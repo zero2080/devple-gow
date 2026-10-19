@@ -58,7 +58,7 @@
 | 저장 | 세이브 포인트 45 유닛 안에서 R1 → `SaveGame` 슬롯 0 (`~/Library/Application Support/devple-gow/slot0.save`) + 체크포인트 갱신 |
 | 형식 | 자체 properties(UTF-8): 레벨·위치·방향, 난이도·코스튬, PlayerProgress 항목, 무기별 레벨/투자, ESC GlobalData (11 문서 §5.2 순서) |
 | 불러오기 | 메인 메뉴 "불러오기"(Menu_Choice 2) → 슬롯 0 이 있으면 세션 복원 후 저장 위치에서 시작. 원작 규칙 `hp = max(저장, 2)`, 사망 수 0 |
-| 생략 | 원작 메모리카드 UI(SaveGameMenu 예/아니오, SaveLoadMenu 슬롯 선택, `FSCommand:PS2_MemoryCard_Select`) |
+| 연결 | 원작 메모리카드 UI (SaveGameMenu 예/아니오 → SaveLoadMenu 카드·파일 선택) — 22 문서 §7 `MemoryCardFlow` |
 
 `SaveGameTest`: 진행도·무기·마법·GlobalData 왕복 일치.
 

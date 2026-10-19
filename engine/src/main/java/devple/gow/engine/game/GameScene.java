@@ -78,6 +78,9 @@ public final class GameScene implements Scene {
 	private boolean paused;
 	/** 파워업(업그레이드) 메뉴 열림: 메뉴 스크립트가 투자를 처리하므로 HUD 값 쓰기를 멈춘다. */
 	private boolean powerUp;
+	/** 세이브 포인트: 저장 질문(SaveGameMenu) 대기 중 / 메모리카드 화면 진행 중 (22 문서 §7). */
+	private boolean saveAsk;
+	private MemoryCardFlow saveFlow;
 	private float time;
 	private float messageTimer;
 	private float stepTimer;
@@ -149,8 +152,16 @@ public final class GameScene implements Scene {
 				}
 				if (powerUp && name.equals("PS2_PSMDone") && "1".equals(String.valueOf(value).replace(".0", ""))) {
 					onPowerUpClosed();
-				} else if (paused && !powerUp && (name.equals("PS2_PauseDone") || name.endsWith("Menu_Choice"))) {
+				} else if (saveAsk && name.equals("PS2_Done") && "1".equals(String.valueOf(value).replace(".0", ""))) {
+					onSaveAnswered("1".equals(String.valueOf(vars.get("PS2_Menu_Choice")).replace(".0", "")));
+				} else if (paused && !powerUp && !saveAsk && saveFlow == null
+						&& (name.equals("PS2_PauseDone") || name.endsWith("Menu_Choice"))) {
 					onMenuClosed(name, value);
+				}
+			});
+			hud.player().addCommandListener((cmd, arg) -> {
+				if (saveFlow != null) {
+					saveFlow.command(cmd, arg);
 				}
 			});
 			enemyShader = new Shader("skinned.vert", "basic.frag");
@@ -610,17 +621,42 @@ public final class GameScene implements Scene {
 	}
 
 	/**
-	 * 세이브 포인트 저장 (원작 상태 15 SavePoint → 17 SaveWrite). 원작 메모리카드 슬롯 UI(SaveGameMenu/SaveLoadMenu)는
-	 * 생략하고 슬롯 0 에 바로 저장한다.
+	 * 세이브 포인트 (원작 상태 15 SavePoint → 16 SaveGameMenu → 17 SaveWrite): HUD 의 "저장하시겠습니까?"(PS2_SaveGame_Event) →
+	 * 예 → 원작 메모리카드 화면을 {@link MemoryCardFlow} 로 진행 (카드 → 파일 → 덮어쓰기/새 파일 → 저장 중 → 완료).
 	 */
-	private void save() {
-		try {
-			Vector3f p = hero.ctl.position;
-			SaveGame.capture(session, levelName, new float[]{p.x, p.y, p.z}, hero.ctl.yaw).write(SaveGame.slot(0));
-			checkpoint.set(p);
-			System.out.println("저장 완료: " + SaveGame.slot(0));
-		} catch (IOException ex) {
-			System.out.println("저장 실패: " + ex.getMessage());
+	private void askSave() {
+		paused = saveAsk = true;
+		hud.variables().event("PS2_SaveGame_Event", 1);
+	}
+
+	private void onSaveAnswered(boolean yes) {
+		saveAsk = false;
+		if (!yes) {
+			paused = false;
+			return;
+		}
+		Vector3f p = new Vector3f(hero.ctl.position);
+		float yaw = hero.ctl.yaw;
+		saveFlow = MemoryCardFlow.save(hud.variables(), session.messages, SaveGame.dir(),
+				() -> SaveGame.capture(session, levelName, new float[]{p.x, p.y, p.z}, yaw));
+		saveFlow.start();
+	}
+
+	private void updateSaveFlow(float dt) {
+		saveFlow.update(dt);
+		switch (saveFlow.result()) {
+			case SAVED -> {
+				checkpoint.set(hero.ctl.position);
+				System.out.println("저장 완료: " + MemoryCardFlow.file(SaveGame.dir(), saveFlow.fileIndex()));
+				saveFlow = null;
+				paused = false;
+			}
+			case CANCELLED -> {
+				saveFlow = null;
+				paused = false;
+			}
+			default -> {
+			}
 		}
 	}
 
@@ -680,16 +716,21 @@ public final class GameScene implements Scene {
 		if (messageTimer > 0 && (messageTimer -= dt) <= 0) {
 			hud.variables().event("PS2_MessageTemplate_Event", 0);
 		}
+		if (saveFlow != null) {
+			updateSaveFlow(dt);
+		}
 		if (paused || leaving) {
 			return;
 		}
+		session.playTime += dt;
 		if (e.input().pressed(PadButton.START)) {
 			paused = true;
 			hud.variables().event("PS2_PauseMenu_Event", 1);
 			return;
 		}
 		if (e.input().pressed(PadButton.R1) && !hero.combat.active() && nearSavePoint()) {
-			save();
+			askSave();
+			return;
 		}
 		if (e.input().pressed(PadButton.SELECT)) {
 			paused = powerUp = true;

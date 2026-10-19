@@ -25,6 +25,8 @@ public final class SaveGame {
 	public float hp, mp;
 	public int redOrbs, hpLevel, mpLevel, gorgonEyes, phoenixFeathers, deaths, itemFlags;
 	public String selectedMagic;
+	/** 누적 플레이 시간 (초, 원작 슬롯 디렉터리 f32 playTime — 11 문서 §5.1). */
+	public float playTime;
 	public final Map<Weapon, int[]> weapons = new TreeMap<>();
 	/** ESC GlobalData 변수 (id → 값 문자열 "타입:값"). */
 	public final Map<Integer, String> globalData = new TreeMap<>();
@@ -55,6 +57,7 @@ public final class SaveGame {
 		g.deaths = p.deaths;
 		g.itemFlags = p.itemFlags;
 		g.selectedMagic = p.selectedMagic != null ? p.selectedMagic.name() : "";
+		g.playTime = s.playTime;
 		for (Weapon w : Weapon.values()) {
 			g.weapons.put(w, new int[]{p.level.get(w), p.invested.get(w)});
 		}
@@ -82,6 +85,7 @@ public final class SaveGame {
 		});
 		s.player = p;
 		s.difficulty = difficulty;
+		s.playTime = playTime;
 		globalData.forEach((k, v) -> s.scriptHost.globalData().put(k, decode(v)));
 	}
 
@@ -102,6 +106,7 @@ public final class SaveGame {
 		pr.setProperty("deaths", Integer.toString(deaths));
 		pr.setProperty("itemFlags", Integer.toString(itemFlags));
 		pr.setProperty("selectedMagic", selectedMagic);
+		pr.setProperty("playTime", Float.toString(playTime));
 		weapons.forEach((w, v) -> pr.setProperty("weapon." + w.name(), v[0] + "," + v[1]));
 		globalData.forEach((k, v) -> pr.setProperty("global." + k, v));
 		Files.createDirectories(file.getParent());
@@ -134,6 +139,7 @@ public final class SaveGame {
 		g.deaths = Integer.parseInt(pr.getProperty("deaths"));
 		g.itemFlags = Integer.parseInt(pr.getProperty("itemFlags"));
 		g.selectedMagic = pr.getProperty("selectedMagic", "");
+		g.playTime = Float.parseFloat(pr.getProperty("playTime", "0"));
 		for (Weapon w : Weapon.values()) {
 			String v = pr.getProperty("weapon." + w.name());
 			if (v != null) {

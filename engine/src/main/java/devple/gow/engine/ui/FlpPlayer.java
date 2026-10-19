@@ -72,6 +72,10 @@ public final class FlpPlayer {
 		commandListeners.add(l);
 	}
 
+	public MessageTable messages() {
+		return messages;
+	}
+
 	public UiVariables variables() {
 		return vars;
 	}
