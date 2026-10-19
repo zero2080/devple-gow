@@ -116,6 +116,12 @@ public final class CameraRig {
 		return s == null || s.cam == null ? "Follow" : s.cam.def().shortName();
 	}
 
+	/** 현재 카메라가 수중 카메라인지 (CameraDef 플래그 0x8000). */
+	public boolean underwater() {
+		Shot s = shots.isEmpty() ? null : shots.getLast();
+		return s != null && s.cam != null && (s.cam.def().p().flags() & devple.gow.tools.level.CameraDef.F_UNDERWATER) != 0;
+	}
+
 	public Pose pose() {
 		return cur;
 	}

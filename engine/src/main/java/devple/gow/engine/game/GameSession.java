@@ -65,5 +65,7 @@ public final class GameSession {
 			presets[i] = t.i(node, names[i], 0);
 		}
 		snd.setReverbPresets(presets, t.f(node, "Base Reverb", 3500));
+		snd.setUnderwaterParams(t.i(node, "Underwater Volume Scale", 512) / 1024f, t.i(node, "Underwater Pitch Offset", -1524),
+				t.i(node, "Underwater Music Vol Scale", 768) / 1024f, t.f(node, "Underwater Tween Time", 0.1f));
 	}
 }

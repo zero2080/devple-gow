@@ -285,7 +285,63 @@ public final class SoundManager implements AutoCloseable {
 	}
 
 	float groupGain(int group) {
-		return master * groupVolume[group & 15];
+		return master * groupVolume[group & 15] * underwaterGain(group);
+	}
+
+	// ---- 수중 (exe sub_001EFB90, TWK_Sound "Underwater *", 29 문서 §10) ----
+
+	/** Underwater Volume Scale / Pitch Offset / Music Vol Scale (1024 = 1.0, 피치 1/128 반음) / Tween Time (초). */
+	private float uwVolume = 512 / 1024f, uwPitch = -1524, uwMusic = 768 / 1024f, uwTween = 0.1f;
+	private boolean underwater;
+	private float uwTime;
+
+	public void setUnderwaterParams(float volScale, float pitchOffset, float musicScale, float tween) {
+		uwVolume = volScale;
+		uwPitch = pitchOffset;
+		uwMusic = musicScale;
+		uwTween = Math.max(0.01f, tween);
+	}
+
+	/** 원작 플래그 0x29F170&amp;0x8000 (수중) — 0.1초 동안 섞인다. */
+	public void setUnderwater(boolean on) {
+		underwater = on;
+	}
+
+	/** 수중 섞임 0..1. */
+	public float underwaterMix() {
+		return Math.max(0, Math.min(1, uwTime / uwTween));
+	}
+
+	/** 그룹 마스크 0x39 (SFX 0, Ambient 3, IOP 4, Footsteps 5) 볼륨 = 1 + (Scale − 1)·f, 0x2 (Music) = Music Vol Scale. */
+	private float underwaterGain(int group) {
+		float f = underwaterMix();
+		if (f <= 0) {
+			return 1;
+		}
+		return switch (group) {
+			case 0, 3, 4, 5 -> 1 + (uwVolume - 1) * f;
+			case 1 -> 1 + (uwMusic - 1) * f;
+			default -> 1;
+		};
+	}
+
+	/** 피치 배율: 0x39 그룹과 0x400 (SFX UW pitch, 그룹 10) 에 Pitch Offset·f (1/128 반음 단위 [추정]). */
+	float underwaterPitch(int group) {
+		float f = underwaterMix();
+		if (f <= 0 || !(group == 0 || group == 3 || group == 4 || group == 5 || group == 10)) {
+			return 1;
+		}
+		return (float) Math.pow(2, uwPitch * f / 128.0 / 12.0);
+	}
+
+	private void updateUnderwater(float dt) {
+		float before = uwTime;
+		uwTime = Math.max(0, Math.min(uwTween, uwTime + (underwater ? dt : -dt)));
+		if (uwTime != before) {
+			for (SoundInstance i : instances.values()) {
+				i.updateVoices();
+			}
+		}
 	}
 
 	public void onRumble(BiConsumer<Integer, Integer> l) {
@@ -515,6 +571,7 @@ public final class SoundManager implements AutoCloseable {
 			}
 		}
 		updateReverb(dt);
+		updateUnderwater(dt);
 		backend.tick(dt);
 		streams.keySet().removeIf(id -> !backend.playing(id));
 		Iterator<SoundInstance> it = instances.values().iterator();

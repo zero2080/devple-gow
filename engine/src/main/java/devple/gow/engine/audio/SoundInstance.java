@@ -357,7 +357,7 @@ public final class SoundInstance {
 		env.advanceSamples(16); // 첫 틱 전에 즉시 공격(shift 0)은 이미 최대
 		Voice v = baseVoice(t.vol(), t.pan());
 		v.gain *= env.level();
-		v.pitch = bendPitch(t);
+		v.pitch = bendPitch(t) * mgr.underwaterPitch(music ? 1 : sound.volGroup());
 		v.label = name() + " tone@" + Integer.toHexString(t.sampleOffset());
 		int id = mgr.backend.play(c, v);
 		if (id > 0) {
@@ -449,7 +449,7 @@ public final class SoundInstance {
 	void updateVoices() {
 		for (int[] v : voices) {
 			Voice x = baseVoice(v[2], v[3]);
-			x.pitch = bendPitch(v[4], v[5]);
+			x.pitch = bendPitch(v[4], v[5]) * mgr.underwaterPitch(music ? 1 : sound.volGroup());
 			SpuEnvelope e = envs.get(v[0]);
 			if (e != null) {
 				x.gain *= e.level();

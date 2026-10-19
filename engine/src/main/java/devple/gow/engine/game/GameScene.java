@@ -972,6 +972,7 @@ public final class GameScene implements Scene {
 		Vector3f p = hero.ctl.position;
 		nav.update(dt, p);
 		cameraRig.update(dt, p, hero.ctl.yaw, !hero.ctl.grounded);
+		session.sound.setUnderwater(cameraRig.underwater()); // 수중 카메라 → 소리 수중 처리 (29 문서 §10)
 		world.tick(dt, p.x, p.y, p.z);
 		magicFx.update(hero.magic, p, hero.ctl.yaw, enemies.stream().map(Enemy::fighter).toList(), dt, cam.eye);
 		if (hero.player.hp <= 0) {

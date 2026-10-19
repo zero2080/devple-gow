@@ -78,7 +78,7 @@ snd.has(name); snd.find(name); snd.nameOf(hash);
 | ADSR | 완료 | §7 |
 | 리버브 | 완료 (모드 근사) | §8 |
 | LFO | 완료 | §9 |
-| 수중 필터 | 미구현 | 14 §8 |
+| 수중 | 완료 | §10 |
 | 피치 상한 | 192kHz (SPU2 0x3FFF) | 9 개 톤이 초과 |
 
 ## 5. 테스트 (`engine/src/test/.../audio`, 헤드리스, gow-rom 필요)
@@ -131,7 +131,7 @@ OpenAL 경로는 로컬에서 수동 확인 (재생 60 프레임, `alGetError` 0
   `kill()` (즉시 정지) 과 플러그인·스트림 보이스는 엔벨로프 없이 바로 끈다.
 - **실데이터 분포** (`SpuEnvelopeTest.adsrDistribution`, 톤 8,195 / 305 종): 최다 `80FF/9FCD` ×3,153 = 즉시 공격·최대 유지·선형 릴리스
   shift 13 (≈ 342ms). `9FCE` 683ms, `9FCC` 171ms, `9FC0` 1ms. 공격 shift 가 큰 `A8FF`·`B2FF`·`B7FF` 는 페이드 인 (환경음·음성).
-- 남은 것: 수중 필터 — 리버브는 §8, LFO 는 §9.
+- 리버브는 §8, LFO 는 §9, 수중은 §10.
 
 ## 8. 리버브
 
@@ -176,3 +176,18 @@ IRX 근거: 설정 `0x4F14`, 초기화 `0x22DC`, 대상별 깊이 `0x29D4`, 계�
 - 실데이터 81 그레인 / 43 소리 (`SND_TORCH_LOOP`, `SND_BIGTORCH_LP`, `SND_FLIESBUZZ_LP`, `SND_WINDWHISTLES_LOOP`, `SND_TIMEWARP_LP` …):
   볼륨(사인·삼각 0.6–10Hz), 벤드(depth 1024, 0.02–2Hz 느린 피치 흔들림), 5 = 다른 슬롯 속도 변조.
 - 검증 `SoundLfoTest`: 1Hz = 240 틱 한 주기, 삼각/사각/반전, `SND_TORCH_LOOP` 볼륨이 4초 동안 0.12–0.44 로 흔들림.
+
+## 10. 수중 (`SoundManager.setUnderwater`)
+
+[확실: 흐름·값 / 추정: 피치 단위]
+- **수중 판정 = 현재 카메라**: 카메라 관리자 `0x1EF620` 이 현재 카메라 정의 플래그(CAM_ +0x74)를 0x29F170 에 복사하고, `0x1EFB90` 이 bit 0x8000 을 본다.
+  실데이터: ATHN02A WaterCam, ATHN04A/PAND04E SwimCam, PAND00C/00D/03F/03J 튜브 카메라, PAND02D~I 수로 카메라 등 13 레벨 (`CameraDef.F_UNDERWATER`).
+- 섞임 f: 수중이면 프레임마다 +dt, 아니면 −dt, [0, Underwater Tween Time 0.1초] → f = t / 0.1.
+- `sub_001703A0(그룹 마스크, 볼륨, 피치)` 세 번 호출:
+  | 마스크 | 그룹 | 볼륨 (1024 = 1) | 피치 |
+  |---|---|---|---|
+  | 0x39 | SFX 0, Ambient 3, IOP 4, Footsteps 5 | 1 + (Underwater Volume Scale 512/1024 − 1)·f | Underwater Pitch Offset −1524 · f |
+  | 0x2 | Music 1 | 1 + (Music Vol Scale 768/1024 − 1)·f | 0 |
+  | 0x400 | SFX UW pitch 10 | 1 | 피치 오프셋 · f |
+- 피치 단위는 989snd 미세 피치(1/128 반음)로 보고 −1524 ≈ −11.9 반음 [추정]. `GameScene` 이 매 프레임 `cameraRig.underwater()` 를 넘긴다.
+- 검증 `UnderwaterTest`.
