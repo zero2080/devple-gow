@@ -145,6 +145,27 @@ public final class WadAssets implements AutoCloseable {
 		});
 	}
 
+	/**
+	 * 이름이 겹치는 텍스처 (R_PERMK 의 TXR_file1 …) 중 태그 번호 {@code beforeTag} 앞에서 마지막으로 정의된 것. 원작 자원 이름은
+	 * 적재 순서상 가장 최근 정의로 풀린다 [추정: 같은 그룹 묶음 PTC → MAT → TXR 이 바로 앞에 있음].
+	 */
+	public Texture textureBefore(String txrName, int beforeTag) {
+		TextureLibrary.Entry best = null;
+		for (TextureLibrary.Entry e : textures.textures()) {
+			if (e.txr().name().equals(txrName) && e.tagIndex() < beforeTag && e.mipLevel() == 0 && (best == null || e.tagIndex() > best.tagIndex())) {
+				best = e;
+			}
+		}
+		if (best == null) {
+			return texture(txrName);
+		}
+		TextureLibrary.Entry f = best;
+		return glTextures.computeIfAbsent(txrName + "@" + f.tagIndex(), n -> {
+			int[] argb = TextureDecoder.decode(f.gfx(), f.pal(), 0);
+			return Texture.of(TextureDecoder.toImage(f.gfx().width(), f.gfx().height(), argb), true);
+		});
+	}
+
 	/** MDL 이름으로 렌더 모델 생성 (LOD 0). */
 	public RenderModel model(String mdlName) {
 		return models.computeIfAbsent(mdlName, n -> {

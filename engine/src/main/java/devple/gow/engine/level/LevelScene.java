@@ -190,7 +190,7 @@ public final class LevelScene implements Scene {
 		cam.fovDeg = 60f;
 		placeStart(all);
 		camMode = startCam;
-		fx = new LevelFx(e, assets, data, instances);
+		fx = new LevelFx(e, assets, data, instances, wadPath);
 		System.out.printf(Locale.ROOT, "레벨 %s: 렌더 인스턴스 %d (하늘 %d), 충돌 삼각형 %d, 볼륨 %d, 카메라 %d%n", assets.wad().name(),
 				instances.size(), instances.stream().filter(Instance::sky).count(), collision.triangles().size(),
 				data.volumes.size(), data.placedCameras.size());

@@ -54,8 +54,12 @@ render  fx.beforeRender(e, cam)                        // FarClip → cam.far, r
 - `AnimatedModel` (캐릭터) 은 변경하지 않음 (기존 `Blend.of`).
 
 ## 5. 파티클 / 날씨 / 물
-- 비 (ATHN01A): 셀 20×16 = ±160 정육면체를 카메라 앞 150 에 두고 감쌈, 1000 개 (PTC_rain), 수명 0.6 s, 낙하 900/s + 바람 vec×16,
-  `MAT_nalRain` 텍스처 가산, 줄기 48×6. 시작 시 2초 미리 채움. 볼륨 상자 밖 숨김은 미구현.
+- 날씨 (`fx/Weather`, 16 §1.5) = 원작 경로: 종류 GO 의 PTC (레벨 WAD, 없으면 R_PERMK — `LevelFx` 가 레벨 WAD 옆 R_PERMK 를 필요할 때 읽음) 를
+  최대 개수만큼 한 번 채우고 (`ParticleSystem.Emitter.weather`), 매 프레임 −vec·16·dt (+ 비 낙하 160/s, 플랑크톤 난수 걸음) 이동 → 카메라 앞
+  (셀×8 − near 2) 정육면체로 감싸기 → 볼륨 상자 (소유 ± box×8) 밖은 안 그림. 그리기 = PTC VU 식, 나이 = 수명 − 0.5 고정, 레코드 = PTC +0x8C 속성 배치
+  (비: q1 = 방향). PTC 머티리얼은 PTC 앞 마지막 같은 이름 MAT/TXR 로 푼다 (`WadAssets.textureBefore`; R_PERMK MAT_lambert2 가 여럿).
+  이전 문제 [확실]: 손으로 맞춘 비 (줄기 48, 색 1.7) 를 모든 종류에 썼고 (플랑크톤·먼지 레벨도 비), PTC VU 경로는 방향 레코드(q1)가 비어 화면이 하얗게 덮였다.
+  `GOW_PTCVU=off` 면 근사 이미터 (비는 원작 속도·크기로 맞춤). 확인: ATHN01A/D 가는 사선 빗줄기, DEST01 옅은 모래 안개, PAND00C 떠다니는 점.
 - FXC 이미터: 서브타입 1 원뿔 / 2 전방향은 원작 식, 5–9 볼륨은 로컬 배율 상자 [추정], 3/4 표면·커브는 지오메트리 미해석으로 생략.
   **PTC VU 식** (`tools/fx/PtcVu`, `ParticleDef.ptc`): 파티클마다 레코드 {(생성 위치, 0), (생성 속도)} + 고정 난수 씨앗 + 나이(초) 로 식을 계산 →
   색 (0x80 = 1.0, 알파 최대 ≈ 2), 위치, 반폭, 회전, 종류별 모양 (사각형/원반/선/줄기/평면). 블렌드 = flags&3 (0x44 / 0x48 / 0x42), TCC/TFX = flags, `particle.frag uGs` 가 GS 규칙(미리 곱한 색, As/0x80)으로 출력 [확실].

@@ -36,7 +36,16 @@ public final class LevelFx implements AutoCloseable {
 	private boolean prewarmed;
 	private final java.util.List<WaterSurface> waters = new java.util.ArrayList<>();
 
+	private final java.nio.file.Path wadPath;
+	private WadAssets permk;
+
 	public LevelFx(Engine e, WadAssets assets, LevelData data, List<LevelScene.Instance> instances) {
+		this(e, assets, data, instances, null);
+	}
+
+	/** @param wadPath 레벨 WAD 경로 (같은 폴더의 R_PERMK 에서 상주 날씨 GO 를 찾는다; null 가능) */
+	public LevelFx(Engine e, WadAssets assets, LevelData data, List<LevelScene.Instance> instances, java.nio.file.Path wadPath) {
+		this.wadPath = wadPath;
 		env = new FxEnvironment(assets, data);
 		EnvParams p = env.params();
 		for (EnvParams.Fog f : p.fogs) {
@@ -62,10 +71,32 @@ public final class LevelFx implements AutoCloseable {
 		}
 		LevelEmitters.build(data, assets, particles);
 		for (EnvParams.Weather w : p.weathers) {
-			ParticleSystem.Emitter em = particles.add(Weather.def(w, assets), 0, 0, 0);
+			float[] o = ownerPosition(data, w.owner());
+			Weather.Built b = Weather.build(w, assets, o, this::permk);
+			ParticleSystem.Emitter em = particles.add(b.def(), o == null ? 0 : o[0], o == null ? 0 : o[1], o == null ? 0 : o[2]);
 			em.followCamera = true;
-			em.ahead = em.def.box()[0] - 10;
+			// 원작 0x21CF80: 정육면체 중심 = 카메라 + 시선·(셀×8 − near)
+			em.ahead = Weather.cell(w.type()) * 8 - Weather.NEAR;
+			em.weather = b.sim();
+			System.out.printf(Locale.ROOT, "  env 날씨 %s %s: %s%n", w.owner(), w.typeName(),
+					b.sim() == null ? "근사 이미터" : String.format(Locale.ROOT, "%s ×%d, 나이 %.2f, 방향 %s", b.def().name(), b.sim().count,
+							b.sim().age, java.util.Arrays.toString(b.sim().dir)));
 		}
+	}
+
+	/** 상주 R_PERMK (날씨 GO gosnow/goplankton/godust/goembers/gogroundfog) — 처음 필요할 때 읽는다. */
+	private WadAssets permk() {
+		if (permk == null && wadPath != null) {
+			java.nio.file.Path pk = wadPath.resolveSibling("R_PERMK.WAD");
+			if (java.nio.file.Files.exists(pk)) {
+				try {
+					permk = new WadAssets(pk);
+				} catch (java.io.IOException ex) {
+					System.out.println("  R_PERMK 읽기 실패: " + ex.getMessage());
+				}
+			}
+		}
+		return permk;
 	}
 
 	/** 소유 GO 의 관절 0 월드 위치 (없으면 인스턴스 위치, 그것도 없으면 null). */
@@ -151,5 +182,8 @@ public final class LevelFx implements AutoCloseable {
 	public void close() {
 		particles.close();
 		waters.forEach(WaterSurface::close);
+		if (permk != null) {
+			permk.close();
+		}
 	}
 }

@@ -66,9 +66,21 @@ public final class PtcVu {
 	/** 결과 → 출력 주소 (0x222 기준, w 만이면 0x100|k, 없음 −1). */
 	private final int[] targets;
 	private final int nResults;
+	/**
+	 * PTC +0x8C u8[12] 속성 배치: 바이트 = 스트림 (&amp;3) + 바이트 오프셋 (&amp;0xFC). 스트림 1 = VU 레코드 (보폭 +0xC qword), 0 = CPU 전용,
+	 * 2 = 쓰지 않는 속성의 빈 자리 [확실: 0x15B770/0x15B880 반복자 + 날씨 0x21AD60..0x21C878 의 쓰기, 추정: 스트림 1 = VU 전송].
+	 * 번호: 0 출생 시각 (스칼라), 1 위치, 2 속도, 6 방향 (비 줄기 0x21AFD8 / 속도 방향).
+	 */
+	public final int[] attr = new int[12];
+
+	/** 속성 번호. */
+	public static final int ATTR_BIRTH = 0, ATTR_POS = 1, ATTR_VEL = 2, ATTR_DIR = 6;
 
 	public PtcVu(ByteBuffer ptc) {
 		ByteBuffer d = ptc.duplicate().order(ByteOrder.LITTLE_ENDIAN);
+		for (int k = 0; k < 12; k++) {
+			attr[k] = d.limit() > 0x8C + k ? d.get(0x8C + k) & 0xFF : 2;
+		}
 		int b = 0x98;
 		word0 = d.getInt(b);
 		kind = d.getInt(b + 4);
@@ -117,6 +129,17 @@ public final class PtcVu {
 			}
 			r++;
 		}
+	}
+
+	/** 속성 k 가 VU 레코드 (스트림 1) 안에 있으면 qword 번호, 아니면 −1. */
+	public int recordQword(int k) {
+		int a = attr[k];
+		return (a & 3) == 1 ? (a & 0xFC) >> 4 : -1;
+	}
+
+	/** 속성 k 의 VU 레코드 qword 안 시작 성분 (0..3). */
+	public int recordLane(int k) {
+		return (attr[k] & 0xC) >> 2;
 	}
 
 	/** 연산 k 의 결과 개수 (이전 프레임 값을 함께 내는 연산은 2). */

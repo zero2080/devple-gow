@@ -44,6 +44,9 @@ public final class ParticleSystem implements AutoCloseable {
 		public float lodNear = -1, lodFar = -1;
 		/** followCamera 일 때 상자 중심을 카메라 앞으로 이 거리만큼 (원작 셀/2 − near). */
 		public float ahead;
+		/** SCR_Weather 원작 경로 (null 이 아니면 생성률 대신 최대 개수를 한 번 채우고 원작 갱신 fn 으로 움직인다, {@link Weather}). */
+		public Weather.Sim weather;
+		final float[] weatherMove = new float[3];
 		/**
 		 * 이펙트 GO 가 매 프레임 덮어쓰는 FXC P 블록 값 (40 문서 §3, ANM 타입 10 채널). 음수/NaN = 정의 값 사용.
 		 * rate = 초당 생성 수, speed / speedRnd / cone = 원뿔 모드 속력·폭·퍼짐, sizeScale = 크기 배율 (인스턴스 스케일).
@@ -152,6 +155,15 @@ public final class ParticleSystem implements AutoCloseable {
 			if (!e.active) {
 				continue;
 			}
+			if (e.weather != null) {
+				Weather.Sim w = e.weather;
+				w.frameMove(dt, e.weatherMove);
+				if (!w.filled) {
+					w.filled = true;
+					fillWeather(e);
+				}
+				continue;
+			}
 			float lod = 1;
 			if (e.lodNear >= 0 && e.lodFar > e.lodNear && !e.followCamera) {
 				float d = eye.distance(e.pos) / 16f;
@@ -166,6 +178,10 @@ public final class ParticleSystem implements AutoCloseable {
 		}
 		for (int i = 0; i < count; i++) {
 			ParticleDef d = owner[i].def;
+			if (owner[i].weather != null) {
+				stepWeather(i, owner[i], dt);
+				continue;
+			}
 			age[i] += dt;
 			if (age[i] >= life[i]) {
 				int l = --count;
@@ -191,6 +207,58 @@ public final class ParticleSystem implements AutoCloseable {
 			if (owner[i].followCamera) {
 				wrap(i, d);
 			}
+		}
+	}
+
+	/** 원작 날씨 초기화 (0x21AFD8 / 0x21BB38 / 0x21BED0): 정육면체 안 균일 난수 위치, 속도 0. */
+	private void fillWeather(Emitter e) {
+		Weather.Sim w = e.weather;
+		Vector3f c = w.track ? centre(e) : e.pos;
+		for (int k = 0; k < w.count && count < max; k++) {
+			int i = count++;
+			owner[i] = e;
+			px[i] = c.x + r(w.half);
+			py[i] = c.y + r(w.half);
+			pz[i] = c.z + r(w.half);
+			vx[i] = vy[i] = vz[i] = 0;
+			life[i] = Float.MAX_VALUE;
+			seed[i] = rnd.nextFloat();
+			stepWeather(i, e, 0);
+		}
+	}
+
+	/**
+	 * 원작 날씨 갱신 (비 0x21AD60, 플랑크톤 0x21B768, 먼지 0x21BCB0): 공통 이동 (+ 플랑크톤 난수 걸음), 정육면체로 감싸기,
+	 * 볼륨 상자 밖이면 숨김 (나이 −1 = 원작 출생 −1). 레코드 = (위치, 출생) + 비는 방향 (속성 6).
+	 */
+	private void stepWeather(int i, Emitter e, float dt) {
+		Weather.Sim w = e.weather;
+		float mx = e.weatherMove[0], my = e.weatherMove[1], mz = e.weatherMove[2];
+		if (w.type == 2 && dt > 0) {
+			float f = dt * 60;   // 원작은 프레임 단위 (월드/프레임)
+			vx[i] = Math.clamp(vx[i] + r(Weather.PLANKTON_STEP), -Weather.PLANKTON_MAX, Weather.PLANKTON_MAX);
+			vy[i] = Math.clamp(vy[i] + r(Weather.PLANKTON_STEP), -Weather.PLANKTON_MAX, Weather.PLANKTON_MAX);
+			vz[i] = Math.clamp(vz[i] + r(Weather.PLANKTON_STEP), -Weather.PLANKTON_MAX, Weather.PLANKTON_MAX);
+			mx += vx[i] * f;
+			my += vy[i] * f;
+			mz += vz[i] * f;
+		}
+		Vector3f c = w.track ? centre(e) : e.pos;
+		px[i] = c.x + wrap1(px[i] + mx - c.x, w.half);
+		py[i] = c.y + wrap1(py[i] + my - c.y, w.half);
+		pz[i] = c.z + wrap1(pz[i] + mz - c.z, w.half);
+		age[i] = w.inside(px[i], py[i], pz[i]) ? w.age : -1;
+		p0x[i] = px[i];
+		p0y[i] = py[i];
+		p0z[i] = pz[i];
+		if (w.type == 0) {
+			v0x[i] = w.dir[0];
+			v0y[i] = w.dir[1];
+			v0z[i] = w.dir[2];
+		} else {
+			v0x[i] = vx[i];
+			v0y[i] = vy[i];
+			v0z[i] = vz[i];
 		}
 	}
 
@@ -503,8 +571,8 @@ public final class ParticleSystem implements AutoCloseable {
 			}
 		}
 		for (int i = 0; i < count; i++) {
-			if (owner[i].def != d) {
-				continue;
+			if (owner[i].def != d || age[i] < 0) {
+				continue;   // 날씨: 볼륨 밖 (원작 출생 −1 → VU 가 건너뜀)
 			}
 			record(vu, i);
 			vu.eval(ev, rec, Float.floatToRawIntBits(seed[i]) * 2654435761L, age[i], VU_DT);
@@ -638,18 +706,37 @@ public final class ParticleSystem implements AutoCloseable {
 				rec[2][c] = bx;
 				rec[3][c] = ax;
 			}
+		} else if (vu.recordQword(PtcVu.ATTR_POS) == 0) {
+			// PTC +0x8C 속성 배치대로: 위치 q0, 속도 (스트림 1 이면 보통 q1), 방향 (속성 6: 비 q1, 줄기류 q2). 비·먼지는 속도가 CPU 스트림 0.
+			int qv = vu.recordQword(PtcVu.ATTR_VEL), qd = vu.recordQword(PtcVu.ATTR_DIR);
+			if (qv > 0 && qv < rec.length) {
+				int l0 = vu.recordLane(PtcVu.ATTR_VEL);
+				rec[qv][l0] = v0x[i];
+				rec[qv][l0 + 1] = v0y[i];
+				rec[qv][l0 + 2] = v0z[i];
+			}
+			if (qd > 0 && qd < rec.length) {
+				dirTo(rec[qd], vu.recordLane(PtcVu.ATTR_DIR), i);
+			} else if (qv == 1) {
+				dirTo(rec[2], 0, i);   // 이전 가정 유지 (q2 = 속도 방향; 속성 3–5 는 미해석)
+			}
 		} else {
 			rec[1][0] = v0x[i];
 			rec[1][1] = v0y[i];
 			rec[1][2] = v0z[i];
-			float l = (float) Math.sqrt(v0x[i] * v0x[i] + v0y[i] * v0y[i] + v0z[i] * v0z[i]);
-			if (l > 1e-6f) {
-				rec[2][0] = v0x[i] / l;
-				rec[2][1] = v0y[i] / l;
-				rec[2][2] = v0z[i] / l;
-			} else {
-				rec[2][1] = -1;
-			}
+			dirTo(rec[2], 0, i);
+		}
+	}
+
+	/** 속도 방향 (단위, 0 이면 아래). */
+	private void dirTo(float[] q, int l0, int i) {
+		float l = (float) Math.sqrt(v0x[i] * v0x[i] + v0y[i] * v0y[i] + v0z[i] * v0z[i]);
+		if (l > 1e-6f) {
+			q[l0] = v0x[i] / l;
+			q[l0 + 1] = v0y[i] / l;
+			q[l0 + 2] = v0z[i] / l;
+		} else {
+			q[l0 + 1] = -1;
 		}
 	}
 

@@ -14,6 +14,7 @@ import java.util.stream.Stream;
  * <pre>
  *   fx:env    &lt;wad&gt;        환경 스크립트 (Fog / LayeredFog / FarClip / Sky / Weather / Water / Mirror) 해석 값
  *   fx:survey &lt;dir&gt;        전 WAD 환경 스크립트 target 별 개수와 레벨 목록
+ *   fx:weather &lt;dir&gt;       전 WAD SCR_Weather 값 + 그 WAD 의 날씨 PTC_ (rain/snow/plankton/dust/ember/fog) VU 요약
  *   fx:ptc    &lt;wad&gt; [필터]  FXC_ 이미터 / 필드 / PTC_ 모양과 연결 (모양 이름, 머티리얼)
  *   fx:matanim &lt;wad&gt;        머티리얼 ANM (플립북 프레임 / UV 스크롤 / 색·회전 트랙)
  *   fx:parts  &lt;wad&gt; &lt;go&gt;   배치된 인스턴스의 서브메시별 머티리얼 / AABB (하늘 돔 구조 확인)
@@ -32,6 +33,7 @@ public final class Cli {
 		switch (args[0]) {
 			case "env" -> System.out.print(new EnvParams(WadFile.load(Path.of(args[1]))).describe());
 			case "survey" -> survey(Path.of(args[1]));
+			case "weather" -> weatherSurvey(Path.of(args[1]));
  			case "ptc" -> ptc(Path.of(args[1]), args.length > 2 ? args[2].toLowerCase() : "");
 			case "ptcsurvey" -> ptcSurvey(Path.of(args[1]));
 			case "ptcvu" -> ptcvu(Path.of(args[1]), args.length > 2 ? args[2].toLowerCase() : "");
@@ -98,6 +100,33 @@ public final class Cli {
 			}
 		}
 		count.forEach((k, c) -> System.out.printf("%5d %s  e.g. %s%n", c[0], k, example.get(k)));
+	}
+
+	/** 전 WAD SCR_Weather 와 같은 WAD 의 날씨 PTC_ (16 문서 §1.5). */
+	private static void weatherSurvey(Path dir) throws Exception {
+		List<Path> wads;
+		try (Stream<Path> s = Files.list(dir)) {
+			wads = s.filter(p -> p.toString().endsWith(".WAD")).sorted().toList();
+		}
+		for (Path p : wads) {
+			WadFile wad = WadFile.load(p);
+			EnvParams env = new EnvParams(wad);
+			if (env.weathers.isEmpty() && !p.getFileName().toString().equals("R_PERMK.WAD")) {
+				continue;   // R_PERMK = 상주 날씨 GO (gosnow, goplankton, godust, goembers, gogroundfog)
+			}
+			for (EnvParams.Weather w : env.weathers) {
+				System.out.printf(java.util.Locale.ROOT, "%-10s %-18s type=%d(%s) vec=%s box=%s%n", p.getFileName(), w.owner(), w.type(),
+						w.typeName(), EnvParams.v(w.vec()), EnvParams.v(w.box()));
+			}
+			FxResources r = new FxResources(wad);
+			for (FxResources.Shape s : r.shapes.values()) {
+				String n = s.name().toLowerCase();
+				if (n.matches("ptc_(rain|snow|plankton|dust|embers|groundfog)")) {
+					System.out.printf(java.util.Locale.ROOT, "    %s count=%d life=%.2f flags=%x vu=%d mat=%s%n", s.name(), s.maxCount(), s.lifespan(),
+							s.flags(), s.vuType(), s.material());
+				}
+			}
+		}
 	}
 
 	/** PTC_ VU 블록 식 목록 (PtcVu). */
