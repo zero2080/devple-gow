@@ -76,7 +76,8 @@ snd.has(name); snd.find(name); snd.nameOf(hash);
 | 4채널 VPK | 채널 (0,1)+(2,3) 믹스, `musicParam(a, b)` = 층 a 볼륨 b/127 | [추정] |
 | 음악 페이드 | 미구현 (즉시 전환) | |
 | ADSR | 완료 | §7 |
-| LFO / 리버브 / 수중 필터 | 미구현 | 14 §8 |
+| 리버브 | 완료 (모드 근사) | §8 |
+| LFO / 수중 필터 | 미구현 | 14 §8 |
 | 피치 상한 | 192kHz (SPU2 0x3FFF) | 9 개 톤이 초과 |
 
 ## 5. 테스트 (`engine/src/test/.../audio`, 헤드리스, gow-rom 필요)
@@ -129,4 +130,24 @@ OpenAL 경로는 로컬에서 수동 확인 (재생 60 프레임, `alGetError` 0
   `kill()` (즉시 정지) 과 플러그인·스트림 보이스는 엔벨로프 없이 바로 끈다.
 - **실데이터 분포** (`SpuEnvelopeTest.adsrDistribution`, 톤 8,195 / 305 종): 최다 `80FF/9FCD` ×3,153 = 즉시 공격·최대 유지·선형 릴리스
   shift 13 (≈ 342ms). `9FCE` 683ms, `9FCC` 171ms, `9FC0` 1ms. 공격 shift 가 큰 `A8FF`·`B2FF`·`B7FF` 는 페이드 인 (환경음·음성).
-- 남은 것: LFO(그레인 4), 리버브(Base Reverb 그룹 / exe 0x29CFE8 프리셋), 수중 필터.
+- 남은 것: LFO(그레인 4), 수중 필터 — 리버브는 §8.
+
+## 8. 리버브
+
+### 8.1 원작 [확실: 데이터 흐름 / 추정: 가중치·슬루]
+- 프리셋 표 (exe 0x29CFE8 이름 → 0x29D010 값, TWK_Sound `/System/Sound/`): 0 Custom(이미터 값), 1 Outdoor Small 2728, 2 Outdoor Medium 3432,
+  3 Outdoor Large 4792, 4 Indoor Small 2080, 5 Indoor Medium 2608, 6 Indoor Large 3472, 7 Underwater 3752. `Base Reverb` 3500.0, `Override Reverb` 0.
+- **리버브는 사운드 이미터(SEM)가 정한다**: SEM `+0xD0` u32 사용자 깊이, `+0xD5` u8 종류(0..7), `+0xD6` u16 flags (bit0 = 리버브 기여).
+  `0x1706C0` 이 이 값을 이미터 상태(+0xBC/+0xC1/+0xC2)로 복사하고, 리스너 갱신 `0x171B28` 안의 `0x171F24` 가 bit0 이고 가중치 &gt; 0 인 이미터마다
+  깊이(종류 ≠ 0 → 프리셋, 0 → 사용자 값)를 `0x172910` 에 넘긴다: `Σ += (깊이 − 현재 기준) × w`, `Σw += w` (0x29D030 / 0x29D034).
+- 실데이터 (`SemStats`, 전 WAD): 리버브 이미터는 대부분 앰비언트 루프 — 예 ATHN01A `SNDAmbDeckofShip` 종류 3(Outdoor Large),
+  ATHN01B `SNDAmbBallanceRoom` 종류 5(Indoor Medium), SEWR01 하수도 사용자 깊이 9000, PAND04E 절벽 3 / 동굴 5.
+
+### 8.2 엔진
+- `SoundEmitter` 에 `reverbType / flags / reverbDepth` 추가. `SoundManager.soundGroup` 이 bit0 이미터를 켜면 리버브 소스로 등록 (재생이 끝나면 제거).
+- 매 프레임 `깊이 = Base + Σ w·(프리셋 − Base) / max(1, Σw)`, `w = 1 − 거리/max(near, far)` (0 이하 0, 2D 이미터 1) [추정: 가중치 식],
+  초당 8000 단위로 따라감 [추정]. `GameSession` 이 TWK_Sound 값으로 프리셋을 덮는다.
+- 출력: `AudioBackend.reverb(깊이/0x7FFF)` → OpenAL EFX 표준 리버브 하나 (보조 슬롯 이득 = 깊이 × 3 [청감 보정]).
+  보이스마다 `Voice.dry` (음악 1, 메뉴 6, MPEG 8, 수중 음악 9, Dry Effects 14 그룹) 이면 보내지 않는다. 장치에 EFX 가 없으면 리버브 없이 재생.
+- 원작 SPU2 리버브 모드(Room/Hall 등 지연선 설정)는 IRX 쪽이라 미확인 → EFX 기본(generic) 값 [근사].
+- 검증: `ReverbTest` — 이미터 없음 3500, 갑판 이미터 켜면 &gt; 4500 (Outdoor Large), 멀어지면 3500 으로 복귀, 백엔드에 깊이/0x7FFF 전달.

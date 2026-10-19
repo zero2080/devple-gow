@@ -190,4 +190,4 @@ R_PERMK 콤보 이벤트 중 일부(`#b9630087` 60 회, `#0279aaec` 35 회, `#bb
 ## 8. 미해결
 - 그레인 10–12, LFO(4) 효과, ADSR 엔벨로프, Tone flags 비트, Sound flags 0x08.
 - DPMS param(+0x10)·+0x1C, cmd 0x16 인자, MusicGroupParam 의미, SEM mode·+0xD0·mode 2 거리.
-- 리버브(Base Reverb 그룹, exe 0x29CFE8 프리셋), 수중(UW) 그룹 전환.
+- ~~리버브~~ (29 문서 §8: SEM 이미터 +0xD5 종류 / +0xD6 bit0), 수중(UW) 그룹 전환.

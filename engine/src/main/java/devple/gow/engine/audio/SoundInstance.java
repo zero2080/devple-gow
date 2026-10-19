@@ -366,7 +366,9 @@ public final class SoundInstance {
 	Voice baseVoice(int toneVol, int tonePan) {
 		Voice v = new Voice();
 		float g = vol / 127f * Math.max(0, sound.vol()) / 127f * Math.max(0, toneVol) / 127f;
-		v.gain = g * mgr.groupGain(music ? 1 : sound.volGroup());
+		int group = music ? 1 : sound.volGroup();
+		v.gain = g * mgr.groupGain(group);
+		v.dry = SoundManager.isDryGroup(group);
 		v.pan = pan + tonePan;
 		v.pos = pos != null ? new Vector3f(pos) : null;
 		v.near = near;

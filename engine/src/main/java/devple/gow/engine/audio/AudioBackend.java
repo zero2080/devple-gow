@@ -24,6 +24,10 @@ public interface AudioBackend extends AutoCloseable {
 
 	void listener(Vector3fc pos, Vector3fc forward, Vector3fc up);
 
+	/** 리버브 깊이 0..1 (SPU2 리버브 출력 볼륨 = 989snd 깊이 / 0x7FFF, 29 문서 §8). dry 가 아닌 보이스에 적용. */
+	default void reverb(float depth) {
+	}
+
 	/** 매 프레임: 스트림 버퍼 보충, 끝난 보이스 정리. */
 	void tick(float dt);
 

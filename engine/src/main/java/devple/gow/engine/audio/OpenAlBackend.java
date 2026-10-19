@@ -5,6 +5,7 @@ import org.joml.Vector3fc;
 import org.lwjgl.openal.AL;
 import org.lwjgl.openal.ALC;
 import org.lwjgl.openal.ALCCapabilities;
+import org.lwjgl.openal.EXTEfx;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ShortBuffer;
@@ -29,6 +30,8 @@ public final class OpenAlBackend implements AudioBackend {
 
 	private static final int SOURCES = 48;
 	private static final int STREAM_BUFS = 4;
+	/** SPU2 깊이(0..1) → EFX 슬롯 이득. 원작 깊이 3500/0x7FFF ≈ 0.11 이 EFX 에선 너무 작게 들려 키운다 [추정: 청감 보정]. */
+	private static final float REVERB_SCALE = 3f;
 
 	private static final class Slot {
 		int id;
@@ -46,6 +49,9 @@ public final class OpenAlBackend implements AudioBackend {
 	private final Map<Integer, Slot> slots = new LinkedHashMap<>();
 	private final Map<AdpcmClip, int[]> clipBuffers = new IdentityHashMap<>();
 	private int next = 1;
+	/** EFX 리버브 (장치가 ALC_EXT_EFX 를 지원할 때만, 아니면 0). */
+	private int reverbEffect;
+	private int reverbSlot;
 
 	/** 장치를 열 수 없으면 IllegalStateException. */
 	public OpenAlBackend() {
@@ -60,6 +66,14 @@ public final class OpenAlBackend implements AudioBackend {
 		alDistanceModel(AL_LINEAR_DISTANCE_CLAMPED);
 		for (int i = 0; i < SOURCES; i++) {
 			free.add(alGenSources());
+		}
+		if (caps.ALC_EXT_EFX) {
+			// SPU2 리버브 대역: EFX 표준 리버브 (원작 리버브 모드(방 크기·감쇠)는 미확인 — 기본 generic 값), 젖은 소리 양만 깊이로 조절
+			reverbEffect = EXTEfx.alGenEffects();
+			EXTEfx.alEffecti(reverbEffect, EXTEfx.AL_EFFECT_TYPE, EXTEfx.AL_EFFECT_REVERB);
+			reverbSlot = EXTEfx.alGenAuxiliaryEffectSlots();
+			EXTEfx.alAuxiliaryEffectSloti(reverbSlot, EXTEfx.AL_EFFECTSLOT_EFFECT, reverbEffect);
+			EXTEfx.alAuxiliaryEffectSlotf(reverbSlot, EXTEfx.AL_EFFECTSLOT_GAIN, 0);
 		}
 	}
 
@@ -112,6 +126,9 @@ public final class OpenAlBackend implements AudioBackend {
 	}
 
 	private void apply(int src, Voice v) {
+		if (reverbSlot != 0) {
+			org.lwjgl.openal.AL11.alSource3i(src, EXTEfx.AL_AUXILIARY_SEND_FILTER, v.dry ? EXTEfx.AL_EFFECTSLOT_NULL : reverbSlot, 0, EXTEfx.AL_FILTER_NULL);
+		}
 		alSourcef(src, AL_GAIN, Math.max(0, v.gain));
 		alSourcef(src, AL_PITCH, Math.max(0.05f, v.pitch));
 		if (v.pos != null) {
@@ -208,6 +225,13 @@ public final class OpenAlBackend implements AudioBackend {
 	}
 
 	@Override
+	public void reverb(float depth) {
+		if (reverbSlot != 0) {
+			EXTEfx.alAuxiliaryEffectSlotf(reverbSlot, EXTEfx.AL_EFFECTSLOT_GAIN, Math.max(0, Math.min(1, depth * REVERB_SCALE)));
+		}
+	}
+
+	@Override
 	public void tick(float dt) {
 		Iterator<Slot> it = slots.values().iterator();
 		while (it.hasNext()) {
@@ -249,6 +273,10 @@ public final class OpenAlBackend implements AudioBackend {
 			}
 			alDeleteBuffers(b[1]);
 		});
+		if (reverbSlot != 0) {
+			EXTEfx.alDeleteAuxiliaryEffectSlots(reverbSlot);
+			EXTEfx.alDeleteEffects(reverbEffect);
+		}
 		alcMakeContextCurrent(0);
 		alcDestroyContext(context);
 		alcCloseDevice(device);

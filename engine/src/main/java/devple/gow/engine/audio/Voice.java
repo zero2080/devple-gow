@@ -14,6 +14,8 @@ public final class Voice {
 	public float pan;
 	public float near = 10;
 	public float far = 80;
+	/** 리버브 보내기 없음 (음악·메뉴·MPEG·Dry Effects 그룹, 29 문서 §8). */
+	public boolean dry;
 	/** 설명 (헤드리스 로그·디버그용). */
 	public String label = "";
 
@@ -25,6 +27,7 @@ public final class Voice {
 		v.pan = pan;
 		v.near = near;
 		v.far = far;
+		v.dry = dry;
 		v.label = label;
 		return v;
 	}

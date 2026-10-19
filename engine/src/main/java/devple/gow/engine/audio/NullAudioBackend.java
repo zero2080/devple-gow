@@ -28,6 +28,7 @@ public final class NullAudioBackend implements AudioBackend {
 
 	private final Map<Integer, V> voices = new HashMap<>();
 	private final List<Started> log = new ArrayList<>();
+	private float reverb;
 	private final Vector3f listener = new Vector3f();
 	private int next = 1;
 
@@ -114,5 +115,15 @@ public final class NullAudioBackend implements AudioBackend {
 
 	public int active() {
 		return voices.size();
+	}
+
+	@Override
+	public void reverb(float depth) {
+		reverb = depth;
+	}
+
+	/** 마지막으로 받은 리버브 깊이 (테스트용). */
+	public float reverbDepth() {
+		return reverb;
 	}
 }

@@ -45,5 +45,23 @@ public final class GameSession {
 		if (!sound.loaded().containsKey(permk.name())) {
 			sound.load(permk);
 		}
+		applySoundTweaks(sound, permk);
+	}
+
+	/** TWK_Sound /System/Sound/ 의 리버브 프리셋·Base Reverb (29 문서 §8). */
+	static void applySoundTweaks(SoundManager snd, WadFile permk) {
+		Tweaks t = new Tweaks();
+		t.load(permk);
+		String node = t.findNode("/System/Sound/");
+		if (node == null) {
+			return;
+		}
+		String[] names = {null, "Outdoor Small", "Outdoor Medium", "Outdoor Large", "Indoor Small", "Indoor Medium", "Indoor Large",
+				"Underwater"};
+		int[] presets = new int[names.length];
+		for (int i = 1; i < names.length; i++) {
+			presets[i] = t.i(node, names[i], 0);
+		}
+		snd.setReverbPresets(presets, t.f(node, "Base Reverb", 3500));
 	}
 }

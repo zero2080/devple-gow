@@ -72,6 +72,16 @@ public final class SoundManager implements AutoCloseable {
 	private int nextHandle = 1;
 	private int musicHandle;
 	private String musicName;
+	/** 리버브 프리셋 (TWK_Sound /System/Sound/: 0 = 이미터 사용자 값, 1..7 = Outdoor S/M/L, Indoor S/M/L, Underwater) + Base Reverb. */
+	private final int[] reverbPresets = {0, 2728, 3432, 4792, 2080, 2608, 3472, 3752};
+	private float reverbBase = 3500;
+	/** 리버브에 기여하는 재생 중 이미터 (soundGroup 이 SEM flags bit0 이미터를 켤 때 등록). */
+	private final List<ReverbSource> reverbSources = new ArrayList<>();
+	private float reverbDepth = Float.NaN;
+
+	private record ReverbSource(int handle, int depth, Vector3f pos, float radius) {
+	}
+
 	private BiConsumer<Integer, Integer> rumble = (motor, value) -> {
 	};
 
@@ -362,6 +372,11 @@ public final class SoundManager implements AutoCloseable {
 				if (h != 0) {
 					setRange(h, e.near(), Math.max(e.near() + 1, e.far()));
 					hs.add(h);
+					if (e.reverb()) {
+						int t = e.reverbType();
+						reverbSources.add(new ReverbSource(h, t > 0 && t < reverbPresets.length ? reverbPresets[t] : e.reverbDepth(), p,
+								Math.max(e.near(), e.far())));
+					}
 				}
 			}
 		}
@@ -446,6 +461,47 @@ public final class SoundManager implements AutoCloseable {
 		return Files.exists(f) ? f : null;
 	}
 
+	// ---- 리버브 (29 문서 §8) ----
+
+	/** TWK_Sound 값으로 프리셋 갱신 (presets[1..7], base = "Base Reverb"). */
+	public void setReverbPresets(int[] presets, float base) {
+		System.arraycopy(presets, 1, reverbPresets, 1, Math.min(presets.length, reverbPresets.length) - 1);
+		reverbBase = base;
+	}
+
+	/** 음악·메뉴·MPEG·수중 음악·Dry Effects 그룹은 리버브를 보내지 않는다. */
+	static boolean isDryGroup(int group) {
+		return group == 1 || group == 6 || group == 8 || group == 9 || group == 14;
+	}
+
+	/**
+	 * 리스너 리버브 깊이 (exe 0x171F24 → 0x172910 근사): 리버브 이미터마다 가중치 w (리스너 거리 → 1..0, 반경 = max(near, far) [추정]),
+	 * 깊이 = Base + Σ w·(프리셋 − Base) / max(1, Σ w). 이미터가 없으면 Base.
+	 */
+	public float reverbTarget() {
+		float sum = 0, wsum = 0;
+		for (ReverbSource r : reverbSources) {
+			float w = r.pos == null ? 1 : Math.max(0, 1 - r.pos.distance(listener) / Math.max(1, r.radius));
+			sum += w * (r.depth - reverbBase);
+			wsum += w;
+		}
+		return reverbBase + sum / Math.max(1, wsum);
+	}
+
+	/** 현재 리버브 깊이 (989snd 단위, 0..0x7FFF). */
+	public float reverbDepth() {
+		return reverbDepth;
+	}
+
+	private void updateReverb(float dt) {
+		reverbSources.removeIf(r -> !playing(r.handle));
+		float target = reverbTarget();
+		// 갑작스런 변화를 막는 이동 (초당 8000 단위 — 원작 슬루 값 미확인)
+		reverbDepth = Float.isNaN(reverbDepth) ? target
+				: reverbDepth + Math.max(-8000 * dt, Math.min(8000 * dt, target - reverbDepth));
+		backend.reverb(reverbDepth / 32767f);
+	}
+
 	// ---- 프레임 ----
 
 	/** 매 프레임: 240Hz 그레인 틱 + 백엔드 보충 + 끝난 인스턴스 정리. */
@@ -458,6 +514,7 @@ public final class SoundManager implements AutoCloseable {
 				i.tick();
 			}
 		}
+		updateReverb(dt);
 		backend.tick(dt);
 		streams.keySet().removeIf(id -> !backend.playing(id));
 		Iterator<SoundInstance> it = instances.values().iterator();
