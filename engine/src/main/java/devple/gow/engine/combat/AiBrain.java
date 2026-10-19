@@ -393,34 +393,88 @@ public final class AiBrain {
 		return o == null || o == this;
 	}
 
-	/** 빈 칸 중 대상 거리가 반경에 가깝고 자신에게 가까운 칸 (0x20BA60 근사). */
+	/**
+	 * 칸 선택 (0x20BA60 → 0x20BFB0):
+	 * <ol>
+	 *   <li>막힌 칸 = 다른 적이 점유한 칸 + 대상 칸 (원작은 여기에 벽 칸 비트 +0x40 도 OR — 미구현 [근사])</li>
+	 *   <li>자기 칸에서 4방향 flood fill → 도달 불가 칸도 제외 (자기 칸이 격자 밖이면 생략)</li>
+	 *   <li>대상 중심 ±반경 정사각형 안 균등 무작위 점 → 칸, 제외 칸이 아니면 채택. 최대 5번</li>
+	 *   <li>실패하면 121 칸 중 무작위, 막혔으면 대체 (원작 sub_00243B68 — 미상 → 자신에 가장 가까운 빈 칸 [근사])</li>
+	 * </ol>
+	 */
 	private void pickCell(float radius) {
 		freeCell();
-		Vector3f tp = target.position();
-		int best = -1;
-		float bestCost = Float.MAX_VALUE;
-		for (int c = 0; c < GRID * GRID; c++) {
-			if (!cellFree(c)) {
-				continue;
+		int n = GRID * GRID;
+		boolean[] blocked = new boolean[n];
+		for (int c = 0; c < n; c++) {
+			blocked[c] = !cellFree(c);
+		}
+		blocked[HALF * GRID + HALF] = true;
+		boolean[] excluded = blocked.clone();
+		int start = cellOf(self.pos);
+		if (start >= 0) {
+			boolean[] reach = new boolean[n];
+			java.util.ArrayDeque<Integer> q = new java.util.ArrayDeque<>();
+			reach[start] = true;
+			q.add(start);
+			while (!q.isEmpty()) {
+				int c = q.poll(), i = c / GRID, j = c % GRID;
+				int[][] nb = {{i - 1, j}, {i + 1, j}, {i, j - 1}, {i, j + 1}};
+				for (int[] e : nb) {
+					if (e[0] < 0 || e[0] >= GRID || e[1] < 0 || e[1] >= GRID) {
+						continue;
+					}
+					int d = e[0] * GRID + e[1];
+					if (!reach[d] && !blocked[d]) {
+						reach[d] = true;
+						q.add(d);
+					}
+				}
 			}
-			int i = c / GRID - HALF, j = c % GRID - HALF;
-			float r = (float) Math.hypot(i * CELL, j * CELL);
-			if (r < CELL * 0.75f) {
-				continue;
-			}
-			float cx = tp.x + i * CELL, cz = tp.z + j * CELL;
-			// 반경보다 바깥 칸은 토큰 획득 거리(R_wait×16×1.1)를 넘을 수 있어 강하게 피함
-			float cost = Math.abs(r - radius) * (r > radius ? 4f : 1.5f)
-					+ 0.15f * (float) Math.hypot(cx - self.pos.x, cz - self.pos.z) + rnd.nextFloat() * 4f;
-			if (cost < bestCost) {
-				bestCost = cost;
-				best = c;
+			for (int c = 0; c < n; c++) {
+				excluded[c] |= !reach[c];
 			}
 		}
-		cell = best < 0 ? HALF * GRID + HALF : best;
+		Vector3f tp = target.position();
+		int chosen = -1;
+		for (int tries = 0; tries < 5 && chosen < 0; tries++) {
+			Vector3f pnt = new Vector3f(tp.x + (2 * rnd.nextFloat() - 1) * radius, tp.y, tp.z + (2 * rnd.nextFloat() - 1) * radius);
+			int c = cellOf(pnt);
+			if (c >= 0 && !excluded[c]) {
+				chosen = c;
+			}
+		}
+		if (chosen < 0) {
+			int c = rnd.nextInt(n);
+			if (!blocked[c]) {
+				chosen = c;
+			} else {
+				float best = Float.MAX_VALUE;
+				for (int k = 0; k < n; k++) {
+					if (!excluded[k]) {
+						float d = cellPos(k).distance(self.pos);
+						if (d < best) {
+							best = d;
+							chosen = k;
+						}
+					}
+				}
+			}
+		}
+		cell = chosen < 0 ? HALF * GRID + HALF : chosen;
 		slot.cells.put(cell, this);
 		atCellMs = 0;
 		sinceCellMs = 0;
+	}
+
+	/** 0x20AF30: 위치 → 칸 번호 (대상 중심 11×11, 32 단위, 밖이면 −1). */
+	private int cellOf(Vector3f p) {
+		Vector3f tp = target.position();
+		float fx = (p.x - tp.x) / CELL + HALF + 0.5f, fz = (p.z - tp.z) / CELL + HALF + 0.5f;
+		if (fx < 0 || fz < 0 || fx >= GRID || fz >= GRID) {
+			return -1;
+		}
+		return (int) fx * GRID + (int) fz;
 	}
 
 	private void freeCell() {
