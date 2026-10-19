@@ -26,6 +26,15 @@ public interface CombatOwner {
 	/** 이동 방향 yaw (정면 = 모델 -Z 를 yaw 만큼 회전). */
 	float yaw();
 
+	/** HasMagic (0x1D93C0): 선택 마법(3–6)을 쓸 MP 가 있는지. */
+	default boolean hasMagic(int magicId) {
+		return true;
+	}
+
+	/** UseMagic: 마법 분기로 기술을 시작할 때 MP 소모. */
+	default void useMagic(int magicId) {
+	}
+
 	/**
 	 * 피해 적용. 반환값 = 잡기 원 임계 HP(AI1 "Circle HP")를 이번 피해로 통과했는지 (이벤트 21).
 	 */

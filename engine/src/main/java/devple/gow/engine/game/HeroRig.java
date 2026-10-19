@@ -39,6 +39,7 @@ public final class HeroRig implements AutoCloseable {
 	public final GodMode godMode;
 	public final HitCounter hitCounter;
 	public final DamageRules rules;
+	public final devple.gow.engine.combat.Magic magic;
 	public int difficulty = 1;
 	private final AnimatedModel model;
 	private final Shader shader;
@@ -60,6 +61,7 @@ public final class HeroRig implements AutoCloseable {
 		godMode = new GodMode(tweaks);
 		hitCounter = new HitCounter(tweaks);
 		rules = new DamageRules(tweaks);
+		magic = new devple.gow.engine.combat.Magic(tweaks, player);
 		combat = new Combatant(new CombatData(permk, CombatData.heroFiles(), set), animator, owner());
 		combat.setDamageScale(() -> rules.playerScale(difficulty, player.costume, bladeLevel(), godMode.active()));
 		hittable = new Hittable() {
@@ -137,6 +139,14 @@ public final class HeroRig implements AutoCloseable {
 				return -1;
 			}
 
+			public boolean hasMagic(int id) {
+				return magic.has(id);
+			}
+
+			public void useMagic(int id) {
+				magic.use(id);
+			}
+
 			public Vector3f position() {
 				return ctl.position;
 			}
@@ -166,6 +176,7 @@ public final class HeroRig implements AutoCloseable {
 			}
 		}
 		hitCounter.update(dt);
+		magic.update(combat, dt);
 	}
 
 	public void draw(Camera cam, float aspect, float alpha, Texture white) {

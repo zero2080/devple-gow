@@ -97,3 +97,10 @@
 
 `EnemyFactoryTest`: 미노타우로스 = 050–053·HP 90·방어 17, 해골병 = 020…028·HP 35, 하피 = 본체 스켈레톤·HP 15.
 검증 로그 (`--hero --blade 2 --enemy R_SKS --auto combo`): 4+4+4+6+6 = 24 피해 후 COMBO6A 12 → HP 35 를 넘겨 `EV_DEATH → death02`.
+
+## 9. 마법 (`combat/Magic`)
+- `CombatOwner.hasMagic / useMagic` = 원작 HasMagic(0x1D93C0) / UseMagic. 분기 magic 3–6 은 **선택 마법 일치 + MP ≥ 비용** 일 때만 통과, 기술 시작 시 MP 차감.
+- 비용 (TWK `/Player/<마법>/`): 번개·제우스 `Stage n Magic Drain`, 메두사 `Stage n Drain × 0.05`, 하데스 75.
+- 포세이돈의 분노: 마법 버튼(R2 매핑) 홀드 → M513 AIRLIGHTNINGSTART → 루프(M510/507) 동안 0.25초마다 `Stage n Damage Per Second × 0.25`, 사거리 `Reach × 16 × 2` [추정], 넉백 `Ground Impulse Away`.
+- `MagicTest`: 포세이돈 획득 → MP 100, 시전 → 67 (비용 33), 범위 피해 확인.
+- 미구현: 메두사 석화, 제우스 투척, 하데스 소환 효과, 시각 이펙트(FXC/PTC 파티클).

@@ -97,6 +97,15 @@ public final class Combatant {
 		return stanceTag;
 	}
 
+	public Hittable target() {
+		return target;
+	}
+
+	/** 현재 기술의 애니 이름 (없으면 null). */
+	public String clipName() {
+		return clip != null ? clip.name : null;
+	}
+
 	/** 현재 기술 진행률 0..1 (애니 시간 / 길이). */
 	public float progress() {
 		if (move == null || clip == null || clip.duration <= 0) {
@@ -315,7 +324,7 @@ public final class Combatant {
 		if (b.magic() == 7 && !owner.artemisEquipped()) {
 			return -1;
 		}
-		if (b.magic() >= 3 && b.magic() <= 6 && b.magic() != owner.selectedMagic()) {
+		if (b.magic() >= 3 && b.magic() <= 6 && (b.magic() != owner.selectedMagic() || !owner.hasMagic(b.magic()))) {
 			return -1;
 		}
 		float hp = owner.hp();
@@ -369,6 +378,9 @@ public final class Combatant {
 		if (m == null) {
 			log.accept("기술 없음: " + b.target());
 			return;
+		}
+		if (b.magic() >= 3 && b.magic() <= 6) {
+			owner.useMagic(b.magic());
 		}
 		move = m;
 		clip = data.animation(m);
