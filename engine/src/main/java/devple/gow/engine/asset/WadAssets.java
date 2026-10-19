@@ -72,8 +72,27 @@ public final class WadAssets implements AutoCloseable {
 		});
 	}
 
+	/** 파싱된 원본 모델 (없으면 null). */
+	public GowModel gowModel(String mdlName) {
+		return gowModels.stream().filter(m -> m.name.equals(mdlName)).findFirst().orElse(null);
+	}
+
+	/** 머티리얼의 첫 레이어 텍스처 이름 (없으면 null). */
+	public String materialTexture(String matName) {
+		MaterialResource m = materials.get(matName);
+		return m == null || m.layers().isEmpty() ? null : m.layers().getFirst().texture();
+	}
+
+	/** 이미 변환된 TriMesh (예: 레벨 배치 후 월드 좌표) 를 이 WAD 의 머티리얼로 GPU 모델화. 캐시하지 않는다. */
+	public RenderModel build(String name, TriMesh tm) {
+		return buildMesh(name, tm);
+	}
+
 	private RenderModel build(GowModel gm) {
-		TriMesh tm = TriMesh.of(gm, 0);
+		return buildMesh(gm.name, TriMesh.of(gm, 0));
+	}
+
+	private RenderModel buildMesh(String name, TriMesh tm) {
 		List<RenderModel.Part> parts = new ArrayList<>();
 		float[] min = {Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE};
 		float[] max = {-Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE};
@@ -123,7 +142,7 @@ public final class WadAssets implements AutoCloseable {
 			}
 			parts.add(new RenderModel.Part(new Mesh(v, idx, GL_TRIANGLES), tex, blend, tint, s.hasNormal));
 		}
-		return new RenderModel(gm.name, parts, min, max);
+		return new RenderModel(name, parts, min, max);
 	}
 
 	@Override

@@ -20,9 +20,10 @@ package devple.gow.tools.model;
  * @param comps  원소당 성분 수 (V4-5 는 4)
  * @param data   count*comps 개 정수. 부호/0 확장 + STMOD(offset/difference) 적용 후 값
  * @param offset 원본 스트림 내 명령 위치 (디버그용)
+ * @param row    STMOD 1(offset) 로 더해진 STROW 값 (없으면 null). 정적 메시 위치의 툴 오프셋 — 게임은 쓰지 않는다 (12 문서)
  */
 public record VifUnpack(int vn, int vl, int addr, boolean usn, boolean flg, int cl, int wl, int count, int comps,
-						int[] data, int offset) {
+						int[] data, int offset, int[] row) {
 
 	public static final int VL_32 = 0;
 	public static final int VL_16 = 1;

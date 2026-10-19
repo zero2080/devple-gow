@@ -16,8 +16,10 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 | 08 | [엔진 아키텍처 (Java + LWJGL)](08-engine-architecture.md) | 골격 + 모델 렌더 |
 | 09 | [오디오 포맷 (VAG / VPK)](09-audio-format.md) | 완료 |
 | 11 | [성장(업그레이드 비용) / 픽업(오브·아이템) / 저장(세이브 구조) / 씬 흐름(상태 머신·레벨 그래프)](11-progression-save-flow.md) | 1차 완료 (미해결 §9) |
+| 12 | [레벨 구성: 배치(go/오브젝트) / 충돌(Sheet, BallHull) / 카메라(CAM, CMV)](12-level-format.md) | 1차 완료 (표면 속성 비트·레일 카메라 미상) |
 | 20 | [구현: 성장 시스템](20-impl-progression.md) | 완료 (테스트 6) |
 | 22 | [구현: 씬 흐름 / 게임 상태 머신](22-impl-game-flow.md) | 로직 완료 (테스트 2) |
+| 23 | [구현: 레벨 씬 / 충돌 질의](23-impl-level.md) | 렌더·충돌 질의 완료 (테스트 4) |
 | 1x | 게임 시스템 재구현: 전투, 스킬/마법, 이벤트, UI | 진행 예정 |
 
 ## 빌드 / 도구 실행
@@ -33,4 +35,6 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 ./gradlew :tools:run --args="tweak:dump gow-rom/R_HERO0.WAD work/exe/twk_R_HERO0.txt"  # TWK 튜닝값 (키 이름 복원)
 ./gradlew :tools:run --args="progress:dump gow-rom"                                  # 업그레이드 비용·성장·오브·세이브 구조
 ./gradlew :tools:run --args="progress:levels gow-rom work/progression/levels.txt"    # 레벨 연결 그래프 (ESC 씬 이동 호출)
+./gradlew :tools:run --args="level:info gow-rom/ATHN01A.WAD"                          # 레벨 배치/충돌/볼륨/카메라
+./gradlew :engine:run --args="--level gow-rom/ATHN01A.WAD --cam auto --col"           # 레벨 뷰어
 ```

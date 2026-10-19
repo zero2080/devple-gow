@@ -27,6 +27,8 @@ public final class VertexBatch {
 	public final float[][] uv;
 	public final float[][] normal;
 	public final int[][] color;
+	/** 위치 UNPACK 에 더해진 STROW ÷ 16 (x, y, z). 없으면 0. 레벨 배치 시 빼야 한다 (12 문서 §2). */
+	public final float[] posRow = new float[3];
 	/** V4-32 쿼드워드들 (GIF 태그 등). VU 주소와 함께. */
 	public final List<int[]> qwords = new ArrayList<>();
 	public final List<Integer> qwordAddr = new ArrayList<>();
@@ -57,6 +59,11 @@ public final class VertexBatch {
 			}
 		}
 		count = p == null ? 0 : p.count();
+		if (p != null && p.row() != null && p.vl() != VifUnpack.VL_32) {
+			for (int k = 0; k < 3; k++) {
+				posRow[k] = p.row()[k] * POS_SCALE;
+			}
+		}
 		pos = new int[count][4];
 		uv = t == null ? null : new float[count][2];
 		normal = n == null ? null : new float[count][3];

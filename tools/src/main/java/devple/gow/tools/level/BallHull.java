@@ -1,0 +1,122 @@
+package devple.gow.tools.level;
+
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * 볼록 볼륨 "BallHull" (COL 0x11). 소유 오브젝트 관절 로컬 좌표.
+ * {@code CDV_} 동적 충돌(kind 0), {@code CMV_} 카메라 볼륨(1), {@code ENV_} 환경 트리거(2), {@code SEV_} 사운드 영역(3).
+ * <pre>
+ * 0x00 u32 0x11   0x04 u32 kind   0x08 "BallHull"   0x10 u32 크기   0x14 u32 ballCount   0x18 u32 hullCount
+ * 0x1C vec4 경계구 (x, y, z, r)   0x2C u32 ?   0x30 u32 ? (CDV 0x1F)   0x34 u32 nameCount   0x38 u32 planeCount
+ * 0x3C u32[11] 오프셋: [0] 이름 char[24][nameCount]  [1..3] ball 보조 표(미상)  [4] vec4 ball (x, y, z, r)
+ *                     [5] u8 hull별 평면 수  [6][7] 미상  [8] vec4 hull 중심
+ *                     [9] u8 평면별 이름 번호(CMV: 활성화할 카메라 RCM_x)  [10] vec4 평면 (n, d)
+ * 내부 판정: ball 안 (|p - c| &lt;= r) 이거나, hull 의 모든 평면에 대해 n·p + d &lt;= 0
+ *   (n 은 관절 스케일이 반영된 비정규 벡터일 수 있음 — 부호 판정이므로 로컬 좌표에서 그대로 쓴다)
+ * </pre>
+ */
+public final class BallHull {
+
+	public record Hull(float[] center, List<float[]> planes, int nameIndex) {
+	}
+
+	public final String name;
+	public final int kind;
+	public final float[] sphere = new float[4];
+	public final List<String> names = new ArrayList<>();
+	public final List<Hull> hulls = new ArrayList<>();
+	/** 구 볼륨 (x, y, z, r). */
+	public final List<float[]> balls = new ArrayList<>();
+
+	public BallHull(String name, ByteBuffer d) {
+		this.name = name;
+		kind = d.getInt(4);
+		int ballCount = d.getInt(0x14);
+		int hullCount = d.getInt(0x18);
+		for (int k = 0; k < 4; k++) {
+			sphere[k] = d.getFloat(0x1C + k * 4);
+		}
+		int nameCount = d.getInt(0x34);
+		int planeCount = d.getInt(0x38);
+		int[] off = new int[11];
+		for (int i = 0; i < 11; i++) {
+			off[i] = d.getInt(0x3C + i * 4);
+		}
+		for (int i = 0; i < nameCount; i++) {
+			byte[] b = new byte[24];
+			d.get(off[0] + i * 24, b);
+			int len = 0;
+			while (len < 24 && b[len] != 0) {
+				len++;
+			}
+			names.add(new String(b, 0, len, StandardCharsets.ISO_8859_1));
+		}
+		for (int b = 0; b < ballCount; b++) {
+			int o = off[4] + b * 16;
+			balls.add(new float[]{d.getFloat(o), d.getFloat(o + 4), d.getFloat(o + 8), d.getFloat(o + 12)});
+		}
+		int plane = 0;
+		for (int h = 0; h < hullCount; h++) {
+			int n = d.get(off[5] + h) & 0xFF;
+			float[] c = {d.getFloat(off[8] + h * 16), d.getFloat(off[8] + h * 16 + 4), d.getFloat(off[8] + h * 16 + 8)};
+			List<float[]> ps = new ArrayList<>();
+			int nameIndex = plane < planeCount ? d.get(off[9] + plane) & 0xFF : 0;
+			for (int k = 0; k < n && plane < planeCount; k++, plane++) {
+				int o = off[10] + plane * 16;
+				ps.add(new float[]{d.getFloat(o), d.getFloat(o + 4), d.getFloat(o + 8), d.getFloat(o + 12)});
+			}
+			hulls.add(new Hull(c, ps, nameIndex));
+		}
+	}
+
+	public static boolean is(ByteBuffer d) {
+		return d.limit() > 0x68 && d.getInt(0) == 0x11 && d.get(8) == 'B' && d.get(12) == 'H';
+	}
+
+	/** 로컬 좌표 p 가 볼륨 안인지 (ball 또는 hull). */
+	public boolean contains(float x, float y, float z) {
+		for (float[] b : balls) {
+			float dx = x - b[0], dy = y - b[1], dz = z - b[2];
+			if (dx * dx + dy * dy + dz * dz <= b[3] * b[3]) {
+				return true;
+			}
+		}
+		return find(x, y, z) >= 0;
+	}
+
+	/** 로컬 좌표 p 를 포함하는 첫 hull 번호, 없으면 -1. */
+	public int find(float x, float y, float z) {
+		for (int h = 0; h < hulls.size(); h++) {
+			boolean in = !hulls.get(h).planes.isEmpty();
+			for (float[] p : hulls.get(h).planes) {
+				if (p[0] * x + p[1] * y + p[2] * z + p[3] > 0) {
+					in = false;
+					break;
+				}
+			}
+			if (in) {
+				return h;
+			}
+		}
+		return -1;
+	}
+
+	/** hull 이 가리키는 이름 (CMV 의 경우 "RCM_" + 카메라 이름). */
+	public String nameOf(int hull) {
+		int i = hulls.get(hull).nameIndex;
+		return i < names.size() ? names.get(i) : null;
+	}
+
+	public String kindName() {
+		return switch (kind) {
+			case 0 -> "collision";
+			case 1 -> "camera";
+			case 2 -> "environment";
+			case 3 -> "sound";
+			default -> "kind" + kind;
+		};
+	}
+}
