@@ -2,6 +2,7 @@ package devple.gow.engine.fx;
 
 import devple.gow.engine.asset.RenderModel;
 import devple.gow.engine.render.Texture;
+import devple.gow.tools.fx.FxResources;
 
 /**
  * 이미터 한 종류의 파라미터 (31 문서 §4). PTC_/SEM_ 해석값이나 SCR_Weather 에서 만든다.
@@ -25,17 +26,41 @@ import devple.gow.engine.render.Texture;
  * @param speed      원뿔 모드 속력 (월드/초), speedRnd = 폭: v = speed − r/2 + rand·r
  * @param fadeCurve  0 = 선형 color0→color1, 1 = 알파 4u(1−u), 2 = 알파 (A·u + B·u²)/128 (PTC VU 상수 추정)
  * @param alphaA     fadeCurve 2 계수 A, alphaB = B
+ * @param ptc        원작 PTC_ (null 아니면 색·크기·위치·회전·블렌드를 VU 블록 식 {@link devple.gow.tools.fx.PtcVu} 로 계산, 16 문서 §2.4)
  */
 public record ParticleDef(String name, float rate, float life, float lifeJitter, float[] box, float[] velocity, float[] spread,
 						  float[] accel, float drag, float size0, float size1, float[] color0, float[] color1, float fadeIn,
 						  float stretch, float spin, Texture texture, int frames, RenderModel.Blend blend,
-						  float cone, float speed, float speedRnd, int fadeCurve, float alphaA, float alphaB) {
+						  float cone, float speed, float speedRnd, int fadeCurve, float alphaA, float alphaB, FxResources.Shape ptc) {
+
+	/** 근사 정의 (VU 식 없음). */
+	public ParticleDef(String name, float rate, float life, float lifeJitter, float[] box, float[] velocity, float[] spread,
+					   float[] accel, float drag, float size0, float size1, float[] color0, float[] color1, float fadeIn,
+					   float stretch, float spin, Texture texture, int frames, RenderModel.Blend blend,
+					   float cone, float speed, float speedRnd, int fadeCurve, float alphaA, float alphaB) {
+		this(name, rate, life, lifeJitter, box, velocity, spread, accel, drag, size0, size1, color0, color1, fadeIn, stretch, spin,
+				texture, frames, blend, cone, speed, speedRnd, fadeCurve, alphaA, alphaB, null);
+	}
+
+	/** 같은 정의에 원작 PTC VU 식을 붙인다 (수명 흔들림 0: 원작 색 곡선이 수명에 맞춰져 있다). */
+	public ParticleDef withPtc(FxResources.Shape shape) {
+		return new ParticleDef(name, rate, life, 0, box, velocity, spread, accel, drag, size0, size1, color0, color1, fadeIn, stretch,
+				spin, shape.textured() ? texture : null, frames, blend, cone, speed, speedRnd, fadeCurve, alphaA, alphaB, shape);
+	}
+
+	/** VU 식으로 그리는가. */
+	public boolean vu() {
+		return ptc != null && ptc.vu() != null && !VU_OFF;
+	}
+
+	/** 비교용: 환경 변수 GOW_PTCVU=off 면 이전 근사 렌더. */
+	private static final boolean VU_OFF = "off".equals(System.getenv("GOW_PTCVU"));
 
 	/** 상자 모드 (비/눈 등). */
 	public ParticleDef(String name, float rate, float life, float lifeJitter, float[] box, float[] velocity, float[] spread,
 					   float[] accel, float drag, float size0, float size1, float[] color0, float[] color1, float fadeIn,
 					   float stretch, float spin, Texture texture, int frames, RenderModel.Blend blend) {
 		this(name, rate, life, lifeJitter, box, velocity, spread, accel, drag, size0, size1, color0, color1, fadeIn, stretch, spin,
-				texture, frames, blend, -1, 0, 0, 0, 0, 0);
+				texture, frames, blend, -1, 0, 0, 0, 0, 0, null);
 	}
 }

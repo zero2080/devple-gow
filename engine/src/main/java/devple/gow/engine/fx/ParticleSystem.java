@@ -4,6 +4,8 @@ import devple.gow.engine.asset.RenderModel;
 import devple.gow.engine.render.Camera;
 import devple.gow.engine.render.Shader;
 import devple.gow.engine.render.Texture;
+import devple.gow.tools.fx.FxResources;
+import devple.gow.tools.fx.PtcVu;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.lwjgl.system.MemoryUtil;
@@ -56,6 +58,8 @@ public final class ParticleSystem implements AutoCloseable {
 
 	private final int max;
 	private final float[] px, py, pz, vx, vy, vz, age, life, seed;
+	/** 생성 위치·속도 (VU 식 레코드: q0 = (위치, 출생), q1 = (속도, 0)). */
+	private final float[] p0x, p0y, p0z, v0x, v0y, v0z;
 	private final Emitter[] owner;
 	private int count;
 	private final List<Emitter> emitters = new ArrayList<>();
@@ -89,6 +93,12 @@ public final class ParticleSystem implements AutoCloseable {
 		age = new float[max];
 		life = new float[max];
 		seed = new float[max];
+		p0x = new float[max];
+		p0y = new float[max];
+		p0z = new float[max];
+		v0x = new float[max];
+		v0y = new float[max];
+		v0z = new float[max];
 		owner = new Emitter[max];
 		shader = new Shader("particle.vert", "particle.frag");
 		buf = MemoryUtil.memAllocFloat(max * 6 * STRIDE);
@@ -151,6 +161,9 @@ public final class ParticleSystem implements AutoCloseable {
 				i--;
 				continue;
 			}
+			if (d.vu()) {
+				continue; // 위치·색·크기는 렌더 때 VU 식으로 (원작도 매 프레임 레코드 + 나이로 다시 계산)
+			}
 			vx[i] += d.accel()[0] * dt;
 			vy[i] += d.accel()[1] * dt;
 			vz[i] += d.accel()[2] * dt;
@@ -193,6 +206,12 @@ public final class ParticleSystem implements AutoCloseable {
 		age[to] = age[from];
 		life[to] = life[from];
 		seed[to] = seed[from];
+		p0x[to] = p0x[from];
+		p0y[to] = p0y[from];
+		p0z[to] = p0z[from];
+		v0x[to] = v0x[from];
+		v0y[to] = v0y[from];
+		v0z[to] = v0z[from];
 		owner[to] = owner[from];
 	}
 
@@ -232,6 +251,12 @@ public final class ParticleSystem implements AutoCloseable {
 		age[i] = 0;
 		life[i] = d.life() * (1 + r(d.lifeJitter()));
 		seed[i] = rnd.nextFloat();
+		p0x[i] = px[i];
+		p0y[i] = py[i];
+		p0z[i] = pz[i];
+		v0x[i] = vx[i];
+		v0y[i] = vy[i];
+		v0z[i] = vz[i];
 	}
 
 	/** 미리 채우기: 비처럼 시작부터 화면에 차 있어야 하는 이미터. */
@@ -273,6 +298,10 @@ public final class ParticleSystem implements AutoCloseable {
 		}
 		Vector3f a = new Vector3f(), bAx = new Vector3f(), tmp = new Vector3f();
 		for (ParticleDef d : defs) {
+			if (d.vu()) {
+				renderVu(d, cam, up, right);
+				continue;
+			}
 			buf.clear();
 			int verts = 0;
 			for (int i = 0; i < count; i++) {
@@ -334,6 +363,8 @@ public final class ParticleSystem implements AutoCloseable {
 				shader.set("uUseTex", 0);
 			}
 			shader.set("uSoft", 1);
+			shader.set("uGs", 0);
+			glBlendEquation(GL_FUNC_ADD);
 			if (d.blend() == RenderModel.Blend.ADD) {
 				glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 			} else {
@@ -344,7 +375,279 @@ public final class ParticleSystem implements AutoCloseable {
 		glBindVertexArray(0);
 		glDepthMask(true);
 		glDisable(GL_BLEND);
+		glBlendEquation(GL_FUNC_ADD);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	}
+
+	// ---- 원작 VU 식 렌더 (16 문서 §2.4) ----
+
+	private final float[][] rec = new float[6][4];
+	private final java.util.Map<ParticleDef, PtcVu.Eval> evals = new java.util.IdentityHashMap<>();
+	private int vuVerts;
+
+	/** PS2 화면 높이 (선/점 1 화소 폭 환산). */
+	private static final float GS_LINES = 448f;
+	/** 원작 q21.z = 1/60 (이전 프레임 위치, 선 길이). */
+	private static final float VU_DT = 1 / 60f;
+	private static final boolean DEBUG = System.getenv("GOW_PTCVU_LOG") != null;
+
+	/**
+	 * 원작 파티클 마이크로코드 그대로: 출력 0x222 색 (0x80 = 1.0), 위치·크기·방향은 종류별 ({@link PtcVu}). 블렌드 = PTC flags&amp;3
+	 * (0x44 알파 / 0x48 가산 / 0x42 감산), TEX0.TCC/TFX = flags 0x400 / bits 2–3, 깊이 쓰기 = flags 0x20000.
+	 */
+	private void renderVu(ParticleDef d, Camera cam, Vector3f up, Vector3f right) {
+		FxResources.Shape sh = d.ptc();
+		PtcVu vu = sh.vu();
+		if (vu.kind == 5) {
+			return; // 화면 굴절 (프레임 버퍼를 텍스처로 쓰는 열기 아지랑이) — 미구현, 그리지 않는다
+		}
+		PtcVu.Eval ev = evals.computeIfAbsent(d, k -> vu.newEval());
+		Texture tex = d.texture();
+		shader.set("uGs", 1);
+		shader.set("uUseTex", tex != null ? 1 : 0);
+		shader.set("uTfx", sh.tfx());
+		shader.set("uTcc", sh.textureAlpha() ? 1 : 0);
+		if (tex != null) {
+			tex.bind(0);
+		}
+		switch (sh.gsBlend()) {
+			case 0x48 -> {
+				glBlendEquation(GL_FUNC_ADD);
+				glBlendFunc(GL_ONE, GL_ONE);
+			}
+			case 0x42 -> {
+				glBlendEquation(GL_FUNC_REVERSE_SUBTRACT);
+				glBlendFunc(GL_ONE, GL_ONE);
+			}
+			default -> {
+				glBlendEquation(GL_FUNC_ADD);
+				glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+			}
+		}
+		glDepthMask(sh.depthWrite());
+		float texW = tex != null ? tex.width() * 16f : 1024f, texH = tex != null ? tex.height() * 16f : 1024f;
+		float tanHalf = (float) Math.tan(Math.toRadians(cam.fovDeg) / 2);
+		buf.clear();
+		vuVerts = 0;
+		Vector3f a = new Vector3f(), b = new Vector3f(), p = new Vector3f(), t = new Vector3f();
+		int kind = vu.kind;
+		int segs = kind == 4 ? vu.fanSegments() : 0;
+		// 꼬리 +1/+2 = GS UV (텍셀×16, PRIM FST=1): 보통 (1024,0)/(0,1024) = 64×64 텍스처 전체 [확실: SKLpart 64×64]
+		float du0 = 0, dv0 = 0, du1 = 1, dv1 = 1;
+		if (tex != null && kind != 4 && kind != 7 && kind != 0) {
+			int a0 = vu.tailBits(1, 0), b0 = vu.tailBits(1, 1), a1 = vu.tailBits(2, 0), b1 = vu.tailBits(2, 1);
+			if (a0 >= 0 && a1 >= 0 && b0 >= 0 && b1 >= 0 && Math.max(a0, a1) <= 0x4000 && Math.max(b0, b1) <= 0x4000 && a0 != a1 && b0 != b1) {
+				du0 = Math.min(a0, a1) / texW;
+				du1 = Math.max(a0, a1) / texW;
+				dv0 = Math.min(b0, b1) / texH;
+				dv1 = Math.max(b0, b1) / texH;
+			}
+		}
+		for (int i = 0; i < count; i++) {
+			if (owner[i].def != d) {
+				continue;
+			}
+			record(vu, i);
+			vu.eval(ev, rec, Float.floatToRawIntBits(seed[i]) * 2654435761L, age[i], VU_DT);
+			float[][] o = ev.out;
+			float sc = owner[i].sizeScale;
+			float u0 = du0, v0 = dv0, u1 = du1, v1 = dv1;
+			if (ev.uvSet) {
+				u0 = ev.uv[0] / texW;
+				v0 = ev.uv[1] / texH;
+				u1 = ev.uv[2] / texW;
+				v1 = ev.uv[3] / texH;
+			}
+			float[] c = o[0];
+			float cr = c[0] / 128f, cg = c[1] / 128f, cb = c[2] / 128f, ca = c[3] / 128f;
+			if (DEBUG && i % 50 == 0) {
+				System.err.printf(java.util.Locale.ROOT, "vu %s tex %s uv %d,%d %d,%d k%d age %.2f c=(%.0f,%.0f,%.0f,%.0f) o1=(%.1f,%.1f,%.1f,%.2f) o2w=%.2f%n", d.name(), tex == null ? "-" : tex.width() + "x" + tex.height(),
+						vu.tailBits(1, 0), vu.tailBits(1, 1), vu.tailBits(2, 0), vu.tailBits(2, 1), kind,
+						age[i], c[0], c[1], c[2], c[3], o[1][0], o[1][1], o[1][2], o[1][3], o[2][3]);
+			}
+			switch (kind) {
+				case 0 -> { // 점: 1 화소
+					p.set(o[1][0], o[1][1], o[1][2]);
+					float w = pixel(cam, p, tanHalf);
+					quad(p, a.set(up).mul(w), b.set(right).mul(w), cr, cg, cb, ca, u0, v0, u1, v1);
+				}
+				case 1, 2, 3 -> { // 화면 사각형, 반폭 = 0x223.w (월드). 3 은 0x224.w 회전 (월드 위쪽 기준)
+					p.set(o[1][0], o[1][1], o[1][2]);
+					float s = o[1][3] * sc;
+					if (s <= 0) {
+						continue;
+					}
+					float ang = kind == 3 ? o[2][3] : 0;
+					float cs = (float) Math.cos(ang) * s, sn = (float) Math.sin(ang) * s;
+					a.set(up).mul(cs).fma(sn, right);
+					b.set(right).mul(cs).fma(-sn, up);
+					quad(p, a, b, cr, cg, cb, ca, u0, v0, u1, v1);
+				}
+				case 4 -> { // 원반: 중심색 0x222, 테두리색 0x223, 중심·반지름 0x224
+					p.set(o[2][0], o[2][1], o[2][2]);
+					float s = o[2][3] * sc;
+					if (s <= 0) {
+						continue;
+					}
+					float[] e = o[1];
+					fan(p, up, right, s, segs, cr, cg, cb, ca, e[0] / 128f, e[1] / 128f, e[2] / 128f, e[3] / 128f);
+				}
+				case 7 -> { // 선: 이전(0x224)→현재(0x225), 길이 배율 min(나이/dt, 0x224.w), 머리색 0x222 / 꼬리색 0x223
+					float f = Math.min(age[i] / VU_DT, o[2][3]);
+					t.set(o[3][0] - o[2][0], o[3][1] - o[2][1], o[3][2] - o[2][2]).mul((2 * f - 1) * 0.5f);
+					p.set(o[2][0] + o[3][0], o[2][1] + o[3][1], o[2][2] + o[3][2]).mul(0.5f);
+					float w = pixel(cam, p, tanHalf);
+					float[] e = o[1];
+					line(cam, p, t, w, e[0] / 128f, e[1] / 128f, e[2] / 128f, e[3] / 128f, cr, cg, cb, ca);
+				}
+				case 8 -> { // 방향 줄기: 위치 0x223 (.w 배율), 방향 0x224, 폭 = 시선×방향
+					p.set(o[1][0], o[1][1], o[1][2]);
+					float s = o[1][3] * sc;
+					a.set(o[2][0], o[2][1], o[2][2]).mul(s);
+					t.set(p).sub(cam.eye);
+					b.set(t).cross(a);
+					if (b.lengthSquared() < 1e-10f) {
+						continue;
+					}
+					b.normalize(Math.abs(s));
+					corners(vu, p, a, b, cr, cg, cb, ca, u0, v0, u1, v1);
+				}
+				case 9 -> { // 평면 사각형: 위치 0x223 (.w 배율), 축 0x224 (x), 0x225 (y)
+					p.set(o[1][0], o[1][1], o[1][2]);
+					float s = o[1][3] * sc;
+					a.set(o[3][0], o[3][1], o[3][2]).mul(s);
+					b.set(o[2][0], o[2][1], o[2][2]).mul(s);
+					corners(vu, p, a, b, cr, cg, cb, ca, u0, v0, u1, v1);
+				}
+				default -> {
+				}
+			}
+		}
+		flush();
+		glDepthMask(false);
+	}
+
+	/** 레코드 = 일반 배치 {(위치, 출생), (속도, 0), (속도 방향)} — 종류 9 는 {(위치), 축 A, 축 B} (수평면, 임의 회전) [근사]. */
+	private void record(PtcVu vu, int i) {
+		for (float[] q : rec) {
+			java.util.Arrays.fill(q, 0);
+		}
+		rec[0][0] = p0x[i];
+		rec[0][1] = p0y[i];
+		rec[0][2] = p0z[i];
+		if (vu.kind == 9) {
+			// 바닥 무늬 (피 자국·파문): 원작은 바닥 법선 정렬 코드가 축을 채운다 (0x1F9278) [근사: 수평면]
+			float th = seed[i] * 6.2832f;
+			float cs = (float) Math.cos(th), sn = (float) Math.sin(th);
+			rec[1][0] = cs;
+			rec[1][2] = sn;
+			rec[2][0] = -sn;
+			rec[2][2] = cs;
+			rec[3][0] = cs;
+			rec[3][2] = sn;
+		} else {
+			rec[1][0] = v0x[i];
+			rec[1][1] = v0y[i];
+			rec[1][2] = v0z[i];
+			float l = (float) Math.sqrt(v0x[i] * v0x[i] + v0y[i] * v0y[i] + v0z[i] * v0z[i]);
+			if (l > 1e-6f) {
+				rec[2][0] = v0x[i] / l;
+				rec[2][1] = v0y[i] / l;
+				rec[2][2] = v0z[i] / l;
+			} else {
+				rec[2][1] = -1;
+			}
+		}
+	}
+
+	/** PS2 448 줄 기준 1 화소 (×1.5) 의 월드 반폭. */
+	private static float pixel(Camera cam, Vector3f p, float tanHalf) {
+		float dist = Math.max(p.distance(cam.eye), 1f);
+		return dist * tanHalf / GS_LINES * 1.5f;
+	}
+
+	private void ensure(int verts) {
+		if ((vuVerts + verts) * STRIDE > buf.capacity()) {
+			flush();
+		}
+	}
+
+	private void flush() {
+		if (vuVerts > 0) {
+			buf.flip();
+			glBufferSubData(GL_ARRAY_BUFFER, 0, buf);
+			glDrawArrays(GL_TRIANGLES, 0, vuVerts);
+		}
+		buf.clear();
+		vuVerts = 0;
+	}
+
+	/** 사각형 p ± a ± b (a = 세로, b = 가로). */
+	private void quad(Vector3f p, Vector3f a, Vector3f b, float r, float g, float bl, float al, float u0, float v0, float u1, float v1) {
+		ensure(6);
+		float x = p.x, y = p.y, z = p.z;
+		put(x - b.x - a.x, y - b.y - a.y, z - b.z - a.z, u0, v1, r, g, bl, al);
+		put(x + b.x - a.x, y + b.y - a.y, z + b.z - a.z, u1, v1, r, g, bl, al);
+		put(x + b.x + a.x, y + b.y + a.y, z + b.z + a.z, u1, v0, r, g, bl, al);
+		put(x - b.x - a.x, y - b.y - a.y, z - b.z - a.z, u0, v1, r, g, bl, al);
+		put(x + b.x + a.x, y + b.y + a.y, z + b.z + a.z, u1, v0, r, g, bl, al);
+		put(x - b.x + a.x, y - b.y + a.y, z - b.z + a.z, u0, v0, r, g, bl, al);
+		vuVerts += 6;
+	}
+
+	/** 종류 8/9 모서리: p + a·c.y + b·c.x, c = 꼬리+3 / 꼬리+4 (UV 도 같은 짝, 0x2FC / 0x35E). */
+	private void corners(PtcVu vu, Vector3f p, Vector3f a, Vector3f b, float r, float g, float bl, float al,
+						 float u0, float v0, float u1, float v1) {
+		float x0 = vu.tailFloat(3, 0), y0 = vu.tailFloat(3, 1), x1 = vu.tailFloat(4, 0), y1 = vu.tailFloat(4, 1);
+		if (x0 == x1 && y0 == y1) {
+			x0 = y0 = 1;
+			x1 = y1 = -1;
+		}
+		ensure(6);
+		float[][] v = {
+				{p.x + a.x * y0 + b.x * x0, p.y + a.y * y0 + b.y * x0, p.z + a.z * y0 + b.z * x0, u0, v0},
+				{p.x + a.x * y0 + b.x * x1, p.y + a.y * y0 + b.y * x1, p.z + a.z * y0 + b.z * x1, u1, v0},
+				{p.x + a.x * y1 + b.x * x0, p.y + a.y * y1 + b.y * x0, p.z + a.z * y1 + b.z * x0, u0, v1},
+				{p.x + a.x * y1 + b.x * x1, p.y + a.y * y1 + b.y * x1, p.z + a.z * y1 + b.z * x1, u1, v1}};
+		for (int k : QUAD) {
+			put(v[k][0], v[k][1], v[k][2], v[k][3], v[k][4], r, g, bl, al);
+		}
+		vuVerts += 6;
+	}
+
+	private static final int[] QUAD = {0, 1, 3, 0, 3, 2};
+
+	/** 원반 (종류 4, 0x3A1): 화면을 향한 부채꼴, 중심색 → 테두리색. */
+	private void fan(Vector3f p, Vector3f up, Vector3f right, float s, int segs, float r, float g, float bl, float al,
+					 float er, float eg, float eb, float ea) {
+		ensure(segs * 3);
+		for (int k = 0; k < segs; k++) {
+			double a0 = 2 * Math.PI * k / segs, a1 = 2 * Math.PI * (k + 1) / segs;
+			float c0 = (float) Math.cos(a0) * s, s0 = (float) Math.sin(a0) * s, c1 = (float) Math.cos(a1) * s, s1 = (float) Math.sin(a1) * s;
+			put(p.x, p.y, p.z, 0.5f, 0.5f, r, g, bl, al);
+			put(p.x + right.x * c0 + up.x * s0, p.y + right.y * c0 + up.y * s0, p.z + right.z * c0 + up.z * s0, 0.5f, 0.5f, er, eg, eb, ea);
+			put(p.x + right.x * c1 + up.x * s1, p.y + right.y * c1 + up.y * s1, p.z + right.z * c1 + up.z * s1, 0.5f, 0.5f, er, eg, eb, ea);
+		}
+		vuVerts += segs * 3;
+	}
+
+	/** 선 (종류 7, 0x1E5): 중심 p ± h, 폭 w (화면 1 화소), 꼬리색 → 머리색. */
+	private void line(Camera cam, Vector3f p, Vector3f h, float w, float tr, float tg, float tb, float ta,
+					  float r, float g, float bl, float al) {
+		Vector3f side = new Vector3f(p).sub(cam.eye).cross(h);
+		if (side.lengthSquared() < 1e-10f) {
+			return;
+		}
+		side.normalize(w);
+		ensure(6);
+		float ax = p.x - h.x, ay = p.y - h.y, az = p.z - h.z, bx = p.x + h.x, by = p.y + h.y, bz = p.z + h.z;
+		put(ax - side.x, ay - side.y, az - side.z, 0, 0, tr, tg, tb, ta);
+		put(ax + side.x, ay + side.y, az + side.z, 0, 1, tr, tg, tb, ta);
+		put(bx + side.x, by + side.y, bz + side.z, 1, 1, r, g, bl, al);
+		put(ax - side.x, ay - side.y, az - side.z, 0, 0, tr, tg, tb, ta);
+		put(bx + side.x, by + side.y, bz + side.z, 1, 1, r, g, bl, al);
+		put(bx - side.x, by - side.y, bz - side.z, 1, 0, r, g, bl, al);
+		vuVerts += 6;
 	}
 
 	private void put(float x, float y, float z, float u, float v, float r, float g, float b, float a) {

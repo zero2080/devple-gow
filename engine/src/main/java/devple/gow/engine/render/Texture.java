@@ -11,8 +11,11 @@ import static org.lwjgl.opengl.GL41C.*;
 public final class Texture implements AutoCloseable {
 
 	private final int id;
+	private final int width, height;
 
 	public Texture(int w, int h, ByteBuffer rgba, boolean repeat) {
+		width = w;
+		height = h;
 		id = glGenTextures();
 		glBindTexture(GL_TEXTURE_2D, id);
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
@@ -51,6 +54,15 @@ public final class Texture implements AutoCloseable {
 		Texture t = new Texture(1, 1, b, true);
 		MemoryUtil.memFree(b);
 		return t;
+	}
+
+	/** 업로드 크기 (GS TW/TH 거듭제곱). */
+	public int width() {
+		return width;
+	}
+
+	public int height() {
+		return height;
 	}
 
 	public void bind(int unit) {

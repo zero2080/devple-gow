@@ -29,10 +29,27 @@ import static org.lwjgl.opengl.GL41C.glActiveTexture;
 public final class FxEnvironment {
 
 	/**
-	 * 안개 시작 거리 D0 = CentreZ × 이 값 (16 문서 §1.2). GS Z = 16·CentreZ·n·(f−d)/((f−n)·d) (n = 10, 확실),
-	 * Z→알파 램프 기준 Z 는 미확정 [추정] — 스크린샷 비교로 2^14 → D0 = CentreZ·10/1024 (HDES01A 610, ATHN01A 293).
+	 * 원작 뷰포트 near (+0x384 기본 −10). GS Z24 = 0x800000 + z', z' = 16·CentreZ·n·(f−d)/((f−n)·d) (16 문서 §1.2) [확실].
+	 * 안개 패스 0x127918 (Z 를 CT24 로 읽어 바이트별 부호 반전 → Z24 max(·, 0x807FFF) → Z16 보기 하위 반워드의 상위 바이트를
+	 * 프레임 알파로) 의 결과: G = ⌊z'/256⌋, A8 = 256 − G (1 ≤ G ≤ 128) / 0x7F (그 밖) [확실: GS 메모리 배치 시뮬레이션],
+	 * 이어서 0x126CF8 이 A8·Fog_A 로 변조 → 블렌드 계수 Ad/0x80 (basic.frag).
 	 */
-	public static float fogScale = 10f / 1024f;
+	public static float viewNear = 10f;
+	/** 원작 뷰포트 far 기본 (+0x388 = −10000, SCR_FarClip 이 바꾼다). */
+	public static float viewFar = 10000f;
+
+	/**
+	 * basic.frag 와 같은 깊이 알파 (Fog_A 곱하기 전, 0..127/128): z' = 16·C·n·(f−d)/((f−n)·d),
+	 * z' ≥ 0x7FFF → 0 (안개색 스프라이트 Z 검사 탈락), 아니면 (128 − ⌊z'/256⌋)/128 (⌊z'/256⌋ = 0 이면 127/128).
+	 */
+	public static float depthAlpha(int centreZ, float d, float far) {
+		float zp = 16f * centreZ * viewNear * Math.max(far - d, 0) / ((far - viewNear) * Math.max(d, 1e-3f));
+		if (zp >= 32767f) {
+			return 0;
+		}
+		float g = (float) Math.floor(zp / 256f);
+		return (g >= 1 ? 128 - g : 127) / 128f;
+	}
 
 	private final EnvParams params;
 	private final Map<String, float[]> ownerPos = new HashMap<>();
@@ -119,15 +136,16 @@ public final class FxEnvironment {
 			s.set("uFogColor2", c[2][0], c[2][1], c[2][2], c[2][3]);
 			float[] st = layered.stops();
 			s.set("uFogStops", st[0], st[1], st[2]);
-			s.set("uFogDepth", layered.centreZ() * fogScale, cam.near, cam.far, back(layered.backPlane()));
+			s.set("uFogDepth", 16f * layered.centreZ() * viewNear, cam.near, cam.far, back(layered.backPlane()));
 		} else {
 			float[] c = fog.color();
 			s.set("uFogMode", 1);
 			s.set("uFogBlend", fog.blend());
 			s.set("uFogColor", c[0], c[1], c[2], c[3]);
-			s.set("uFogDepth", fog.centreZ() * fogScale, cam.near, cam.far, back(fog.backPlane()));
+			s.set("uFogDepth", 16f * fog.centreZ() * viewNear, cam.near, cam.far, back(fog.backPlane()));
 		}
 		s.set("uFogScreen", fbHeight, 0f);
+		s.set("uFogGs", params.farClips.isEmpty() ? viewFar : params.farClips.getFirst().farDistance(), viewNear);
 		// 안개 텍스처 레이어: 스크롤(초당) · 회전(도/초) · 배율
 		String mat = layered != null ? layered.material() : fog.material();
 		float[] sc = layered != null ? layered.scroll() : fog.scroll();

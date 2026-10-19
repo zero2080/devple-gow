@@ -331,7 +331,16 @@ public final class LevelScene implements Scene {
 				lc = data.placedCameras.getFirst();
 			}
 		}
-		if (lc != null) {
+		String dbg = System.getenv("GOW_LEVEL_CAM"); // 디버그 스크린샷: "ex,ey,ez,tx,ty,tz"
+		if (dbg != null && dbg.equals("print") && lc != null) {
+			System.out.printf(Locale.ROOT, "cam eye %s fwd %s%n", java.util.Arrays.toString(lc.eye()), java.util.Arrays.toString(lc.forward()));
+			dbg = null;
+		}
+		if (dbg != null) {
+			String[] v = dbg.split(",");
+			cam.eye.set(Float.parseFloat(v[0]), Float.parseFloat(v[1]), Float.parseFloat(v[2]));
+			cam.target.set(Float.parseFloat(v[3]), Float.parseFloat(v[4]), Float.parseFloat(v[5]));
+		} else if (lc != null) {
 			float[] eye = lc.eye();
 			float[] fw = lc.forward();
 			cam.eye.set(eye[0], eye[1], eye[2]);

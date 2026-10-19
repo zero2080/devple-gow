@@ -75,6 +75,7 @@ public final class Cli {
 			}
 			case "tree" -> tree(an, parse(args[2]), args.length > 3 ? Integer.parseInt(args[3]) : 2, 0,
 					new java.util.HashSet<>(), System.out);
+			case "vu1" -> Vu1Dis.print(Vu1Dis.load(an.elf(), parse(args[2]), parse(args[3])), System.out); // VIF MPG 체인 → VU1 디스어셈블
 			case "words" -> words(an, parse(args[2]), args.length > 3 ? Integer.parseInt(args[3]) : 64, System.out);
 			default -> throw new IllegalArgumentException("unknown: " + args[0]);
 		}

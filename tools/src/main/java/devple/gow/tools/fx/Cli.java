@@ -33,6 +33,8 @@ public final class Cli {
 			case "env" -> System.out.print(new EnvParams(WadFile.load(Path.of(args[1]))).describe());
 			case "survey" -> survey(Path.of(args[1]));
  			case "ptc" -> ptc(Path.of(args[1]), args.length > 2 ? args[2].toLowerCase() : "");
+			case "ptcsurvey" -> ptcSurvey(Path.of(args[1]));
+			case "ptcvu" -> ptcvu(Path.of(args[1]), args.length > 2 ? args[2].toLowerCase() : "");
 			case "matanim" -> {
 				for (MaterialAnim.Anim a : MaterialAnim.load(WadFile.load(Path.of(args[1]))).values()) {
 					StringBuilder b = new StringBuilder();
@@ -68,6 +70,46 @@ public final class Cli {
 			if (f.name().toLowerCase().contains(filter)) {
 				System.out.printf(java.util.Locale.ROOT, "%-22s field kind=%d mag=%.3f dir=%s att=%.2f dist=%.1f..%.1f%n", f.name(), f.kind(),
 						f.magnitude(), EnvParams.v(f.dir()), f.attenuation(), f.minDist(), f.maxDist());
+			}
+		}
+	}
+
+	/** 전 WAD PTC VU 블록 서명 (종류, 레코드 배치, 플래그&amp;3, 연산, 출력) 분포. */
+	private static void ptcSurvey(Path dir) throws Exception {
+		Map<String, int[]> count = new TreeMap<>();
+		Map<String, String> example = new TreeMap<>();
+		List<Path> wads;
+		try (Stream<Path> s = Files.list(dir)) {
+			wads = s.filter(p -> p.toString().endsWith(".WAD")).sorted().toList();
+		}
+		for (Path p : wads) {
+			for (devple.gow.tools.wad.WadTag t : WadFile.load(p).tags()) {
+				if (t.tag() == devple.gow.tools.wad.WadTagType.RESOURCE && t.magic() == 0x13 && t.hasData() && t.size() >= 0x128) {
+					java.nio.ByteBuffer d = t.data();
+					PtcVu v = new PtcVu(d);
+					StringBuilder k = new StringBuilder(String.format(java.util.Locale.ROOT, "kind=%d lay=%08x fl&3=%d fl=%x ops=", v.kind,
+							d.getInt(0x8C), d.getInt(0x80) & 3, d.getInt(0x80) & 0x7E7FC));
+					k.append(java.util.Arrays.toString(v.tables[6])).append(" t0=").append(java.util.Arrays.toString(v.tables[0]))
+							.append(" t1=").append(java.util.Arrays.toString(v.tables[1]))
+							.append(" t4=").append(java.util.Arrays.toString(v.tables[4])).append(" t5=").append(java.util.Arrays.toString(v.tables[5]));
+					count.computeIfAbsent(k.toString(), x -> new int[1])[0]++;
+					example.putIfAbsent(k.toString(), p.getFileName() + ":" + t.name());
+				}
+			}
+		}
+		count.forEach((k, c) -> System.out.printf("%5d %s  e.g. %s%n", c[0], k, example.get(k)));
+	}
+
+	/** PTC_ VU 블록 식 목록 (PtcVu). */
+	private static void ptcvu(Path wadPath, String filter) throws Exception {
+		for (devple.gow.tools.wad.WadTag t : WadFile.load(wadPath).tags()) {
+			if (t.tag() == devple.gow.tools.wad.WadTagType.RESOURCE && t.magic() == 0x13 && t.hasData() && t.size() >= 0x128
+					&& t.name().toLowerCase().contains(filter)) {
+				java.nio.ByteBuffer d = t.data();
+				int lay = d.getInt(0x8C), lay2 = d.getInt(0x90), lay3 = d.getInt(0x94);
+				System.out.printf(java.util.Locale.ROOT, "%s life=%.2f size=%.1f flags=%x rec=%d layout=%08x %08x %08x%n", t.name(),
+						d.getFloat(0x70), d.getFloat(0x74), d.getInt(0x80), d.getInt(0x84), lay, lay2, lay3);
+				System.out.print(new PtcVu(d).describe());
 			}
 		}
 	}

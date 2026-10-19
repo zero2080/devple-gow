@@ -109,8 +109,10 @@ public final class LevelEmitters {
 		// 볼륨/표면 이미터: 로컬 행렬 스케일 × sectionRadius 크기의 상자에서 [추정]
 		float r = cone ? Math.max(em.minDist(), 0) * 16 : Math.max(scale * Math.max(em.sectionRadius(), 0.5f), 1f);
 		float rate = Math.min(em.rate(), 400);
-		return new ParticleDef(em.name(), rate, life, 0.1f, new float[]{r, r, r}, new float[]{0, speed, 0}, new float[]{rnd, rnd, rnd},
+		ParticleDef pd = new ParticleDef(em.name(), rate, life, 0.1f, new float[]{r, r, r}, new float[]{0, speed, 0}, new float[]{rnd, rnd, rnd},
 				new float[3], 0, size, size * 0.6f, new float[]{c[0], c[1], c[2], Math.min(c[3], 1)}, c1, 0.05f,
 				sh.renderMode() == 6 ? size * 2 : 0, 1.5f, tex, 1, blend, cone ? spread : 0.6f, cone ? speed : Math.max(speed, 8), rnd, fade, aA, aB);
+		// 원작 PTC VU 식 (색·크기·위치·블렌드, 16 문서 §2.4)
+		return sh.vu() != null ? pd.withPtc(sh) : pd;
 	}
 }

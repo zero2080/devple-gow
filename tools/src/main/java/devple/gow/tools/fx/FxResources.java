@@ -53,9 +53,39 @@ public final class FxResources {
 	 * @param vuType    0x98+4 VU 프로그램 종류 (불 3, 비 8, 파문 9, 조각 0)
 	 * @param material  PTC 그룹 안의 MAT_
 	 * @param colors    VU 상수 영역 qword (RGB 0..128 + 변화량 등, 의미 일부만 추정)
+	 * @param vu        VU 블록 식 목록 ({@link PtcVu}: 색·위치·크기·회전을 나이(초)의 식으로 계산) [확실: 마이크로코드]
 	 */
 	public record Shape(String name, String shape, int maxCount, float lifespan, float size, float lodNear, float lodFar, int flags,
-						int vuType, String material, float[][] constants) {
+						int vuType, String material, float[][] constants, PtcVu vu) {
+
+		/** GS ALPHA (0x15DE50 / 0x15EA00): flags&amp;3 = 1 → 0x48 가산, 2 → 0x42 감산, 0·3 → 0x44 알파 [확실]. */
+		public int gsBlend() {
+			return switch (flags & 3) {
+				case 1 -> 0x48;
+				case 2 -> 0x42;
+				default -> 0x44;
+			};
+		}
+
+		/** flags 0x80 = 텍스처 (머티리얼 TEX0/TEX1/CLAMP + TEST 0x5360B), 아니면 정점색만 (TEST 0x50000) [확실]. */
+		public boolean textured() {
+			return (flags & 0x80) != 0;
+		}
+
+		/** TEX0.TCC = flags bit 10 (0x400): 0 이면 텍스처 알파를 쓰지 않고 정점 알파만 [확실]. */
+		public boolean textureAlpha() {
+			return (flags & 0x400) != 0;
+		}
+
+		/** TEX0.TFX = flags bits 2–3: 0 MODULATE, 1 DECAL, 2 HIGHLIGHT, 3 HIGHLIGHT2 [확실]. */
+		public int tfx() {
+			return (flags >> 2) & 3;
+		}
+
+		/** flags 0x20000 → ZBUF.ZMSK = 0 (깊이 쓰기), 아니면 깊이 쓰기 끔 [확실]. */
+		public boolean depthWrite() {
+			return (flags & 0x20000) != 0;
+		}
 
 		/**
 		 * VU 상수에서 색/알파 곡선 추정 [추정]: RGB 세 값(4..256, 0x80 = 1.0) 다음 한 칸 건너 변화량 RGB, 이어서 알파 계수 A, B
@@ -177,7 +207,7 @@ public final class FxResources {
 			c[k] = floats(d, 0x128 + k * 16, 4);
 		}
 		return new Shape(name, EnvScript.cstr(d, 0x54, 24), d.getInt(0x6C), d.getFloat(0x70), d.getFloat(0x74), d.getFloat(0x78),
-				d.getFloat(0x7C), d.getInt(0x80), vu, mat, c);
+				d.getFloat(0x7C), d.getInt(0x80), vu, mat, c, d.limit() >= 0x128 ? new PtcVu(d) : null);
 	}
 
 	/** PTC 바로 뒤의 MAT_ 참조 ({@code GROUP{ PTC_x, MAT_y }}), 없으면 null. */

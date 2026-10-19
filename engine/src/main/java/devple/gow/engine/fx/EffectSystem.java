@@ -460,11 +460,13 @@ public final class EffectSystem implements AutoCloseable {
 		// (불 Tfire 0x691, 번개 0x80281, 베기 반짝임 0x80680) [추정: 플래그-재질 대응]
 		devple.gow.engine.asset.RenderModel.Blend blend = (sh.flags() & 0x8000) != 0 ? devple.gow.engine.asset.RenderModel.Blend.ALPHA
 				: devple.gow.engine.asset.RenderModel.Blend.ADD;
-		return new ParticleDef(em.name(), Math.max(em.rate(), 0), life, 0.15f, new float[]{r, r, r}, new float[3], new float[3], acc,
+		ParticleDef pd = new ParticleDef(em.name(), Math.max(em.rate(), 0), life, 0.15f, new float[]{r, r, r}, new float[3], new float[3], acc,
 				0.3f, size, size1, c0, c1, 0.02f, sh.renderMode() == 6 ? size * 2 : 0, 1.5f,
 				base != null ? base.texture() : null, 1, blend,
 				spread, em.speed() * 16, em.speedRnd() * 16, fade,
 				base != null ? base.alphaA() : 0, base != null ? base.alphaB() : 0);
+		// 원작 PTC VU 식이 있으면 색·크기·위치·블렌드를 그것으로 (16 문서 §2.4) — 위 근사값은 VU 없는 모양용
+		return sh.vu() != null ? pd.withPtc(sh) : pd;
 	}
 
 	@Override
