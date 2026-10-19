@@ -121,7 +121,7 @@ public final class HeroRig implements AutoCloseable {
 			}
 
 			public boolean onGround() {
-				return true;
+				return ctl.grounded;
 			}
 
 			public int bladeLevel() {
@@ -165,6 +165,9 @@ public final class HeroRig implements AutoCloseable {
 	/** 한 틱: 전투 → (기술 중이면 루트 모션, 아니면 이동) → 신 모드 → 히트 카운터. */
 	public void update(Input in, float camYaw, float dt, Vector3f aimTarget) {
 		combat.update(in, dt);
+		if (!combat.active() && in.pressed(PadButton.CROSS)) {
+			ctl.jump(Math.hypot(in.leftX(), in.leftY()) > 0.3);
+		}
 		if (combat.active()) {
 			ctl.updateCombat(combat, in, camYaw, dt, aimTarget);
 		} else {

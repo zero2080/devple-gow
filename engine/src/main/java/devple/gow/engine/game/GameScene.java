@@ -70,7 +70,6 @@ public final class GameScene implements Scene {
 	private final Vector3f spawn = new Vector3f();
 	private final Vector3f checkpoint = new Vector3f();
 	private float spawnYaw;
-	private float vy;
 	private float camYaw;
 	private boolean paused;
 	private float time;
@@ -179,7 +178,7 @@ public final class GameScene implements Scene {
 		hero.ctl.position.set(at);
 		hero.ctl.prevPosition.set(at);
 		hero.ctl.yaw = spawnYaw;
-		vy = 0;
+		hero.ctl.vy = 0;
 	}
 
 	private ScriptListener listener() {
@@ -383,15 +382,19 @@ public final class GameScene implements Scene {
 	private void physics(float dt) {
 		Vector3f p = hero.ctl.position;
 		float g = col.groundHeight(p.x, p.y + STEP, p.z, 4000);
-		if (!Float.isNaN(g) && p.y - g <= 2f && vy <= 0) {
+		var c0 = hero.ctl;
+		if (!Float.isNaN(g) && p.y - g <= 2f && c0.vy <= 0) {
 			p.y = g;
-			vy = 0;
+			c0.vy = 0;
+			c0.grounded = true;
 		} else {
-			vy -= GRAVITY * dt;
-			p.y += vy * dt;
+			c0.vy -= GRAVITY * dt;
+			p.y += c0.vy * dt;
+			c0.grounded = false;
 			if (!Float.isNaN(g) && p.y < g) {
 				p.y = g;
-				vy = 0;
+				c0.vy = 0;
+				c0.grounded = true;
 			}
 		}
 		if (Float.isNaN(g) && p.y < checkpoint.y - 3000) {

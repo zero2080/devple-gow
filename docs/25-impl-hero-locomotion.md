@@ -25,3 +25,16 @@
 - 레벨 충돌(12/23 문서) 연결: 지면 높이 추종, 벽 충돌
 - 전투 상태(10 문서): 공격/방어/회피/점프를 Animator 위에 상태 머신으로
 - 걷기 ↔ 달리기 블렌드 공간(blendIndex/blendParam) 재현
+
+## 5. 점프 / 공중 상태
+| 항목 | 구현 | 근거 |
+|------|------|------|
+| 클립 | 제자리 `jumpUp`(ANIVJump), 이동 중 `jumpAir`(ANIJump), 2단 `jumpdoubleair`(ANIDblJump), 하강 `fallv`(ANIFall), 착지 `land`(ANILand) | TWK `/Animation/goHero/Navigation/` 표 (데이터 그대로) |
+| 이름 대소문자 | `AnimationSet.find` 에 대소문자 무시 2차 검색 추가 | Navigation 표는 "standidle", "fallv" 처럼 소문자 |
+| 점프 초속 | √(2·g·45) ≈ 119 유닛/s, 정점 ≈ 45 유닛 | **추정**. 점프 애니의 zeroJoint Y 는 ~9 유닛뿐 → 궤적은 물리로 처리됨. 원작 점프 파라미터 키는 미복원 |
+| 2단 점프 | 공중에서 × 한 번 더 | 원작 조작 |
+| 공중 제어 | 스틱 방향으로 48 유닛/s | 걷기 속도 [추정] |
+| 공중 상태 | `CombatOwner.onGround() = grounded` → 분기 상태 플래그 0x4 → 공중 기술(AIRH1/AIRV1/AIRDASH …) 활성 | 10 문서 §2.4 |
+| 우선순위 | 전투 기술이 × 를 쓰지 않았을 때만 점프 | |
+
+`JumpAirComboTest`: × → 정점 30–60 유닛, 공중 □ → AIRH1(13), 착지.

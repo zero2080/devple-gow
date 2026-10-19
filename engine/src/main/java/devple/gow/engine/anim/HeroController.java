@@ -33,6 +33,18 @@ public final class HeroController {
 	public float yaw;
 	private float prevYaw;
 
+	/**
+	 * 점프 초속 (유닛/s). 원작 점프 파라미터 키는 미복원 → 정점 높이 ≈ 45 유닛(크레토스 키 1.2배)이 되도록
+	 * v = √(2·g·h), g = 9.82×16 [추정]. 2단 점프도 같은 값.
+	 */
+	public static final float JUMP_SPEED = (float) Math.sqrt(2 * 9.82 * 16 * 45);
+
+	/** 수직 속도 / 지면 여부 / 사용한 점프 수 (물리는 게임 씬이 적분). */
+	public float vy;
+	public boolean grounded = true;
+	private int jumps;
+	private boolean wasGrounded = true;
+
 	private Animation rootClip;
 	private final Vector3f lastZero = new Vector3f();
 
@@ -103,11 +115,44 @@ public final class HeroController {
 		return new Vector3f(p[0], p[1], p[2]);
 	}
 
+	/**
+	 * 점프 (× 버튼). 원작 Navigation 표: 제자리 = ANIVJump "jumpUp", 이동 중 = ANIJump "jumpAir",
+	 * 공중 = ANIDblJump "jumpdoubleair". 2단 점프까지.
+	 */
+	public boolean jump(boolean moving) {
+		if (grounded) {
+			jumps = 1;
+			anim.play(moving ? "jumpAir" : "jumpUp", true);
+		} else if (jumps < 2) {
+			jumps = 2;
+			anim.play("jumpdoubleair", true);
+		} else {
+			return false;
+		}
+		vy = JUMP_SPEED;
+		grounded = false;
+		return true;
+	}
+
 	/** @param camYaw 카메라 Y 회전 (스틱 입력을 카메라 기준으로 해석) */
 	public void update(Input in, float camYaw, float dt) {
 		prevPosition.set(position);
 		prevYaw = yaw;
 		rootClip = null;
+		if (!grounded) {
+			airUpdate(in, camYaw, dt);
+			return;
+		}
+		if (!wasGrounded) {
+			wasGrounded = true;
+			jumps = 0;
+			anim.play("land", true); // ANILand
+		}
+		if (anim.current() != null && anim.current().name.equals("land") && !anim.finished()
+				&& Math.hypot(in.leftX(), in.leftY()) < 0.15f) {
+			anim.update(dt);
+			return;
+		}
 		float sx = in.leftX(), sy = in.leftY();
 		float mag = Math.min(1f, (float) Math.hypot(sx, sy));
 		if (mag < 0.15f) {
@@ -121,6 +166,23 @@ public final class HeroController {
 			float speed = clipSpeed(anim.current());
 			// 정면 -Z 를 yaw 만큼 회전
 			position.add((float) -Math.sin(yaw) * speed * dt, 0, (float) -Math.cos(yaw) * speed * dt);
+		}
+		anim.update(dt);
+	}
+
+	/** 공중: 스틱으로 공중 제어(걷기 속도), 하강 시 ANIFall "fallv". */
+	private void airUpdate(Input in, float camYaw, float dt) {
+		wasGrounded = false;
+		float sx = in.leftX(), sy = in.leftY();
+		float mag = Math.min(1f, (float) Math.hypot(sx, sy));
+		if (mag > 0.15f) {
+			float dirYaw = camYaw + (float) Math.atan2(-sx, sy);
+			yaw += wrap(dirYaw - yaw) * Math.min(1f, TURN_RATE * dt);
+			float speed = 48f * mag;
+			position.add((float) -Math.sin(yaw) * speed * dt, 0, (float) -Math.cos(yaw) * speed * dt);
+		}
+		if (vy < 0 && anim.finished()) {
+			anim.play("fallv", false);
 		}
 		anim.update(dt);
 	}

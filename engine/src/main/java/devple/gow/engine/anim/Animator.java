@@ -45,7 +45,7 @@ public final class Animator {
 		prevTime = time;
 		current = a;
 		time = 0;
-		fadeTime = tweaks.f(twkNode, name + "_Tween", 0.15f);
+		fadeTime = tweaks.f(twkNode, a.name + "_Tween", 0.15f);
 		fade = previous == null || fadeTime <= 0 ? 1f : 0f;
 	}
 

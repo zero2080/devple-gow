@@ -131,6 +131,17 @@ public final class AnimationSet {
 				}
 			}
 		}
+		// 대소문자 무시 2차 검색 (TWK Navigation 표는 "standidle", "fallv" 처럼 소문자로 적혀 있다)
+		for (Group g : groups) {
+			if (grp != null && !g.name.equalsIgnoreCase(grp)) {
+				continue;
+			}
+			for (Animation a : g.acts) {
+				if (a.name.equalsIgnoreCase(nm)) {
+					return a;
+				}
+			}
+		}
 		return null;
 	}
 
