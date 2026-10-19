@@ -33,6 +33,8 @@ public final class ZeusBolt {
 		public final Vector3f pos = new Vector3f(), prev = new Vector3f(), vel = new Vector3f();
 		public final int level;
 		final float damage, life, impulse, concRadius;
+		/** Arrow 템플릿 노드 (명중 플래시 필드). */
+		String arrowNode;
 		public float age;
 		public boolean dead;
 		public Hittable hit;
@@ -145,6 +147,7 @@ public final class ZeusBolt {
 			concR = tw.f(String.format("/TweakTemplates/Concussion/%03d/", conc), "Start Radius", 2f) * Magic.UNIT;
 		}
 		Bolt b = new Bolt(level, tw.i16(an, "Damage", 8), lifetime, tw.f(an, "Ground Impulse Away", 300f), concR);
+		b.arrowNode = an;
 		Vector3f p = c.owner().position();
 		float yaw = c.owner().yaw();
 		Vector3f fwd = new Vector3f((float) -Math.sin(yaw), 0, (float) -Math.cos(yaw));
@@ -189,6 +192,21 @@ public final class ZeusBolt {
 		bolts.removeIf(b -> b.dead);
 	}
 
+	/**
+	 * 명중 화면 플래시 (0x2249A0 → 0x224108: 0x195BA8(+0x164 Fog Template, +0x15C Bright, +0x160 Dark, +0x168 Flash Freq,
+	 * f12 = +0x16C #8ae891cf 지속)). R_PERMK: thunderbolt 0/0/−1/1/0, ch1 9 "dimWhiteAdd"/0/−1/6/0.4, ch2 8/0/−1/20/0 (45 문서 §1.4).
+	 */
+	static final int ARROW_FLASH_DURATION = 0x8ae891cf;
+
+	void flash(String an, Magic.Sink sink) {
+		if (an == null) {
+			return;
+		}
+		var d = tw.rawHash(an, ARROW_FLASH_DURATION);
+		sink.screenFlash(tw.i16(an, "Fog Template", -1), tw.i16(an, "Bright Camera Filter", -1), tw.i16(an, "Dark Camera Filter", -1),
+				tw.i16(an, "Flash Freq", 1), d.isPresent() ? Float.intBitsToFloat(d.getAsInt()) : 0f);
+	}
+
 	private void impact(Combatant c, Bolt b, Hittable h, List<? extends Hittable> targets, Magic.Sink sink) {
 		b.dead = true;
 		b.hit = h;
@@ -199,6 +217,7 @@ public final class ZeusBolt {
 		h.receive(HIT, c, b.damage, new Vector3f(dir).mul(b.impulse));
 		sink.hit(h, b.damage);
 		sink.effect("goBoltHit", b.pos);
+		flash(b.arrowNode, sink);
 		if (b.concRadius > 0) {
 			// Concussion 템플릿: 충격점 반경 안의 다른 대상에 충격 (피해값은 덤프 손상으로 미확인 → 0)
 			for (Hittable o : targets) {

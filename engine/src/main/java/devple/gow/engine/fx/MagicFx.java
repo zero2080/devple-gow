@@ -757,6 +757,11 @@ public final class MagicFx implements AutoCloseable {
 			public void concussion(int template, Vector3f at) {
 				MagicFx.this.concussion(template, heroJoints, at);
 			}
+
+			@Override
+			public void screenFlash(int fogTemplate, int bright, int dark, int flashFreq, float duration) {
+				screen.start(fogTemplate, bright, dark, flashFreq, duration);
+			}
 		};
 	}
 
@@ -1028,6 +1033,31 @@ public final class MagicFx implements AutoCloseable {
 	private final List<EffectSystem.Effect> godFx = new ArrayList<>();
 	private boolean godOn;
 
+	/**
+	 * 블레이드 god 판 (0x1FA9A0, 해제 0x1FA9D8 = 보통 판): 0x1FAA10(블레이드, GO 이름, 궤적·사슬·사슬 빛 머티리얼).
+	 * god 판 = "goMAIgodblade" / MAT_godswordtrail / MAT_godchainlink / MAT_godchainglow, 보통 = goMAIblade / MAT_swordtrail /
+	 * MAT_chainlink / MAT_chainglow (모두 WAD_R_Wpn = R_WPN&lt;코스튬&gt;_&lt;단계&gt;). 블레이드마다 이전 GO 를 지우고 (0x132768) 새 GO 를
+	 * 만들어 (0x132508/0x1327B8/0x132648) 영웅에 붙이고 (0x131460) 이전 행렬을 복사, "LeftBladeLight"/"RightBladeLight" 라이트 연결.
+	 * 엔진: 블레이드 루트 = 무기 로케이터 (BladeModels 와 같은 lWeapOH/rWeapOH), 보통 블레이드는 숨긴다. 궤적·사슬은 엔진에 없다.
+	 */
+	public static final String GOD_BLADE = "goMAIgodblade";
+	static final String[] BLADE_JOINTS = {"lWeapOH", "rWeapOH"};
+	private java.util.function.BooleanSupplier godBladeCheck = () -> false;
+	private boolean godBladesOn;
+
+	/** 무기 WAD (R_WPN&lt;c&gt;_&lt;n&gt;) 의 goMAIgodblade 등록. active = 블레이드를 들었는지 (아르테미스면 거짓). */
+	public void setGodBlades(Path wpnWad, java.util.function.BooleanSupplier active) {
+		if (wpnWad != null && Files.exists(wpnWad)) {
+			fx.add(wpnWad);
+		}
+		godBladeCheck = active != null ? active : () -> false;
+	}
+
+	/** god 판 블레이드 GO 가 떠 있는지 (HeroRig 가 보통 블레이드를 숨긴다). */
+	public boolean godBladesOn() {
+		return godOn && godBladesOn;
+	}
+
 	private void godMode(boolean on) {
 		if (on == godOn) {
 			return;
@@ -1046,6 +1076,22 @@ public final class MagicFx implements AutoCloseable {
 				}
 				return true;
 			}, Float.MAX_VALUE));
+		}
+		// 블레이드 god 판 (0x1FA9A0 → 0x1FAA10): 양손 블레이드 GO 를 goMAIgodblade 로 바꿔 무기 관절에 붙인다 (45 문서 §2)
+		godBladesOn = false;
+		if (godBladeCheck.getAsBoolean()) {
+			for (String jn : BLADE_JOINTS) {
+				EffectSystem.Effect b = fx.play(GOD_BLADE, out -> {
+					if (!heroJoints.world(jn, out)) {
+						out.translation(heroPos).rotateY(heroYaw);
+					}
+					return true;
+				}, Float.MAX_VALUE);
+				if (b != null) {
+					godFx.add(b);
+					godBladesOn = true;
+				}
+			}
 		}
 		// Strike/Flash: 원작은 위치를 정하지 않는다 (풀 인스턴스의 이전 행렬) → 엔진은 영웅 위치 [추정]
 		Vector3f p = new Vector3f(heroPos);

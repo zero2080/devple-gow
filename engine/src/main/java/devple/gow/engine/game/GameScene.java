@@ -232,6 +232,9 @@ public final class GameScene implements Scene {
 		magicFx = new devple.gow.engine.fx.MagicFx(session.rom); // 원작 이펙트 GO (40 문서)
 		hero.magic.setSink(magicFx.sink((name, at) -> session.sound.play(name, at)));
 		magicFx.bindHero(hero.combat, hero::jointWorld);
+		magicFx.setGodBlades(session.rom.resolve("R_WPN" + hero.player.costume + "_" + Math.max(0, Math.min(5, hero.bladeLevel())) + ".WAD"),
+				() -> !hero.player.artemisEquipped); // 블레이드 god 판 (0x1FA9A0, 45 문서 §2)
+		hero.hideBlades = magicFx::godBladesOn;
 		wireEffects();
 		hudBinding.castable = hero.magic::has;
 		boolean seamless = arrival != null && (arrival.kind() == LevelLink.Kind.SEAMLESS || arrival.kind() == LevelLink.Kind.WALK);
@@ -1487,10 +1490,42 @@ public final class GameScene implements Scene {
 			level.renderEffects(e, cam); // 비·파티클·물은 캐릭터 뒤에 (--no-fx 로 끔: 스크린샷용)
 		}
 		magicFx.render(cam, e.window().aspect(), e.renderer().white());
+		renderCameraFilter();
 		if (levelHud != null) {
 			levelHud.render(e);
 		}
 		hud.render(e);
+	}
+
+	private devple.gow.engine.render.CameraFilterRenderer filterRenderer;
+	private final Map<Integer, java.util.Optional<devple.gow.engine.fx.CameraFilter>> filters = new java.util.HashMap<>();
+
+	/** 이번 프레임 카메라 필터 번호 (0x1EFA14: 카메라 +0x910 대체 ≥ 0 이면 그것, 아니면 현재 카메라 CAM 0xB0). 테스트·디버그용. */
+	public int cameraFilterIndex() {
+		String force = System.getProperty("gow.camfilter"); // 디버그: 번호 강제 (스크린샷 검증)
+		if (force != null) {
+			return Integer.parseInt(force);
+		}
+		return devple.gow.engine.fx.CameraFilter.select(magicFx.screen.filter(), cameraRig.filter());
+	}
+
+	/** 카메라 필터 (45 문서 §1): 3D 장면 뒤, HUD 앞 [추정: 원작 노드 층 3 / 우선순위 7]. */
+	private void renderCameraFilter() {
+		if (System.getProperty("gow.nocamfilter") != null || orbTweaks == null) {
+			return;
+		}
+		int n = cameraFilterIndex();
+		if (n < 0) {
+			return;
+		}
+		var f = filters.computeIfAbsent(n, k -> java.util.Optional.ofNullable(devple.gow.engine.fx.CameraFilter.load(orbTweaks, k)));
+		if (f.isEmpty() || !f.get().visible()) {
+			return;
+		}
+		if (filterRenderer == null) {
+			filterRenderer = new devple.gow.engine.render.CameraFilterRenderer();
+		}
+		filterRenderer.draw(f.get(), cam);
 	}
 
 	/** 다른 슬롯 레벨 지오메트리 (처음 필요할 때 적재, 바뀌면 교체). */
@@ -1529,6 +1564,9 @@ public final class GameScene implements Scene {
 		enemies.forEach(en -> en.model().close());
 		enemyShader.close();
 		magicFx.close();
+		if (filterRenderer != null) {
+			filterRenderer.close();
+		}
 		hero.close();
 		hud.close();
 		if (levelHud != null) {

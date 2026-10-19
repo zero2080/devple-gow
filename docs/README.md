@@ -48,6 +48,8 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 | 42 | [구현: 버튼 안내 1024·질문 Internal 0xB·Animator 모드, 하네스 2 단계 (이웃 GlobalData·전역 이벤트)](42-impl-use-button-animator.md) | 1차 (테스트 3) |
 | 43 | [검증: 전 레벨 시각 QA (효과 켬 105 레벨, SCR_Sky 하늘·배경 안개·반투명 패스 순서, 시작 act 자세·SCR_Mirror 반사 §6, 시작 카메라 §7)](43-visual-qa.md) | 완료 (정상 97, 의심 2, 테스트 3 + 4 + 4) |
 | 44 | [구현: 노멀맵 (원작에 없는 선택 기능, 기본 꺼짐 — 덮어쓰기 PNG / 휘도 Sobel 생성, 화면 미분 코탄젠트 좌표계, 구운 색 세부 배율)](44-impl-normal-map.md) | 1차 (테스트 5) |
+| 45 | [구현: 카메라 필터 (시선 고도각 세로 그라데이션 덮개, CAM 0xB0 수중 필터, 명중 플래시) · 블레이드 god 판 (goMAIgodblade)](45-impl-camera-filter-god-blades.md) | 1차 (테스트 6) |
+| 46 | [구현: 렌즈 플레어 (SCR_LensFlare 단일 가산 스프라이트, 가림 비율)](46-impl-lens-flare.md) | 1차 (테스트 3) |
 | 90 | [현황 / 로드맵](90-status-roadmap.md) | 수시 갱신 |
 
 ## 게임 실행

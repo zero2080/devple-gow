@@ -47,6 +47,8 @@ public final class HeroRig implements AutoCloseable {
 	private final AnimatedModel model;
 	/** 혼돈의 블레이드 (lWeapOH/rWeapOH 부착, 34 문서). 없으면 null. */
 	private final devple.gow.engine.asset.BladeModels blades;
+	/** 참이면 보통 블레이드를 그리지 않는다 (신들의 분노 god 판 GO 가 대신, MagicFx.godBladesOn, 45 문서 §2). */
+	public java.util.function.BooleanSupplier hideBlades = () -> false;
 	private devple.gow.engine.asset.ArtemisBladeModel artemis;
 	private int artemisStageLoaded = -1;
 	private final Path rom;
@@ -360,7 +362,7 @@ public final class HeroRig implements AutoCloseable {
 			if (artemis != null) {
 				artemis.draw(cam, aspect, w, sk, pose.world(sk), white);
 			}
-		} else if (blades != null) {
+		} else if (blades != null && !hideBlades.getAsBoolean()) {
 			blades.draw(cam, aspect, w, sk, pose.world(sk), white);
 		}
 	}

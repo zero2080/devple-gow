@@ -18,7 +18,7 @@ import java.util.List;
  * 0x80/0x84 f32 레일 점-대상 거리 max/min (×16 유닛, 레일 탐색 비용)    0x88/0x8C 최종 거리 max/min (×16)
  * 0x90/0x94 f32 피치/요 허용 범위 (설계 각도 ± 도, 요 180 = 무제한)
  * 0x98..0xA4 미사용 쌍(로더가 min≤max 정렬)   0xA8 f32 레일 t 감쇠 (프레임당 남기는 비율)   0xAC f32 0.75 (청취자 위치 비율)
- * 0xB0 u32 필터 이름 인덱스    0xB8 f32 기본 전환 시간(초, 0 = 컷)    0xBC s32 우선순위 (큰 값 우선)
+ * 0xB0 u32 카메라 필터 템플릿 번호 (/TweakTemplates/CameraFilter/NNN, 활성화 0x1F3A38 이 색을 카메라 상태 +0xA0 에 복사, 렌더 0x1EFA68 → 0x162008; 45 문서)    0xB8 f32 기본 전환 시간(초, 0 = 컷)    0xBC s32 우선순위 (큰 값 우선)
  * 0xC0 vec3 고정 주시점 (×16, 카메라 로컬; 플래그 0x40000 이고 0x100 이 없을 때)
  * 0xCC 전환표 12 × 32B: char[24] 이전 카메라 이름, f32 전환 시간, u32 동순위 우선 플래그
  * </pre>
@@ -28,7 +28,7 @@ import java.util.List;
  * 0x80000 청취자 거리 제한 해제, 0x100000 청취자 비율 = 0xAC. 근거: 0x1F3768, 0x1F29A0, 0x1F1AA0, 0x1EE8E0 (30 문서).
  */
 public record CameraDef(String name, float[] local, String rail, int mode, int railKind, float[] params, float[] fov,
-		Params p, List<Transition> transitions) {
+		Params p, List<Transition> transitions, int filter) {
 
 	public static final int MAGIC = 0x00000009;
 	public static final int F_TRACK = 0x100;
@@ -83,7 +83,7 @@ public record CameraDef(String name, float[] local, String rail, int mode, int r
 			int e = 0xCC + i * 0x20;
 			tr.add(new Transition(cstr(d, e, 24), d.getFloat(e + 0x18), d.getInt(e + 0x1C) != 0));
 		}
-		return new CameraDef(name, m, rail, pitchMode, yawMode, pr, f, p, List.copyOf(tr));
+		return new CameraDef(name, m, rail, pitchMode, yawMode, pr, f, p, List.copyOf(tr), d.getInt(0xB0));
 	}
 
 	private static String cstr(ByteBuffer d, int off, int max) {

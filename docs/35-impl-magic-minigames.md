@@ -176,12 +176,14 @@ SCR_Lightning 첫 인스턴스 (0x194AEC–0x194B04) [확실: 코드]:
    안개: 환경 (0x29CA60) +0x110 = 0x2FF730, 관리자 +0x84 = 프레임 번호. 렌더 0x1281C8 가 끝에서 +0x110 을 레벨 안개 (+0x80) 로 되돌리고, 0x125BE0 은 +0x84 가
    이번 프레임이 아니면 안개를 끈다 → **스크립트가 도는 프레임에만** 대체 안개.
 4. +0x910 은 카메라 필터 렌더 0x1EFA14 가 읽는다: ≥ 0 이면 `/TweakTemplates/CameraFilter/NNN/` (목록 0x337B74, 0x1F4BF4: RGBA 3개 +0x20/+0x30/+0x40, Toppoint/Midpoint/BottomPoint,
-   Blend Mode → ALPHA 표 0x29F140 = {0x44 블렌드, 0x48 가산, 0x42 감산}) 를 0x162008 로 화면에 그린다, 아니면 카메라 기본 필터. **되돌리는 코드가 없다** (초기화 0x1EDC40 만).
-5. 다른 호출자 0x223920 (← 0x2249A0 = Arrow 투사체 갱신, §3 — 명중 시 Arrow 템플릿 +0x15C..+0x16C 를 넘기고 지속 f12 > 0 → 0x204AB0 → 0x195D70 이 그 시간 동안 0x195C90) [추정: 용도, 확실: 경로].
+   Blend Mode → ALPHA 표 0x29F140 = {0x44 블렌드, 0x48 가산, 0x42 감산}) 를 0x162008 로 화면에 그린다, 아니면 카메라 기본 필터 (CAM 0xB0). **되돌리는 코드가 없다** (초기화 0x1EDC40 만).
+   → 렌더·템플릿·카메라 기본 필터 해석과 엔진 구현은 **45 문서 §1**.
+5. 다른 호출자 0x22411C (← 0x2249A0 = Arrow 투사체 명중, §3 — Arrow 템플릿 +0x164 Fog / +0x15C Bright / +0x160 Dark / +0x168 Flash Freq / +0x16C 지속 #8ae891cf 를 넘기고,
+   매 프레임 0x204AB0 → 0x195D70 이 그 시간 동안 0x195C90) [확실]. 제우스의 분노 Ch1 (Arrow 003) 만 지속 0.4 → dimWhiteAdd 1프레임 플래시 3번 (45 §1.4, 엔진 `ZeusBolt.flash`).
 
-R_PERMK 값 (세 단계 같음): Bright **0 = CameraFilter/000 "None"** (색 전부 0, Blend Mode 1 = 가산 → 화면 변화 없음), Dark −1, Flash Freq 5, **Fog Template 0 = Fog/000 "360 Lightning"**
+R_PERMK 값 (세 단계 같음): Bright **0 = CameraFilter/000 "None"** (색 전부 0, Blend Mode 덤프 1.0 = 하위 바이트 **0 블렌드**, 알파 0 → 화면 변화 없음, 45 §1.3), Dark −1, Flash Freq 5, **Fog Template 0 = Fog/000 "360 Lightning"**
 (색 (0.35, 0.25, 0.2), Fog_A 0.6, CentreZ 16500, Blend Mode 2 = **감산**, BackPlane_A −1). → 눈에 보이는 화면 효과는 **안개 대체 하나**: 멀수록 (0.35,0.25,0.2)·0.6 까지 빼서
-배경·하늘이 어두운 청록으로 가라앉는다. 카메라 필터 렌더는 엔진에 없다 (`LightningScreen.filter()` 로 번호만 유지).
+배경·하늘이 어두운 청록으로 가라앉는다. 카메라 필터 렌더는 45 문서 §1 (`CameraFilterRenderer`; "None" 이라 포세이돈 중에는 보이지 않지만, +0x910 = 0 이 남아 그 레벨의 수중 필터가 꺼진다 — 원작 그대로).
 
 엔진: `MagicFx.screen` (`LightningScreen`) 이 `Magic.lightningScript()` 로 시작·프레임을 돌리고, `GameScene.render` 가 `env.setFogOverride(screen.fog())` (매 렌더, null = 레벨 안개).
 `FxEnvironment.applyFog` 는 대체 안개가 있으면 층 안개·텍스처 없이 단일 안개로 쓴다.
@@ -199,7 +201,7 @@ R_PERMK 값 (세 단계 같음): Bright **0 = CameraFilter/000 "None"** (색 전
   매 타격·주기적 낙뢰 같은 갱신 코드는 없다.
 - 엔진: `MagicFx` 가 `CombatOwner.godMode()` 상승/하강에서 갑옷 8개 (`GOD_ARMOR`, 관절 부착, 수명 무한) + Strike/Flash 를 켜고 끈다. `HeroRig.updateTint` 가 사건 때 영웅 색
   (`AnimatedModel.setColorScale`, 파트 색에 곱 [추정: +0xB0 xyz 를 곱셈 색으로 해석]) — 원작처럼 나중 사건이 덮어쓴다 (신 모드 중 포세이돈 → 끝나면 1).
-- 미구현: 블레이드 god 판 (0x1FA9A0), God Mode Trail Tint, SND_TRANSFORM_LP 루프·SND_TRANSFORM_END (엔진 미연결).
+- ~~블레이드 god 판 (0x1FA9A0)~~ → 45 문서 §2 (goMAIgodblade GO 교체, 보통 블레이드 숨김). 미구현: God Mode Trail Tint·god 궤적/사슬 머티리얼 (엔진에 궤적·사슬 렌더 없음), SND_TRANSFORM_LP 루프·SND_TRANSFORM_END (엔진 미연결).
 - 스크린샷 (스크래치 `fx3/`): `god_t50.png` (ARENA08 진입 Strike 기둥), `god_a_t130.png` / `god_a_t300.png` (ATHN01A: 푸른 틴트, 투구·견갑·팔·정강이 갑옷 + 번개 이미터).
 
 ## 5. 미니게임
