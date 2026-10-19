@@ -28,6 +28,9 @@ public final class SoundInstance {
 	/** 톤 보이스의 SPU ADSR 엔벨로프 (보이스 id → 엔벨로프, 29 문서 §7). 플러그인·스트림 보이스는 없음 (= 1). */
 	final Map<Integer, SpuEnvelope> envs = new HashMap<>();
 	final byte[] regs = new byte[4];
+	/** LFO 슬롯 (LFO_SETTINGS 그레인, 29 문서 §9) 과 이번 틱 변조값 (핸들러 +0x38 볼륨 / +0x3C 팬 / +0x44 PMOD / +0x40 벤드). */
+	private final SoundLfo[] lfos = new SoundLfo[SoundLfo.SLOTS];
+	private int lfoVol, lfoPan, lfoPmod, lfoBend;
 	/** 핸들러 볼륨 0..127 (자식 사운드 ref vol), pan(도), pitch bend (-32768..32767). */
 	int vol = 127;
 	int pan;
@@ -103,7 +106,8 @@ public final class SoundInstance {
 			}
 			return false;
 		});
-		if (!envs.isEmpty()) {
+		boolean lfoChanged = tickLfos();
+		if (!envs.isEmpty() || lfoChanged) {
 			updateVoices();
 		}
 		for (SoundInstance c : children) {
@@ -168,6 +172,15 @@ public final class SoundInstance {
 		switch (g.type()) {
 			case SoundBank.G_TONE, SoundBank.G_TONE2 -> tone(bank.tone(g));
 			case SoundBank.G_PLUGIN -> mgr.plugin(this, bank.plugin(g));
+			case SoundBank.G_LFO -> {
+				SoundBank.Lfo l = bank.lfo(g);
+				int slot = l.slot() & (SoundLfo.SLOTS - 1);
+				lfos[slot] = l.target() == 0 ? null : new SoundLfo(l, mgr.rng, Math.max(0, sound.vol()));
+				if (l.target() == 0) {
+					lfoVol = lfoPan = lfoPmod = lfoBend = 0; // 0x23B4 해제 (대상 값 원복) [단순화: 전부]
+					updateVoices();
+				}
+			}
 			case SoundBank.G_START_CHILD -> {
 				SoundBank.SoundRef r = bank.soundRef(g);
 				SoundBank.Sound s = resolve(r);
@@ -295,7 +308,7 @@ public final class SoundInstance {
 			case SoundBank.G_KILL_VOICES -> keyOff();
 			case SoundBank.G_ON_STOP_MARKER -> idx = grains.size() - 1;
 			default -> {
-				// NULL / CONTROL_NULL / MARKER / LOOP_START / LFO / XREF / 10~12 (GoW 전용 미상): 무시
+				// NULL / CONTROL_NULL / MARKER / LOOP_START / XREF / 10~12 (GoW 전용 미상): 무시
 			}
 		}
 		return 0;
@@ -358,18 +371,69 @@ public final class SoundInstance {
 	}
 
 	private float bendPitch(int pbLow, int pbHigh) {
-		double semis = bend < 0 ? bend / 32768.0 * pbLow : bend / 32767.0 * pbHigh;
-		return (float) Math.pow(2, semis / 12);
+		int b = Math.max(-32768, Math.min(32767, bend + lfoBend));
+		double semis = b < 0 ? b / 32768.0 * pbLow : b / 32767.0 * pbHigh;
+		// PMOD: 1/128 반음 단위로 가산 [추정: 단위]
+		return (float) Math.pow(2, (semis + lfoPmod / 128.0) / 12);
+	}
+
+	/** 240Hz: LFO 계산 (0x24D8). @return 변조값이 바뀌었으면 true */
+	private boolean tickLfos() {
+		boolean changed = false;
+		for (SoundLfo l : lfos) {
+			if (l == null) {
+				continue;
+			}
+			int v = l.next(mgr.rng);
+			switch (l.target) {
+				case SoundLfo.VOLUME -> {
+					int m = (int) ((long) l.scaled * (v - 0x7FFF) >> 16);
+					changed |= m != lfoVol;
+					lfoVol = m;
+				}
+				case SoundLfo.PAN -> {
+					int m = l.scaled * v >> 15;
+					changed |= m != lfoPan;
+					lfoPan = m;
+				}
+				case SoundLfo.PMOD -> {
+					int m = l.scaled * v >> 15;
+					changed |= m != lfoPmod;
+					lfoPmod = m;
+				}
+				case SoundLfo.PBEND -> {
+					int m = l.scaled * v >> 15;
+					changed |= m != lfoBend;
+					lfoBend = m;
+				}
+				case SoundLfo.RATE -> {
+					SoundLfo o = lfos[l.targetExtra & (SoundLfo.SLOTS - 1)];
+					if (o != null && o != l) {
+						o.step = o.baseStep + (((o.baseStep >>> 8) * l.depth >> 10) * v >> 15 << 8);
+					}
+				}
+				case SoundLfo.DEPTH -> {
+					SoundLfo o = lfos[l.targetExtra & (SoundLfo.SLOTS - 1)];
+					if (o != null && o != l) {
+						o.depth = (o.baseDepth + ((o.baseDepth * l.depth >> 10) * v >> 15)) & 0xFFFF;
+						o.rescale(Math.max(0, sound.vol()));
+					}
+				}
+				default -> {
+				}
+			}
+		}
+		return changed;
 	}
 
 	/** 볼륨 = 핸들러 × 소리 × 톤 (각 /127) × 볼륨 그룹 × 마스터. */
 	Voice baseVoice(int toneVol, int tonePan) {
 		Voice v = new Voice();
-		float g = vol / 127f * Math.max(0, sound.vol()) / 127f * Math.max(0, toneVol) / 127f;
+		float g = vol / 127f * Math.max(0, sound.vol() + lfoVol) / 127f * Math.max(0, toneVol) / 127f;
 		int group = music ? 1 : sound.volGroup();
 		v.gain = g * mgr.groupGain(group);
 		v.dry = SoundManager.isDryGroup(group);
-		v.pan = pan + tonePan;
+		v.pan = pan + tonePan + lfoPan;
 		v.pos = pos != null ? new Vector3f(pos) : null;
 		v.near = near;
 		v.far = far;

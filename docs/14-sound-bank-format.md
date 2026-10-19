@@ -69,7 +69,7 @@ A = 8 + 28N:  FileAttributes (989snd 파일 헤더, OpenGOAL 989snd 와 같은 �
 | type | 이름 | 동작 (IRX 처리기) | 확신 |
 |-----:|------|------------------|------|
 | 1 | TONE | arg = 그레인 데이터 오프셋 → Tone 재생 (0x4A0C) | 확실 |
-| 4 | LFO_SETTINGS | 16B 데이터 (0x4F14) — 미구현 | 이름 추정 |
+| 4 | LFO_SETTINGS | 16B 데이터 (0x4F14) — 형식·계산 29 문서 §9 | 확실 |
 | 5 | STARTCHILDSOUND | SoundRef → 자식 소리 시작 (0x5DBC) | 확실 |
 | 6 | STOPCHILDSOUND | 자식 정지 (0x60CC) | 확실 |
 | 7 | PLUGIN_MESSAGE | 32B 'DPMS' 메시지 → SMPD_IOP 플러그인 (§4) | 확실 |
@@ -188,6 +188,6 @@ R_PERMK 콤보 이벤트 중 일부(`#b9630087` 60 회, `#0279aaec` 35 회, `#bb
 잘린 뱅크에서 빠진 소리이거나 런타임 생성 이름으로 추정 (재생 안 함).
 
 ## 8. 미해결
-- 그레인 10–12, LFO(4) 효과, ADSR 엔벨로프, Tone flags 비트, Sound flags 0x08.
+- 그레인 10–12, Tone flags 비트, Sound flags 0x08. (LFO·ADSR 은 29 문서 §9/§7)
 - DPMS param(+0x10)·+0x1C, cmd 0x16 인자, MusicGroupParam 의미, SEM mode·+0xD0·mode 2 거리.
 - ~~리버브~~ (29 문서 §8: SEM 이미터 +0xD5 종류 / +0xD6 bit0), 수중(UW) 그룹 전환.

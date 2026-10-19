@@ -24,6 +24,7 @@ public final class NullAudioBackend implements AudioBackend {
 		boolean loop;
 		PcmStream stream;
 		long streamed;
+		Voice last;
 	}
 
 	private final Map<Integer, V> voices = new HashMap<>();
@@ -56,6 +57,16 @@ public final class NullAudioBackend implements AudioBackend {
 
 	@Override
 	public void update(int id, Voice v) {
+		V x = voices.get(id);
+		if (x != null) {
+			x.last = v.copy();
+		}
+	}
+
+	/** 마지막 update 로 받은 보이스 파라미터 (없으면 null, 테스트용). */
+	public Voice lastUpdate(int id) {
+		V x = voices.get(id);
+		return x != null ? x.last : null;
 	}
 
 	@Override

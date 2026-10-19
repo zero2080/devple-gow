@@ -77,6 +77,14 @@ public final class SoundBank {
 	public record Plugin(int command, String name, int param, int kind, boolean loop, int flag1c, int arg0, int arg1) {
 	}
 
+	/**
+	 * LFO_SETTINGS 데이터 (16B, IRX 0x4F14 → 핸들러 +0x5C + 48·slot): +0 slot, +1 target (0 = 해제, 1 볼륨, 2 팬, 3/4 피치 계열),
+	 * +2 target_extra, +3 shape (1 사인, 2 사각, 3 삼각, 4 톱니, 5 무작위), +4 u16 duty (사각 경계, 0..2048), +6 u16 depth (1024 = 최대),
+	 * +8 u8 flags (0x1 반전, 0x2 시작 위상 무작위), +0xA u16 시작 위상 (0..2048), +0xC u32 step (틱마다 위상 += step·2, 위상 = 2048 &lt;&lt; 16 주기).
+	 */
+	public record Lfo(int slot, int target, int targetExtra, int shape, int duty, int depth, int flags, int startPhase, int step) {
+	}
+
 	/** START/STOP_CHILD, BRANCH 데이터 (32B): +0 s8 vol(-1 = 상속), +0xC s32 소리 번호(&lt;0 이면 +0x10 이름으로 검색). */
 	public record SoundRef(int vol, int soundIndex, String soundName) {
 	}
@@ -214,6 +222,12 @@ public final class SoundBank {
 		}
 		return new Plugin(0, cstr(res, o + 8, 8), res.getInt(o + 16), res.getInt(o + 20), res.getInt(o + 24) != 0,
 				res.getInt(o + 28), 0, 0);
+	}
+
+	public Lfo lfo(Grain g) {
+		int o = grainData + g.arg();
+		return new Lfo(res.get(o) & 0xFF, res.get(o + 1) & 0xFF, res.get(o + 2) & 0xFF, res.get(o + 3) & 0xFF, res.getShort(o + 4) & 0xFFFF,
+				res.getShort(o + 6) & 0xFFFF, res.get(o + 8) & 0xFF, res.getShort(o + 10) & 0xFFFF, res.getInt(o + 12));
 	}
 
 	public SoundRef soundRef(Grain g) {
