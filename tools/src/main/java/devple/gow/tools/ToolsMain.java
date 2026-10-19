@@ -25,6 +25,8 @@ import java.util.Arrays;
  *   ./gradlew :tools:run --args="pak-extract P2_gow_kor.iso gow-rom [--all]"   (--all: 동영상 PSS/PSW 포함)
  *   ./gradlew :tools:run --args="wad-ls gow-rom/ATHN01A.WAD"
  * </pre>
+ * "패키지:명령" 형식은 {@code devple.gow.tools.<패키지>.Cli#main(String[])} 로 위임한다.
+ * 예) {@code texture:export gow-rom/R_HERO0.WAD out} → {@code texture.Cli.main(["export", ...])}
  */
 public final class ToolsMain {
 
@@ -32,6 +34,14 @@ public final class ToolsMain {
 		if (args.length < 2) {
 			System.err.println("usage: <iso-info|iso-ls|iso-extract|pak-ls|pak-extract|wad-ls> <file> [outDir] [--all]");
 			System.exit(1);
+		}
+		int colon = args[0].indexOf(':');
+		if (colon > 0) {
+			String[] sub = args.clone();
+			sub[0] = args[0].substring(colon + 1);
+			Class.forName("devple.gow.tools." + args[0].substring(0, colon) + ".Cli")
+					.getMethod("main", String[].class).invoke(null, (Object) sub);
+			return;
 		}
 		String[] rest = Arrays.copyOfRange(args, 1, args.length);
 		switch (args[0]) {
