@@ -419,4 +419,127 @@ class NavDataTest {
 		assertFalse(Float.isNaN(ec.groundHeight(b.pos.x, b.pos.y + 4, b.pos.z, 8)), "ATHN01E 바닥 위 " + b.pos);
 		assertTrue(Float.isNaN(dc.groundHeight(b.pos.x, b.pos.y + 4, b.pos.z, 64)), "ATHN01D 바닥이 아님 → 게임 씬 WALK 전환");
 	}
+
+	/** 물·벽 따라 걷기 애니 = R_HERO0 TWK /Animation/goHero/Navigation/ 표 (0x26–0x2E, 0x35–0x3A) [확실]. */
+	@Test
+	void waterAndWallWalkAnimsFromNavigationTable() throws Exception {
+		Tweaks t = new Tweaks();
+		t.load(WadFile.load(rom().resolve("R_HERO0.WAD")));
+		NavAnims def = new NavAnims();
+		for (String k : List.of("ANITread", "ANITreadSwim", "ANIDiveDashC", "ANIDiveDash", "ANIDive1", "ANIDive2", "ANISwim", "ANISwimIdle",
+				"ANIJump", "ANIVJump", "ANIWallFront", "ANIWallFrontR", "ANIWallFrontL", "ANIWallBack", "ANIWallBackR", "ANIWallBackL",
+				"ANIClimbAL", "ANIClimbAR", "ANIClimbCL", "ANIClimbCR")) {
+			assertEquals(t.s(NavAnims.NODE, k, null), def.get(k), k);
+		}
+	}
+
+	/**
+	 * 원작 충돌 위 물 (38 §11): ATHN02A 수로 (Water 면 y −687.4, 바닥 −800) 에 떨어지면 SINK → TREAD (발 = 수면 − 28.16),
+	 * □ 잠수로 바닥까지, △ 로 올라와 수면에서 물 밖 도약.
+	 */
+	@Test
+	void athn02aCanalSwimDiveAndLeap() throws Exception {
+		NavWorld w = new NavWorld(new LevelCollision(level("ATHN02A").sheets));
+		HeroNavigatorTest.Body b = new HeroNavigatorTest.Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		HeroNavigatorTest.Pad in = new HeroNavigatorTest.Pad();
+		// 수로 안 열린 물: 가장 높은 바닥이 깊은 Water 면인 첫 격자 점
+		Vector3f start = null;
+		for (int x = -480; x <= 752 && start == null; x += 16) {
+			for (int z = 2400; z <= 4320 && start == null; z += 16) {
+				NavWorld.Floor f = w.floor(x, -600, z, 200);
+				NavWorld.Floor bed = w.floor(x, -690, z, 200);
+				if (f != null && f.has(SurfaceAttr.WATER) && bed != null && bed.y() < f.y() - 100) {
+					start = new Vector3f(x, -600, z);
+				}
+			}
+		}
+		assertNotNull(start, "ATHN02A 열린 물");
+		b.grounded = false;
+		b.pos.set(start);
+		for (int i = 0; i < 120 && nav.state() != NavState.SWIM; i++) {
+			HeroNavigatorTest.tick(nav, b, w, in);
+		}
+		assertEquals(NavState.SWIM, nav.state(), "수로에 빠짐 " + b.pos);
+		float surface = nav.waterSurface();
+		assertEquals(-687.43f, surface, 0.05f);
+		for (int i = 0; i < 240 && nav.water() != HeroNavigator.Water.TREAD; i++) {
+			HeroNavigatorTest.tick(nav, b, w, in);
+		}
+		assertEquals(HeroNavigator.Water.TREAD, nav.water());
+		assertEquals(surface - HeroNavigator.SWIM_DEPTH, b.pos.y, 1e-3f);
+		for (int i = 0; i < 180; i++) {
+			in.down.add(PadButton.SQUARE);
+			HeroNavigatorTest.tick(nav, b, w, in);
+		}
+		assertEquals(HeroNavigator.Water.DIVE, nav.water());
+		NavWorld.Floor bed = w.floor(b.pos.x, surface - 30, b.pos.z, 400);
+		assertEquals(bed.y(), b.pos.y, 0.5f, "수로 바닥까지 잠수 " + b.pos);
+		for (int i = 0; i < 300 && nav.state() == NavState.SWIM; i++) {
+			in.down.add(PadButton.TRIANGLE);
+			HeroNavigatorTest.tick(nav, b, w, in);
+		}
+		assertEquals(NavState.AIR, nav.state(), "물 밖 도약");
+		assertEquals("swimdive", b.anim);
+	}
+
+	/**
+	 * 원작 좁은 턱 벽 (38 §12): PAND02B 의 Narrow 벽 (높이 128–288) 앞 바닥에서 벽 쪽으로 걸으면 벽 보고 걷기, 오른쪽으로 0.5 초 이동.
+	 * PAND00C 의 BackPress 벽은 등 대고 걷기. ATHN06B 의 Narrow 는 높이 16 평균대 옆면이라 머리 선분이 빗나가 붙지 않는다 (균형 걷기 바닥).
+	 */
+	@Test
+	void narrowLedgeWallsInLevels() throws Exception {
+		int[] front = wallWalkSpots("PAND02B", false);
+		assertEquals(18, front[0], "PAND02B Narrow 벽에 붙는 자리");
+		assertTrue(front[1] >= 12, "옆으로 걸음 " + front[1]);
+		int[] back = wallWalkSpots("PAND00C", true);
+		assertEquals(6, back[1], "PAND00C BackPress 6 면");
+		assertEquals(0, wallWalkSpots("ATHN06B", false)[0], "평균대 옆면은 벽 걷기 아님");
+	}
+
+	/** 레벨의 좁은 턱 벽 면마다 법선 쪽 12 앞 바닥에서 벽 쪽으로 걸어 본다: {붙음, 붙고 0.5 초 옆으로 걸음}. */
+	private static int[] wallWalkSpots(String lv, boolean back) throws Exception {
+		LevelCollision c = new LevelCollision(level(lv).sheets);
+		NavWorld w = new NavWorld(c);
+		int entered = 0, walked = 0;
+		for (LevelCollision.Tri t : c.triangles()) {
+			if (t.floor() || !HeroNavigator.narrowSurface(t)) {
+				continue;
+			}
+			Vector3f ctr = new Vector3f(t.a()).add(t.b()).add(t.c()).div(3);
+			Vector3f n = new Vector3f(t.n().x, 0, t.n().z).normalize();
+			for (int sgn = -1; sgn <= 1; sgn += 2) {
+				Vector3f st = new Vector3f(ctr).fma(sgn * 12f, n);
+				NavWorld.Floor f = w.floor(st.x, ctr.y + 4, st.z, 80);
+				if (f == null) {
+					continue;
+				}
+				HeroNavigatorTest.Body b = new HeroNavigatorTest.Body();
+				b.pos.set(st.x, f.y(), st.z);
+				HeroNavigator nav = new HeroNavigator(b, w, null);
+				HeroNavigatorTest.Pad in = new HeroNavigatorTest.Pad();
+				Vector3f dir = new Vector3f(n).mul(-sgn);
+				float yaw = HeroNavigator.yawOf(dir);
+				in.lx = (float) -Math.sin(yaw);
+				in.ly = (float) Math.cos(yaw);
+				nav.update(in, 0, HeroNavigatorTest.DT);
+				if (nav.state() != NavState.WALL_WALK) {
+					continue;
+				}
+				assertEquals(back, nav.wallBack(), lv + " " + b.pos);
+				entered++;
+				Vector3f p0 = new Vector3f(b.pos);
+				float ry = HeroNavigator.yawOf(new Vector3f(dir).cross(0, 1, 0));
+				in.lx = (float) -Math.sin(ry);
+				in.ly = (float) Math.cos(ry);
+				for (int i = 0; i < 30 && nav.state() == NavState.WALL_WALK; i++) {
+					nav.update(in, 0, HeroNavigatorTest.DT);
+				}
+				if (nav.state() == NavState.WALL_WALK && b.pos.distance(p0) > 9) {
+					walked++;
+				}
+			}
+		}
+		return new int[] {entered, walked};
+	}
 }

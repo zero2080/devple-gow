@@ -44,19 +44,24 @@ import java.util.Map;
  * 0x15C 1.25   0x1C6374                수평 줄 최소 속도                                    [확실]
  * 0x160 20     0x1C6138                짚라인 (+0x174 0x40000) 목표 속도                       [확실]
  * 0x164 10     0x1C6134                짚라인 가속                                         [확실]
- * 0x168 1.25   0x1C8CBC / 0x1C7484     좁은 턱 벽 따라 걷기 (WallFront/Back) 속도              [확실: 엔진 미구현]
+ * 0x168 1.25   0x1C8CBC / 0x1C7484     좁은 턱 벽 따라 걷기 (WallFront/Back) 속도              [확실]
  * 0x178 10     0x1EAFF0                지상 목표 속도 (× 스틱)                               [확실: 엔진 영웅은 애니 이동량]
  * 0x17C 0.5 ×3 0x1C4518                붙은 오브젝트 밀기 최소 속도 [무게 0/1/2]               [확실]
  * 0x188 1.9 / 1.5 / 1.2  0x1C453C      붙은 오브젝트 밀기 최대 속도 [무게 0/1/2] (× 스틱)      [확실]
  * 0x194 0 ×3, 0x1A0 24 / 16 / 9  0x1C4A08  상자 차기 속도 lerp(최소, 최대, 충전 / 0x1AC) [무게]  [확실]
  * 0x1AC 2      0x1C49A8                상자 차기 최대 충전 시간                               [확실]
  * 0x1D4 7.5    0x1CA7F8                수영 (+0x174 0x100, ANISwim) 목표 속도                  [확실]
- * 0x1D8 4.5    0x1CA7F0                물 위 떠 있기 (0x80, ANITread) 목표 속도                [확실: 엔진 미구분]
+ * 0x1D8 4.5    0x1CA7F0                물 위 떠 있기 (0x80, ANITread) 목표 속도                [확실]
  * 0x1DC 1      0x1CA80C                수영 최소 속도                                       [확실]
  * 0x1E0 7.5    0x1CA7D4                수영 가속                                           [확실]
  * 0x1E4 7.5    0x1CA7D0                수영 감속                                           [확실]
  * 0x1E8 0.15   0x1CA62C                수영 회전 비율 (프레임당)                              [확실: 값 / 추정: 0x183D68 각도 보간]
- * 0x1EC 0.2    0x1C9C00                물 판정 높이 = 키 × (1 − 이 값)                        [추정: 수면 = 몸 위 20 % 아래]
+ * 0x1EC 0.2    0x1C9C00                물 판정 높이 = 키 × (1 − 이 값) − 바닥 (내비 위치 기준 21.76)  [확실: 0x1E57D8 수면 맞춤]
+ * 0x1F0 15     0x1CAC68                물 위·가라앉음 (0x80/0x100) 부력 (m/s², 월드 수직 속도에 더함)  [확실]
+ * 0x1F8 0.5 / 0x1FC 1   0x1C9F10       잠수 돌진 (R1) 충전 시간 하한 / 상한 (초)                 [확실]
+ * 0x200 11 / 0x204 22   0x1C9F24       잠수 돌진 속도 lerp (m/s)                               [확실]
+ * 0x208 0.01 / 0x20C 0.1  0x1C9F2C     잠수 돌진 조종 시간 lerp (+0x2B8 = 이 값 + 1, ≥ 1 동안 상하 조종)  [확실]
+ * 0x114 10 / 0x120 12   0x1E9CD0       벽 옆 끝 (+0x2D8 0x100/0x200) × 옆 점프: 정면 / 위 속도 (정면을 ±90° 돌림)  [확실]
  * 0x230 1      0x1EAFB0 / 0x1EB578     +0x2D8 비트 4 (좁은 길) 일 때 지상 속도 배율             [확실: 값 / 추정: 비트 뜻]
  * 0x234 0.6    0x1E6D74                몸 상자 반폭 (상자 폭 = ×2)                           [확실: 0x1E6D58]
  * 0x238 2.2    0x1E6D80                몸 키 (+0x120.y) — 줄 잡기 점·줄 손 높이                [확실]
@@ -78,7 +83,8 @@ public final class NavTuning {
 			LADDER_SLIDE_DEC = 0x134, ROPE_CLIMB = 0x138, ROPE_CLIMB_MIN = 0x13C, ROPE_SWING_FORCE = 0x148, ROPE_SLIDE_MAX = 0x14C,
 			ROPE_SLIDE_ACC = 0x150, ROPE_SLIDE_DEC = 0x154, TRAVERSE = 0x158, TRAVERSE_MIN = 0x15C, ZIP_SPEED = 0x160, ZIP_ACCEL = 0x164,
 			LEDGE_WALK = 0x168, GROUND = 0x178, PUSH_MIN = 0x17C, PUSH_MAX = 0x188, KICK_MIN = 0x194, KICK_MAX = 0x1A0, KICK_CHARGE = 0x1AC, SWIM = 0x1D4, TREAD = 0x1D8, SWIM_MIN = 0x1DC, SWIM_ACCEL = 0x1E0, SWIM_DECEL = 0x1E4,
-			SWIM_TURN = 0x1E8, WATER_LINE = 0x1EC, NARROW_SCALE = 0x230, BODY_HALF = 0x234, BODY_HEIGHT = 0x238, BODY_BASE = 0x23C;
+			SWIM_TURN = 0x1E8, WATER_LINE = 0x1EC, BUOYANCY = 0x1F0, DASH_CHARGE_MIN = 0x1F8, DASH_CHARGE_MAX = 0x1FC,
+			DASH_MIN = 0x200, DASH_MAX = 0x204, DASH_STEER_MIN = 0x208, DASH_STEER_MAX = 0x20C, EDGE_JUMP_OUT = 0x114, EDGE_JUMP_UP = 0x120, NARROW_SCALE = 0x230, BODY_HALF = 0x234, BODY_HEIGHT = 0x238, BODY_BASE = 0x23C;
 
 	/** R_PERMK TWK_Sold_000 (크라토스) — 데이터 테스트가 원본과 대조. */
 	public static final NavTuning KRATOS = new NavTuning(Map.ofEntries(
@@ -96,6 +102,8 @@ public final class NavTuning {
 			Map.entry(KICK_MIN, 0f), Map.entry(KICK_MIN + 4, 0f), Map.entry(KICK_MIN + 8, 0f),
 			Map.entry(KICK_MAX, 24f), Map.entry(KICK_MAX + 4, 16f), Map.entry(KICK_MAX + 8, 9f), Map.entry(KICK_CHARGE, 2f), Map.entry(SWIM, 7.5f), Map.entry(TREAD, 4.5f), Map.entry(SWIM_MIN, 1f),
 			Map.entry(SWIM_ACCEL, 7.5f), Map.entry(SWIM_DECEL, 7.5f), Map.entry(SWIM_TURN, 0.15f), Map.entry(WATER_LINE, 0.2f),
+			Map.entry(BUOYANCY, 15f), Map.entry(DASH_CHARGE_MIN, 0.5f), Map.entry(DASH_CHARGE_MAX, 1f), Map.entry(DASH_MIN, 11f), Map.entry(DASH_MAX, 22f),
+			Map.entry(DASH_STEER_MIN, 0.01f), Map.entry(DASH_STEER_MAX, 0.1f), Map.entry(EDGE_JUMP_OUT, 10f), Map.entry(EDGE_JUMP_UP, 12f),
 			Map.entry(NARROW_SCALE, 1f), Map.entry(BODY_HALF, 0.6f), Map.entry(BODY_HEIGHT, 2.2f), Map.entry(BODY_BASE, 0.4f)));
 
 	private final Map<Integer, Float> values;
