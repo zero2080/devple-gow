@@ -139,6 +139,32 @@ class AiBrainTest {
 		assertEquals(AiBrain.State.COMBAT, f.brain().state(), "시선이 트이면 인지");
 	}
 
+	/** 경보 (0x1D1AD8, 반경 0x48 × 16): 인지한 적이 반경 안의 동료를 전투로 끌어들인다. */
+	@Test
+	void perceptionAlertsNearbyAllies() throws Exception {
+		AiTargets.clear();
+		EnemyFactory.Kind k = kind("R_MIN.WAD");
+		EnemyFighter seer = k.spawn(), near = k.spawn(), far = k.spawn();
+		seer.pos.set(0, 0, -200);
+		float r = new AiTemplate(k.tweaks(), seer.ai1()).alertRadius * 16f;
+		near.pos.set(r * 0.5f, 0, -200);
+		far.pos.set(r * 3f, 0, -200);
+		near.brain().setSightBlocked((eye, to) -> true);
+		far.brain().setSightBlocked((eye, to) -> true);
+		Hittable tgt = dummy(new Vector3f());
+		for (EnemyFighter f : List.of(seer, near, far)) {
+			f.setFoe(tgt);
+		}
+		for (float t = 0; t < 0.5f; t += DT) {
+			seer.update(DT);
+			near.update(DT);
+			far.update(DT);
+		}
+		assertEquals(AiBrain.State.COMBAT, seer.brain().state());
+		assertEquals(AiBrain.State.COMBAT, near.brain().state(), "반경 " + r + " 안 → 경보");
+		assertTrue(far.brain().state() != AiBrain.State.COMBAT, "반경 밖은 그대로");
+	}
+
 	@Test
 	void minotaurApproachesAndAttacksWithTemplateCadence() throws Exception {
 		EnemyFactory.Kind k = kind("R_MIN.WAD");

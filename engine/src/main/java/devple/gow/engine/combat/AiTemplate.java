@@ -43,6 +43,8 @@ public final class AiTemplate {
 	public final float minRepickDist;
 	/** +0x4C 시야 거리(×16) / +0x50 시야각(도) (0x1D22B0). */
 	public final float sightRange, sightFov;
+	/** 0x48 (400232ce): 경보 반경 (×16) — 인지한 적이 이 안의 개체에 메시지 1000(대상) 을 보냄 (0x1D1AD8 → 0x1D1A70). */
+	public final float alertRadius;
 	/** +0x68 / +0x64 이동 속도 % (0x1D0044: 평상 / 특수 상태). */
 	public final float speedPct, speedPctAlt;
 	/** +0x58 (×16) 대상 추적 한계 거리 (0x1D0948) [추정]. */
@@ -76,6 +78,7 @@ public final class AiTemplate {
 		anyAttackDist = f(tw, 0xC3A12B87, -1f);
 		minRepickDist = f(tw, 0x2C2B1E13, 4f);
 		sightRange = f(tw, 0x4672BFB2, 80f);
+		alertRadius = f(tw, 0x400232CE, 10f);
 		sightFov = f(tw, 0xD37B884C, 180f);
 		speedPct = f(tw, 0x72949419, 100f);
 		speedPctAlt = f(tw, 0xCD7DA53A, 50f);

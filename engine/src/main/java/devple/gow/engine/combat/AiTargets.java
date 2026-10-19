@@ -27,6 +27,8 @@ public final class AiTargets {
 		public final MoveHistory history = new MoveHistory();
 		/** 기록 갱신 담당 (같은 프레임에 여러 적이 중복 갱신하지 않도록 한 명만). */
 		private AiBrain ticker;
+		/** 이 대상을 노리는 AI (경보 전파용). */
+		final java.util.Set<AiBrain> brains = java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
 
 		Slot(AiData.Soldier sold) {
 			this.sold = sold;

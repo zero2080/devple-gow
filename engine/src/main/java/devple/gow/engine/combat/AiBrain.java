@@ -121,8 +121,14 @@ public final class AiBrain {
 			return;
 		}
 		releaseAll();
+		if (slot != null) {
+			slot.brains.remove(this);
+		}
 		target = t;
 		slot = t != null ? AiTargets.slot(t) : null;
+		if (slot != null) {
+			slot.brains.add(this);
+		}
 		state = State.IDLE;
 		if (t != null) {
 			if (t.combatant() != null) {
@@ -205,6 +211,7 @@ public final class AiBrain {
 			}
 			state = State.COMBAT;
 			log.accept("인지 거리 " + (int) dist);
+			alertNearby();
 		}
 		if (target.hp() <= 0) {
 			releaseAll();
@@ -252,6 +259,20 @@ public final class AiBrain {
 		// 시선 가림 (0x1D257C sub_0011E3E8 충돌 월드 레이 — 원뿔 안일 때만 의미)
 		return sightBlocked == null || (tmpl.flags & AiTemplate.FLAG_IGNORE_LOS) != 0
 				|| !sightBlocked.test(new Vector3f(self.pos).add(0, EYE, 0), new Vector3f(tp).add(0, EYE, 0));
+	}
+
+	/** 경보 (0x1D1AD8): 경보 반경 ×16 안의, 같은 대상을 노리는 아직 인지 못한 동료를 전투로 (메시지 1000) [추정: 수신 처리]. */
+	private void alertNearby() {
+		if (slot == null) {
+			return;
+		}
+		float r = tmpl.alertRadius * 16f;
+		for (AiBrain o : List.copyOf(slot.brains)) {
+			if (o != this && o.state != State.COMBAT && !o.dead() && o.tmpl.mode != 5 && o.self.pos.distance(self.pos) <= r) {
+				o.state = State.COMBAT;
+				o.log.accept("경보 받음");
+			}
+		}
 	}
 
 	private boolean inSightCone(Vector3f tp) {
