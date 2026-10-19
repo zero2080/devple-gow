@@ -118,23 +118,23 @@ public final class Renderer implements AutoCloseable {
 				if (b == RenderModel.Blend.CUTOUT) {
 					if (pass == 0) {
 						basic.set("uAlphaRef", 0.75f);
-						drawLayer(p, tex, RenderModel.Blend.OPAQUE, tint, sc, false);
+						drawLayer(p, tex, RenderModel.Blend.OPAQUE, tint, sc, false, true);
 						basic.set("uAlphaRef", 0f);
 					} else {
 						basic.set("uAlphaMax", 0.75f);
-						drawLayer(p, tex, RenderModel.Blend.ALPHA, tint, sc, false);
+						drawLayer(p, tex, RenderModel.Blend.ALPHA, tint, sc, false, true);
 						basic.set("uAlphaMax", 0f);
 						continue;   // 레이어는 패스 0 에서 이미 그렸다
 					}
 				} else {
-					drawLayer(p, tex, b, tint, sc, false);
+					drawLayer(p, tex, b, tint, sc, false, true);
 				}
 				if (fx != null && !fx.layers().isEmpty()) {
 					glDepthFunc(GL_LEQUAL);
 					for (MaterialFx.Layer l : fx.layers()) {
 						RenderModel.Blend lb = l.blend() == RenderModel.Blend.OPAQUE || l.blend() == RenderModel.Blend.CUTOUT
 								? RenderModel.Blend.ALPHA : l.blend();
-						drawLayer(p, fx.frame(l, fxTime), lb, l.tint(), fx.uv(l.index(), fxTime), l.env() && p.lit());
+						drawLayer(p, fx.frame(l, fxTime), lb, l.tint(), fx.uv(l.index(), fxTime), l.env() && p.lit(), false);
 					}
 					glDepthFunc(GL_LESS);
 				}
@@ -146,7 +146,8 @@ public final class Renderer implements AutoCloseable {
 		basic.set("uEnvUv", 0);
 	}
 
-	private void drawLayer(RenderModel.Part p, Texture tex, RenderModel.Blend blend, float[] t, float[] scroll, boolean env) {
+	/** @param base 머티리얼 첫 레이어 (노멀맵은 이것에만, 44 문서) */
+	private void drawLayer(RenderModel.Part p, Texture tex, RenderModel.Blend blend, float[] t, float[] scroll, boolean env, boolean base) {
 		boolean opaque = blend == RenderModel.Blend.OPAQUE;
 		if (!opaque) {
 			glEnable(GL_BLEND);
@@ -187,12 +188,36 @@ public final class Renderer implements AutoCloseable {
 		} else {
 			basic.set("uUvOffset", 0f, 0f);
 		}
+		boolean nm = base && !env && tex != null && (opaque || blend == RenderModel.Blend.ALPHA) && bindNormalMap(basic, tex);
 		p.mesh().draw();
+		if (nm) {
+			basic.set("uNmOn", 0);
+		}
 		if (!opaque) {
 			glDisable(GL_BLEND);
 			glDepthMask(true);
 			glBlendEquation(GL_FUNC_ADD);
 		}
+	}
+
+	/**
+	 * 노멀맵 켬이면 tex 의 노멀맵을 유닛 2 에 묶고 uNmOn = 1 (44 문서). 꺼져 있거나 맵이 없으면 아무것도 안 하고 false —
+	 * 꺼짐 상태의 GL 호출·유니폼은 기능 추가 전과 같다. 호출한 쪽이 그린 뒤 uNmOn 을 0 으로 돌린다.
+	 */
+	public static boolean bindNormalMap(Shader sh, Texture tex) {
+		if (!NormalMaps.enabled() || tex == null) {
+			return false;
+		}
+		Texture nm = tex.normalMap();
+		if (nm == null) {
+			return false;
+		}
+		nm.bind(NormalMaps.UNIT);
+		glActiveTexture(GL_TEXTURE0);
+		sh.set("uNormalMap", NormalMaps.UNIT);
+		sh.set("uNmDetail", NormalMaps.DETAIL_K, NormalMaps.DETAIL_LO, NormalMaps.DETAIL_HI);
+		sh.set("uNmOn", 1);
+		return true;
 	}
 
 	public void endFrame(float fade) {

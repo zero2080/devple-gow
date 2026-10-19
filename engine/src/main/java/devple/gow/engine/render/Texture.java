@@ -12,10 +12,18 @@ public final class Texture implements AutoCloseable {
 
 	private final int id;
 	private final int width, height;
+	private final boolean repeat;
+	/** 노멀맵 출처 (44 문서, 선택 기능): 캐시 키·원본 크기·원본 ARGB 공급자. null = 노멀맵 없음. */
+	private String nmKey;
+	private int nmSrcW, nmSrcH;
+	private java.util.function.Supplier<int[]> nmSource;
+	private Texture normalMap;
+	private boolean nmBuilt;
 
 	public Texture(int w, int h, ByteBuffer rgba, boolean repeat) {
 		width = w;
 		height = h;
+		this.repeat = repeat;
 		id = glGenTextures();
 		glBindTexture(GL_TEXTURE_2D, id);
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
@@ -49,6 +57,44 @@ public final class Texture implements AutoCloseable {
 		return t;
 	}
 
+	/** ARGB 배열 (w×h, 2 의 거듭제곱) 그대로 업로드. */
+	public static Texture ofArgb(int w, int h, int[] argb, boolean repeat) {
+		ByteBuffer buf = MemoryUtil.memAlloc(w * h * 4);
+		for (int c : argb) {
+			buf.put((byte) (c >> 16)).put((byte) (c >> 8)).put((byte) c).put((byte) (c >>> 24));
+		}
+		Texture t = new Texture(w, h, buf.flip(), repeat);
+		MemoryUtil.memFree(buf);
+		return t;
+	}
+
+	/**
+	 * 노멀맵 출처 등록 (생성은 {@link #normalMap()} 첫 호출까지 미룬다 — 기능이 꺼져 있으면 아무 일도 없다).
+	 *
+	 * @param key    텍스처 캐시 키 (덮어쓰기 파일 이름)
+	 * @param sw/sh  원본 크기 (업로드 크기보다 작으면 패딩)
+	 * @param source 원본 ARGB (행 우선) 공급자
+	 */
+	public Texture withNormalSource(String key, int sw, int sh, java.util.function.Supplier<int[]> source) {
+		nmKey = key;
+		nmSrcW = sw;
+		nmSrcH = sh;
+		nmSource = source;
+		return this;
+	}
+
+	/** 노멀맵 텍스처 (처음 부를 때 만들어 캐시). 출처가 없으면 null. GL 스레드에서만. */
+	public Texture normalMap() {
+		if (!nmBuilt) {
+			nmBuilt = true;
+			if (nmSource != null) {
+				normalMap = NormalMaps.build(nmKey, width, height, nmSrcW, nmSrcH, repeat, nmSource);
+			}
+			nmSource = null;
+		}
+		return normalMap;
+	}
+
 	public static Texture white() {
 		ByteBuffer b = MemoryUtil.memAlloc(4).put(new byte[]{-1, -1, -1, -1}).flip();
 		Texture t = new Texture(1, 1, b, true);
@@ -73,5 +119,9 @@ public final class Texture implements AutoCloseable {
 	@Override
 	public void close() {
 		glDeleteTextures(id);
+		if (normalMap != null) {
+			normalMap.close();
+			normalMap = null;
+		}
 	}
 }

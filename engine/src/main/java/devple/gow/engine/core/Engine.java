@@ -48,6 +48,7 @@ public final class Engine implements AutoCloseable {
 				ticks++;
 				acc -= TICK;
 			}
+			devple.gow.engine.render.NormalMaps.pollToggle(window.handle()); // 5 키 = 노멀맵 (원작에 없음, 44 문서)
 			renderer.beginFrame();
 			scenes.render(this, (float) (acc / TICK));
 			renderer.endFrame(scenes.fade());
@@ -74,6 +75,9 @@ public final class Engine implements AutoCloseable {
 	}
 
 	private void capture() {
+		if (devple.gow.engine.render.NormalMaps.enabled()) {
+			System.out.println("노멀맵: " + devple.gow.engine.render.NormalMaps.stats());
+		}
 		try {
 			Screenshot.save(window.width(), window.height(), captureFile);
 		} catch (IOException e) {
