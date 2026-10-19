@@ -8,6 +8,14 @@ import devple.gow.engine.combat.CombatData;
 import devple.gow.engine.combat.CombatOwner;
 import devple.gow.engine.combat.Combatant;
 import devple.gow.engine.combat.DamageRules;
+import devple.gow.engine.combat.EnemyFighter;
+import devple.gow.engine.combat.Hittable;
+import devple.gow.engine.game.GameRules;
+import devple.gow.engine.game.PlayerState;
+import devple.gow.engine.ui.HudBinding;
+import devple.gow.engine.ui.UiLayer;
+import devple.gow.tools.combat.CombatFile;
+import devple.gow.tools.ui.MessageTable;
 import devple.gow.engine.combat.TrainingDummy;
 import devple.gow.engine.core.Engine;
 import devple.gow.engine.game.Tweaks;
@@ -53,6 +61,14 @@ public final class HeroTestScene implements Scene {
 	private HeroController ctl;
 	private Combatant combat;
 	private TrainingDummy dummy;
+	private WadAssets minAssets;
+	private Shader skinnedMin;
+	private AnimatedModel minModel;
+	private EnemyFighter enemy;
+	private PlayerState player;
+	private UiLayer hud;
+	private final HudBinding hudBinding = new HudBinding();
+	private Hittable heroHittable;
 	private Mesh grid;
 	private Mesh box;
 	private float camYaw;
@@ -84,15 +100,64 @@ public final class HeroTestScene implements Scene {
 		Animator animator = new Animator(sk, set, tw, "/Animation/goHero/");
 		ctl = new HeroController(animator);
 		CombatData data = new CombatData(perm, CombatData.heroFiles(), set);
+		player = new PlayerState(GameRules.load(perm));
+		player.level.put(devple.gow.engine.game.Weapon.BLADES, bladeLevel);
 		combat = new Combatant(data, animator, owner());
 		DamageRules rules = new DamageRules(tw);
 		combat.setDamageScale(() -> rules.playerScale(1, 0, bladeLevel, false));
+		heroHittable = new Hittable() {
+			public Vector3f position() {
+				return ctl.position;
+			}
+
+			public float hp() {
+				return player.hp;
+			}
+
+			public int classId() {
+				return -1;
+			}
+
+			public int stanceTag() {
+				return combat.stanceTag();
+			}
+
+			public boolean invulnerable() {
+				return player.hp <= 0 || combat.invulnerable();
+			}
+
+			public Result receive(CombatFile.Attack a, Combatant attacker, float dmg, Vector3f knock) {
+				Result r = combat.takeHit(a, attacker, dmg);
+				System.out.printf("  크레토스 피격 %.1f → %s (HP %.0f)%n", dmg, r, player.hp);
+				return r;
+			}
+		};
+		try {
+			minAssets = new WadAssets(rom.resolve("R_MIN.WAD"));
+			Tweaks mtw = new Tweaks();
+			mtw.load(perm);
+			mtw.load(minAssets.wad());
+			Skeleton msk = Skeleton.loadAll(minAssets.wad()).stream().filter(s -> s.name.equals("min")).findFirst().orElseThrow();
+			AnimationSet mset = AnimationSet.load(minAssets.wad(), "ANM_min");
+			skinnedMin = new Shader("skinned.vert", "basic.frag");
+			minModel = new AnimatedModel(minAssets, minAssets.gowModel("MDL_MIN"), msk, skinnedMin);
+			enemy = new EnemyFighter(minAssets.wad(), mtw, msk, mset, 50,
+					List.of("TWK_CombatFile_050", "TWK_CombatFile_051", "TWK_CombatFile_052", "TWK_CombatFile_053"),
+					new int[]{10, 11, 20, 21, 22, 40, 41, 44}, 17, "standIdle", "walkFront", 30f);
+			enemy.pos.set(0, 0, -120);
+			enemy.setFoe(heroHittable);
+			enemy.setIncomingScale(() -> rules.incomingScale(1, 0, bladeLevel, false));
+			enemy.combat().onLog(s -> System.out.println("[미노타우로스] " + s));
+			hud = new UiLayer(new WadAssets(rom.resolve("R_PERMK.WAD")), true, "FLP_HUDK", MessageTable.fromWad(perm).orElse(null), new devple.gow.engine.ui.UiVariables());
+		} catch (IOException ex) {
+			throw new UncheckedIOException(ex);
+		}
 		combat.onLog(System.out::println);
 		combat.debug = auto == Auto.COMBO;
 		System.out.printf("전투 데이터: 기술 %d개, 루트 액션 %d개, 블레이드 레벨 %d%n", data.moveCount(),
 				data.rootActions().size(), bladeLevel);
 		dummy = new TrainingDummy(new Vector3f(0, 0, -50), 90, 10);
-		combat.setTarget(dummy);
+		combat.setTarget(enemy != null ? enemy : dummy);
 		MeshBuilder g = new MeshBuilder();
 		for (int i = -40; i <= 40; i++) {
 			float c = i == 0 ? 0.6f : 0.25f;
@@ -115,7 +180,12 @@ public final class HeroTestScene implements Scene {
 	private CombatOwner owner() {
 		return new CombatOwner() {
 			public float hp() {
-				return 100;
+				return player.hp;
+			}
+
+			public boolean applyDamage(float d) {
+				player.hp = Math.max(0, player.hp - d);
+				return false;
 			}
 
 			public boolean onGround() {
@@ -162,7 +232,8 @@ public final class HeroTestScene implements Scene {
 		camYaw -= in.rightX() * dt * 2;
 		combat.update(in, dt);
 		if (combat.active()) {
-			ctl.updateCombat(combat, in, camYaw, dt, dummy.hp > 0 ? dummy.pos : null);
+			Vector3f aim = enemy != null ? (enemy.dead() ? null : enemy.pos) : (dummy.hp > 0 ? dummy.pos : null);
+			ctl.updateCombat(combat, in, camYaw, dt, aim);
 		} else if (auto == Auto.RUN && (autoTime += dt) < 0.4f) {
 			ctl.update(new Input(e.window().handle()) {
 				@Override
@@ -178,8 +249,17 @@ public final class HeroTestScene implements Scene {
 		} else {
 			ctl.update(in, camYaw, dt);
 		}
-		dummy.update(dt);
-		ctl.separate(dummy.pos, 10);
+		if (enemy != null) {
+			enemy.update(dt);
+			ctl.separate(enemy.pos, 22);
+		} else {
+			dummy.update(dt);
+			ctl.separate(dummy.pos, 10);
+		}
+		if (hud != null) {
+			hudBinding.update(player, hud.variables());
+			hud.update(e);
+		}
 	}
 
 	@Override
@@ -192,11 +272,18 @@ public final class HeroTestScene implements Scene {
 		cam.eye.set(p.x + 90, p.y + 70, p.z + 90);
 		e.renderer().begin3d(cam);
 		e.renderer().draw(grid, new Matrix4f(), false);
-		float k = dummy.hp / dummy.maxHp;
-		e.renderer().basic().set("uTint", dummy.flash > 0 ? new Vector4f(1, 1, 1, 1) : new Vector4f(0.8f, 0.25f + 0.5f * k, 0.2f, 1));
-		e.renderer().draw(box, new Matrix4f().translation(dummy.pos), true);
-		e.renderer().basic().set("uTint", new Vector4f(1, 1, 1, 1));
+		if (enemy == null) {
+			float k = dummy.hp / dummy.maxHp;
+			e.renderer().basic().set("uTint", dummy.flash > 0 ? new Vector4f(1, 1, 1, 1) : new Vector4f(0.8f, 0.25f + 0.5f * k, 0.2f, 1));
+			e.renderer().draw(box, new Matrix4f().translation(dummy.pos), true);
+			e.renderer().basic().set("uTint", new Vector4f(1, 1, 1, 1));
+		} else if (enemy.deadTime() < 3f) {
+			minModel.draw(cam, e.window().aspect(), enemy.world(new Matrix4f(), alpha), enemy.animator().pose(), e.renderer().white());
+		}
 		model.draw(cam, e.window().aspect(), world, ctl.animator().pose(), e.renderer().white());
+		if (hud != null) {
+			hud.render(e);
+		}
 	}
 
 	@Override
@@ -206,5 +293,13 @@ public final class HeroTestScene implements Scene {
 		grid.close();
 		box.close();
 		hero.close();
+		if (minModel != null) {
+			minModel.close();
+			skinnedMin.close();
+			minAssets.close();
+		}
+		if (hud != null) {
+			hud.close();
+		}
 	}
 }
