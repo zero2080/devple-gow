@@ -111,6 +111,27 @@ public final class Tweaks {
 		return null;
 	}
 
+	/** 대소문자 무시 노드 이름 찾기 (예 "/Animation/goMIN/"). */
+	public String findNode(String node) {
+		for (String k : numbers.keySet()) {
+			if (k.equalsIgnoreCase(node)) {
+				return k;
+			}
+		}
+		for (String k : strings.keySet()) {
+			if (k.equalsIgnoreCase(node)) {
+				return k;
+			}
+		}
+		return null;
+	}
+
+	/** prefix 로 시작하는 첫 노드 (없으면 null). */
+	public String firstNode(String prefix) {
+		return java.util.stream.Stream.concat(numbers.keySet().stream(), strings.keySet().stream())
+				.filter(k -> k.startsWith(prefix)).sorted().findFirst().orElse(null);
+	}
+
 	public int nodeCount() {
 		return numbers.size() + strings.size();
 	}

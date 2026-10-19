@@ -84,3 +84,16 @@
 - TWK 의 short/bool 값은 하위 비트만 유효 (`Tweaks.i16`). 예: `Milestone 0 Hits` = 0x3F33000A → 10, Orb `Type` = 0x411D0002 → 2(붉은 오브).
 - `RewardsTest`: MIN Death = 붉은 오브 25 포인트 (10 문서 예시와 일치), 10 히트 → 2개, 신 모드 지속 14.0초.
 - 신 모드 중에는 `CombatOwner.godMode()` 가 참 → 분기 flags 0x100 (파일 005 신 모드 전용 콤보) 이 열리고 피해 ×2 / 받는 피해 감소.
+
+## 8. 적 자동 구성 (`EnemyFactory`)
+적 리소스 WAD 하나 → `EnemyFighter` (스켈레톤·모델·애니·AI1·CombatFileSet·공격/방어 기술 자동 탐색).
+
+| 규칙 | 이유 |
+|------|------|
+| 스켈레톤 = WAD 이름과 같은 것 우선(R_HAR → `har`), 없으면 관절 수 최대 | R_HAR 에는 관절이 더 많은 석화 파편 `harstonedbrk` 가 있음 |
+| AI1 / CombatFileSet = **적 WAD 자체**의 첫 템플릿 | R_PERMK 에 영웅 세트(000)가 있어 함께 검색하면 잘못 잡힘 |
+| 공격 기술 = REQUEST0 루트 액션 중 피해 > 0 인 공격이 있는 기술, 방어 = guard 1 | 10 문서 §2.2 |
+| 처치 드롭 = OrbEmitter `"<WAD 접미사> Death"` (예 MIN Death, SKS Death) | 10 문서 §11.1 |
+
+`EnemyFactoryTest`: 미노타우로스 = 050–053·HP 90·방어 17, 해골병 = 020…028·HP 35, 하피 = 본체 스켈레톤·HP 15.
+검증 로그 (`--hero --blade 2 --enemy R_SKS --auto combo`): 4+4+4+6+6 = 24 피해 후 COMBO6A 12 → HP 35 를 넘겨 `EV_DEATH → death02`.

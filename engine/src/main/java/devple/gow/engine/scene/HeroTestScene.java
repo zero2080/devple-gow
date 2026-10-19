@@ -80,6 +80,15 @@ public final class HeroTestScene implements Scene {
 	private float autoTime;
 	private ScriptedInput scripted;
 
+	private String enemyWad = "R_MIN";
+
+	public HeroTestScene(Path rom, Auto auto, int bladeLevel, String enemyWad) {
+		this(rom, auto, bladeLevel);
+		if (enemyWad != null) {
+			this.enemyWad = enemyWad.toUpperCase();
+		}
+	}
+
 	public HeroTestScene(Path rom, Auto auto, int bladeLevel) {
 		this.rom = rom;
 		this.auto = auto;
@@ -140,17 +149,12 @@ public final class HeroTestScene implements Scene {
 			}
 		};
 		try {
-			minAssets = new WadAssets(rom.resolve("R_MIN.WAD"));
-			Tweaks mtw = new Tweaks();
-			mtw.load(perm);
-			mtw.load(minAssets.wad());
-			Skeleton msk = Skeleton.loadAll(minAssets.wad()).stream().filter(s -> s.name.equals("min")).findFirst().orElseThrow();
-			AnimationSet mset = AnimationSet.load(minAssets.wad(), "ANM_min");
+			var kind = devple.gow.engine.combat.EnemyFactory.load(rom.resolve(enemyWad + ".WAD"), perm, -1);
+			minAssets = kind.assets();
 			skinnedMin = new Shader("skinned.vert", "basic.frag");
-			minModel = new AnimatedModel(minAssets, minAssets.requireModel("MDL_MIN"), msk, skinnedMin);
-			enemy = new EnemyFighter(minAssets.wad(), mtw, msk, mset, 50,
-					List.of("TWK_CombatFile_050", "TWK_CombatFile_051", "TWK_CombatFile_052", "TWK_CombatFile_053"),
-					new int[]{10, 11, 20, 21, 22, 40, 41, 44}, 17, "standIdle", "walkFront", 30f);
+			minModel = kind.buildModel(skinnedMin);
+			enemy = kind.spawn();
+			System.out.printf("적: %s AI1 %03d HP %.0f 전투 파일 %s%n", enemyWad, kind.ai1(), enemy.maxHp(), kind.combatFiles());
 			enemy.pos.set(0, 0, -120);
 			enemy.setFoe(heroHittable);
 			enemy.setIncomingScale(() -> rules.incomingScale(1, 0, bladeLevel, godMode.active()));
@@ -161,7 +165,7 @@ public final class HeroTestScene implements Scene {
 			if (java.nio.file.Files.exists(lvl)) {
 				orbTweaks.load(WadFile.load(lvl));
 			}
-			enemy.combat().onLog(s -> System.out.println("[미노타우로스] " + s));
+			enemy.combat().onLog(s -> System.out.println("[" + enemyWad + "] " + s));
 			hud = new UiLayer(new WadAssets(rom.resolve("R_PERMK.WAD")), true, "FLP_HUDK", MessageTable.fromWad(perm).orElse(null), new devple.gow.engine.ui.UiVariables());
 		} catch (IOException ex) {
 			throw new UncheckedIOException(ex);
@@ -281,10 +285,11 @@ public final class HeroTestScene implements Scene {
 			enemy.update(dt);
 			if (enemy.dead() && !dropped) {
 				dropped = true;
-				for (var o : devple.gow.engine.game.OrbDrops.roll(orbTweaks, "MIN Death", new java.util.Random(), player.hp, player.mp)) {
+				String emitter = enemyWad.substring(2) + " Death";
+				for (var o : devple.gow.engine.game.OrbDrops.roll(orbTweaks, emitter, new java.util.Random(), player.hp, player.mp)) {
 					player.pickupOrb(o.type(), o.points());
 				}
-				System.out.println("미노타우로스 처치 → 붉은 오브 " + player.redOrbs);
+				System.out.println(enemyWad + " 처치 → 붉은 오브 " + player.redOrbs);
 			}
 			ctl.separate(enemy.pos, 22);
 		} else {

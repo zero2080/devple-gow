@@ -51,6 +51,11 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 	 */
 	public EnemyFighter(WadFile wad, Tweaks tw, Skeleton sk, AnimationSet set, int ai1, List<String> combatFiles,
 						int[] attackMoves, int blockMove, String idleClip, String walkClip, float walkSpeed) {
+		this(wad, tw, sk, set, ai1, combatFiles, attackMoves, blockMove, idleClip, walkClip, walkSpeed, "/Animation/goMIN/");
+	}
+
+	public EnemyFighter(WadFile wad, Tweaks tw, Skeleton sk, AnimationSet set, int ai1, List<String> combatFiles,
+						int[] attackMoves, int blockMove, String idleClip, String walkClip, float walkSpeed, String animNode) {
 		String node = String.format("/TweakTemplates/AI1/%03d/", ai1);
 		this.classId = ai1;
 		this.maxHp = tw.i(node, "HitPoints", 100) & 0xFFFF;
@@ -63,9 +68,17 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 		this.idleClip = idleClip;
 		this.walkClip = walkClip;
 		this.walkSpeed = walkSpeed;
-		this.anim = new Animator(sk, set, tw, "/Animation/goMIN/");
+		this.anim = new Animator(sk, set, tw, animNode);
 		this.combat = new Combatant(new CombatData(wad, combatFiles, set), anim, this);
 		anim.play(idleClip, true);
+	}
+
+	public int ai1() {
+		return classId;
+	}
+
+	public float maxHp() {
+		return maxHp;
 	}
 
 	public Combatant combat() {
