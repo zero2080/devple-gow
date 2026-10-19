@@ -703,7 +703,8 @@ public final class ScriptWorld {
 		e.spawnCount++;
 		ScriptActor a = new ScriptActor(e.group() + "#" + e.id(), intSlot(e, EntitySlots.FILTER), e.position(), e);
 		actors.add(a);
-		listener.spawnEnemy(new ScriptListener.SpawnRequest(e, a, tpl, String.valueOf(slot(e, "Patrol")), e.world.clone()));
+		listener.spawnEnemy(new ScriptListener.SpawnRequest(e, a, tpl, String.valueOf(slot(e, "Patrol")), e.world.clone(),
+				intSlot(e, "SpawnAction")));
 		created(a);
 	}
 

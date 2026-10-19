@@ -64,7 +64,7 @@
 | 7 Vis | 0 Visible, 1..7 속성(int, 0 그대로 / 1 켬 / 2 끔), 8 FadeTime float | 9 | +16 Attr17, +17 JointVisibility (`0x1A3200`, 효과 `0x1ABAA8`) |
 | 8 EventTransmitter | 0 EventId, 1 Arg1, 2 Arg2 (int) | 3 | `0x1A3578` |
 | 9 Start | 0 PlayerName str ("Hero"), 1 Filter int(+0x9C), 2 CameraName str | – | `0x1A3780` |
-| 10 SpawnEnemy | 0 ? int, 1 ? int(-1), 2 SpawnAtStart bool, 3 Respawn bool, 4 TemplateId int, 5..8 int, 9 Patrol str ("patrolN") | 10 | `0x1A3840`, 효과 `0x1AC850` |
+| 10 SpawnEnemy | 0 MaximumCount int, 1 ? int(-1), 2 SpawnAtStart bool, 3 Respawn bool, 4 TemplateId int, 5..6 int, 7 SpawnAction int(-1, 생성 액션 = CombatFile 액션 ID, 32 문서), 8 InitState int (5 = 석화), 9 Patrol str ("patrolN") | 10 | `0x1A3840`, 효과 `0x1AC850` |
 | 11 Creator | 0 Name0 str ("chest", "savepoint", "aoRED" …), 1 Name1 str, 2 float, 3..5 int(-1), 6,7 int, **8 CreateAtStart bool** (36 문서 §5), 9 bool | 10 | +17 bool (`0x1A3B90`) |
 | 12 GlobalData / 13 LevelData | 0 Priority int, 1..16 Init action (변수 초기화) | – | `0x1A3F18` / `0x1A4240` |
 | 14 Marker | 0 Id int (+0x9C) | – | `0x1A4568` |

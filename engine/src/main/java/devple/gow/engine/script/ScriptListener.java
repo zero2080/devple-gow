@@ -14,8 +14,14 @@ public interface ScriptListener {
 	record LevelRequest(LevelOp op, String wad, String entry, float[] pos) {
 	}
 
-	/** SpawnEnemy 발동: 생성된 액터(위치/그룹 = 스폰 지점/Filter), 템플릿 번호, 순찰 경로 이름. */
-	record SpawnRequest(ScriptEntity source, ScriptActor actor, int templateId, String patrol, float[] world) {
+	/**
+	 * SpawnEnemy 발동: 생성된 액터(위치/그룹 = 스폰 지점/Filter), 템플릿 번호, 순찰 경로 이름,
+	 * 생성 액션 (슬롯 7 SpawnAction, -1 = 없음: 원작 Enemy1 초기화가 이 CombatFile 액션을 요청 — 500 SPAWN, 504 SKSWALLSPAWN …, 32 문서).
+	 */
+	record SpawnRequest(ScriptEntity source, ScriptActor actor, int templateId, String patrol, float[] world, int spawnAction) {
+		public SpawnRequest(ScriptEntity source, ScriptActor actor, int templateId, String patrol, float[] world) {
+			this(source, actor, templateId, patrol, world, -1);
+		}
 	}
 
 	/** EventTransmitter → 오브젝트 이벤트. actor 가 null 이면 objectName(소유 GO) 대상. */

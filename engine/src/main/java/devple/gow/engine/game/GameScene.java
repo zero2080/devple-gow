@@ -842,6 +842,9 @@ public final class GameScene implements Scene {
 		f.setIncomingScale(hero::incomingScale);
 		EnemyFactory.Kind fk = kind;
 		f.onShatter(() -> stoneKill(f, fk));
+		if (bossKind == null) {
+			f.startSpawnAction(r.spawnAction()); // 스폰 슬롯 7: SPAWN / SKSWALLSPAWN / 도발 (32 문서 §벽 스폰)
+		}
 		enemies.add(new Enemy(f, kind.buildModel(enemyShader), r.actor(), kind));
 		if (boss != null) {
 			boss.onSpawn(f, r.actor(), r.templateId(), arena());

@@ -159,18 +159,77 @@ class EnemyNavTest {
 		}
 		assertEquals(EnemyNav.Mode.ROPE, n.mode());
 		assertEquals(64f, p.x, 1.5f, "2 m/s × 16 × 2 s");
-		// 목표가 줄 아래 바닥 → 줄 위 투영점 16 안에서 놓고 떨어진다
-		Vector3f ground = new Vector3f(150, 0, 60);
+		// 목표가 줄 아래 바닥 (발 기준 100 아래) → 줄 따라가다 목표 방향이 45° 보다 가파르면 (수평 < 100) 놓는다 (0x1CFD20: Δy < −16, dir.y < −cos45)
+		Vector3f ground = new Vector3f(190, 0, 60);
 		int frames = 0;
 		while (n.mode() == EnemyNav.Mode.ROPE && frames++ < 600) {
 			n.update(p, new Vector3f(), ground, false, DT);
 		}
 		assertEquals(EnemyNav.Mode.AIR, n.mode());
-		assertEquals(150 - EnemyNav.ROPE_DROP, p.x, 2f);
+		assertEquals(190 - 100, p.x, 3f);
 		for (int i = 0; i < 120 && n.mode() != EnemyNav.Mode.GROUND; i++) {
 			n.update(p, new Vector3f(), null, false, DT);
 		}
 		assertEquals(EnemyNav.Mode.GROUND, n.mode());
+	}
+
+	@Test
+	void ropeSubStatesGiveBranchMask() {
+		// 0x207DC0: 줄은 하위 상태 0x20000 (양끝 고정 수평 줄) 일 때만 분기 마스크 0x80
+		for (int sub : new int[]{0, EnemyNav.SUB_CHAIN, EnemyNav.SUB_TRAVERSE, EnemyNav.SUB_ZIPLINE}) {
+			EnemyNav.Rope r = new EnemyNav.Rope(new Vector3f(-200, 130, 60), new Vector3f(200, 130, 60), sub);
+			EnemyNav n = new EnemyNav(AiTemplate.CAP_ROPE, SKEL, 1000);
+			n.setWorld(new EnemyNav.World() {
+				public float ground(float x, float y, float z, float drop) {
+					return WORLD.ground(x, y, z, drop);
+				}
+
+				public EnemyNav.WallHit wall(Vector3f o, Vector3f dir, float dist) {
+					return null;
+				}
+
+				public EnemyNav.Rope rope(Vector3f p, float rr) {
+					return r;
+				}
+			});
+			Vector3f p = new Vector3f(0, 105, 60);
+			n.update(p, new Vector3f(), null, false, DT);
+			assertEquals(EnemyNav.Mode.ROPE, n.mode());
+			assertEquals(3, n.conditionState());
+			assertEquals(sub == EnemyNav.SUB_TRAVERSE ? 0x80 : 0, n.combatMask(), "하위 " + Integer.toHexString(sub));
+			assertEquals(EnemyNav.ST_ROPE | sub, n.stateBits());
+		}
+	}
+
+	@Test
+	void hangingRopeReleasesTowardGoalAwayFromAnchor() {
+		// 매단 줄: 목표가 아래이고 매단 점에서 수평 16 넘게 떨어져 있으면 놓음, 바로 밑이면 매달려 있음 (0x1CFD90)
+		EnemyNav.Rope hang = new EnemyNav.Rope(new Vector3f(0, 200, 60), new Vector3f(0, 60, 60));
+		assertEquals(0, hang.sub(), "수직 = 매단 줄");
+		EnemyNav n = new EnemyNav(AiTemplate.CAP_ROPE, SKEL, 1000);
+		n.setWorld(new EnemyNav.World() {
+			public float ground(float x, float y, float z, float drop) {
+				return WORLD.ground(x, y, z, drop);
+			}
+
+			public EnemyNav.WallHit wall(Vector3f o, Vector3f dir, float dist) {
+				return null;
+			}
+
+			public EnemyNav.Rope rope(Vector3f p, float r) {
+				return hang;
+			}
+		});
+		Vector3f p = new Vector3f(0, 100, 60);
+		n.update(p, new Vector3f(), null, false, DT);
+		assertEquals(EnemyNav.Mode.ROPE, n.mode());
+		assertEquals(0, n.combatMask());
+		for (int i = 0; i < 30; i++) {
+			n.update(p, new Vector3f(), new Vector3f(5, 0, 60), false, DT);
+		}
+		assertEquals(EnemyNav.Mode.ROPE, n.mode(), "목표가 매단 점 바로 밑 → 매달림");
+		n.update(p, new Vector3f(), new Vector3f(80, 0, 60), false, DT);
+		assertEquals(EnemyNav.Mode.AIR, n.mode(), "수평 80 > 16 → 놓음");
 	}
 
 	@Test
