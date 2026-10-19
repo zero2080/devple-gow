@@ -121,8 +121,24 @@ public final class FxEnvironment {
 		return fog == null ? "없음" : String.format(Locale.ROOT, "Fog %s centreZ=%d", fog.owner(), fog.centreZ());
 	}
 
+	/**
+	 * 안개 대체 (원작 환경 +0x110 = 다른 안개 관리자, 렌더 0x1281C8 끝에서 레벨 안개 +0x80 으로 되돌림 → 매 프레임 다시 걸어야 한다).
+	 * 포세이돈의 분노 Fog Template ({@link LightningScreen}). 대체 안개는 단일 안개 (층 비트 끔), 텍스처 없음. null = 레벨 안개.
+	 */
+	public void setFogOverride(EnvParams.Fog f) {
+		override = f;
+	}
+
+	public EnvParams.Fog fogOverride() {
+		return override;
+	}
+
+	private EnvParams.Fog override;
+
 	/** basic.frag 안개 유니폼 설정. 안개가 없거나 꺼져 있으면 끈다. */
 	public void applyFog(Shader s, Camera cam, int fbHeight) {
+		EnvParams.Fog fog = override != null ? override : this.fog;
+		EnvParams.LayeredFog layered = override != null ? null : this.layered;
 		if (!enabled || (fog == null && layered == null)) {
 			disableFog(s);
 			return;

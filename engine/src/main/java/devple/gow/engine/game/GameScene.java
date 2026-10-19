@@ -209,6 +209,7 @@ public final class GameScene implements Scene {
 			}
 			hero.player.level.put(Weapon.BLADES, 2);
 			hero.player.mp = hero.player.maxMp();
+			hero.combat.godMeter = 100; // 신들의 분노 게이지 가득 (L3+R3)
 		}
 		grab.onSound(n -> session.sound.play(n));
 		// 마법 (35 문서): 대상 = 살아있는 적 전체, 소리 → SoundManager, HUD 선택 마법 아이콘
@@ -752,7 +753,7 @@ public final class GameScene implements Scene {
 
 	/**
 	 * 디버그/검증용 스크립트 입력: {@code -Dgow.script="L1:0.5:0.4,R1:0.7:0.05,SQUARE:2:0.05"} (버튼:시작초:누름초).
-	 * {@code -Dgow.giveAll} 이면 시작 시 마법 4종·아르테미스의 검·블레이드 Lv2 지급.
+	 * {@code -Dgow.giveAll} 이면 시작 시 마법 4종·아르테미스의 검·블레이드 Lv2·신들의 분노 게이지 100 지급.
 	 */
 	private final devple.gow.engine.input.ScriptedInput debugInput = parseDebugScript();
 
@@ -1402,6 +1403,7 @@ public final class GameScene implements Scene {
 	@Override
 	public void render(Engine e, float alpha) {
 		updateCamera(alpha);
+		level.fx().env().setFogOverride(magicFx.screen.fog()); // 포세이돈 Fog Template (0x195C90, 35 문서 §4.6)
 		level.render(e, alpha);
 		renderOtherSlot(e);
 		// 캐릭터에도 레벨 안개 (같은 basic.frag 유니폼)

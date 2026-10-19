@@ -172,7 +172,21 @@ public final class Magic {
 	}
 
 	private boolean lightningOn;
+	/** SCR_Lightning 스크립트 해시 (영웅 AIRLIGHTNINGSTART 0.25~, AIRLIGHTNINGLOOP 이벤트). */
+	public static final int SCR_LIGHTNING = 0x79C369CD;
+	private boolean lightningScript;
+	private float lightningTime;
 	public final LightningMash mash = new LightningMash();
+
+	/** SCR_Lightning 이 돌고 있는지 (시작 기술 0.25 부터 LIGHTNINGEXIT 전까지) — 화면 효과·영웅 틴트 (0x195BA8, 0x1E03C0) 의 수명. */
+	public boolean lightningScript() {
+		return lightningScript;
+	}
+
+	/** 스크립트 경과 초 (0x3368B4). */
+	public float lightningTime() {
+		return lightningTime;
+	}
 	private float mashRate, lightningReach = 5;
 
 	/** 포세이돈의 분노 루프 기술(*lightningloop) 재생 중 — 이펙트 goLightningAttackMain 유지 (40 문서 §5.4). */
@@ -210,6 +224,19 @@ public final class Magic {
 		String node = "/Player/Lightning/";
 		int st = stage(3);
 		String sp = "Stage " + st + " ";
+		// 스크립트 수명 (0x1948F0: 첫 인스턴스가 0x3368B4 = 0 으로 시작, 매 프레임 += 1/60, ≥ Stage Duration 이면
+		// sub_001E1AB0 = combatant +0x1AC |= 0x400 → AIRLIGHTNINGLOOP 의 "! AUTO → LIGHTNINGEXIT" (flags 0x800) 가 열린다) [확실]
+		boolean script = c.activeScript(SCR_LIGHTNING) != null;
+		if (script && !lightningScript) {
+			lightningTime = 0;
+		}
+		lightningScript = script;
+		if (script) {
+			lightningTime += dt;
+			if (lightningTime >= tw.f(node, sp + "Duration", 1f)) {
+				c.setStateBit(Combatant.STATE_CHARGED, true);
+			}
+		}
 		if (on && !lightningOn) {
 			mash.start();
 			acc = 0;

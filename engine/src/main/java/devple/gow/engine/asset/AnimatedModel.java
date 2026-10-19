@@ -152,6 +152,18 @@ public final class AnimatedModel implements AutoCloseable {
 	}
 
 	/**
+	 * 인스턴스 색 RGB (원작 메시 인스턴스 +0xB0 xyz, w = 불투명도 0x1504B0; sub_001E03C0 이 xyz 만 바꾼다) — 파트 색에 곱한다
+	 * [추정: 곱]. 기본 (1, 1, 1). 신들의 분노 틴트·포세이돈 단계 틴트.
+	 */
+	public void setColorScale(float r, float g, float b) {
+		colorScale[0] = r;
+		colorScale[1] = g;
+		colorScale[2] = b;
+	}
+
+	private final float[] colorScale = {1, 1, 1};
+
+	/**
 	 * 머티리얼 ANM 을 적용해 그린다 (이펙트 GO, 40 문서 §5): fxTime ≥ 0 이면 파트 머티리얼의 UV 스크롤(레이어 0)과
 	 * 불투명도(hdr8 = p28)를 시간 fxTime 으로, alpha 는 전체 불투명도 배율 (페이드 아웃).
 	 */
@@ -209,7 +221,7 @@ public final class AnimatedModel implements AutoCloseable {
 					}
 					op *= p.matAnim().value("hdr8", fxTime, 1f);
 				}
-				shader.set("uTint", new org.joml.Vector4f(t[0], t[1], t[2], t[3] * op));
+				shader.set("uTint", new org.joml.Vector4f(t[0] * colorScale[0], t[1] * colorScale[1], t[2] * colorScale[2], t[3] * op));
 				p.mesh().draw();
 				if (scrolled) {
 					shader.set("uUvOffset", 0f, 0f);

@@ -59,11 +59,17 @@ class MagicTest {
 		TrainingDummy dummy = new TrainingDummy(new Vector3f(0, 0, -60), 500, 1000);
 		c.setTarget(dummy);
 		List<Integer> moves = new ArrayList<>();
+		float[] clock = {0}, exitAt = {-1}, scriptAt = {-1};
 		c.onLog(s -> {
 			if (s.startsWith("기술 ")) {
-				moves.add(Integer.parseInt(s.split(" ")[1]));
+				int id = Integer.parseInt(s.split(" ")[1]);
+				moves.add(id);
+				if (id == 511 && exitAt[0] < 0) {
+					exitAt[0] = clock[0];
+				}
 			}
 		});
+		devple.gow.engine.fx.LightningScreen screen = new devple.gow.engine.fx.LightningScreen(tw);
 		ScriptedInput in = new ScriptedInput(0, List.of(new ScriptedInput.Step(0.1f, 2.5f, PadButton.L2)));
 		float dt = 1 / 60f;
 		for (float t = 0; t < 3.5f; t += dt) {
@@ -75,10 +81,21 @@ class MagicTest {
 				ctl.update(in, 0, dt);
 			}
 			magic.update(c, dt);
+			screen.update(magic.lightningScript(), magic.stage(3), dt);
+			if (magic.lightningScript() && scriptAt[0] < 0) {
+				scriptAt[0] = clock[0];
+				assertNotNull(screen.fog(), "스크립트 동안 Fog Template 000 대체");
+			}
 			dummy.update(dt);
+			clock[0] += dt;
 		}
 		assertEquals(513, moves.getFirst(), "AIRLIGHTNINGSTART: " + moves);
 		assertEquals(67f, ps.mp, 0.01f);
 		assertTrue(dummy.hp < 500, "범위 피해 " + dummy.hp + " moves " + moves);
+		// 1단계 Duration 1초: SCR_Lightning 시작 뒤 1초에 0x400 → AIRLIGHTNINGLOOP 의 "! AUTO → M511 LIGHTNINGEXIT" (flags 0x800)
+		assertTrue(moves.contains(511), "Duration 끝 → LIGHTNINGEXIT: " + moves);
+		assertEquals(1f, exitAt[0] - scriptAt[0], 0.1f, "스크립트 " + scriptAt[0] + " → 종료 " + exitAt[0]);
+		assertNull(screen.fog(), "끝나면 레벨 안개로");
+		assertEquals(0, screen.filter(), "Bright Camera Filter 0 (None) 이 남는다 — 원작도 되돌리지 않음");
 	}
 }

@@ -251,6 +251,6 @@ MFX 템플릿 0x48 바이트 (`/TweakTemplates/MFX/nnn/`):
 - 표면/커브 이미터 (FXC 3/4), FXC 필드 소용돌이·뉴턴.
 - 바닥 피 자국의 원작 낙하·부착 (Cone/Impulse/Gravity/Fall Time), Particle System 1 Dark / 2.
 - MFX #33317a59/#da729778 (진동·소리 추정), Slice Hit 의 원작 접촉 조건.
-- ~~포세이돈 매시 미터~~ (§4.1, 35 §4.5). goFlashGrp: **포세이돈이 아니라 신들의 분노(God Mode)** — 0x1DAB08 (0x1DAD18 ← 0x1DB1C0 등: 게이지 0x3044A0 ≥ 0x304364 일 때 — God Mode 진입 [강한 추정]) 이 영웅 관절 8 곳에 GO 를 붙이고 goStrikeGrp 를 플레이어 컨트롤러 +0x44, goFlashGrp 를 +0x48 에 만들기만 하고, 해제 0x1DABF8 이 지운다. 그 사이 +0x44/+0x48 을 읽는 코드는 찾지 못함 [확실: 생성·제거, 미확인: 위치 갱신] → 엔진 God Mode 연출과 함께 미연결.
+- ~~포세이돈 매시 미터~~ (§4.1, 35 §4.5). ~~포세이돈 화면 효과 0x195BA8~~ (35 §4.6: 보이는 것은 Fog/000 "360 Lightning" 감산 안개 대체뿐, 틴트 1·카메라 필터 "None"). ~~신들의 분노 GO~~ (35 §4.7): 0x1DAEC0 이 만든 갑옷 GO 8개 (goBreastPlate·goHelmet·견갑·팔찌·정강이, 관절 vertebrae4/head/humerus/radius/tibia) 를 진입 0x1DAB08 이 켜고 부착, goStrikeGrp/goFlashGrp 는 진입 때 한 번 (위치 미지정 → 엔진은 영웅 위치 [추정]), 해제 0x1DABF8 이 끔. +0x44/+0x48 을 읽는 갱신 코드는 없다 [확실]. 남은 것: 카메라 필터 렌더 0x162008, 블레이드 god 판 0x1FA9A0.
 - Concussion No Orient/Link Duration, PlayFX #a4e61bc3 / #71bfa948 / #a6de59b7, Left/Right Weapon 의 정확한 부착 대상.
 - 적 템플릿 번호 충돌 (여러 적 WAD 의 같은 PlayFX 번호) — 마지막 WAD 가 덮음.

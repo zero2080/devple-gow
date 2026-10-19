@@ -285,6 +285,46 @@ public final class HeroRig implements AutoCloseable {
 		magic.update(combat, in, dt);
 		// 포세이돈 연타 회전 (SCR_Lightning 0x195160: 영웅 행렬에 Y 회전 Mash Max Spin · 연타율)
 		ctl.yaw += magic.lightningSpin() * dt;
+		updateTint();
+	}
+
+	private boolean tintGod, tintLightning;
+
+	/**
+	 * 영웅 인스턴스 색 (sub_001E03C0, 사건 때만 쓰고 유지): God Mode 진입 (0x1DAD18) = {@code Weapon Level n/God Mode Tint R/G/B}
+	 * (+0x20, lv1–3 (0.5, 0.6, 0.75), lv4–5 (1, 0, 0)), 해제 = (1, 1, 1); SCR_Lightning 시작 (0x194AEC) = {@code Stage n Tint Red/Green/Blue}
+	 * (R_PERMK 전부 1), 끝 (0x194858) = (1, 1, 1). 원작처럼 나중 사건이 덮어쓴다 (신 모드 중 포세이돈을 쓰면 틴트가 1 로 돌아감).
+	 */
+	private void updateTint() {
+		boolean god = godMode.active();
+		if (god != tintGod) {
+			tintGod = god;
+			String n = "/Player/Weapon Level " + bladeLevel() + "/";
+			setTint(god ? new float[]{tweaks.f(n, "God Mode Tint R", 1), tweaks.f(n, "God Mode Tint G", 1), tweaks.f(n, "God Mode Tint B", 1)}
+					: null);
+		}
+		boolean ls = magic.lightningScript();
+		if (ls != tintLightning) {
+			tintLightning = ls;
+			String n = "/Player/Lightning/";
+			String sp = "Stage " + magic.stage(3) + " ";
+			setTint(ls ? new float[]{tweaks.f(n, sp + "Tint Red", 1), tweaks.f(n, sp + "Tint Green", 1), tweaks.f(n, sp + "Tint Blue", 1)}
+					: null);
+		}
+	}
+
+	private final float[] tint = {1, 1, 1};
+
+	private void setTint(float[] c) {
+		tint[0] = c == null ? 1 : c[0];
+		tint[1] = c == null ? 1 : c[1];
+		tint[2] = c == null ? 1 : c[2];
+		model.setColorScale(tint[0], tint[1], tint[2]);
+	}
+
+	/** 현재 영웅 인스턴스 색 (테스트). */
+	public float[] tint() {
+		return tint.clone();
 	}
 
 	/** 관절 월드 행렬 (영웅 월드 × 관절, 이펙트 부착용). 없는 관절이면 영웅 원점 + false. */

@@ -146,7 +146,8 @@ TWK `/Player/MedusaHead` 의 일부 값은 덤프가 float 로 잘못 보여준�
 | Stage n Mash Damage Scale / Mash Reach Scale | +0x10 / +0x14 | 1·1.5·1.5 / 1·2·3 |
 | Stage n Mashometer Drain / Max | +0x18 / +0x1C | 1·3·3 / 1·15·10 |
 | Stage n Allow Mashing | bool +0x20 (하위 바이트) | **거짓**·참·참 |
-| Stage n Tint RGB, Bright/Dark Camera Filter, Flash Freq, Fog Template | +0x24.. / short +0x30–0x36 | 0x195BA8 화면 효과 (미구현) |
+| Stage n Tint Red/Green/Blue | f32 +0x24 / +0x28 / +0x2C | 1·1·1 (영웅·대상 인스턴스 색, §4.6) |
+| Stage n Bright / Dark Camera Filter, Flash Freq, Fog Template | short +0x30 / +0x32 / +0x34 / +0x36 | 0 / −1 / 5 / 0 (§4.6) |
 
 매 프레임 (0x194B38–0x194C04) [확실]:
 - 미터 0x3368B0: 시전 시작 0. Allow Mashing 이면 `미터 = clamp(미터 − Drain/60, 0, Max)`, 그 프레임 새로 누른 패드 비트 **0x20 = ○** (패드 워드 +0x28 = Pad_Read 0x17C384 의 값, 비트 5) 이면 `+1` (덧셈 뒤 자르지 않음).
@@ -157,8 +158,49 @@ TWK `/Player/MedusaHead` 의 일부 값은 덤프가 float 로 잘못 보여준�
 - 1단계는 Allow Mashing 거짓 → r = 0 → 낙뢰 없음, 회전 없음.
 
 엔진: `LightningMash` (미터, dt 기준), `Magic.lightning` (위 식, 대상 = 게임 씬 적 목록, 타이머 하나 [근사], 판정 거리 = f23·16·2 [근사, 대상 반지름 대신]),
-`Magic.lightningSpin()` → `HeroRig` 가 영웅 yaw 에 더함, `mashRate()`/`lightningReach()` → `MagicFx` (40 문서 §4.1). Duration 종료는 기존대로 루프 기술 길이 [미구현].
+`Magic.lightningSpin()` → `HeroRig` 가 영웅 yaw 에 더함, `mashRate()`/`lightningReach()` → `MagicFx` (40 문서 §4.1).
+**Duration 종료** [확실]: `Magic` 이 SCR_Lightning 이벤트 (#79C369CD, AIRLIGHTNINGSTART 0.25~ / AIRLIGHTNINGLOOP) 가 켜진 시점부터 시간을 재고
+≥ Stage Duration 이면 `STATE_CHARGED` (원작 sub_001E1AB0 = combatant +0x1AC |= 0x400) → M510 의 `! AUTO → M511 LIGHTNINGEXIT` (flags 0x108A47, 0x800 = 0x400 필요·소비),
+M513 도 같은 분기, M507 은 `! AUTO → FALLV`. 이전에는 루프가 끝나지 않았다 (AUTO → M510 무한).
 테스트 `LightningMashTest` (연타 → 7/15, Max 정지, 손 떼면 0, Allow 거짓 → 0, TWK 값).
+
+## 4.6 포세이돈 화면 효과 — 0x195BA8 / 0x195C90 (`fx/LightningScreen`, `FxEnvironment.setFogOverride`, `HeroRig` 틴트)
+SCR_Lightning 첫 인스턴스 (0x194AEC–0x194B04) [확실: 코드]:
+1. **틴트** `sub_001E03C0(영웅, (Tint R, G, B, 1))`: 영웅 모델 인스턴스 목록 (+0xC0[LOD]) 마다 인스턴스 색 +0xB0 의 xyz 를 바꾼다 (w = 불투명도, 0x1504B0 이 씀).
+   피해 대상도 슬롯 (0x2FF6F0, 5개) 에 들어올 때 같은 색, 슬롯을 떠나거나 끝날 때 (1,1,1) (0x195718 / 0x1946D8). 끝 0x194858 이 영웅을 (1,1,1) 로.
+   R_PERMK 는 세 단계 모두 (1,1,1) → **보이는 변화 없음**. 엔진: `HeroRig.updateTint` (사건 때만, 아래 신들의 분노와 같은 경로), 대상 틴트는 값이 1 이라 생략.
+2. **0x195BA8(Fog Template, Bright, Dark, Flash Freq, 지속 0)**: 안개 템플릿 ≠ −1 이면 `/TweakTemplates/Fog/NNN/` (목록 0x29F320 = 0x20D7F0 이 만든 "Fog" 템플릿,
+   0x182D50 = 번호로 조회·없으면 적재) 의 Fog_R/G/B/A (+0x20), CentreZ (+0x50), Blend Mode (+0x54), BackPlane_A (+0x58) 를 전용 안개 관리자 0x2FF730 에 (0x125970 = SCR_Fog 적용과 같은 함수,
+   층 비트 0x2 끔). 값은 0x3368BC.. 에 보관, 플래시 타이머 0x3368C4 = 0.
+3. **매 프레임 0x195C90**: 타이머 −= 1/60 → ≤ 0 이면 카메라 (0x29F16C) +0x910 = Bright (≠ −1), 타이머 += 1/Flash Freq; 아니면 +0x910 = Dark (≠ −1).
+   안개: 환경 (0x29CA60) +0x110 = 0x2FF730, 관리자 +0x84 = 프레임 번호. 렌더 0x1281C8 가 끝에서 +0x110 을 레벨 안개 (+0x80) 로 되돌리고, 0x125BE0 은 +0x84 가
+   이번 프레임이 아니면 안개를 끈다 → **스크립트가 도는 프레임에만** 대체 안개.
+4. +0x910 은 카메라 필터 렌더 0x1EFA14 가 읽는다: ≥ 0 이면 `/TweakTemplates/CameraFilter/NNN/` (목록 0x337B74, 0x1F4BF4: RGBA 3개 +0x20/+0x30/+0x40, Toppoint/Midpoint/BottomPoint,
+   Blend Mode → ALPHA 표 0x29F140 = {0x44 블렌드, 0x48 가산, 0x42 감산}) 를 0x162008 로 화면에 그린다, 아니면 카메라 기본 필터. **되돌리는 코드가 없다** (초기화 0x1EDC40 만).
+5. 다른 호출자 0x223920 (← 0x2249A0 = Arrow 투사체 갱신, §3 — 명중 시 Arrow 템플릿 +0x15C..+0x16C 를 넘기고 지속 f12 > 0 → 0x204AB0 → 0x195D70 이 그 시간 동안 0x195C90) [추정: 용도, 확실: 경로].
+
+R_PERMK 값 (세 단계 같음): Bright **0 = CameraFilter/000 "None"** (색 전부 0, Blend Mode 1 = 가산 → 화면 변화 없음), Dark −1, Flash Freq 5, **Fog Template 0 = Fog/000 "360 Lightning"**
+(색 (0.35, 0.25, 0.2), Fog_A 0.6, CentreZ 16500, Blend Mode 2 = **감산**, BackPlane_A −1). → 눈에 보이는 화면 효과는 **안개 대체 하나**: 멀수록 (0.35,0.25,0.2)·0.6 까지 빼서
+배경·하늘이 어두운 청록으로 가라앉는다. 카메라 필터 렌더는 엔진에 없다 (`LightningScreen.filter()` 로 번호만 유지).
+
+엔진: `MagicFx.screen` (`LightningScreen`) 이 `Magic.lightningScript()` 로 시작·프레임을 돌리고, `GameScene.render` 가 `env.setFogOverride(screen.fog())` (매 렌더, null = 레벨 안개).
+`FxEnvironment.applyFog` 는 대체 안개가 있으면 층 안개·텍스처 없이 단일 안개로 쓴다.
+비교 (스크래치 `fx3/pos2.png` vs `pos2_noovr.png`, ARENA08 틱 100): 화면 위 1/4 평균 RGB (66.7, 54.2, 44.3) → (21.2, 26.9, 24.1), 가까운 바닥은 그대로.
+
+## 4.7 신들의 분노 연출 — 0x1DAEC0 / 0x1DAD18 / 0x1DAB08 / 0x1DABF8 (`MagicFx.godMode`, `HeroRig` 틴트)
+- 영웅 초기화 0x1DAEC0 [확실]: 갑옷 GO 8개를 만들고 숨긴다 (메시 인스턴스 플래그 +0xC0 비트 46, 0x1508D0 ·vtable +0x40), 관절 번호를 +0x14..+0x22 에:
+  goBreastPlate–vertebrae4, goHelmet–head, goShoulderGuardR–rHumerus, goBracerR–rRadius, goGrieveR–rTibia, goShoulderGuardL–lHumerus, goBracerL–lRadius, goGrieveL–lTibia.
+  (모두 R_PERMK: MDL_breastPlate 등 + FXC_goldGlowEmit / FXC_lightemit* 번개 이미터, 수명 무한.)
+- 진입 0x1DAD18(a1 ≠ 0): 0x1DAB08 — 8개를 켜고 (vtable +0x30) sub_00131460 으로 관절에 부착, goStrikeGrp (+0x44) · goFlashGrp (+0x48) 를 한 번 생성 (act 1.07초 1회).
+  이어서 "God Mode Loop Name" (SND_TRANSFORM_LP) 소리 (0x170AF0), **영웅 틴트 = Weapon Level n God Mode Tint R/G/B** (+0x20, lv1–3 (0.5, 0.6, 0.75), lv4–5 (1, 0, 0)),
+  양손 블레이드 0x1FA9A0 (goMAIgodblade 판), +0x50 = 40.
+- 해제 (a1 = 0): 0x1DABF8 (8개 분리·숨김, Strike/Flash 제거), 루프 소리 정지, 틴트 (1,1,1), 블레이드 0x1FA9D8.
+- +0x44/+0x48 을 읽는 코드는 없다 → Strike/Flash 는 위치를 정하지 않은 채 한 번 재생 [확실: 0x1DAB08 에 행렬 쓰기 없음]. 엔진은 영웅 위치에 [추정].
+  매 타격·주기적 낙뢰 같은 갱신 코드는 없다.
+- 엔진: `MagicFx` 가 `CombatOwner.godMode()` 상승/하강에서 갑옷 8개 (`GOD_ARMOR`, 관절 부착, 수명 무한) + Strike/Flash 를 켜고 끈다. `HeroRig.updateTint` 가 사건 때 영웅 색
+  (`AnimatedModel.setColorScale`, 파트 색에 곱 [추정: +0xB0 xyz 를 곱셈 색으로 해석]) — 원작처럼 나중 사건이 덮어쓴다 (신 모드 중 포세이돈 → 끝나면 1).
+- 미구현: 블레이드 god 판 (0x1FA9A0), God Mode Trail Tint, SND_TRANSFORM_LP 루프·SND_TRANSFORM_END (엔진 미연결).
+- 스크린샷 (스크래치 `fx3/`): `god_t50.png` (ARENA08 진입 Strike 기둥), `god_a_t130.png` / `god_a_t300.png` (ATHN01A: 푸른 틴트, 투구·견갑·팔·정강이 갑옷 + 번개 이미터).
 
 ## 5. 미니게임
 ### 5.1 RepeatPress 재해석 (0x192160) — `RepeatPressQte` 수정
@@ -259,7 +301,7 @@ TWK `/Player/MedusaHead` 의 일부 값은 덤프가 float 로 잘못 보여준�
 | 메두사 광선 / 섬광 / Nuke | goEyeBeam (반복, 손), goMedHeadFlash (1회 0.333초), Concussion 템플릿 goMedHeadNuke (반경 확대) | 머리 GO 대신 영웅 rWeapIH |
 | 제우스 | goBolt + goStdBolt 꼬리 (Arrow 템플릿), 명중 goBoltHit | 차지 goBoltChargeUp 미연결 |
 | 하데스 | goDedRed 영혼, goDeadHit, goDeadDie | |
-| 포세이돈 | goLightningAttackMain + goLightningRadius (배율 = 연타 사거리), 연타율 × From Above Bolt Freq 로 goStrikeGrp, 피해 틱 goLightningSingleBolt | 화면 틴트·카메라 필터·안개 (0x195BA8) |
+| 포세이돈 | goLightningAttackMain + goLightningRadius (배율 = 연타 사거리), 연타율 × From Above Bolt Freq 로 goStrikeGrp, 피해 틱 goLightningSingleBolt, Fog/000 안개 대체 (§4.6) | 카메라 필터 렌더 (값이 "None" 이라 보이지 않음) |
 | 석상 먼지 / 파괴 | – (원작 *stonedbrk 파편 모델 미구현) | 회색 파티클 그대로 |
 
 데이터가 없으면 (WAD 없음·이름 미해석) 예전 파티클로 대신한다. 근사였던 스크린샷 `work/shots/35/*.png` 는 40 문서 §8 로 대체.
@@ -267,6 +309,8 @@ TWK `/Player/MedusaHead` 의 일부 값은 덤프가 float 로 잘못 보여준�
 ## 8. 테스트 (헤드리스, 원본 데이터)
 | 테스트 | 검증 |
 |---|---|
+| `MagicTest.poseidonsRage` (+) | SCR_Lightning 시작 뒤 Stage 0 Duration 1초 (±0.1) 에 M511 LIGHTNINGEXIT, 스크립트 동안 Fog 대체, 끝나면 해제, 필터 0 유지 |
+| `LightningScreenTest` (2) | 단계 표 Bright 0 / Dark −1 / Flash 5 / Fog 0 / Tint 1, Fog/000 "360 Lightning" 값, CameraFilter/000 "None", God Mode Tint; 플래시 초당 5회·재시작 |
 | `MagicSpellsTest.medusaPetrifiesMinotaurAndShatters` | R2 홀드 → 81→82, 정면 150 유닛 미노타우로스 석화 (저항 6000), 옆 적은 그대로, MP 초당 12.5, 돌 지속 5초, □ 공격 → 파괴 + 콜백 |
 | `medusaStoneWearsOff` | 5초 후 해제, 게이지 최대 복귀 |
 | `zeusBoltHitsAtDistanceAndCostsMp` | 25m 표적 명중, 피해 = 8 × 발수, MP = 100 − 5 × 발수 |

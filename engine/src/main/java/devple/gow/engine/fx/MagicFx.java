@@ -883,6 +883,8 @@ public final class MagicFx implements AutoCloseable {
 			hideThunderbolt();
 		}
 		lightning(m, heroPos, heroYaw, dt);
+		screen.update(m.lightningScript(), m.stage(3), dt);
+		godMode(heroCombat != null && heroCombat.owner() != null && heroCombat.owner().godMode());
 		recentSounds.replaceAll((k, v) -> v - dt);
 		recentSounds.values().removeIf(v -> v <= 0);
 		for (Hittable h : enemies) {
@@ -1009,6 +1011,51 @@ public final class MagicFx implements AutoCloseable {
 				radiusFx = null;
 			}
 		}
+	}
+
+	/** 포세이돈 화면 효과 (0x195BA8 / 0x195C90): 안개 대체·카메라 필터 번호. */
+	public final LightningScreen screen = new LightningScreen(tw);
+
+	/**
+	 * 신들의 분노 GO (0x1DAEC0 생성 / 0x1DAB08 켬 / 0x1DABF8 끔, 0x1DAD18 이 God Mode 진입·해제에 부른다) [확실: 코드].
+	 * 영웅 초기화 0x1DAEC0 이 갑옷 GO 8개를 만들어 숨기고 관절 번호를 +0x14.. 에 둔다. 진입 0x1DAB08: 8개를 켜고 (vtable +0x30)
+	 * sub_00131460 으로 관절에 부착, goStrikeGrp (+0x44) · goFlashGrp (+0x48) 를 한 번 생성 (둘 다 act 1.07초 1회, 행렬을 쓰는 코드 없음).
+	 * 해제 0x1DABF8: 8개 분리·숨김, 남아 있는 Strike/Flash 제거.
+	 */
+	public static final String[][] GOD_ARMOR = {
+			{"goBreastPlate", "vertebrae4"}, {"goHelmet", "head"}, {"goShoulderGuardR", "rHumerus"}, {"goBracerR", "rRadius"},
+			{"goGrieveR", "rTibia"}, {"goShoulderGuardL", "lHumerus"}, {"goBracerL", "lRadius"}, {"goGrieveL", "lTibia"}};
+	private final List<EffectSystem.Effect> godFx = new ArrayList<>();
+	private boolean godOn;
+
+	private void godMode(boolean on) {
+		if (on == godOn) {
+			return;
+		}
+		godOn = on;
+		godFx.forEach(EffectSystem.Effect::stop);
+		godFx.clear();
+		if (!on) {
+			return;
+		}
+		for (String[] a : GOD_ARMOR) {
+			String jn = a[1];
+			addIf(godFx, fx.play(a[0], out -> {
+				if (!heroJoints.world(jn, out)) {
+					out.translation(heroPos).rotateY(heroYaw);
+				}
+				return true;
+			}, Float.MAX_VALUE));
+		}
+		// Strike/Flash: 원작은 위치를 정하지 않는다 (풀 인스턴스의 이전 행렬) → 엔진은 영웅 위치 [추정]
+		Vector3f p = new Vector3f(heroPos);
+		addIf(godFx, fx.play("goStrikeGrp", EffectSystem.Anchor.at(p, heroYaw)));
+		addIf(godFx, fx.play("goFlashGrp", EffectSystem.Anchor.at(p, heroYaw)));
+	}
+
+	/** 신들의 분노 GO (테스트). */
+	public List<EffectSystem.Effect> godEffects() {
+		return godFx;
 	}
 
 	/** goLightningRadius 배율 (0x3368B8). */
