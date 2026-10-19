@@ -56,10 +56,13 @@ class EvilKratosFightTest {
 		assertTrue(until(r, 1, () -> r.fight.sync().active() && r.fight.sync().pairedMove() == EvilKratosFight.HUG_START),
 				"포옹 동기: hero " + r.heroMoves + " fam " + move(fam));
 		r.run(0.3f); // 자세 섞임(페이드) 뒤
-		// synchJoint 정렬: 가족 정면 48, 가족을 마주 봄
-		Vector3f front = new Vector3f((float) -Math.sin(fam.yaw), 0, (float) -Math.cos(fam.yaw)).mul(48).add(fam.pos);
-		assertEquals(0, new Vector3f(r.ctl.position.x, 0, r.ctl.position.z).distance(front.x, 0, front.z), 2f, "영웅 위치 " + r.ctl.position);
-		assertEquals(0, Math.abs(Math.IEEEremainder(r.ctl.yaw - fam.yaw - Math.PI, Math.PI * 2)), 1e-3, "마주 봄");
+		// 동기 정렬 = synchJoint 위치 겹침·같은 방향 (관절 접촉 검사, 37 문서 §11): 가족 (0,0,−16) / 영웅 (0,0,−32) → 영웅 원점이 가족 원점 16 뒤
+		Vector3f back = new Vector3f((float) Math.sin(fam.yaw), 0, (float) Math.cos(fam.yaw)).mul(16).add(fam.pos);
+		assertEquals(0, new Vector3f(r.ctl.position.x, 0, r.ctl.position.z).distance(back.x, 0, back.z), 1f, "영웅 위치 " + r.ctl.position);
+		assertEquals(0, Math.abs(Math.IEEEremainder(r.ctl.yaw - fam.yaw, Math.PI * 2)), 1e-3, "같은 방향");
+		// 포옹 중 영웅 손목이 가족 관절에 닿음 (예전 "정면 48 마주 봄" 은 20 이상 떨어짐)
+		float reach = BossSyncContact.handGap(r.ctl.animator(), r.ctl.world(new org.joml.Matrix4f(), 1), fam.animator(), fam.world(new org.joml.Matrix4f(), 1));
+		assertTrue(reach < 8, "손목 ↔ 가족 관절 " + reach);
 		r.pad.down.add(devple.gow.engine.input.PadButton.CIRCLE);
 		for (int i = 0; i < 90; i++) {
 			r.pad.down.add(devple.gow.engine.input.PadButton.CIRCLE); // 866 루프: ○ 유지
@@ -69,6 +72,7 @@ class EvilKratosFightTest {
 		assertTrue(r.heroHp <= heroHp - 24 + 1e-3f, "영웅 SELF_HP +2 ×12: " + r.heroHp);
 		assertTrue(r.log.contains("message 454"), "1035(865) → hugMsg 454: " + r.log);
 		assertEquals(1, fight.hugs());
+		assertTrue(r.hero.godMeter >= 10, "가족 865/866 GOD_METER_ADD → 크레토스 게이지: " + r.hero.godMeter);
 		// ○ 를 놓으면 867 → 가족은 대기 순환으로 돌아감
 		assertTrue(until(r, 4, () -> !r.fight.sync().active() && move(fam) <= 1), "포옹 끝: fam " + move(fam));
 	}
@@ -109,5 +113,60 @@ class EvilKratosFightTest {
 		r.run(0.5f);
 		assertTrue(r.log.stream().anyMatch(l -> l.startsWith("internal 0x13")), "FailedScreen: " + r.log);
 		assertTrue(r.fight.phases.contains("가족 사망"));
+	}
+
+	/** 분신 666 을 영웅 정면 30 에 두고 EVIGRAB(0) — 판정 [0.47–0.53] 이 영웅에 닿을 때까지. 성공하면 분신. */
+	static EnemyFighter cloneGrabs(BossRig r) {
+		EnemyFighter fam = r.fight.boss();
+		assertTrue(until(r, 8, () -> r.enemies.stream().anyMatch(e -> e.ai1() == 666)), r.log.toString());
+		EnemyFighter clone = r.enemies.stream().filter(e -> e.ai1() == 666).findFirst().orElseThrow();
+		// 가족에서 떨어진 곳 (분신 공격 휘말림 없이)
+		r.ctl.position.set(fam.pos.x - (float) Math.sin(fam.yaw) * 150, fam.pos.y, fam.pos.z - (float) Math.cos(fam.yaw) * 150);
+		r.ctl.prevPosition.set(r.ctl.position);
+		for (int k = 0; k < 10 && !r.heroMoves.contains(EvilKratosFight.CLONE_GRAB_START); k++) {
+			clone.pos.set(r.ctl.position.x + 30, r.ctl.position.y, r.ctl.position.z);
+			clone.prevPos.set(clone.pos);
+			clone.yaw = (float) Math.atan2(30, 0); // 영웅 쪽 (-x) 을 봄: 정면 = (-sin, -cos)
+			clone.combat().forceMove(0);
+			until(r, 1.2f, () -> r.heroMoves.contains(EvilKratosFight.CLONE_GRAB_START));
+		}
+		assertTrue(r.heroMoves.contains(EvilKratosFight.CLONE_GRAB_START), "EVIGRAB 적중 → 영웅 A860: " + r.heroMoves);
+		return clone;
+	}
+
+	@Test
+	void cloneGrabWiggleEscapes() throws Exception {
+		BossRig r = spawned();
+		r.autoMinigame = false;
+		EvilKratosFight fight = (EvilKratosFight) r.fight;
+		EnemyFighter clone = cloneGrabs(r);
+		assertTrue(until(r, 3, () -> fight.cloneSync().active() && fight.cloneSync().pairedMove() == EvilKratosFight.CLONE_GRAB_LOOP),
+				"860 → 861 쌍: hero " + r.heroMoves + " clone " + move(clone));
+		assertSame(clone, fight.grabber());
+		var off = BossSync.synchOffset(clone, r.ctl.animator());
+		assertEquals(0, new org.joml.Vector3f(clone.pos).add(off).distance(r.ctl.position), 1e-2f, "분신 = 영웅 − synchJoint 차 (BOSS_TO_HERO)");
+		assertTrue(fight.heroLocked());
+		// 스틱 흔들기 → 게이지 > 2 → "AUTO fall>2" → 862 탈출, 분신도 862 (EVIGRABHEROWIN, 분신 사망 연출)
+		for (int i = 0; i < 120 && !r.heroMoves.contains(EvilKratosFight.CLONE_GRAB_WIN); i++) {
+			r.pad.lx = i % 2 == 0 ? 1 : -1;
+			r.tick();
+		}
+		r.pad.lx = 0;
+		assertTrue(r.heroMoves.contains(EvilKratosFight.CLONE_GRAB_WIN), "흔들기 → 862: " + r.heroMoves + " wiggle " + r.hero.wiggle());
+		assertEquals(1, fight.grabEscapes);
+		assertTrue(until(r, 1, () -> move(clone) == EvilKratosFight.CLONE_GRAB_WIN), "분신 862: " + move(clone));
+	}
+
+	@Test
+	void cloneGrabWithoutWiggleHurtsHero() throws Exception {
+		BossRig r = spawned();
+		r.autoMinigame = false;
+		EvilKratosFight fight = (EvilKratosFight) r.fight;
+		EnemyFighter clone = cloneGrabs(r);
+		float hp = r.heroHp;
+		assertTrue(until(r, 8, () -> r.heroMoves.contains(EvilKratosFight.CLONE_GRAB_LOSE)), "창 끝 → 863: " + r.heroMoves);
+		assertEquals(1, fight.grabLosses);
+		assertTrue(until(r, 3, () -> r.heroHp <= hp - 10 + 1e-3f), "863 SELF_HP 10 → 영웅 피해: " + r.heroHp);
+		assertTrue(until(r, 4, () -> fight.grabber() == null), "잡기 끝");
 	}
 }

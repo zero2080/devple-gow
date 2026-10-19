@@ -34,6 +34,9 @@ public final class EvilKratosFight extends BossFight {
 
 	public static final String LEVEL = "ATHN08B";
 	public static final int FAMILY = 660, HUG_START = 865, HUG_LOOP = 866, HUG_EXIT = 867, FAMILY_DEATH = 150;
+	/** 분신이 크레토스를 잡음: 분신 M0 EVIGRAB 적중 → 영웅 A860 (EV_HIT_REACT 태그 860) / 분신 HIT_CONFIRM → 860 → 861, 영웅 861 은
+	 * "AUTO fall&gt;2" (스틱 흔들기 게이지 &gt; 2) → 862 탈출, 아니면 창 끝 → 863 (영웅 SELF_HP 10). */
+	public static final int CLONE_GRAB_START = 860, CLONE_GRAB_LOOP = 861, CLONE_GRAB_WIN = 862, CLONE_GRAB_LOSE = 863;
 	static final int[] CLONES = {666, 667, 668, 669};
 	/** 영웅 잡기 자세 (GRAB SET_1B0 idx=200). */
 	static final int GRAB_STANCE = 200;
@@ -44,6 +47,12 @@ public final class EvilKratosFight extends BossFight {
 	private int hugs;
 	private int demoStep;
 	private float demoWait;
+	/** 분신 잡기 동기 (860–863, 같은 ID 쌍): 분신을 영웅 원점에 (synchJoint 둘 다 (0,0,−32) → 같은 원점). */
+	private final BossSync cloneSync = new BossSync(id -> id >= CLONE_GRAB_START && id <= CLONE_GRAB_LOSE, BossSync.Align.BOSS_TO_HERO);
+	private EnemyFighter grabber;
+	private int heroSerial = -1;
+	/** 분신 잡기 결과 기록 (테스트): 탈출 / 실패. */
+	public int grabEscapes, grabLosses;
 
 	EvilKratosFight(Path rom, WadFile permk) throws IOException {
 		super(LEVEL);
@@ -89,8 +98,61 @@ public final class EvilKratosFight extends BossFight {
 		f.damageFrom = at -> at != hero || at.stanceTag() == GRAB_STANCE;
 	}
 
+	/** 크레토스를 잡고 있는 분신 (없으면 null). */
+	public EnemyFighter grabber() {
+		return grabber;
+	}
+
+	public BossSync cloneSync() {
+		return cloneSync;
+	}
+
+	@Override
+	public boolean heroLocked() {
+		return super.heroLocked() || cloneSync.active();
+	}
+
+	@Override
+	public boolean claimsGrab(EnemyFighter target) {
+		return super.claimsGrab(target) || (target != null && target == grabber);
+	}
+
+	private static boolean cloneGrab(devple.gow.engine.combat.Combatant c) {
+		return c.active() && c.move().id() >= CLONE_GRAB_START && c.move().id() <= CLONE_GRAB_LOSE;
+	}
+
+	/** 분신 잡기 동기: 잡은 분신을 찾아 BossSync (같은 ID 쌍) 로 영웅과 묶는다. */
+	private void cloneGrabSync(Input in, float dt) {
+		var hero = arena.heroCombat();
+		if (grabber == null) {
+			for (EnemyFighter m : minions.keySet()) {
+				if (!m.dead() && cloneGrab(m.combat())) {
+					grabber = m;
+					break;
+				}
+			}
+		}
+		if (grabber == null) {
+			return;
+		}
+		cloneSync.update(in, arena.heroCtl(), hero, grabber, kindFor(grabber.ai1()).tweaks(), dt);
+		int serial = hero.moveSerial(), nm = hero.active() ? hero.move().id() : -1;
+		if (serial != heroSerial) {
+			heroSerial = serial;
+			if (nm == CLONE_GRAB_WIN) {
+				grabEscapes++;
+			} else if (nm == CLONE_GRAB_LOSE) {
+				grabLosses++;
+			}
+		}
+		if (!cloneSync.active() && !cloneGrab(grabber.combat()) && !cloneGrab(hero)) {
+			grabber = null;
+		}
+	}
+
 	@Override
 	protected void tick(Input in, float dt) {
+		cloneGrabSync(in, dt);
 		EnemyFighter f = boss;
 		// 가족은 제자리 (xmc 애니 세트에 이동 클립이 없고 DTre 001 이 비어 있음)
 		f.pos.set(familyPos);

@@ -111,7 +111,13 @@ public final class LevelData {
 				continue;
 			}
 			if (lastGo != null && t.magic() == 0x17 && GoBehavior.is(d)) {
-				behaviors.putIfAbsent(lastGo, GoBehavior.parse(lastGo, d));
+				// GO 하나에 비헤이비어가 여럿일 수 있다 (PAND03G gologlever = Creator 100 + PushPull 15 "BMI Log Puller" id 351):
+				// Creator 는 상호작용이 아니므로 다음 비헤이비어가 대신한다
+				GoBehavior nb = GoBehavior.parse(lastGo, d);
+				GoBehavior old = behaviors.get(lastGo);
+				if (old == null || (old.type().equals("Creator") && !nb.type().equals("Creator"))) {
+					behaviors.put(lastGo, nb);
+				}
 				continue;
 			}
 			if (t.magic() == 0x11) {

@@ -117,6 +117,16 @@ public final class CombatScriptBridge {
 				}
 				return true;
 			}
+			case EVENT_HEALTH -> {
+				// 스크립트 → 적 1039 (0x25B6E8: 0x40F → 0x1CC810 → 0x204690 피해 적용, 피해 = 인자1) — 예 PAND03G logLoadGRP-LogDamageBoss 999
+				float before = f.hp;
+				f.applyDamage(e.arg1());
+				if (before > 0 && f.hp <= 0) {
+					f.combat().fire(devple.gow.engine.combat.CombatInput.EV_DEATH, -1, null);
+				}
+				log.add("1039 → " + a.group + " 피해 " + e.arg1());
+				return true;
+			}
 			case METER_ON -> {
 				if (!meters.containsKey(a)) {
 					for (int slot = 1; slot <= 3; slot++) {

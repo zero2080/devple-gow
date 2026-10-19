@@ -55,6 +55,11 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 	public float hpFloor;
 	/** 이 공격자에게서만 피해를 받는다 (null = 모두). ATHN08B 가족: 영웅 공격은 CombatFile 661 의 모든 반응 태그가 (block). */
 	public java.util.function.Predicate<Combatant> damageFrom;
+	/**
+	 * 피해를 클래스가 직접 처리 (원작 Enemy1 하위 클래스의 vtable +0x40 TakeDamage 재정의, 예 BMI 0x1C1838: 배출구·갑옷 단계 누적).
+	 * 있으면 {@link #applyDamage} 는 HP 를 건드리지 않고 이것만 부르며 잡기 원 통과는 없다.
+	 */
+	public java.util.function.Consumer<Float> damageHook;
 	private float think = 1f;
 	private Hittable foe;
 	private float deadTime;
@@ -463,7 +468,16 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 	}
 
 	@Override
+	public boolean killedBy(float damage) {
+		return damageHook == null && CombatOwner.super.killedBy(damage);
+	}
+
+	@Override
 	public boolean applyDamage(float damage) {
+		if (damageHook != null) {
+			damageHook.accept(damage);
+			return false;
+		}
 		float before = hp;
 		hp = Math.max(Math.min(hpFloor, before), hp - damage);
 		return circleHp < 65535 && before > circleHp && hp <= circleHp && hp > 0;

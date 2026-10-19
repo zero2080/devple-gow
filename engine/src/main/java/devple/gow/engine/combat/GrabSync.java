@@ -133,7 +133,11 @@ public final class GrabSync {
 
 	/** 적 combatant 하나에 대한 TimedPress 처리 (테스트에서 직접 호출 가능). */
 	public void updateTimed(EnemyFighter en, Tweaks tw, Input in) {
-		Combatant ec = en.combat();
+		updateTimed(en.combat(), tw, in);
+	}
+
+	/** TimedPress 를 가진 쪽 combatant (보통 적, BMI 올라타기 451–453 는 영웅 기술에 있음). 실패 = 그 combatant 의 같은 창 REQUEST0 분기. */
+	public void updateTimed(Combatant ec, Tweaks tw, Input in) {
 		var ev = ec.activeScript(TimedPressQte.SCR_TIMED_PRESS);
 		if (timed != null && (ev != timedEvent || ec.moveSerial() != timedSerial)) {
 			// 창을 벗어남
