@@ -36,9 +36,11 @@ public final class MeshObject {
 	public final int[][] jointMaps;
 	public final List<VertexBatch> batches = new ArrayList<>();
 	public final List<String> warnings = new ArrayList<>();
+	private final ByteBuffer src;
 
 	public MeshObject(ByteBuffer b, int off) {
 		this.offset = off;
+		this.src = b;
 		type = b.getInt(off);
 		dmaTagCount = b.getInt(off + 4);
 		materialIndex = Short.toUnsignedInt(b.getShort(off + 8));
@@ -89,6 +91,31 @@ public final class MeshObject {
 			}
 		}
 		return wrap(out);
+	}
+
+	/**
+	 * 체인 c 의 정점색 (배치 순서로 이어 붙임, 정점색 없는 배치는 null 항목). 체인은 지오메트리 REF 를 공유하고 정점색 REF 만 다르다
+	 * (16 문서 §3.5, DMA 덤프로 확인). 체인 0 = {@link VertexBatch#color}.
+	 */
+	public List<int[]> chainColors(int c) {
+		List<int[]> out = new ArrayList<>();
+		if (c <= 0 || c >= chainCount) {
+			for (VertexBatch vb : batches) {
+				for (int i = 0; i < vb.count; i++) {
+					out.add(vb.color != null ? vb.color[i] : null);
+				}
+			}
+			return out;
+		}
+		List<String> w = new ArrayList<>();
+		ByteBuffer stream = flattenChain(src, offset, offset + 0x20 + c * dmaTagCount * 16);
+		for (VifParser.Batch rb : VifParser.parse(stream, 0, stream.limit(), w)) {
+			VertexBatch vb = new VertexBatch(rb);
+			for (int i = 0; i < vb.count; i++) {
+				out.add(vb.color != null ? vb.color[i] : null);
+			}
+		}
+		return out;
 	}
 
 	private static void write(ByteArrayOutputStream out, ByteBuffer b, int at, int len) {

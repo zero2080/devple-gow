@@ -11,6 +11,7 @@ layout(location = 5) in float aWeight;
 uniform mat4 uJoints[128];
 uniform mat4 uModel;
 uniform mat4 uViewProj;
+uniform vec2 uUvOffset; // UV 스크롤 (설정 안 하면 0)
 
 out vec3 vNormal;
 out vec2 vUv;
@@ -22,7 +23,7 @@ void main() {
 	vec4 p = (a * vec4(aPos, 1.0)) * aWeight + (b * vec4(aPos, 1.0)) * (1.0 - aWeight);
 	vec3 n = mat3(a) * aNormal * aWeight + mat3(b) * aNormal * (1.0 - aWeight);
 	vNormal = mat3(uModel) * n;
-	vUv = aUv;
+	vUv = aUv + uUvOffset;
 	vColor = aColor;
 	gl_Position = uViewProj * uModel * vec4(p.xyz, 1.0);
 }
