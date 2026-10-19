@@ -76,7 +76,8 @@ public final class AnimatedModel implements AutoCloseable {
 			if (mat != null && !mat.layers().isEmpty()) {
 				MaterialResource.Layer l = mat.layers().getFirst();
 				tex = p.hasUv ? assets.texture(l.texture()) : null;
-				blend = RenderModel.Blend.of(l.blendName());
+				// 레벨과 같은 분류 (31 문서): GS 0x44 대부분은 반투명이 아니라 불투명 + 알파 테스트 0.75 (CUTOUT)
+				blend = assets.classify(mat, tex != null);
 				tint = l.rgba();
 			}
 			parts.add(new Part(new SkinnedMesh(v, idx), tex, blend, tint, p.hasNormal, p.jointLocal()));
@@ -94,22 +95,34 @@ public final class AnimatedModel implements AutoCloseable {
 		shader.set("uViewProj", cam.viewProj(aspect));
 		shader.set("uModel", world);
 		shader.set("uTex", 0);
+		// 패스 0 = OPAQUE + CUTOUT(알파 ≥ 0.75, 깊이 쓰기), 패스 1 = CUTOUT 가장자리 + ALPHA/ADD/SUB (깊이 쓰기 끔) — Renderer.draw 와 동일
 		for (int pass = 0; pass < 2; pass++) {
 			Boolean lastLocal = null;
 			for (Part p : parts) {
-				boolean opaque = p.blend() == RenderModel.Blend.OPAQUE;
-				if (opaque != (pass == 0)) {
+				RenderModel.Blend b = p.blend();
+				boolean solid = b == RenderModel.Blend.OPAQUE || b == RenderModel.Blend.CUTOUT;
+				if (pass == 0 && !solid || pass == 1 && b == RenderModel.Blend.OPAQUE) {
 					continue;
 				}
 				if (lastLocal == null || lastLocal != p.jointLocal()) {
 					upload(p.jointLocal() ? w : skin);
 					lastLocal = p.jointLocal();
 				}
+				RenderModel.Blend mode = b;
+				if (b == RenderModel.Blend.CUTOUT) {
+					mode = pass == 0 ? RenderModel.Blend.OPAQUE : RenderModel.Blend.ALPHA;
+					shader.set(pass == 0 ? "uAlphaRef" : "uAlphaMax", 0.75f);
+				}
+				boolean opaque = mode == RenderModel.Blend.OPAQUE;
 				if (!opaque) {
 					glEnable(GL_BLEND);
 					glDepthMask(false);
-					glBlendFunc(GL_SRC_ALPHA, p.blend() == RenderModel.Blend.ALPHA ? GL_ONE_MINUS_SRC_ALPHA : GL_ONE);
-					glBlendEquation(p.blend() == RenderModel.Blend.SUB ? GL_FUNC_REVERSE_SUBTRACT : GL_FUNC_ADD);
+					switch (mode) {
+						case ADD, SUB -> glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+						case INV -> glBlendFunc(GL_ONE_MINUS_SRC_ALPHA, GL_SRC_ALPHA);
+						default -> glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+					}
+					glBlendEquation(mode == RenderModel.Blend.SUB ? GL_FUNC_REVERSE_SUBTRACT : GL_FUNC_ADD);
 				}
 				(p.texture() != null ? p.texture() : white).bind(0);
 				shader.set("uUseTex", p.texture() != null ? 1 : 0);
@@ -121,6 +134,10 @@ public final class AnimatedModel implements AutoCloseable {
 					glDisable(GL_BLEND);
 					glDepthMask(true);
 					glBlendEquation(GL_FUNC_ADD);
+				}
+				if (b == RenderModel.Blend.CUTOUT) {
+					shader.set("uAlphaRef", 0f);
+					shader.set("uAlphaMax", 0f);
 				}
 			}
 		}
