@@ -42,6 +42,8 @@ public final class Interactables {
 		public float progress;
 		public int lastPercent = -1;
 		public boolean done;
+		/** 스크립트 Vis 로 숨겨짐 (Visible 2) — 잡을 수 없다 (예 PAND00C 엘리베이터 레버는 고리 퍼즐 205 뒤 LeverOn). */
+		public boolean hidden;
 		/** 오브젝트 애니 길이 (초): 과제 진행률의 분모 (원작 0x215928 f13). 애니를 못 찾으면 1 초 [근사]. */
 		public float length = 1f;
 		private TaskProgress task;
@@ -193,7 +195,7 @@ public final class Interactables {
 		Item best = null;
 		float bd = Float.MAX_VALUE;
 		for (Item it : items) {
-			if (it.done && it.kind != Kind.PUSH) {
+			if (it.done && it.kind != Kind.PUSH || it.hidden) {
 				continue;
 			}
 			float d = (float) Math.hypot(it.pos.x - p.x, it.pos.z - p.z) - it.radius;

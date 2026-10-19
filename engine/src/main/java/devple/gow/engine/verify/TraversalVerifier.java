@@ -55,6 +55,9 @@ import java.util.stream.Stream;
  */
 public final class TraversalVerifier {
 
+	/** 현재 레벨에서 스크립트 Vis 로 숨겨진 오브젝트 (소문자). */
+	private final Set<String> hiddenObjects = new HashSet<>();
+
 	public static final String START = "ATHN01A", END = "OLYMP02";
 	/** 보너스 '신들의 도전' 첫/끝 아레나 (11 문서 §6.4, 메뉴에서 시작). */
 	public static final String BONUS_START = "ARENA10", BONUS_END = "ARENA27";
@@ -231,7 +234,22 @@ public final class TraversalVerifier {
 		// 메시지가 닫히면(표시 시간 뒤) 플레이어가 1040(번호) — GameScene 과 같음 (원작 0x1B8ECC, 아레나 "완료" 메시지 → 워프)
 		Map<Integer, Float> msgDue = new java.util.LinkedHashMap<>();
 		float[] clock = {0};
+		hiddenObjects.clear();
 		ScriptListener listener = new ScriptListener() {
+			@Override
+			public void vis(ScriptEntity source, List<String> objects, int[] values) {
+				// Visible 1/2: 숨긴 오브젝트는 R1 상호작용 안 함 (GameScene 과 같음)
+				if (values.length > 0 && (values[0] == 1 || values[0] == 2)) {
+					for (String o : objects) {
+						if (values[0] == 2) {
+							hiddenObjects.add(o.toLowerCase(Locale.ROOT));
+						} else {
+							hiddenObjects.remove(o.toLowerCase(Locale.ROOT));
+						}
+					}
+				}
+			}
+
 			@Override
 			public void message(int id, float sec) {
 				r.messages.put(id, messages.get(id) != null);
@@ -536,6 +554,11 @@ public final class TraversalVerifier {
 			}
 		}
 		for (Interactables.Item it : items.items()) {
+			if (hiddenObjects.contains(it.owner.toLowerCase(Locale.ROOT))) {
+				// 게임에서는 숨겨진 오브젝트를 잡을 수 없다. 하네스는 레벨을 하나씩 돌려 두 레벨에 걸친 퍼즐(PAND00C/00D 고리 → 204/205 → LeverOn)을
+				// 재현하지 못하므로 상호작용은 하되 표시만 남긴다 [하네스 근사]
+				addOnce(r.interactions, "숨김 상태 상호작용(두 레벨 퍼즐 미재현) " + it.owner);
+			}
 			float g = col.groundHeight(it.pos.x, it.pos.y + UP, it.pos.z, DROP);
 			player[0] = it.pos.x;
 			player[1] = Float.isNaN(g) ? it.pos.y : g + 4;

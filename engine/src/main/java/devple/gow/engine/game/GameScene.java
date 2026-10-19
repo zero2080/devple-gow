@@ -509,6 +509,23 @@ public final class GameScene implements Scene {
 
 			@Override
 			public void vis(ScriptEntity source, List<String> objects, int[] values) {
+				// Visible (슬롯 0): 1 보임 / 2 숨김 / 0 그대로 — 렌더와 R1 상호작용 (13 문서 Vis)
+				if (values.length > 0 && (values[0] == 1 || values[0] == 2)) {
+					boolean show = values[0] == 1;
+					for (String o : objects) {
+						if (show) {
+							level.showInstance(o);
+						} else {
+							level.hideInstance(o);
+						}
+						if (hero.nav != null) {
+							var it = hero.nav.items().byOwner(o);
+							if (it != null) {
+								it.hidden = !show;
+							}
+						}
+					}
+				}
 				if (values.length > 4 && values[4] != 0) {
 					objects.forEach(o -> cameraRig.setOwnerVolumes(o, values[4] == 1)); // Attr11_1: CMV 볼륨 on/off
 				}

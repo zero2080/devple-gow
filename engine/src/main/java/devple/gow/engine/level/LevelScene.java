@@ -113,9 +113,14 @@ public final class LevelScene implements Scene {
 	/** 숨긴 인스턴스 (부서진 물체 등, 인스턴스 이름 소문자). */
 	private final java.util.Set<String> removed = new java.util.HashSet<>();
 
-	/** 인스턴스를 더 그리지 않는다 (부서지는 물체 파괴). */
+	/** 인스턴스를 더 그리지 않는다 (부서지는 물체 파괴, 스크립트 Vis 숨김). */
 	public void hideInstance(String name) {
 		removed.add(name.toLowerCase(Locale.ROOT));
+	}
+
+	/** 숨긴 인스턴스를 다시 그린다 (스크립트 Vis Visible 1). */
+	public void showInstance(String name) {
+		removed.remove(name.toLowerCase(Locale.ROOT));
 	}
 
 	/** 통합 게임 씬용: 이 카메라로 렌더 (자유/레벨 카메라 처리 생략). */
