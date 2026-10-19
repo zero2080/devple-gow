@@ -231,6 +231,40 @@ public final class FxEnvironment {
 		return b < 0 ? -1f : Math.min(b / 128f, 1f);
 	}
 
+	/**
+	 * 지오메트리·하늘이 없는 배경 화소 (Z 가 지워진 화소) 의 안개 계수 (16 문서 §1.2) [확실: 0x1281C8 분기 / GS 패킷]:
+	 * 0x1275E0 경로 (Fog_A ≥ 1 ∧ 블렌드 0 ∧ 단일 안개) 는 배경 Z = 0 → G = 0 → <b>안개색 전부</b> (1),
+	 * 그 밖은 0x127FF0 BackPlane 패스가 배경 알파 = BackPlane_A/128 (BackPlane &lt; 0 이면 Z max 0x807FFF → A8 = 1/128 ≈ 0 → -1 = 그리지 않음).
+	 * 결과 계수 = 이 값 × 키/Fog_A 알파 (basic.frag applyFog).
+	 */
+	public float backgroundFactor() {
+		EnvParams.Fog fog = override != null ? override : this.fog;
+		EnvParams.LayeredFog layered = override != null ? null : this.layered;
+		return enabled ? backgroundFactor(fog, layered) : -1f;
+	}
+
+	/** {@link #backgroundFactor()} 의 규칙 (층 안개가 있으면 그것). */
+	public static float backgroundFactor(EnvParams.Fog fog, EnvParams.LayeredFog layered) {
+		if (layered != null) {
+			return back(layered.backPlane());
+		}
+		if (fog == null) {
+			return -1f;
+		}
+		if (fog.color()[3] >= 1 && fog.blend() == 0) {
+			return 1f;
+		}
+		return back(fog.backPlane());
+	}
+
+	/** 배경 화소용 안개 유니폼: applyFog 뒤 배경 표시 + 배경 계수 ({@link #backgroundFactor()}). */
+	public void applyBackgroundFog(Shader s, Camera cam, int fbHeight, float factor) {
+		applyFog(s, cam, fbHeight);
+		int centreZ = layered != null && override == null ? layered.centreZ() : (override != null ? override : fog).centreZ();
+		s.set("uFogDepth", 16f * centreZ * viewNear, cam.near, cam.far, factor);
+		s.set("uFogScreen", fbHeight, 1f);
+	}
+
 	/** 배경(하늘) 그리기 표시: BackPlane_A 가 있으면 깊이 대신 그 알파를 쓴다. */
 	public void setBackground(Shader s, boolean bg, int fbHeight) {
 		s.set("uFogScreen", fbHeight, bg ? 1f : 0f);

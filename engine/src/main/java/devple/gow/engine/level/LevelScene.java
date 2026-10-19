@@ -157,6 +157,7 @@ public final class LevelScene implements Scene {
 		data = new LevelData(assets.wad());
 		collision = new LevelCollision(data.sheets);
 		List<TriMesh> all = new ArrayList<>();
+		java.util.Set<String> skyNames = skyNames(new devple.gow.tools.fx.EnvParams(assets.wad()));
 		for (LevelLayout.Placement p : data.layout.placements()) {
 			String mdl = p.model();
 			GowModel gm = mdl == null ? null : assets.gowModel(mdl);
@@ -169,9 +170,12 @@ public final class LevelScene implements Scene {
 			}
 			float[] b = tm.bounds();
 			Vector3f off = new Vector3f((b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2);
-			// 하늘 돔: 이름/텍스처에 sky + 원점 중심(XZ)의 큰 메시. PAND01A 의 "sky" 처럼 레벨 안에 놓인 하늘 조각은 제외
+			// 하늘 = SCR_Sky 가 붙은 오브젝트 (16 문서 §1.4, 31 §2). SCR_Sky 가 없는 레벨만 이전 휴리스틱
+			// (이름/텍스처에 sky + 원점 중심(XZ)의 큰 메시; PAND01A 의 "sky" 처럼 레벨 안에 놓인 하늘 조각은 제외).
 			float r = Math.max(b[3] - b[0], b[5] - b[2]) / 2;
-			boolean sky = isSky(p, gm) && r > 500 && Math.hypot(off.x, off.z) < r * 0.1f;
+			boolean sky = skyNames.isEmpty()
+					? isSky(p, gm) && r > 500 && Math.hypot(off.x, off.z) < r * 0.1f
+					: isScrSky(p, skyNames);
 			if (!sky) {
 				all.add(tm);
 			}
@@ -194,6 +198,30 @@ public final class LevelScene implements Scene {
 		System.out.printf(Locale.ROOT, "레벨 %s: 렌더 인스턴스 %d (하늘 %d), 충돌 삼각형 %d, 볼륨 %d, 카메라 %d%n", assets.wad().name(),
 				instances.size(), instances.stream().filter(Instance::sky).count(), collision.triangles().size(),
 				data.volumes.size(), data.placedCameras.size());
+	}
+
+	/**
+	 * SCR_Sky 대상 이름 (소문자): 템플릿 소유자 MDL_x (모델에 붙은 스크립트) 와 본문 오브젝트 이름.
+	 * 원작 0x218848 은 이 스크립트가 붙은 GO 를 매 프레임 카메라로 옮긴다 [확실, 16 §1.4].
+	 */
+	static java.util.Set<String> skyNames(devple.gow.tools.fx.EnvParams env) {
+		java.util.Set<String> out = new java.util.HashSet<>();
+		for (devple.gow.tools.fx.EnvParams.Sky s : env.skies) {
+			if (s.owner() != null && !s.owner().isBlank()) {
+				out.add(s.owner().trim().toLowerCase(Locale.ROOT));
+			}
+			if (s.object() != null && !s.object().isBlank()) {
+				out.add(s.object().trim().toLowerCase(Locale.ROOT));
+			}
+		}
+		return out;
+	}
+
+	/** 배치가 SCR_Sky 대상인가: 모델 이름(MDL_x) 또는 오브젝트 이름이 SCR_Sky 이름과 같다. */
+	static boolean isScrSky(LevelLayout.Placement p, java.util.Set<String> skyNames) {
+		String mdl = p.model();
+		return (mdl != null && skyNames.contains(mdl.toLowerCase(Locale.ROOT)))
+				|| skyNames.contains(p.object().name().toLowerCase(Locale.ROOT));
 	}
 
 	private boolean isSky(LevelLayout.Placement p, GowModel gm) {
@@ -375,11 +403,12 @@ public final class LevelScene implements Scene {
 		}
 		fx.beforeRender(e, cam);
 		e.renderer().begin3d(cam);
+		fx.drawBackground(e, cam);
 		fx.beginWorld(e, cam, true);
 		// 하늘: 카메라 중심, 깊이 쓰기 끔 → 항상 맨 뒤
 		glDepthMask(false);
 		for (Instance i : instances) {
-			if (i.sky()) {
+			if (i.sky() && !dbgHidden("sky")) {
 				tmp.translation(cam.eye.x - i.offset().x, cam.eye.y - i.offset().y, cam.eye.z - i.offset().z);
 				e.renderer().draw(i.model(), tmp);
 			}
@@ -387,10 +416,17 @@ public final class LevelScene implements Scene {
 		glDepthMask(true);
 		fx.beginWorld(e, cam, false);
 		tmp.identity();
-		for (Instance i : instances) {
-			String key = i.name().toLowerCase(Locale.ROOT);
-			if (!i.sky() && !fx.hidden(i) && !removed.contains(key) && !posed.containsKey(key)) {
-				e.renderer().draw(i.model(), tmp);
+		// 원작처럼 모든 인스턴스의 불투명 패스 뒤에 반투명 패스 (Renderer.drawPass). GOW_PASSORDER=model 이면 이전 (모델마다 두 패스)
+		for (int pass = MODEL_PASSES ? 1 : 0; pass < 2; pass++) {
+			for (Instance i : instances) {
+				String key = i.name().toLowerCase(Locale.ROOT);
+				if (!i.sky() && !fx.hidden(i) && !removed.contains(key) && !posed.containsKey(key) && !dbgHidden(key)) {
+					if (MODEL_PASSES) {
+						e.renderer().draw(i.model(), tmp);
+					} else {
+						e.renderer().drawPass(i.model(), tmp, pass);
+					}
+				}
 			}
 		}
 		renderPosed(e, cam);
@@ -411,6 +447,17 @@ public final class LevelScene implements Scene {
 		}
 	}
 
+	/** 디버그: GOW_HIDE=인스턴스,… 를 그리지 않는다 ("*" = 하늘 밖 전부, "sky" = 하늘). 화면을 덮는 메시 찾기용 (43 문서). */
+	private static final java.util.Set<String> DBG_HIDE = System.getenv("GOW_HIDE") == null ? java.util.Set.of()
+			: java.util.Set.of(System.getenv("GOW_HIDE").toLowerCase(Locale.ROOT).split(","));
+
+	/** 비교용: GOW_PASSORDER=model 이면 모델마다 두 패스 (이전 동작). */
+	private static final boolean MODEL_PASSES = "model".equals(System.getenv("GOW_PASSORDER"));
+
+	private static boolean dbgHidden(String key) {
+		return !DBG_HIDE.isEmpty() && (DBG_HIDE.contains(key) || (!key.equals("sky") && DBG_HIDE.contains("*")));
+	}
+
 	private void renderPosed(Engine e, Camera cam) {
 		if (posed.isEmpty()) {
 			return;
@@ -419,7 +466,7 @@ public final class LevelScene implements Scene {
 			skinned = new devple.gow.engine.render.Shader("skinned.vert", "basic.frag");
 		}
 		for (Map.Entry<String, float[][]> en : posed.entrySet()) {
-			if (removed.contains(en.getKey())) {
+			if (removed.contains(en.getKey()) || dbgHidden(en.getKey())) {
 				continue;
 			}
 			devple.gow.engine.asset.AnimatedModel m = posedModels.computeIfAbsent(en.getKey(), this::posedModel);
@@ -449,9 +496,11 @@ public final class LevelScene implements Scene {
 		e.renderer().begin3d(c);
 		fx.beginWorld(e, c, false);
 		tmp.identity();
-		for (Instance i : instances) {
-			if (!i.sky() && !fx.hidden(i)) {
-				e.renderer().draw(i.model(), tmp);
+		for (int pass = 0; pass < 2; pass++) {
+			for (Instance i : instances) {
+				if (!i.sky() && !fx.hidden(i) && !dbgHidden(i.name().toLowerCase(Locale.ROOT))) {
+					e.renderer().drawPass(i.model(), tmp, pass);
+				}
 			}
 		}
 		FxEnvironment.disableFog(e.renderer().basic());

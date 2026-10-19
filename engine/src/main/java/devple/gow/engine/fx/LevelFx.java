@@ -159,6 +159,64 @@ public final class LevelFx implements AutoCloseable {
 		e.renderer().setFxTime(env.time());
 	}
 
+	/** 배경 사각형 (NDC 전체, 정점색 = 화면 지움 색). */
+	private devple.gow.engine.render.Mesh bgQuad;
+
+	/**
+	 * 지오메트리가 없는 배경 화소에 안개색 (원작 안개색 스프라이트 0x127000 은 Z 가 지워진 화소에도 그린다, 16 문서 §1.2).
+	 * DEST01 모래 폭풍 (Fog_A 1) 처럼 하늘이 없는 레벨의 먼 배경이 검게 남지 않는다. 하늘·지오메트리 전에 부른다.
+	 */
+	public void drawBackground(Engine e, Camera cam) {
+		float k = env.backgroundFactor();
+		if (k <= 0 || NO_BG) {
+			return;
+		}
+		if (bgQuad == null) {
+			float r = 0.05f, g = 0.04f, b = 0.04f; // Renderer.beginFrame 지움 색
+			float[] v = new float[4 * devple.gow.engine.render.Mesh.STRIDE];
+			float[][] xy = {{-1, -1}, {1, -1}, {1, 1}, {-1, 1}};
+			for (int i = 0; i < 4; i++) {
+				int o = i * devple.gow.engine.render.Mesh.STRIDE;
+				v[o] = xy[i][0];
+				v[o + 1] = xy[i][1];
+				v[o + 2] = 0.999f;
+				v[o + 4] = 1;
+				v[o + 8] = r;
+				v[o + 9] = g;
+				v[o + 10] = b;
+				v[o + 11] = 1;
+			}
+			bgQuad = new devple.gow.engine.render.Mesh(v, new int[]{0, 1, 2, 0, 2, 3}, org.lwjgl.opengl.GL41C.GL_TRIANGLES);
+		}
+		var s = e.renderer().basic();
+		s.use();
+		env.setFramebufferWidth(e.window().width());
+		env.applyBackgroundFog(s, cam, e.window().height(), k);
+		org.joml.Matrix4f id = new org.joml.Matrix4f();
+		s.set("uViewProj", id);
+		s.set("uModel", id);
+		s.set("uTint", new org.joml.Vector4f(1, 1, 1, 1));
+		s.set("uUseTex", 0);
+		s.set("uLit", 0);
+		s.set("uAlphaRef", 0f);
+		s.set("uAlphaMax", 0f);
+		s.set("uFogAdd", 0);
+		org.lwjgl.opengl.GL41C.glDisable(org.lwjgl.opengl.GL41C.GL_DEPTH_TEST);
+		org.lwjgl.opengl.GL41C.glDepthMask(false);
+		boolean blend = org.lwjgl.opengl.GL41C.glIsEnabled(org.lwjgl.opengl.GL41C.GL_BLEND);
+		org.lwjgl.opengl.GL41C.glDisable(org.lwjgl.opengl.GL41C.GL_BLEND);
+		bgQuad.draw();
+		if (blend) {
+			org.lwjgl.opengl.GL41C.glEnable(org.lwjgl.opengl.GL41C.GL_BLEND);
+		}
+		org.lwjgl.opengl.GL41C.glDepthMask(true);
+		org.lwjgl.opengl.GL41C.glEnable(org.lwjgl.opengl.GL41C.GL_DEPTH_TEST);
+		s.set("uViewProj", cam.viewProj(e.window().aspect()));
+	}
+
+	/** 비교용: GOW_FOGBG=off 면 배경 안개를 그리지 않는다 (이전 동작). */
+	private static final boolean NO_BG = "off".equals(System.getenv("GOW_FOGBG"));
+
 	/** 하늘(sky=true) / 지오메트리 그리기 직전: 안개 유니폼. */
 	public void beginWorld(Engine e, Camera cam, boolean sky) {
 		env.setFramebufferWidth(e.window().width());
@@ -182,6 +240,9 @@ public final class LevelFx implements AutoCloseable {
 	public void close() {
 		particles.close();
 		waters.forEach(WaterSurface::close);
+		if (bgQuad != null) {
+			bgQuad.close();
+		}
 		if (permk != null) {
 			permk.close();
 		}

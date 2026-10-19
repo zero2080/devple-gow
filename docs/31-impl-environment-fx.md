@@ -31,6 +31,12 @@ render  fx.beforeRender(e, cam)                        // FarClip → cam.far, r
 ```
 - 다른 셰이더(스키닝)에도 안개를 쓰려면 `levelScene.fx().env().applyFog(shader, cam, fbHeight)` (같은 `basic.frag`).
 - 하늘: SCR_Sky 규칙대로 **관절 0 월드 위치 → 카메라** (이전: AABB 중심). ATHN01A 하늘 미니어처의 바다면이 눈높이 아래에 와서 바다·원경 배·먼 바위가 보인다.
+- **하늘 판정 = SCR_Sky 대상** (43 §2.1) [확실]: 모델(MDL_x, 템플릿 스크립트 소유자) 또는 오브젝트 이름이 SCR_Sky 이름과 같은 배치 (`LevelScene.skyNames/isScrSky`).
+  SCR_Sky 없는 레벨만 이전 휴리스틱 (이름/텍스처 sky + 원점 중심). 이전엔 16 레벨 (group2·skyLR·group1224·ShitBoxl …) 하늘을 놓쳐 구석이 검었다.
+- **배경 안개** (43 §2.2) [확실: 16 §1.2]: `fx.drawBackground` 가 하늘 전에 화면 사각형(지움 색)을 배경 모드 안개로 칠한다.
+  계수 `FxEnvironment.backgroundFactor` = Fog_A ≥ 1 ∧ 블렌드 0 단일 안개 → 1 (0x1275E0, 배경 Z 0 → 안개색 전부), 그 밖 BackPlane_A/128, BackPlane < 0 → 안 칠함. 비교 `GOW_FOGBG=off`.
+- **패스 순서** (43 §2.3) [확실: 16 §3.3]: 모든 인스턴스의 패스 0 (불투명·알파 테스트) 뒤에 패스 1 (반투명) — `Renderer.drawPass`. 이전엔 모델마다 두 패스라
+  뒤 인스턴스의 불투명 면이 반투명 면을 덮었다 (ATHN01D 판자 위 구름 반사). 비교 `GOW_PASSORDER=model`. 디버그 `GOW_HIDE=인스턴스,…` (`*`, `sky`).
 
 ## 3. 셰이더 (기존과 호환: 새 유니폼은 기본 0 = 끔)
 `basic.frag`
@@ -46,6 +52,7 @@ render  fx.beforeRender(e, cam)                        // FarClip → cam.far, r
 ## 4. 머티리얼 (WadAssets / Renderer)
 - `WadAssets.classify`: 0x48 → ADD, 0x42 → SUB, 0x01 → INV, p28·p38 ≠ 1 · TXR bit18 → ALPHA, 텍스처 없는 0x44 → OPAQUE, 나머지 → **CUTOUT**.
 - `Renderer.draw`: 패스 0 = OPAQUE + CUTOUT(α ≥ 0.75, 깊이 쓰기), 패스 1 = CUTOUT 가장자리(α < 0.75, 블렌드) + 반투명. 추가 레이어는 기본 레이어 직후 LEQUAL.
+  레벨은 `drawPass` 로 장면 전체 패스 0 → 패스 1 (§2, 43 §2.3).
   → ATHN01A 그물·밧줄, PAND01A 의 "검은 상자"(정렬 오류) 해결.
 - 플립북: `WadAssets.textureFrames` 가 GFX 세로 스트립을 프레임별 GL 텍스처로 자름, 프레임 = 머티리얼 ANM type 9 키 (1/30 초).
 - UV 스크롤 / 불투명도: 머티리얼 ANM type 8 / type 3 hdr8. 시간 = `Renderer.setFxTime` (레벨 시간).
@@ -94,9 +101,14 @@ render  fx.beforeRender(e, cam)                        // FarClip → cam.far, r
   `fogA / fogA_old` ATHN01A (고도각 눈금: 갑판 쪽 바다 안개가 화면 아래 전체로), `hdes / hdes_old` HDES01A (주황 키 c1 이 지평선 바로 위 띠로),
   `a8b` ARENA08 전투 (적중 피·바닥 피 자국), `p3g` PAND03G 보스 데모, `med` 메두사 광선 (회귀 없음).
 
+## 6.3 검증 (전 레벨 시각 QA, 2026-10, 43 문서)
+- 효과 켬 105 레벨 스크린샷: 예외 0, 정상 84 (이번 수정으로 개선 14), 시작 카메라 13 (효과 무관), 부속 WAD 4, 의심 4 (ATHN05AA 길거리 연기층, OLYMP02 거울 없는 유리 바닥,
+  PAND03A DMC 결계 바인드 자세, ATHN01A 물보라 밝기). 수정: SCR_Sky 하늘 판정, 배경 안개, 반투명 패스 순서. 테스트 `SkyBackgroundTest` (3).
+
 ## 7. 남은 문제
 - ~~안개 거리 보정값~~ → 원작 패스 해석식 (16 §1.2). ~~층 안개 키 알파·t 의 카메라 피치~~ (16 §1.3). 남은 것: TEXA 상태 가정, 텍스처 층 안개 0x127240 UV.
 - 여러 SCR_Fog 전환은 소유 GO 최근접으로 대체 (원작은 ESC 추정).
 - 비 볼륨 상자 판정, 눈/먼지/플랑크톤 모양, 표면·커브 이미터, 칼 궤적(0xB), 필드. (~~PTC 크기 단위~~ 16 §2.4)
-- SCR_Mirror (반사 바닥), LensFlare, GhostTrail, RopeSkinned, cloth 미구현. LGT 동적 조명 미구현 (캐릭터용).
+- SCR_Mirror (반사 바닥 — OLYMP02 유리 바닥 아래가 배경 안개색으로 보임, 43 §4), LensFlare, GhostTrail, RopeSkinned, cloth 미구현.
+- 반투명 패스 안의 정렬 (원작 정렬 단위 미확인, 지금은 인스턴스 순서). 스크립트 Animator 없이 보이는 관절 오브젝트 (PAND03A `godmcdog2`) 는 바인드 자세. LGT 동적 조명 미구현 (캐릭터용).
 - 파티클·물은 레벨 렌더 안에서 그려서 이후에 그리는 캐릭터가 덮는다 (GameScene 의 늦은 효과 패스 훅 필요).

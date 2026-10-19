@@ -78,8 +78,21 @@ public final class Renderer implements AutoCloseable {
 	 * 추가 레이어는 기본 레이어 직후 같은 지오메트리에 LEQUAL 로 덧그린다.
 	 */
 	public void draw(RenderModel model, Matrix4f world) {
+		drawPasses(model, world, 0, 1);
+	}
+
+	/**
+	 * 한 패스만 (0 = 불투명·알파 테스트, 1 = 반투명). 레벨처럼 여러 모델을 그릴 때는 모든 모델의 패스 0 뒤에 패스 1 을 그린다:
+	 * 원작은 정렬(반투명) 플래그 0x8000 머티리얼을 불투명 뒤 따로 그린다 (16 문서 §3.3, 43 문서 — ATHN01D 갑판 판자 p28 0.967 이
+	 * 0.4 아래 구름 반사 평면에 덮이던 문제).
+	 */
+	public void drawPass(RenderModel model, Matrix4f world, int pass) {
+		drawPasses(model, world, pass, pass);
+	}
+
+	private void drawPasses(RenderModel model, Matrix4f world, int first, int last) {
 		basic.set("uModel", world);
-		for (int pass = 0; pass < 2; pass++) {
+		for (int pass = first; pass <= last; pass++) {
 			for (RenderModel.Part p : model.parts()) {
 				RenderModel.Blend b = p.blend();
 				boolean solid = b == RenderModel.Blend.OPAQUE || b == RenderModel.Blend.CUTOUT;

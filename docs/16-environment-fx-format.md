@@ -68,7 +68,7 @@ HDES01A–C −175 (far 2800), HDES01D/E −250 (4000), ATHN01E −800, PAND00A 
 - **0x1275E0** (Fog_A ≥ 1 경로) [확실: GS 패킷]: 0x127918 의 단계 ③ 만 — TEX0 = Z 버퍼 자체를 PSMZ16 (TBP = ZBP·32, DECAL, TCC), 프레임 PSMCT16 FBMSK 0x3FFF,
   TEXA 0, ZBUF ZMSK, x +8 px 스프라이트 → 프레임 알파 = **반전 없는** G = ⌊z'/256⌋ (먼 화소만 쓰이므로 G &lt; 128). 안개색 ALPHA 0x11 = (Cd − Cs)·Ad + Cs
   → 안개 계수 = 1 − G/128 = (128 − G)/128: 모드 0 · Fog_A = 1 의 일반 경로와 같은 결과를 부호 반전·max 패스 없이 얻는 최적화다. Fog_A 가 1 을 넘어도 1 로,
-  BackPlane 패스 없음 (배경 Z = 0 → G = 0 → 안개색 전부).
+  BackPlane 패스 없음 (배경 Z = 0 → G = 0 → 안개색 전부). 엔진: 지오메트리 없는 배경 화소도 칠한다 (DEST01 모래 폭풍 하늘, 43 §2.2).
 - **0x127918** (Fog_A &lt; 1 또는 층 안개일 때): 64 px 열마다 ① Z 버퍼를 PSMCT24 텍스처로 읽어
   임시 버퍼(PSMCT24, 폭 64)에 ALPHA 0xA2 (0 − Cs, COLCLAMP 0 → **바이트별** 부호 반전; vp+0x70 bit0 이면 0xA8 = 복사) ② 같은 버퍼를 ZBUF(PSMZ24)로
   두고 Z = 0x807FFF 스프라이트를 ZTST GREATER 로 → max(값, 0x807FFF) ③ 임시 버퍼를 PSMZ16 텍스처로, 프레임을 PSMCT16 + FBMSK 0x3FFF
@@ -121,6 +121,8 @@ HDES01A: c0 (.605,.165,.12,.72) c1 (.985,.385,.255,1) c2 (.375,0,0,1), t (.265,.
 ATHN01A `nightSky` 는 반지름 ~1024 의 **미니어처 세계**: 바다면 `lambert24` y=432 (2048×2048), 먼 바위 `lambert34` y≈416, 원경 배 `owResBoat` y≈428,
 하늘 돔 `lambert9` y 212..869, 구름 반사 `lambert28` (`TXR_fxCloudReflection_1`), 소용돌이 `vortex_lambert406`. 관절 0 = (0,448,0) → 바다면이 눈높이 16 아래.
 ATHN01A 의 "바다 표면" 은 별도 물 객체가 아니라 이 하늘 미니어처다 (SCR_Water 없음).
+SCR_Sky 는 대개 **모델 템플릿**(소유자 MDL_x)에 붙어 있다: ATHN03A/ARENA `MDL_group2`, ATHN05A `MDL_skyLR`, PAND01BB `MDL_group1224`, PAND04E `MDL_ShitBoxl`·`MDL_group3508`,
+ATHN02B·PAND04AA·PAND04C 는 하늘 2개 (본 + FX). 이름에 sky 가 없는 것이 많아 이름 휴리스틱으로는 못 찾는다 (43 §2.1).
 
 ### 1.5 SCR_Weather
 | 오프셋 | 필드 | 신뢰도 |
@@ -342,6 +344,8 @@ MAT 생성 0x1537C8 이 MAT 그룹 자식을 순회: `ANM_` (서버 3) → mat+0
 
 정렬(반투명) 플래그 mat+0x3C bit 0x8000 (0x1537C8) — 다음 중 하나: p28 ≠ 1, 레이어 0 p38 ≠ 1, 레이어 0 텍스처 런타임 bit 0x40000 (TXR flags bit18 추정), 블렌드 0x48/0x42.
 **그 외(대부분의 0x44)는 불투명 + 알파 테스트**다. (기존 엔진은 0x44 를 전부 반투명 패스로 그려 정렬 오류·검은 상자가 생겼다.)
+정렬 플래그 머티리얼은 불투명 전부 뒤에 그려야 한다: ATHN01D 갑판 판자 `MAT_2woodPlanks06aTrans` (p28 0.967) 아래 0.406 에 불투명 구름 반사
+`MAT_1sfxCloudReflection` (×1.5 색, UV 흐름) 평면이 있어, 판자 = 반투명 젖은 판자 + 비치는 하늘 (43 §2.3).
 
 | 바이트 | GS 식 | GL | 용도 |
 |-------|-------|----|------|

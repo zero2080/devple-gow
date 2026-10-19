@@ -1063,6 +1063,7 @@ public final class GameScene implements Scene {
 			System.out.printf("[디버그] t=%.0f 영웅 (%.0f, %.0f, %.0f) 지면=%s 바닥높이=%.1f 소리=%d 음악=%s 백엔드=%s%n", time, hp.x, hp.y,
 					hp.z, hero.ctl.grounded, col.groundHeight(hp.x, hp.y + STEP, hp.z, 4000), session.sound.active(),
 					session.sound.currentMusic(), session.sound.backend().getClass().getSimpleName());
+			System.out.printf("[디버그] 카메라 눈 %s 대상 %s%n", cam.eye, cam.target);
 		}
 		if (!powerUp) {
 			hudBinding.update(hero.player, hud.variables());
