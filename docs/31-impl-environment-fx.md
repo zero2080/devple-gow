@@ -35,7 +35,7 @@ render  fx.beforeRender(e, cam)                        // FarClip → cam.far, r
 ## 3. 셰이더 (기존과 호환: 새 유니폼은 기본 0 = 끔)
 `basic.frag`
 - 안개: `uFogMode` (0/1/2), `uFogBlend`, `uFogColor/1/2`, `uFogStops`, `uFogDepth` (D0, near, far, BackPlane), `uFogScreen`, `uFogAdd` (가산 파트는 기여를 줄임).
-  깊이 d 는 `gl_FragCoord.z` 와 near/far 로 선형화 (정점 셰이더 변경 없음). `alpha = keyA · clamp(1 − D0/d)`, 층 안개 색 = 화면 y 그라디언트,
+  깊이 d 는 `gl_FragCoord.z` 와 near/far 로 선형화 (정점 셰이더 변경 없음). `alpha = keyA · A8(z')/128` (원작 GS 패스 해석식, 16 §1.2: z' = 16·C·n·(f−d)/((f−n)·d), z' ≥ 0x7FFF → 0, 아니면 (128 − ⌊z'/256⌋); ≈ 1 − D0/d, D0 = CentreZ·10/2048, `FxEnvironment.depthAlpha`), 층 안개 색 = 화면 y 그라디언트,
   배경 패스면 BackPlane_A/128. 텍스처 레이어 `uFogTex` (유닛 1) × 2, 화면 UV 스크롤·회전·배율.
 - 알파: `uAlphaRef` (CUTOUT 0.75), `uAlphaMax` (가장자리 패스).
 `basic.vert` / `skinned.vert`: `uUvOffset` (UV 스크롤), `uEnvUv` (법선 구면 환경맵 UV, basic 만).
@@ -55,7 +55,9 @@ render  fx.beforeRender(e, cam)                        // FarClip → cam.far, r
 - 비 (ATHN01A): 셀 20×16 = ±160 정육면체를 카메라 앞 150 에 두고 감쌈, 1000 개 (PTC_rain), 수명 0.6 s, 낙하 900/s + 바람 vec×16,
   `MAT_nalRain` 텍스처 가산, 줄기 48×6. 시작 시 2초 미리 채움. 볼륨 상자 밖 숨김은 미구현.
 - FXC 이미터: 서브타입 1 원뿔 / 2 전방향은 원작 식, 5–9 볼륨은 로컬 배율 상자 [추정], 3/4 표면·커브는 지오메트리 미해석으로 생략.
-  크기 |PTC+0x74|/16 (VU 1 큰 불은 /64 보정), 색 = VU 상수 휴리스틱 (`colorCurve`), 알파 (A·u + B·u²)/128, 불/불꽃/파문 (VU 1, 3, 9) 은 가산 [추정].
+  **PTC VU 식** (`tools/fx/PtcVu`, `ParticleDef.ptc`): 파티클마다 레코드 {(생성 위치, 0), (생성 속도)} + 고정 난수 씨앗 + 나이(초) 로 식을 계산 →
+  색 (0x80 = 1.0, 알파 최대 ≈ 2), 위치, 반폭, 회전, 종류별 모양 (사각형/원반/선/줄기/평면). 블렌드 = flags&3 (0x44 / 0x48 / 0x42), TCC/TFX = flags, `particle.frag uGs` 가 GS 규칙(미리 곱한 색, As/0x80)으로 출력 [확실].
+  `GOW_PTCVU=off` 면 이전 근사, `GOW_PTCVU_LOG=1` 이면 식 출력 로그.
 - 물 (PAND01A 등): 격자 nx×nz, 60 Hz 고정 스텝, 물방울은 3×3 로 나눠 스파이크 방지, UV = 법선 + 위치 → REFLENVM, α 0.4.
 - 성능: 파티클 최대 12000, 정의별 1 드로우. PAND01A 이미터 86개, ATHN01A 비 1000개 — M4 에서 체감 저하 없음.
 
@@ -68,9 +70,16 @@ render  fx.beforeRender(e, cam)                        // FarClip → cam.far, r
   - `g.png` / `g_off.png`: ATHN07 신전 문 — 푸른 밤 안개, 풀 플립북.
   - `h.png` / `h_off.png`: HDES01A — 붉은/주황 층 안개, FarClip 2800. 안개가 원작보다 짙어 보임 (D0 보정값 의존).
 
+## 6.1 검증 (PTC VU / 안개, 2026-10)
+- `PtcVuTest` (3): SKLpart 표·식 (색·중력·반폭), Tfire 가산·포화, rslicepart 알파, HOgpart 원반, BloodSpart 모서리, 안개 깊이 알파 경계 (ATHN07 181).
+- 스크린샷 (`work/shots/`, 커밋 안 함): `bon_vu/bon_old` PAND01A 화톳불·등불 (이전 흰 덩어리 → 작은 불꽃), `hero_vu/old` 피,
+  `p3g_600/p3g_600_old` PAND03G 백색 화면 해소 (원인 = 이전 근사의 거대한 가산 파티클), `p3g_4200` 배출구 증기,
+  `fog_*_{old,new}`, `fogG_*_{old,new}` ATHN01A/ATHN07/HDES01A (HDES01A 기둥: 가까운 화소 안개 없음).
+- 디버그: `GOW_LEVEL_CAM=ex,ey,ez,tx,ty,tz` (LevelScene 카메라 고정, `print` = 레벨 카메라 출력).
+
 ## 7. 남은 문제
-- 안개 거리 보정값 (D0 = CentreZ·10/1024) 은 원작 캡처와 정량 비교 필요. 층 안개 t 의 카메라 피치 의존성.
+- ~~안개 거리 보정값~~ → 원작 패스 해석식 (16 §1.2). 남은 것: 층 안개 키 알파 결합(0x127240) 세부, TEXA 상태 가정, 층 안개 t 의 카메라 피치 의존성.
 - 여러 SCR_Fog 전환은 소유 GO 최근접으로 대체 (원작은 ESC 추정).
-- 비 볼륨 상자 판정, 눈/먼지/플랑크톤 모양, 표면·커브 이미터, 칼 궤적(0xB), 필드, PTC 크기 단위.
+- 비 볼륨 상자 판정, 눈/먼지/플랑크톤 모양, 표면·커브 이미터, 칼 궤적(0xB), 필드. (~~PTC 크기 단위~~ 16 §2.4)
 - SCR_Mirror (반사 바닥), LensFlare, GhostTrail, RopeSkinned, cloth 미구현. LGT 동적 조명 미구현 (캐릭터용).
 - 파티클·물은 레벨 렌더 안에서 그려서 이후에 그리는 캐릭터가 덮는다 (GameScene 의 늦은 효과 패스 훅 필요).
