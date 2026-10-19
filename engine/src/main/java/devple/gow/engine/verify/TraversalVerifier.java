@@ -430,6 +430,18 @@ public final class TraversalVerifier {
 		walk(todo, points, player, currentSource, step, r);
 		r.ropes.addAll(NavRope.of(lv));
 		// R1 상호작용 ↔ 보행 2회: 과제가 앞 단계 진행(적 처치·동영상 끝)을 조건으로 하는 레벨이 있다 (DEST03 두 번째 뿔피리 = LevelData3)
+		// 부서지는 물체(Breakable) 전부 파괴 — 플레이어가 때려 부순 것 대신 (41 문서, ARENA06 "all broken" 36 개 → 2008 → 1040 → Warp)
+		currentSource[0] = "(물체 파괴)";
+		for (var b : lv.behaviors.values()) {
+			if (b.type().equals("Breakable")) {
+				for (ScriptActor m : List.copyOf(w.markers(b.owner()))) {
+					w.destroy(m);
+				}
+			}
+		}
+		for (float t = 0; t < 6f; t += DT) {
+			step.run(); // 성공 메시지 Delay·표시 시간 → 1040
+		}
 		for (int round = 0; round < 2; round++) {
 			interact(lv, w, levelTweaks, col, points, player, currentSource, step, r);
 			walk(new ArrayList<>(points.keySet()), points, player, currentSource, step, null);

@@ -86,6 +86,8 @@ public final class GameScene implements Scene {
 	private float messageTimer;
 	/** 다른 슬롯 레벨 렌더 (원작은 두 슬롯 모두 그림). */
 	private LevelScene otherScene;
+	/** 부서지는 물체 (Breakable / Brkb, 41 문서). */
+	private Breakables breakables;
 	private boolean otherScenePending;
 	/** 표시 중인 메시지 번호 (-1 없음): 닫힐 때 이벤트 1040(번호) 를 플레이어가 보낸다 (원작 0x1B8ECC/0x1B8F98/0x1B9170). */
 	private int messageId = -1;
@@ -187,6 +189,7 @@ public final class GameScene implements Scene {
 			orbTweaks = new Tweaks();
 			orbTweaks.load(session.permk);
 			orbTweaks.load(level.data().wad);
+			breakables = new Breakables(level.data(), orbTweaks);
 			hero.attachExternalAnims(level.data().wad); // 레벨별 영웅 애니 (ANM_hero_Athn01A 등)
 			loadEnemyKinds();
 			loadBoss();
@@ -1037,6 +1040,10 @@ public final class GameScene implements Scene {
 		}
 		Vector3f p = hero.ctl.position;
 		nav.update(dt, p);
+		breakables.update(hero.combat, world, owner -> {
+			level.hideInstance(owner);
+			System.out.println("파괴: " + owner);
+		});
 		cameraRig.update(dt, p, hero.ctl.yaw, !hero.ctl.grounded);
 		session.sound.setUnderwater(cameraRig.underwater()); // 수중 카메라 → 소리 수중 처리 (29 문서 §10)
 		world.tick(dt, p.x, p.y, p.z);

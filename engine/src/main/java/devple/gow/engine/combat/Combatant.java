@@ -691,6 +691,41 @@ public final class Combatant {
 	 * 공격 판정: 진행률이 판정 구간 [start, end] 안인 공격마다 (부위 히트박스 ∩ 상대 몸) 스윕 검사 → OnContact.
 	 * 부위 = Attack.part = 공격자 CDV 재질 PartType (10 문서 §5.4). 데이터가 없으면 정면 구 근사.
 	 */
+	/**
+	 * 지금 진행 중인 공격(피해 &gt; 0 창)이 구(중심 c, 반지름 r)에 닿는지 — 부서지는 물체 등 전투 대상이 아닌 것용.
+	 * 공격 부위 히트박스(CDV 구)가 있으면 그 구와, 없으면 정면 reach 근사 (34 문서). 공격 번호 집합으로 한 번만: key 로 중복 방지는 호출 측.
+	 *
+	 * @return 닿은 공격 (없으면 null)
+	 */
+	public Attack strikes(Vector3f c, float r) {
+		if (move == null) {
+			return null;
+		}
+		float t = progress();
+		for (Attack a : move.attacks()) {
+			if (t < a.start() || t > a.end() || a.damage() <= 0) {
+				continue;
+			}
+			if (volumes != null && volumes.hasPart(a.part())) {
+				for (float[] s : volumes.spheres(a.part())) {
+					float dx = s[0] - c.x, dy = s[1] - c.y, dz = s[2] - c.z, rr = s[3] + r;
+					if (dx * dx + dy * dy + dz * dz <= rr * rr) {
+						return a;
+					}
+				}
+			} else {
+				Vector3f p = owner.position();
+				float yaw = owner.yaw();
+				Vector3f hit = new Vector3f((float) -Math.sin(yaw), 0, (float) -Math.cos(yaw)).mul(reach).add(p);
+				float dx = c.x - hit.x, dz = c.z - hit.z, rr = hitRadius + r;
+				if (dx * dx + dz * dz <= rr * rr) {
+					return a;
+				}
+			}
+		}
+		return null;
+	}
+
 	private void attacks(float t) {
 		if (target == null || target.invulnerable()) {
 			return;

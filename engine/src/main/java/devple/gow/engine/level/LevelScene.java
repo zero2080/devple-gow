@@ -110,6 +110,14 @@ public final class LevelScene implements Scene {
 		return fx;
 	}
 
+	/** 숨긴 인스턴스 (부서진 물체 등, 인스턴스 이름 소문자). */
+	private final java.util.Set<String> removed = new java.util.HashSet<>();
+
+	/** 인스턴스를 더 그리지 않는다 (부서지는 물체 파괴). */
+	public void hideInstance(String name) {
+		removed.add(name.toLowerCase(Locale.ROOT));
+	}
+
 	/** 통합 게임 씬용: 이 카메라로 렌더 (자유/레벨 카메라 처리 생략). */
 	public void setExternalCamera(Camera c) {
 		external = c;
@@ -347,7 +355,7 @@ public final class LevelScene implements Scene {
 		fx.beginWorld(e, cam, false);
 		tmp.identity();
 		for (Instance i : instances) {
-			if (!i.sky() && !fx.hidden(i)) {
+			if (!i.sky() && !fx.hidden(i) && !removed.contains(i.name().toLowerCase(Locale.ROOT))) {
 				e.renderer().draw(i.model(), tmp);
 			}
 		}
