@@ -37,6 +37,14 @@ public final class CombatData {
 			}
 			rootActions.addAll(f.actions());
 		}
+		this.animation = animation;
+		reindexAnimations();
+	}
+
+	private final AnimationSet animation;
+
+	/** 외부 애니 그룹(잡기 MAI* 등, 적 WAD 의 0x10003)을 붙인 뒤 다시 색인. */
+	public void reindexAnimations() {
 		for (AnimationSet.Group g : animation.groups) {
 			for (Animation a : g.acts) {
 				animByHash.putIfAbsent(TweakFile.hashUpper(a.name), a);

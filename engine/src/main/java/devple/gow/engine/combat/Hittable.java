@@ -20,6 +20,14 @@ public interface Hittable {
 		return -1;
 	}
 
+	/**
+	 * 잡기 가능 상태 (원작 combatant+0x1B8: HP 가 AI1 Circle Health Threshold 아래 → 잡기 원 표시).
+	 * 분기 flags 0x10/0x40 이 이 값을 본다 (GRAB → MAIMIN01 vs GRABREJECT).
+	 */
+	default boolean grabbable() {
+		return false;
+	}
+
 	/** 무적(이벤트 9) 또는 사망. */
 	boolean invulnerable();
 

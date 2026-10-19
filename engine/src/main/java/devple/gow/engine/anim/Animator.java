@@ -60,6 +60,11 @@ public final class Animator {
 		fade = previous == null || fadeTime <= 0 ? 1f : 0f;
 	}
 
+	/** 현재 클립 시간 지정. */
+	public void seek(float t) {
+		time = t;
+	}
+
 	public void setRate(float r) {
 		rate = r;
 	}

@@ -44,6 +44,8 @@ public final class HeroRig implements AutoCloseable {
 	private final AnimatedModel model;
 	private final Shader shader;
 	private int lastHits;
+	private final AnimationSet animSet;
+	private final CombatData combatData;
 	private final Hittable hittable;
 
 	public HeroRig(Path rom, WadFile permk, int costume) throws IOException {
@@ -67,7 +69,9 @@ public final class HeroRig implements AutoCloseable {
 		hitCounter = new HitCounter(tweaks);
 		rules = new DamageRules(tweaks);
 		magic = new devple.gow.engine.combat.Magic(tweaks, player);
-		combat = new Combatant(new CombatData(permk, CombatData.heroFiles(), set), animator, owner());
+		animSet = set;
+		combatData = new CombatData(permk, CombatData.heroFiles(), set);
+		combat = new Combatant(combatData, animator, owner());
 		combat.setDamageScale(() -> rules.playerScale(difficulty, player.costume, bladeLevel(), godMode.active()));
 		hittable = new Hittable() {
 			public Vector3f position() {
@@ -79,7 +83,7 @@ public final class HeroRig implements AutoCloseable {
 			}
 
 			public int classId() {
-				return -1;
+				return 0;
 			}
 
 			public int stanceTag() {
@@ -94,6 +98,15 @@ public final class HeroRig implements AutoCloseable {
 				return combat.takeHit(a, attacker, dmg);
 			}
 		};
+	}
+
+	/**
+	 * 적/레벨 WAD 의 외부 애니 그룹(0x10003, 예 R_MIN 의 ANM_MAIMIN = 크레토스의 미노타우로스 처형 동작)을 영웅 세트에 연결.
+	 * 원작도 적 리소스가 로드될 때 영웅 애니 세트의 해당 그룹이 채워진다 (05 문서 §외부 그룹).
+	 */
+	public void attachExternalAnims(WadFile wad) {
+		animSet.attachAll(wad);
+		combatData.reindexAnimations();
 	}
 
 	public int bladeLevel() {
@@ -124,7 +137,16 @@ public final class HeroRig implements AutoCloseable {
 				return ctl.grounded;
 			}
 
-			public int bladeLevel() {
+			/**
+	 * 적/레벨 WAD 의 외부 애니 그룹(0x10003, 예 R_MIN 의 ANM_MAIMIN = 크레토스의 미노타우로스 처형 동작)을 영웅 세트에 연결.
+	 * 원작도 적 리소스가 로드될 때 영웅 애니 세트의 해당 그룹이 채워진다 (05 문서 §외부 그룹).
+	 */
+	public void attachExternalAnims(WadFile wad) {
+		animSet.attachAll(wad);
+		combatData.reindexAnimations();
+	}
+
+	public int bladeLevel() {
 				return HeroRig.this.bladeLevel();
 			}
 
@@ -140,8 +162,9 @@ public final class HeroRig implements AutoCloseable {
 				return player.selectedMagic != null ? player.selectedMagic.itemId : 0;
 			}
 
+			/** 영웅의 종류 ID = 0 (적 분기의 "tgt=0" 이 영웅을 가리킴, 예 미노타우로스 A400 MAIMIN01). */
 			public int classId() {
-				return -1;
+				return 0;
 			}
 
 			public boolean hasMagic(int id) {

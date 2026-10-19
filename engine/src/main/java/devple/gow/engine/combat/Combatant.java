@@ -32,8 +32,8 @@ public final class Combatant {
 	public static final float REACH = 55f, HIT_RADIUS = 55f;
 
 	/** 분기 매칭 상대 정보 (폴링: 락온 대상, 이벤트: 공격자). */
-	private record Other(float hp, int classId, int tag) {
-		static final Other NONE = new Other(0, -1, -1);
+	private record Other(float hp, int classId, int tag, boolean grabbable, boolean polled) {
+		static final Other NONE = new Other(0, -1, -1, false, true);
 	}
 
 	private final CombatData data;
@@ -99,6 +99,18 @@ public final class Combatant {
 
 	public Hittable target() {
 		return target;
+	}
+
+	/** 현재 기술에 SCRIPT(8) 이벤트가 있는지 (잡기 미니게임 등 스크립트 템플릿 구동). */
+	public boolean hasScriptEvent() {
+		return move != null && move.events().stream().anyMatch(e -> e.type() == 8);
+	}
+
+	/** 애니 진행을 외부에서 지정 (재생 속도 0 인 미니게임 기술: 게이지 = 진행률). */
+	public void setProgress(float p) {
+		if (clip != null) {
+			anim.seek(Math.max(0, Math.min(1, p)) * clip.duration);
+		}
 	}
 
 	/** 현재 기술의 애니 이름 (없으면 null). */
@@ -167,7 +179,8 @@ public final class Combatant {
 	// ---------------- 입력 / 분기 ----------------
 
 	private Other other() {
-		return target == null ? Other.NONE : new Other(target.hp(), target.classId(), target.stanceTag());
+		return target == null ? Other.NONE
+				: new Other(target.hp(), target.classId(), target.stanceTag(), target.grabbable(), true);
 	}
 
 	private void poll(Input in, float t) {
@@ -312,8 +325,12 @@ public final class Combatant {
 		if ((f & 0x8000) == 0 && ((f & 0x2000) != 0) != owner.artemisEquipped()) {
 			return -1;
 		}
-		if ((f & 0x20000) != 0 || (f & 0x80000) != 0 || (f & 0x800) != 0 || (f & 0x8) != 0 || (f & 0x4000) != 0) {
-			return -1; // 미상 플래그 / 차지 / 특수 태그 일치는 아직 미지원
+		if ((f & 0x20000) != 0 || (f & 0x80000) != 0 || (f & 0x800) != 0 || (f & 0x8) != 0) {
+			return -1; // 미상 플래그 / 차지는 아직 미지원
+		}
+		// 대상 조건 (10 문서 §2.4): 0x40 = 무시, 아니면 대상 +0x1B8(잡기 가능) == (0x10 ? 참 : 거짓). 폴링(락온 대상)에만 적용
+		if ((f & 0x40) == 0 && o.polled() && o.grabbable() != ((f & 0x10) != 0)) {
+			return -1;
 		}
 		if ((f & 0x400) != 0 && target == null) {
 			return -1;
@@ -343,8 +360,8 @@ public final class Combatant {
 		}
 		if (b.matchB() == -1) {
 			s += 4;
-		} else if (b.matchB() != o.tag()) {
-			return -1;
+		} else if ((f & 0x4000) == 0 && b.matchB() != o.tag()) {
+			return -1; // 0x4000 = 특수 일치 (잡기 태그 14 등) → 위의 잡기 가능 조건으로 대체 [추정]
 		}
 		if (b.matchA() == -1) {
 			s += 8;
@@ -408,8 +425,9 @@ public final class Combatant {
 	 * 현재 기술의 분기 → 없으면 루트 액션. reaction 은 분기 +0x20 과 비교 (-1 = 무관).
 	 */
 	public void fire(int code, int reaction, Combatant attacker) {
-		Other o = attacker == null ? Other.NONE
-				: new Other(attacker.owner.hp(), attacker.owner.classId(), attacker.stanceTag);
+		// 공격자 쪽 이벤트(17 적중 확인, 22 막힘)는 attacker == null → 상대 = 맞은 대상(락온 대상)
+		Other o = attacker == null ? other()
+				: new Other(attacker.owner.hp(), attacker.owner.classId(), attacker.stanceTag, false, false);
 		Branch c = null;
 		if (move != null) {
 			c = bestMatch(eventBranches(move.branches(), code, reaction), null, o);

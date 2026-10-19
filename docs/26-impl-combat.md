@@ -114,3 +114,25 @@
 | 오른쪽 스틱 앞 | EVADE*(514–517) 즉시, 시작 구간 무적(이벤트 9) |
 
 `ScriptedInput` 에 스틱 구간(`Stick`) 재생 추가.
+
+## 11. 잡기 · 처형 · 연타 QTE (4단계)
+흐름 (미노타우로스, 원본 데이터만으로 분기):
+```
+적 HP ≤ AI1 Circle Health Threshold(25) → Hittable.grabbable() = 참 (원작 combatant+0x1B8)
+영웅 ○ → GRAB(200) 적중 → HIT_CONFIRM 분기: tgt=50, flags 0x10(대상 잡기 가능) → MAIMIN01(400)
+                                          (잡기 불가면 flags 0x10 없는 분기 → GRABREJECT(204))
+적: 공격자 종류 0(영웅) + 자세 태그 200(GRAB 의 SET_1B0) → EV_HIT_REACT A400 → MAIMIN01 → AUTO → MAIMIN02(재생 속도 0)
+MAIMIN02 의 SCRIPT 이벤트 → RepeatPress 템플릿: 5초, ○ 한 번 +0.2, 감소 0.02/초, 시작 0.5
+  게이지 = 적·영웅 애니 진행률 / 1.0 도달 → Pass Move 402 MAIMIN03 / 시간 초과 → Fail Move 403 MAIMIN04
+```
+| 구현 | 내용 |
+|------|------|
+| `Combatant.score` | 대상 조건 0x10/0x40 (대상 잡기 가능 여부) 구현, 0x4000 특수 태그는 잡기 조건으로 대체 [추정] |
+| 이벤트 문맥 | 공격자 쪽 이벤트(17/22)는 맞은 대상을 상대로 매칭 (GRAB → MAIMIN01 선택에 필요) |
+| 영웅 종류 ID = 0 | 적 분기의 `tgt=0` 이 영웅 |
+| `GrabSync` | 결합 중 영웅은 적의 MAI 애니와 같은 이름의 영웅용 외부 애니를 재생, 같은 기준점 배치 |
+| 외부 애니 | 적 WAD 의 `ANM_MAIMIN`(0x10003) 을 영웅 세트에 연결 (`HeroRig.attachExternalAnims`) |
+| `RepeatPressQte` | 템플릿 키 일부는 해시만 존재 → 값 패턴으로 의미 추정(시간 5.0 / 시작 0.5 / Pass 402) |
+
+`GrabTest`: 연타 → PASSED → 402, 무입력 → FAILED → 403. 처형 성공 후 적 사망은 근사(기술 종료 시 HP 0).
+미구현: 미니게임 버튼 아이콘 HUD 표시, TimedPress(타이밍) / 스틱 회전 미니게임, 적별 다른 처형(MAISKB/MAICYW…) 개별 검증.

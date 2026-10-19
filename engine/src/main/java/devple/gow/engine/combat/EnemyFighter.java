@@ -123,7 +123,9 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 				}
 			}
 		}
-		if (combat.active() && combat.hitPause() <= 0) {
+		if (combat.active() && combat.move().speed() == 0) {
+			// 미니게임 기술: 진행은 QTE 게이지가 setProgress 로 지정
+		} else if (combat.active() && combat.hitPause() <= 0) {
 			anim.update(dt);
 		} else if (!combat.active()) {
 			anim.update(dt);
@@ -163,6 +165,11 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 	@Override
 	public int stanceTag() {
 		return combat.stanceTag();
+	}
+
+	@Override
+	public boolean grabbable() {
+		return circleHp < 65535 && hp > 0 && hp <= circleHp;
 	}
 
 	@Override

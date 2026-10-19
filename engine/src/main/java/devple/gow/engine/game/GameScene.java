@@ -80,6 +80,7 @@ public final class GameScene implements Scene {
 	private final List<Enemy> enemies = new ArrayList<>();
 	private Shader enemyShader;
 	private Tweaks orbTweaks;
+	private devple.gow.engine.combat.GrabSync grab;
 	private final Random rnd = new Random();
 
 	public GameScene(GameSession session, String levelName, String entry, float autoRun) {
@@ -110,10 +111,12 @@ public final class GameScene implements Scene {
 			orbTweaks = new Tweaks();
 			orbTweaks.load(session.permk);
 			orbTweaks.load(level.data().wad);
+			hero.attachExternalAnims(level.data().wad); // 레벨별 영웅 애니 (ANM_hero_Athn01A 등)
 			loadEnemyKinds();
 		} catch (IOException ex) {
 			throw new UncheckedIOException(ex);
 		}
+		grab = new devple.gow.engine.combat.GrabSync(hero.ctl, hero.combat);
 		placeSpawn();
 		respawn(spawn);
 		checkpoint.set(spawn);
@@ -150,6 +153,7 @@ public final class GameScene implements Scene {
 						EnemyFactory.Kind k = EnemyFactory.load(path, session.permk, -1);
 						kinds.put(name, k);
 						orbTweaks.load(k.assets().wad());
+						hero.attachExternalAnims(k.assets().wad());
 					} catch (RuntimeException ex) {
 						System.out.println("적 리소스 로드 실패 " + name + ": " + ex.getMessage());
 					}
@@ -320,10 +324,20 @@ public final class GameScene implements Scene {
 			};
 		}
 		EnemyFighter target = nearestEnemy();
-		hero.combat.setTarget(target);
-		hero.update(in, camYaw, dt, target != null ? target.pos : null);
-		physics(dt);
+		if (!grab.active()) {
+			hero.combat.setTarget(target);
+			hero.update(in, camYaw, dt, target != null ? target.pos : null);
+			physics(dt);
+		}
 		updateEnemies(dt);
+		if (target != null) {
+			Enemy te = enemies.stream().filter(x -> x.fighter() == target).findFirst().orElse(null);
+			boolean was = grab.active();
+			grab.update(in, target, te != null ? te.kind().tweaks() : null, dt);
+			if (was && !grab.active() && grab.lastResult() == devple.gow.engine.combat.RepeatPressQte.State.PASSED) {
+				target.hp = 0; // 처형 성공 → 사망 처리 (원작은 처형 기술의 피해/스크립트) [근사]
+			}
+		}
 		Vector3f p = hero.ctl.position;
 		world.tick(dt, p.x, p.y, p.z);
 		if (hero.player.hp <= 0) {
