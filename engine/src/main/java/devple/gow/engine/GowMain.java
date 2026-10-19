@@ -38,7 +38,12 @@ public final class GowMain {
 			} else if (args[i].equals("--game")) {
 				String lvl = i + 1 < args.length && !args[i + 1].startsWith("--") ? args[++i] : "ATHN01A";
 				int ri = java.util.Arrays.asList(args).indexOf("--auto-run");
-				first = new devple.gow.engine.game.GameScene(Path.of("gow-rom"), lvl, ri >= 0 ? Float.parseFloat(args[ri + 1]) : 0);
+				try {
+					first = new devple.gow.engine.game.GameScene(new devple.gow.engine.game.GameSession(Path.of("gow-rom")), lvl,
+							null, ri >= 0 ? Float.parseFloat(args[ri + 1]) : 0);
+				} catch (java.io.IOException ex) {
+					throw new java.io.UncheckedIOException(ex);
+				}
 			} else if (args[i].equals("--hero")) {
 				String rom = i + 1 < args.length && !args[i + 1].startsWith("--") ? args[++i] : "gow-rom";
 				java.util.List<String> al = java.util.Arrays.asList(args);

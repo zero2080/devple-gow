@@ -182,3 +182,5 @@ LoadCheck 는 bool 을 반환하지만 데이터에서는 EntrySensor 의 Action
 - 이벤트 1008/1015/1025 의 의미, EventSensor 슬롯 1.
 - Creator, Animator 효과의 세부, Marker 웨이포인트.
 - Internal 0x9/0xB/0x11/0x12/0x34..0x37 의 의미.
+
+> **27 문서 통합 시 확인**: ATHN01A SpawnEnemy 의 TemplateId 20 = 레벨 RSRCS 적 리소스 R_SKS 의 AI1 020 → TemplateId 는 AI1 템플릿 번호로 판단 [강한 추정].

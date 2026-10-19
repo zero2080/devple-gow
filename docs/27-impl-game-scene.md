@@ -24,7 +24,29 @@
 ## 3. 검증
 - `--game ATHN01A --auto-run 1.5 --screenshot` → 배 갑판 위 크레토스 + 원작 HUD + 레벨 카메라 (`work/game1.png`)
 
-## 4. 다음
+## 4. 스크립트·적 통합 (`GameSession` + `ScriptWorld`)
+| 스크립트 이벤트 | 게임 처리 |
+|----------------|----------|
+| ShowMessage(id, 초) | 원작 HUD 메시지 창: `PS2_MessageTemplate_Line1..5` 에 줄별 텍스트, `PS2_MessageTemplate_Event = 1`, 시간 후 0 |
+| CheckPoint | 재시작 위치 갱신 |
+| 데스존 (플레이어) | 사망 → 체크포인트 재시작 (원작 HP 보정 `onCheckpointRestart`) |
+| LoadWad / LoadForWarp → Warp, Load(wad, entry) | 페이드 전환으로 새 `GameScene` (진행도·GlobalData 는 `GameSession` 으로 유지). 진입점 이름의 GO 위치에서 시작 |
+| LoadCheck | WAD 가 있으면 준비 완료 (원작은 백그라운드 로드 완료 여부) |
+| SpawnEnemy | 레벨 RSRCS 태그(0x1F4)의 적 리소스 `R_<이름>` 를 `EnemyFactory` 로 미리 구성, **TemplateId = AI1 번호**로 종류 선택 |
+| 적 사망 | `ScriptWorld.destroy(actor)` → DestructionSensor (튜토리얼 메시지 등) + OrbEmitter "<적> Death" 오브 |
+
+**새로 확인**: ATHN01A 의 SpawnEnemy TemplateId = 20 = R_SKS 의 AI1 020 (skelly Lvl 1) → 13 문서에서 미해결이던 TemplateId 의미는 AI1 템플릿 번호로 판단 [강한 추정].
+
+검증 로그 (`--game ATHN01A`):
+```
+레벨 ATHN01A (진입점 null): 시작 (1536, 19, 1957), 적 종류 [R_SKS]
+다음 레벨 미리 로드 요청: ATHN01B          ← PlayerStartZone 센서
+적 스폰: R_SKS.WAD (템플릿 20) at (1526, 0, 1739)
+적 스폰: R_SKS.WAD (템플릿 20) at (1547, 0, 1751)
+```
+스크린샷 `work/game2.png`: 배 갑판에서 해골병들이 크레토스에게 접근.
+
+## 5. 다음
 - 레벨 스크립트 런타임(13/28 문서, 진행 중) 연결: 센서 → 메시지/체크포인트/사망 구역/레벨 전환(LoadWad·Warp)/적 스폰
 - 적 스폰: SpawnEnemy 엔티티 + WadInfo 가 지정한 적 WAD(`R_SKS` 등) 로 `EnemyFighter` 생성
 - 레일 카메라(NCV 커브), FOV, 바다면(SCR_Water) 등 연출

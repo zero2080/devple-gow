@@ -47,10 +47,15 @@ public final class HeroRig implements AutoCloseable {
 	private final Hittable hittable;
 
 	public HeroRig(Path rom, WadFile permk, int costume) throws IOException {
+		this(rom, permk, costume, null);
+	}
+
+	/** @param existing 레벨 전환 시 이어받을 진행 상태 (null 이면 새 게임) */
+	public HeroRig(Path rom, WadFile permk, int costume, PlayerState existing) throws IOException {
 		assets = new WadAssets(rom.resolve("R_HERO" + costume + ".WAD"));
 		tweaks.load(permk);
 		tweaks.load(assets.wad());
-		player = new PlayerState(GameRules.load(permk));
+		player = existing != null ? existing : new PlayerState(GameRules.load(permk));
 		player.costume = costume;
 		Skeleton sk = Skeleton.loadAll(assets.wad()).stream().filter(s -> s.name.equals("hero")).findFirst().orElseThrow();
 		AnimationSet set = AnimationSet.load(assets.wad(), "ANM_hero");
