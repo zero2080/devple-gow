@@ -88,6 +88,8 @@ public final class GameScene implements Scene {
 	private LevelScene otherScene;
 	/** 부서지는 물체 (Breakable / Brkb, 41 문서). */
 	private Breakables breakables;
+	/** 떨어지는 중인 적의 수직 속도. */
+	private final java.util.Map<EnemyFighter, Float> enemyFall = new java.util.IdentityHashMap<>();
 	private boolean otherScenePending;
 	/** 표시 중인 메시지 번호 (-1 없음): 닫힐 때 이벤트 1040(번호) 를 플레이어가 보낸다 (원작 0x1B8ECC/0x1B8F98/0x1B9170). */
 	private int messageId = -1;
@@ -1072,9 +1074,20 @@ public final class GameScene implements Scene {
 			EnemyFighter f = en.fighter();
 			boolean wasDead = f.dead();
 			f.update(dt);
-			float g = col.groundHeight(f.pos.x, f.pos.y + STEP, f.pos.z, 400);
-			if (!Float.isNaN(g)) {
+			// 바닥: 계단 높이 안이면 붙이고, 더 아래면 중력으로 떨어진다 (높은 스폰 지점 — ATHN08B 분신 파도 등) [근사: 원작 적 낙하 물리]
+			float g = ground(f.pos.x, f.pos.y + STEP, f.pos.z, 4000);
+			float vy = enemyFall.getOrDefault(f, 0f);
+			if (!Float.isNaN(g) && f.pos.y - g <= STEP && vy >= 0) {
 				f.pos.y = g;
+				enemyFall.remove(f);
+			} else if (!Float.isNaN(g)) {
+				vy -= GRAVITY * dt;
+				f.pos.y = Math.max(g, f.pos.y + vy * dt);
+				if (f.pos.y <= g) {
+					enemyFall.remove(f);
+				} else {
+					enemyFall.put(f, vy);
+				}
 			}
 			if (en.actor() != null) {
 				en.actor().moveTo(f.pos.x, f.pos.y, f.pos.z);
