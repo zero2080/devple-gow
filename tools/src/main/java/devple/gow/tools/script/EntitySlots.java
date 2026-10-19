@@ -58,7 +58,7 @@ public final class EntitySlots {
 		add(8, "EventId", INT, 0).add(8, "Arg1", INT, 0).add(8, "Arg2", INT, 0);
 		base(8);
 		add(9, "PlayerName", STRING, "").add(9, FILTER, INT, 0).add(9, "CameraName", STRING, "");
-		add(10, "unk0", INT, 0).add(10, "unk1", INT, -1).add(10, "SpawnAtStart", BOOL, false).add(10, "Respawn", BOOL, false)
+		add(10, "MaximumCount", INT, 0).add(10, "unk1", INT, -1).add(10, "SpawnAtStart", BOOL, false).add(10, "Respawn", BOOL, false)
 				.add(10, "TemplateId", INT, 0).add(10, "unk5", INT, 0).add(10, "unk6", INT, 0).add(10, "unk7", INT, -1)
 				.add(10, "unk8", INT, 0).add(10, "Patrol", STRING, "");
 		base(10);

@@ -12,6 +12,7 @@
 - 움직이는 발판: Animator 오브젝트의 CDV hull 윗면 (hull 관절 = BallHull off[6]) + 오브젝트 애니 타입 11 = 관절 이동 [추정, 수치 일치] → ATHN05D 엘리베이터 위 Warp 도착 해결 (§4).
 - 이웃 레벨(다른 슬롯) 스크립트를 GameScene 이 같이 돌린다 (GlobalData 공유, LevelData 따로) (§5).
 - 순회 검증: 주 경로의 강제 이벤트 전환 8 → 6. **ATHN01D → ATHN01F (R1 문)**, **PAND05B → HDES01A (상자 밀기)**, **ATHN01D → ATHN01E (짚라인)** 이 강제 없이 연결, ATHN04A → ATHN05D 도착 검사 통과 (§6).
+- **후속 (§10)**: 남은 6 곳도 원작 동작으로 열림 → **주 경로 강제 0, ATHN01A → OLYMP02 를 걷기·상호작용·전투만으로 도달**. 과제 진행률 = 오브젝트 애니 재생(속도 1 / 되감기 −4), 레버도 1023, SpawnEnemy MaximumCount, 동영상 끝 501 보낸 쪽 = 플레이어, 두 슬롯 이벤트 공유, 헤드리스 보스전(HeadlessBoss), PAND02F → PAND02H 도착 = 바닥 구멍 낙하.
 
 ## 1. 충돌 시트 표면 속성 [확실: 데이터 102 시트]
 SheetHdr 섹션 [3] = 표면 레코드 × count(0x50), 레코드 = 24 + dataSize(0x52 = 40). 섹션 [4] = 스키마 엔트리 0x4C 바이트:
@@ -78,7 +79,7 @@ GO 비헤이비어 `tools/level/GoBehavior` (BHV 서버 0x17, GO CXT 다음 리�
 - ATHN01D `gotwinkickdoor` = IO_CSM 템플릿 44 ("HydraKickDoor", 영웅 애니 #b50a547c = `doorKick`), 과제 id **206**. `gonewcaptainunlock` = 45 / 202 (`captainsDoorOpen`).
 - 원작 0x215928 [확실]: `pct = clamp(round(100·t/len), 0, 100)`, 100 인데 t < len 이면 99, 바뀌면 `PostEvent(0x3FF = 1023, pct, taskId(+0x1CC), …)`. t/len = 오브젝트 애니 시간/길이, 재생 속도 +0x1E0 (입력 없으면 −4 로 되감음).
 - 스크립트: `TwinKickDoor-main-taskP` = 1023 ∧ EventArg(1) == 206 ∧ EventArg(0) ≥ 30 → 동영상 Semo02 → 501 → Warp(ATHN01F). 상자 메시지: 인자 1 == 1 ∧ 인자 0 == 100.
-- 구현 [근사]: R1 한 번 = 진행 +12 % (상자 25 %), 0.6 초 입력 없으면 초당 50 % 되감김. % 가 바뀔 때마다 1023 (같은 99/100 규칙). 100 % → 완료 (상자는 chestOpen + 오브 이미터 HealthChest/MagicChest/RaidenChest1).
+- ~~구현 [근사]: R1 한 번 = 진행 +12 %~~ → §10.1: 진행률 = **오브젝트 애니 시간 / 길이** (붙어 있으면 속도 1, 떨어지면 −4 로 되감김) [확실: 0x215DF0]. 연타 유지 판정(마지막 R1 0.6 초 안)만 [근사]. 100 % → 완료 (상자는 chestOpen + 오브 이미터 HealthChest/MagicChest/RaidenChest1).
 - 상자 = Creator Name0 "chest" (unk5 = CSM 템플릿, unk6 = 과제 id [추정]).
 
 ### 3.2 PushPull — 밀기 상자, 크랭크, 레버
@@ -108,7 +109,7 @@ PAND05B `pBoxPand05B-Marker511` → `semoMovieHaveBox-…-semo08marker511` (Filt
 - 첫 보행 뒤 **R1 상호작용 단계** (강제 아님): CSM·상자 = 1023 (10..100 %, 과제 id), LEVER = 1048/1049, PUSH = 1048 → 상자 Marker 를 그 그룹 센서 볼륨으로 → 1049 [근사: 경로 없음]. 보고서 "R1 상호작용".
 - **줄 연결**: 짚라인/수평 줄의 시작점 근처(288)에 L 바닥이 있고 끝점 아래(96 / ±144)에 이웃 레벨 X 바닥이 있으면 WALK L→X (출처 "줄 …").
 - Warp 도착 검사: 바닥 없으면 발판 자세 맞춤까지 본다. 바닥 칸에서 NoPlayerCollision 제외.
-- 결과 (`work/verify/report.md`): ATHN01A → OLYMP02 52 전환 그대로, 주 경로 강제 전환 **8 → 6** (DEST03→PAND00A, PAND00C→PAND04AA, PAND04AA→PAND04C, ATHN08A→08B→08C→07B), ATHN01D→ATHN01F "R1 gotwinkickdoor", PAND05B→HDES01A "밀기 gopboxpand05b → ENV_semoMovieHaveBox", ATHN01D ≈ ATHN01E "줄 gorope3 (ZIPLINE)". 도착 검사 실패 2 → 1 (PAND02F → PAND02H: 근처에 발판 없음, 칼날 함정만 — 미해결).
+- 결과 (38 단계 당시): ATHN01A → OLYMP02 52 전환 그대로, 주 경로 강제 전환 **8 → 6** (DEST03→PAND00A, PAND00C→PAND04AA, PAND04AA→PAND04C, ATHN08A→08B→08C→07B), ATHN01D→ATHN01F "R1 gotwinkickdoor", PAND05B→HDES01A "밀기 gopboxpand05b → ENV_semoMovieHaveBox", ATHN01D ≈ ATHN01E "줄 gorope3 (ZIPLINE)". 도착 검사 실패 2 → 1 (PAND02F → PAND02H: 근처에 발판 없음, 칼날 함정만 — 미해결).
 
 ## 7. 게임 씬 연결
 | 위치 | 내용 |
@@ -128,6 +129,61 @@ PAND05B `pBoxPand05B-Marker511` → `semoMovieHaveBox-…-semo08marker511` (Filt
 
 ## 9. 남은 것
 - 원작 판정 함수(벽 잡기 거리·턱 높이·줄 잡기 반경, 0x18Cxxx Navigation 코드)는 미분석 — 수치는 애니 크기 기준 [근사]. 줄 공격(10 문서 rope attack), 벽 점프 연속, 다이빙(NoDiving), 미끄럼(Slide) 경사 미구현.
-- CSM 진행률은 R1 연타 근사 (원작은 오브젝트 애니 재생 속도). 크랭크 회전량·레버 결과 이벤트(1048/1049 외) 미확인. IO_TandF(들어 올리는 문) 미구현.
+- ~~CSM 진행률은 R1 연타 근사~~ (§10.1 원작 재생 속도 모델). 영웅 쪽 CSM 기술의 연타 판정(붙음 유지 조건), 크랭크 회전 입력(Acc/Dec)은 미분석. IO_TandF(들어 올리는 문, 같은 1023 송신 0x213F90) 미구현.
 - 발판 렌더 자세, CDV 벽 충돌, 운반 회전 (yaw), 이웃 레벨의 적 생성.
-- 순회 검증: 남은 강제 전환 6 (보스·과제 대부분 아레스 전투/동영상), PAND02F → PAND02H 도착.
+- ~~순회 검증: 남은 강제 전환 6, PAND02F → PAND02H 도착~~ → §10 해결. PAND00C 링 퍼즐 자체(크랭크 → 링 회전 → Marker 101 정렬 → 204/205 로 엘리베이터 레버 보이기)는 하네스가 Vis 로 상호작용을 막지 않으므로 검증하지 않음 [근사].
+
+## 10. 후속: 남은 강제 전환 6 곳과 PAND02H 도착 해결
+결과 (`work/verify/report.md`): ATHN01A → OLYMP02 52 전환, **주 경로 강제 0** (`reach(START, false)` 에 OLYMP02), 전환 186 (강제 뒤 12 — 보너스 아레나 9, ATHN01E→01D, PAND01C→01B, PAND02AA→02A), **도착 검사 실패 0**, 헤드리스 보스 4 종 격파.
+
+| 전환 | 무엇이 여는가 (원작) | 고친 것 |
+|---|---|---|
+| DEST03 → PAND00A | 첫 동영상 d01Mp01 끝(501) → 세이렌 3 마리 × **MaximumCount 3** = 9 처치 (LevelData0 == LevelData1 = 9) → d01Mp03 → LevelData3 → 두 번째 뿔피리 CSM 1031 → ThirdMpeg + `LoadForWarp(Pand00A)`/`Warp` (Delay 12.2) [확실: 데이터] | 하네스가 501 을 보낸 쪽 null 로 보냄 → `…MpegDone` (Filter 1) 무반응. GameScene 처럼 보낸 쪽 = 플레이어. R1 상호작용 ↔ 보행 2 회 (뿔피리 2 가 LevelData3 를 기다림) |
+| PAND00C → PAND04AA | `ElevatorLever-LeverProgress`: **1023 인자 1 == 111 ∧ 인자 0 == 100** → `LoadForWarp(Pand04AA)` + `Warp` (Delay 30). 111 = 레버 `goelevatorlever` 의 **PushPull id** — 레버도 과제 진행률을 보낸다 [확실: §10.1] | 레버(PushPull) 를 잡고 있는 동안 레버 애니(3.667 초) 재생 → 1023 (§10.1). 전엔 1048/1049 만 |
+| PAND04AA → PAND04C | `MpegPlayer` Semo06 끝(501, Filter 1) → LevelData1 → `LoadWad(Pand04C)` → LoadCheckC | 501 보낸 쪽 (위와 같음) |
+| ATHN08A → ATHN08B | 아레스 1단계 `608 MAIBARGRABWIN` 끝 **1047(608), 보낸 쪽 그룹 600** → a07Mp01 → LoadForWarp athn08b → Warp | 헤드리스 보스전 (§10.4) |
+| ATHN08B → ATHN08C | 분신 크레토스 4 파도: SpawnEnemy 마다 **MaximumCount** (2 파 7·7·8·8·8·8, 3 파 4×5+5, 4 파 4×5+5 = 25 = LevelData31). 파도 i 의 사망 카운터 == 최대 → 다음 파도 SpawnEnemy (조건 `LevelData(2i) == LevelData(2i+1)`) → 4 파 25 처치 → winEnt (Delay 6) A07MP05 → 501 → Warp [확실: 합 일치 + 0x1AC580] | `ScriptWorld.spawn` 이 MaximumCount 를 지킴 (전엔 무한 재생성이라 카운터가 최대를 지나쳐 3 파가 다시 안 나옴). 하네스: 죽여도 스크립트가 반응하지 않는 적(가족 660 — 죽으면 실패)은 죽이지 않음, 전투 마무리 단계 |
+| ATHN08C → ATHN07B | 아레스 3단계 칼 맞대기 → 622 → 390/395 → **1035(395)** → Semo10 → 501 → Warp | 헤드리스 보스전 |
+| PAND02F → PAND02H 도착 | 발판이 아니다. `ENV_LoadCheckH` (y −1610..−1413) 가 PAND02F 바닥(−1528)의 **구멍** (x 700–720, z 5117–5199) 을 덮고, 그 아래 PAND02H 구덩이 바닥 −1904 로 **떨어진다** (낙하 ≈ 380). GameScene 의 SEAMLESS 판정(다른 슬롯 바닥 600 아래까지)은 이미 받는다 | 하네스 도착 검사: 보행 점(구멍 옆 PAND02F 바닥)만 보지 않고 LoadCheck 볼륨 안 점 중 떠나온 레벨 바닥에 막히지 않고 대상 바닥으로 떨어지는 곳을 찾는다 (`fallInto`) |
+
+### 10.1 과제 진행률 = 오브젝트 애니 재생 (`nav/TaskProgress`) [확실: 디스어셈블]
+- 1023 송신 함수 3 개가 **같은 코드**: 0x215928 (IO_CSM, +0x1C4/+0x1C8/+0x1CC), 0x2118E8 (+0x27C/+0x280/+0x284, 호출 0x2127B0 ← 0x212398), 0x213F90 (+0x1C8/+0x1CC/+0x1D0, 호출 0x214400). 0x2118E8 = PushPull [강한 추정: 레버/크랭크 id 111·21·22·120 을 1023 인자 1 로 기다리는 센서, Push TWK 의 크랭크 소리], 0x213F90 = IO_TandF [추정].
+- 인자: `PostEvent(1023, pct, id, (int)(속도 × 100), 오브젝트)`. pct = clamp(round(100·t/len)), 100 인데 t < len 이면 99. **pct 또는 속도가 바뀔 때마다** 보낸다.
+- 속도 (CSM 0x215DF0): 영웅이 붙어 있으면(+0x190 ≥ 0) **1.0**, 떨어졌고 t > 0 이면 **−4.0**, t = 0 에서 정지. t ≥ len 이고 속도 > 0 이면 완료 → 0x215928(1.01, 1, 1) = 100. PushPull 0x2127B0 도 같은 속도 상수(1.0 / −4.0, +0x268).
+- 길이 = 오브젝트 애니: CSM TWK `#fea292e6` act (쌍발차기 문 "Default" 0.9 초), 없으면 가장 긴 act (레버 3.667, 링 크랭크 12, PAND04C 크랭크 24). 길이 0 (DEST03 뿔피리 "main") = 붙자마자 완료.
+- 게임: `HeroNavigator` CSM/상자 = 마지막 R1 뒤 0.6 초 안이면 붙음 [근사: 영웅 CSM 기술의 유지 조건 미분석], 레버 = 잡고 있는 동안. 놓은 뒤에도 오브젝트는 −4 로 되감기며 1023 을 보낸다. `SceneNav` 가 인자 3 개로 보냄.
+- 상자(Creator "chest") 의 오브젝트 애니는 아직 없음 → 길이 1 초 [근사].
+
+### 10.2 SpawnEnemy MaximumCount [확실: 0x1AC580]
+- SpawnEnemy 슬롯 0 = **MaximumCount** (`"MaximumCount %d exceeded (%d)"`): 0 이 아니면 만든 수(+0x100) 가 이 값에 닿은 뒤 발동은 생성하지 않는다. 메시지 6(제거) 은 사망 수(+0x104)++ 후 Respawn(슬롯 3) 이면 자기 Trigger (조건 슬롯 평가 포함, 0x29D93C = 최소 지연) [확실: 0x1AC630].
+- `EntitySlots` 의 SpawnEnemy `unk0` → `MaximumCount`.
+
+### 10.3 두 슬롯 이벤트 공유 (`ScriptWorld.linkEvents`)
+- PostEvent(0x1A8C78) 는 큐 하나(0x303DB8)에 넣고 전달(0x1AAB00)은 엔티티 목록 전체를 돈다 [확실: 큐 하나 / 추정: 두 슬롯 엔티티가 한 목록]. 그래서 PAND00C EyeDoor 204 → PAND00D FakeEyeDoor 동영상 p00MP03, PAND00D 205 → PAND00C 엘리베이터 동상·레버 표시 같은 **레벨 간 이벤트**가 있다.
+- GameScene: `SceneNav.setOther` 가 이웃 월드와 잇는다 (게임 이벤트·EventTransmitter 모드 5 가 양쪽으로). 하네스는 레벨 단독이라 쓰지 않음.
+
+### 10.4 헤드리스 보스전 (`boss/HeadlessBoss`)
+- 37 문서 테스트용 BossRig 의 핵심을 본 코드로: 크레토스 Combatant + HeroController + BossFight(autoPlay 데모) + CombatScriptBridge + GrabSync, GameScene.update 순서. 순회 검증이 보스 레벨(ATHN01E/02D/08A/08C)에서 보행·R1 단계 뒤 60 Hz 로 최대 240 초, 격파 후 20 초 (컷신 → Warp) 돌린다.
+- 데모가 보스 HP 를 마무리 임계 밑으로 내리는 것은 플레이어 전투를 대신한다 [근사]. 그 뒤 잡기 → 연타 → 타이밍 버튼 → 마무리 기술 → 1047/1035 → 컷신 → Warp 는 원본 데이터 그대로.
+- 결과: 히드라 (구역 → 내려찍기 잡기 3 회 → 기절 → 처형), 메두사 여왕 (시선 → 석화 탈출 → 머리 뜯기), 아레스 1 (잡기 원 2000/1000/500 → 잡기 연타 → 608), 아레스 3 (칼 맞대기 → 395) 모두 격파. 보고서 레벨 상세 "보스전 (헤드리스)".
+
+### 10.5 하네스 변경 (`TraversalVerifier`)
+| 변경 | 이유 |
+|---|---|
+| 동영상 끝 501 의 보낸 쪽 = 플레이어 | Filter 1 `…MpegDone` (DEST03, PAND04AA …) |
+| R1 상호작용 ↔ 보행 2 회, 레버도 1023 (`TaskProgress` 로 애니 끝까지) | 앞 단계 진행을 기다리는 과제, 엘리베이터 레버 |
+| 죽이면 스크립트가 반응하는 적만 0.5 초 뒤 제거 (DestructionSensor 모드 2/3/4 또는 Respawn) | ATHN08B 가족(지킬 대상) |
+| 전투 마무리: 적이 8 초 동안 없을 때까지 (최대 180 초) | 파도 전투 + Delay 6 동영상 |
+| 보스 단계 (HeadlessBoss) | 아레스 1/3, 히드라, 메두사 여왕 |
+| SEAMLESS 도착 검사: LoadCheck 볼륨 안에서 대상 바닥으로 낙하 (`fallInto`) | PAND02F → PAND02H |
+| `gow.trace=<레벨>` 시스템 속성 / `trace` 필드: 그 레벨의 요청·동영상·스폰을 시간순 출력 | 디버그 |
+
+### 10.6 테스트
+| 테스트 | 내용 |
+|---|---|
+| `nav/TaskProgressTest` (4, 데이터 불필요) | 속도 1 로 0.9 초 → 100 (그 전 99 이하, 100 은 한 번), 놓으면 −4 되감기·속도 변화도 송신, 길이 0 즉시 완료, 99 규칙 |
+| `nav/HeroNavigatorTest` +1 | 레버 1048 → 1023 (100, id 111, 속도 100) → 1049 |
+| `nav/NavDataTest` +1 | 애니 길이: 쌍발차기 문 0.9, PAND00C 엘리베이터 레버 LEVER id 111 3.667, DEST03 뿔피리 0 |
+| `script/ScriptWorldTest` +3 | ATHN08B 파도: 4 파 25 · 전체 100 생성 → A07MP05 → Warp, PAND00D 205 → PAND00C LevelData22 (이음/끊음) |
+| `verify/TraversalTest` +3 | 주 경로 6 곳 강제 없음 + `reach(START, false)` ∋ OLYMP02, 보스 4 종 격파, PAND02H 도착 = 낙하 · 전체 도착 실패 0 |
+

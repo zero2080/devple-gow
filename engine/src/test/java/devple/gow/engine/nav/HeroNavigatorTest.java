@@ -498,4 +498,47 @@ class HeroNavigatorTest {
 		}
 		assertTrue(it.progress < p0, "누르지 않으면 되감김");
 	}
+
+	/** 레버 (PushPull): 붙잡기 1048 → 레버 애니가 끝날 때까지 1023 (인자 1 = PushPull id, 원작 0x2118E8) → 놓기 1049. PAND00C 엘리베이터 레버 id 111. */
+	@Test
+	void leverPostsTaskProgressWithItsId() {
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -400, -400, 400, 400, 0, SurfaceAttr.GROUND);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		Body b = new Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		Interactables items = new Interactables();
+		Interactables.Item lever = items.add(new Interactables.Item(Interactables.Kind.LEVER, "goelevatorlever", v(0, 0, -30), 12, 111, "leverpull",
+				null, "newLeever", 20));
+		lever.length = 0.5f;
+		nav.setItems(items);
+		List<String> log = new ArrayList<>();
+		nav.setListener(new HeroNavigator.Listener() {
+			@Override
+			public void taskProgress(Interactables.Item it, TaskProgress.Event e) {
+				log.add("1023 " + e.percent() + " " + e.taskId() + " " + e.speed100());
+			}
+
+			@Override
+			public void pushAttach(Interactables.Item it) {
+				log.add("1048 " + it.id);
+			}
+
+			@Override
+			public void pushDetach(Interactables.Item it) {
+				log.add("1049 " + it.id);
+			}
+		});
+		Pad in = new Pad();
+		in.down.add(PadButton.R1);
+		tick(nav, b, w, in);
+		for (int i = 0; i < 120 && !lever.done; i++) {
+			tick(nav, b, w, in);
+		}
+		assertTrue(lever.done, log.toString());
+		assertEquals("1048 111", log.getFirst());
+		assertEquals("1049 111", log.getLast());
+		assertTrue(log.contains("1023 100 111 100"), "완료 100 % (ElevatorLever-LeverProgress 조건): " + log);
+		assertEquals(NavState.GROUND, nav.state());
+	}
 }

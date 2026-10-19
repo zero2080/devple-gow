@@ -132,6 +132,9 @@ public final class TraversalReport {
 			if (!r.unreachableVolumes.isEmpty()) {
 				lines.add("내부 점 없는 볼륨: " + String.join(", ", r.unreachableVolumes));
 			}
+			if (!r.bossPhases.isEmpty()) {
+				lines.add("보스전 (헤드리스): " + String.join(" → ", r.bossPhases) + (r.bossDefeated ? " — 격파" : " — **격파 못 함**"));
+			}
 			if (!r.interactions.isEmpty()) {
 				lines.add("R1 상호작용: " + String.join("; ", r.interactions));
 			}

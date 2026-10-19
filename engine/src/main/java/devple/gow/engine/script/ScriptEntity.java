@@ -30,6 +30,8 @@ public final class ScriptEntity {
 	/** 받은 이벤트 인자 3개 (Entity:0x9..0xC, 원작 +0x5C..). */
 	final Object[] eventArgs = {0, 0, 0};
 	int spawnedDeaths;
+	/** SpawnEnemy 가 만든 수 (원작 +0x100, MaximumCount 비교). */
+	int spawnCount;
 
 	ScriptEntity(String script, EscScript.Entity data, LevelLayout.Placement owner, float[] world, LevelData.PlacedVolume volume) {
 		this.script = script;

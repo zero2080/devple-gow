@@ -5,7 +5,7 @@
 
 ## 0. 요약
 - 헤드리스 하네스 `verify/TraversalVerifier` 가 레벨 WAD 105 개 전부를 GL 없이 돌린다: LevelData + 충돌 → 시작 지점 바닥 → ScriptWorld 로 모든 스크립트 볼륨(영역 단위)을 걸어 다님 → 게임 이벤트 강제 → 전환·스폰·동영상·메시지·세이브 포인트·오류·누락 리소스 기록 → 전환 그래프.
-- 결과 (`work/verify/report.md`): **ATHN01A → OLYMP02 도달 (52 전환)**, 보너스 ARENA10 → ARENA27 도달, 스크립트 예외 0, 스택 불균형 0, 동영상·메시지·전환 대상·적 템플릿 미해결 0, 누락 MDL/ANM/MAT/TXR 0.
+- 결과 (`work/verify/report.md`): **ATHN01A → OLYMP02 도달 (52 전환, 38 문서 §10 이후 게임 이벤트 강제 없이)**, 보너스 ARENA10 → ARENA27 도달, 스크립트 예외 0, 스택 불균형 0, 동영상·메시지·전환 대상·적 템플릿 미해결 0, 누락 MDL/ANM/MAT/TXR 0.
 - 원작의 레벨 이동은 **레벨 슬롯 2개가 동시에 상주**하는 구조다 (같은 월드 좌표의 이웃 레벨 + Warp 짝 레벨). 이걸 모르고 만든 기존 GameScene 은 LoadCheck 를 무시해서 **ATHN01A 에서 한 발짝도 다음 레벨로 갈 수 없었다** — 이번 단계의 가장 큰 수정.
 - 고친 버그 10 개 (§5): LoadCheck 전환 없음, Warp 도착점, 동영상 끝 이벤트 번호(7 → 501), 볼륨 영역(region) 무시, 평면 1개 hull = 구, Goto 미처리, Creator 시작 생성, 레벨 자체 적 템플릿 모델, 사운드 로더 템플릿을 해골로 스폰, `start*` 없는 레벨 시작점.
 
@@ -106,6 +106,20 @@
 - ATHN04A → ATHN05D 도착: 엘리베이터 발판(CDV + 오브젝트 애니) 위. 남은 도착 실패는 PAND02F → PAND02H 하나.
 - 이웃 레벨 스크립트: GameScene 이 같이 돌린다 (하네스는 아직 레벨 단독).
 - 주 경로 강제 전환 8 → 6. NoPlayerCollision 바닥은 바닥 칸에서 제외 (HDES01B → HDES01C 가 AI 사망면 대신 실제 바닥 이음 WALK 로).
+
+### 38 문서 §10 후 (남은 6 곳 + 도착 실패 1)
+- **주 경로 강제 0**: `reach(ATHN01A, 강제 없이)` 에 OLYMP02. 각 전환을 연 원작 동작:
+  | 전환 | 계기 |
+  |---|---|
+  | DEST03 → PAND00A | d01Mp01 끝 501 (보낸 쪽 = 플레이어 — 하네스가 null 로 보내던 버그) → 세이렌 3 × MaximumCount 3 = 9 → d01Mp03 → 두 번째 뿔피리 CSM 1031 → Warp [확실: 데이터] |
+  | PAND00C → PAND04AA | 엘리베이터 레버 = PushPull 이 보내는 **1023 (100 %, id 111)** (원작 0x2118E8 = CSM 0x215928 과 같은 코드) |
+  | PAND04AA → PAND04C | Semo06 끝 501 (Filter 1) → LoadWad → LoadCheckC |
+  | ATHN08A → ATHN08B | 헤드리스 아레스 1단계: 608 끝 1047 → a07Mp01 → Warp |
+  | ATHN08B → ATHN08C | 분신 4 파도 — SpawnEnemy **MaximumCount** (슬롯 0, 원작 0x1AC580) 로 25 처치 → A07MP05 → Warp |
+  | ATHN08C → ATHN07B | 헤드리스 아레스 3단계: 395 → 1035 → Semo10 → Warp |
+- **도착 검사 실패 0**: PAND02F → PAND02H 는 발판이 아니라 PAND02F 바닥 구멍(LoadCheckH 볼륨 안) 으로 PAND02H 구덩이 바닥(−1904)에 **낙하** (≈ 380).
+- 남은 강제 뒤 전환 12 (주 경로 밖): 보너스 아레나 9 (도전 과제 완료 이벤트), ATHN01E → ATHN01D, PAND01C → PAND01B, PAND02AA → PAND02A.
+- 한계 추가: 하네스는 Vis(보이기/충돌)로 상호작용을 막지 않는다 — PAND00C 엘리베이터 레버는 원작에서 링 퍼즐(PAND00C/00D 두 레벨 이벤트 204/205)을 풀어야 보인다. 레벨 간 이벤트 공유는 GameScene 에만 (38 §10.3).
 
 ## 7. 이번에 이름 붙인 주소
 | 주소 | 이름 | 신뢰도 |

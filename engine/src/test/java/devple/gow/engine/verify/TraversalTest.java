@@ -99,6 +99,42 @@ class TraversalTest {
 		assertTrue(v.results.get("ATHN01D").interactions.stream().anyMatch(s -> s.contains("gotwinkickdoor 과제 206")));
 	}
 
+	/**
+	 * 남은 주 경로 막힘 6 곳이 원작 게임 동작으로 열린다 (게임 이벤트 강제 없음):
+	 * DEST03 (동영상 끝 501 보낸 쪽 = 플레이어 + 세이렌 MaximumCount 3×3 + 두 번째 뿔피리 CSM), PAND00C (엘리베이터 레버 = PushPull 1023 id 111),
+	 * PAND04AA (Semo06 끝 501), ATHN08A / ATHN08C (헤드리스 아레스전 → 1047 608 / 1035 395 → 컷신 → Warp), ATHN08B (분신 파도 MaximumCount → A07MP05).
+	 */
+	@Test
+	void mainPathNeedsNoForcedEvents() {
+		assertTrue(unforced("DEST03", "PAND00A"), "DEST03 뿔피리·세이렌");
+		assertTrue(unforced("PAND00C", "PAND04AA"), "엘리베이터 레버 1023 id 111");
+		assertTrue(unforced("PAND04AA", "PAND04C"), "Semo06 → LevelData1 → LoadWad");
+		assertTrue(unforced("ATHN08A", "ATHN08B"), "아레스 1단계");
+		assertTrue(unforced("ATHN08B", "ATHN08C"), "분신 파도 25");
+		assertTrue(unforced("ATHN08C", "ATHN07B"), "아레스 3단계");
+		assertTrue(v.reach(TraversalVerifier.START, false).containsKey(TraversalVerifier.END), "걷기·상호작용·전투만으로 OLYMP02");
+	}
+
+	/** 헤드리스 보스전 (HeadlessBoss): 히드라·메두사 여왕·아레스 1/3 이 원본 데이터 흐름으로 격파된다. */
+	@Test
+	void bossesDefeatedHeadless() {
+		for (String l : List.of("ATHN01E", "ATHN02D", "ATHN08A", "ATHN08C")) {
+			LevelResult r = v.results.get(l);
+			assertTrue(r.bossDefeated, l + " " + r.bossPhases);
+		}
+	}
+
+	/** PAND02F → PAND02H: 발판이 아니라 PAND02F 바닥 구멍으로 떨어져 PAND02H 구덩이 바닥에 닿는다 (LoadCheckH 볼륨 안). */
+	@Test
+	void pand02hArrivalIsAFall() {
+		var a = v.results.get("PAND02H").arrivals.stream().filter(x -> x.from().equals("PAND02F")).toList();
+		assertFalse(a.isEmpty());
+		assertTrue(a.stream().allMatch(TraversalVerifier.Arrival::ok), a.toString());
+		assertTrue(a.stream().anyMatch(x -> x.detail().contains("낙하")), a.toString());
+		List<String> bad = v.results.values().stream().flatMap(r -> r.arrivals.stream().filter(x -> !x.ok()).map(x -> x.from() + "→" + r.level)).toList();
+		assertTrue(bad.isEmpty(), "도착 검사 실패: " + bad);
+	}
+
 	private static boolean unforced(String from, String to) {
 		return v.results.get(from).edges.stream().anyMatch(e -> e.target().equals(to) && !e.forced());
 	}

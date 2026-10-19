@@ -24,8 +24,13 @@ public final class HeroNavigator {
 
 	/** 게임 쪽 통지 (스크립트 이벤트·보상·사망). */
 	public interface Listener {
-		/** CSM/상자 진행률 변화 (원작 0x215928 → 이벤트 1023: 인자 0 = %, 인자 1 = 과제 id). */
+		/** CSM/상자/레버 진행률 변화 (원작 0x215928 / 0x2118E8 → 이벤트 1023: 인자 0 = %, 인자 1 = 과제 id). */
 		default void taskProgress(Interactables.Item it, int percent) {
+		}
+
+		/** 같은 통지의 전체 인자 (인자 2 = 재생 속도 × 100). 기본은 {@link #taskProgress(Interactables.Item, int)}. */
+		default void taskProgress(Interactables.Item it, TaskProgress.Event e) {
+			taskProgress(it, e.percent());
 		}
 
 		/** 상자류 붙잡기 (이벤트 1048, 인자 0 = id). */
@@ -80,6 +85,8 @@ public final class HeroNavigator {
 	private final Vector3f swingAxis = new Vector3f(1, 0, 0);
 	private float waterY;
 	private Interactables.Item item;
+	/** 영웅이 놓은 뒤 되감기는 중인 CSM/레버 (원작: 오브젝트가 스스로 −4 로 되감음). */
+	private final java.util.List<Interactables.Item> released = new java.util.ArrayList<>();
 	private final Vector3f pushAxis = new Vector3f();
 	private boolean finishing;
 
@@ -144,6 +151,7 @@ public final class HeroNavigator {
 	public boolean update(Input in, float camYaw, float dt) {
 		stateTime += dt;
 		cooldown -= dt;
+		rewindReleased(dt);
 		switch (state) {
 			case WALL_CLIMB, LADDER -> {
 				climb(in, dt);
@@ -573,6 +581,7 @@ public final class HeroNavigator {
 
 	private void startItem(Interactables.Item it) {
 		item = it;
+		released.remove(it);
 		stateTime = 0;
 		idleTime = 0;
 		finishing = false;
@@ -604,42 +613,42 @@ public final class HeroNavigator {
 					listener.pushAttach(it);
 				}
 				body.play(it.heroAnim, true);
-				if (it.kind != Interactables.Kind.LEVER) {
-					it.progress = Math.min(1, it.progress + perPress(it));
-					progress(it);
-				}
 			}
 		}
 	}
 
-	/** R1 한 번에 오르는 진행률 [근사: 원작은 오브젝트 애니 시간/길이 × 100]. */
-	private static float perPress(Interactables.Item it) {
-		return it.kind == Interactables.Kind.CHEST ? 0.25f : 0.12f;
+	/**
+	 * CSM 연타 유지 시간: 마지막 R1 뒤 이 시간 안이면 영웅이 붙어 있는 것으로 본다 [근사: 원작은 영웅 CSM 기술이 붙음(+0x190)을 유지,
+	 * 기술 쪽 연타 판정 미분석]. 붙어 있는 동안 오브젝트 애니가 속도 1 로, 떨어지면 −4 로 되감긴다 ({@link TaskProgress}, 원작 0x215DF0).
+	 */
+	static final float MASH_WINDOW = 0.6f;
+
+	private void rewindReleased(float dt) {
+		for (java.util.Iterator<Interactables.Item> i = released.iterator(); i.hasNext(); ) {
+			Interactables.Item it = i.next();
+			if (it == item) {
+				i.remove();
+				continue;
+			}
+			progress(it, false, dt);
+			if (it.task().time <= 0 || it.task().done) {
+				i.remove();
+			}
+		}
 	}
 
-	private void progress(Interactables.Item it) {
-		int pct = Math.round(it.progress * 100);
-		pct = Math.max(0, Math.min(100, pct));
-		if (pct == 100 && it.progress < 1) {
-			pct = 99; // 원작 0x215928: 100 이지만 끝나지 않았으면 99
-		}
-		if (pct != it.lastPercent) {
-			it.lastPercent = pct;
-			listener.taskProgress(it, pct);
+	/** 오브젝트 애니 한 프레임 → 진행률 이벤트 (원작 0x215928). */
+	private void progress(Interactables.Item it, boolean engaged, float dt) {
+		TaskProgress.Event e = it.task().update(engaged, dt);
+		it.progress = it.task().fraction();
+		if (e != null) {
+			it.lastPercent = e.percent();
+			listener.taskProgress(it, e);
 		}
 	}
 
 	private void interact(Input in, float dt) {
 		Interactables.Item it = item;
-		if (it.kind == Interactables.Kind.LEVER) {
-			if (stateTime > 0.2f && body.animFinished() || stateTime > 4f) {
-				listener.pushDetach(it);
-				listener.interactDone(it);
-				it.done = true;
-				end();
-			}
-			return;
-		}
 		if (finishing) {
 			if (body.animFinished() || stateTime > 2f) {
 				end();
@@ -647,20 +656,36 @@ public final class HeroNavigator {
 			return;
 		}
 		if (in.pressed(PadButton.CIRCLE) || stickMag(in) > 0.7f) {
-			it.progress = 0;
-			progress(it);
+			// 놓음: 오브젝트는 −4 로 되감긴다 (원작 0x2160C0) — 남은 되감기는 {@link #rewindReleased}
+			if (it.kind == Interactables.Kind.LEVER) {
+				listener.pushDetach(it);
+			}
+			progress(it, false, dt);
+			released.add(it);
 			end();
 			return;
 		}
-		if (in.pressed(PadButton.R1)) {
-			idleTime = 0;
-			it.progress = Math.min(1, it.progress + perPress(it));
-			body.play(it.heroAnim, true);
-		} else if ((idleTime += dt) > 0.6f) {
-			it.progress = Math.max(0, it.progress - 0.5f * dt);
+		boolean engaged;
+		if (it.kind == Interactables.Kind.LEVER) {
+			engaged = true; // 레버/크랭크: 잡고 있는 동안 (PushPull 0x2127B0 속도 1)
+		} else {
+			if (in.pressed(PadButton.R1)) {
+				idleTime = 0;
+				body.play(it.heroAnim, true);
+			} else {
+				idleTime += dt;
+			}
+			engaged = idleTime < MASH_WINDOW;
 		}
-		progress(it);
-		if (it.progress >= 1) {
+		progress(it, engaged, dt);
+		if (it.task().done) {
+			if (it.kind == Interactables.Kind.LEVER) {
+				listener.pushDetach(it);
+				listener.interactDone(it);
+				it.done = true;
+				end();
+				return;
+			}
 			it.done = true;
 			listener.interactDone(it);
 			if (it.finishAnim != null) {

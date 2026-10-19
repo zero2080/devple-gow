@@ -75,8 +75,9 @@ public final class SceneNav {
 		navigator.setItems(items);
 		navigator.setListener(new HeroNavigator.Listener() {
 			@Override
-			public void taskProgress(Interactables.Item it, int percent) {
-				world.postEvent(EVENT_TASK, percent, it.id, 0, world.player());
+			public void taskProgress(Interactables.Item it, devple.gow.engine.nav.TaskProgress.Event e) {
+				// 원작 0x215928 / 0x2118E8: 1023 (%, 과제 id, 재생 속도 × 100)
+				world.postEvent(EVENT_TASK, e.percent(), e.taskId(), e.speed100(), world.player());
 			}
 
 			@Override
@@ -142,6 +143,7 @@ public final class SceneNav {
 		}
 		neighbourName = name;
 		neighbour = null;
+		world.linkEvents(null);
 		if (data == null) {
 			return;
 		}
@@ -151,6 +153,7 @@ public final class SceneNav {
 			Vector3f p = world.player() != null ? new Vector3f(world.player().pos[0], world.player().pos[1], world.player().pos[2]) : new Vector3f();
 			nw.placePlayer(p.x, p.y, p.z, true); // 이미 서 있는 볼륨은 "안" 으로 (들어올 때 발동하지 않음)
 			neighbour = nw;
+			world.linkEvents(nw); // 전역 이벤트 큐 공유 (원작 0x303DB8)
 			System.out.println("이웃 레벨 스크립트: " + name + " (엔티티 " + nw.entities().size() + ")");
 		} catch (RuntimeException ex) {
 			System.out.println("이웃 레벨 스크립트 실패 " + name + ": " + ex);
@@ -267,6 +270,7 @@ public final class SceneNav {
 			} catch (RuntimeException ex) {
 				System.out.println("이웃 레벨 스크립트 오류: " + ex);
 				neighbour = null;
+				world.linkEvents(null);
 			}
 		}
 	}
