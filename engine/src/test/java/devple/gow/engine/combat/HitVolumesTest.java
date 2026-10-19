@@ -50,6 +50,7 @@ class HitVolumesTest {
 		BallHull h = HitVolumes.cdvFor(hero, sk);
 		assertArrayEquals(new int[]{4, 56, 60, 1, 1}, h.ballJoint, "CDV_hero 관절 (vertebrae4, 발 2, pelvis 2)");
 		assertArrayEquals(new int[]{1, 7, 9}, h.materialPart, "Body 1 / rightFoot 7 / extra1 9");
+		assertArrayEquals(new int[]{501, 0, 0}, h.materialFx, "SheetFX: 몸 501 Hero Flesh");
 		WeaponAttach w = WeaponAttach.blades(WadFile.load(rom.resolve("R_WPN0_2.WAD")));
 		assertArrayEquals(new int[]{2, 11}, w.cdv.materialPart, "weaponLeftMat 2 / weaponTwinCollisionMat 11");
 		HitVolumes v = HitVolumes.forHero(hero, sk, WadFile.load(rom.resolve("R_WPN0_2.WAD")));
@@ -66,11 +67,14 @@ class HitVolumesTest {
 	/** combo3A(왼쪽 블레이드 투척, 부위 2): 정면 40 의 미노타우로스는 맞고 등 뒤 40 은 안 맞는다. */
 	@Test
 	void combo3AHitsFrontNotBehind() throws Exception {
-		assertEquals(1, swing(-40, "front").hits, "정면 40");
+		Result front = swing(-40, "front");
+		assertEquals(1, front.hits, "정면 40");
+		// 피격 구 재질 SheetFX (CDV_MIN BodyCollision +0x2C = 510 "Zombie Flesh") → 적중 MFX (40 문서 §6)
+		assertEquals(510, front.fx, "맞은 구의 SheetFX");
 		assertEquals(0, swing(40, "behind").hits, "등 뒤 40");
 	}
 
-	private record Result(int hits) {
+	private record Result(int hits, int fx) {
 	}
 
 	private Result swing(float z, String tag) throws Exception {
@@ -133,7 +137,7 @@ class HitVolumesTest {
 		if (draw) {
 			sheet(frames, labels, out.resolve("combo3A_" + tag + ".png"));
 		}
-		return new Result(hits[0]);
+		return new Result(hits[0], min.hitVolumes().lastHitFx());
 	}
 
 	// ---- 디버그 이미지 (work/hitbox 가 있을 때만) ----

@@ -3,6 +3,7 @@ package devple.gow.tools.fx;
 import devple.gow.tools.anim.Animation;
 import devple.gow.tools.anim.AnimationSet;
 import devple.gow.tools.anim.Skeleton;
+import devple.gow.tools.audio.SoundEmitter;
 import devple.gow.tools.level.GoInstance;
 import devple.gow.tools.wad.WadFile;
 import devple.gow.tools.wad.WadTag;
@@ -50,9 +51,22 @@ public final class EffectLibrary {
 	 * @param emitters FXC 이미터
 	 * @param fields   FXC 필드 (중력 등)
 	 * @param sound    SEM_ 사운드 이미터 이름 (없으면 null)
+	 * @param acts     ANM 첫 그룹의 act 전부 (mewh "On"/"off" 처럼 이름으로 고르는 오브젝트, 41 문서 파괴 애니)
+	 * @param sem      SEM_ 이미터 데이터 (같은 이름이 여럿이면 오브젝트 그룹 바로 앞의 정의 = WAD 스트리밍 순서, 없으면 null)
 	 */
 	public record EffectDef(String go, String object, WadFile wad, float scale, String model, Skeleton skeleton, Animation anim,
-							List<EmitterDef> emitters, List<FxResources.Field> fields, String sound) {
+							List<EmitterDef> emitters, List<FxResources.Field> fields, String sound, List<Animation> acts,
+							SoundEmitter sem) {
+
+		/** 이름으로 act 찾기 (대소문자 무시, 없으면 null). */
+		public Animation act(String name) {
+			for (Animation a : acts) {
+				if (a.name.equalsIgnoreCase(name)) {
+					return a;
+				}
+			}
+			return null;
+		}
 
 		/** 1회성 = 애니가 있고 반복이 아님 (0x228210 이 완료 콜백 수를 센다). */
 		public boolean oneShot() {
@@ -83,10 +97,15 @@ public final class EffectLibrary {
 		 * @param stream 3 퍼짐, 4 속력, 5 속력 랜덤, 8 초당 생성 수
 		 */
 		public float param(EmitterDef e, int stream, float t, float def) {
-			if (anim == null || e.channel() < 0) {
+			return param(anim, e, stream, t, def);
+		}
+
+		/** {@link #param(EmitterDef, int, float, float)} 를 다른 act 로 (mewh "On"). */
+		public float param(Animation a, EmitterDef e, int stream, float t, float def) {
+			if (a == null || e.channel() < 0) {
 				return def;
 			}
-			return anim.channel(e.channel(), stream, t, def);
+			return a.channel(e.channel(), stream, t, def);
 		}
 
 		/**
@@ -94,13 +113,22 @@ public final class EffectLibrary {
 		 * 1회성 이펙트는 act 끝 이후 0.
 		 */
 		public float rate(EmitterDef e, float t) {
-			if (oneShot() && t > anim.duration) {
+			return rate(anim, e, t);
+		}
+
+		/** 다른 act 의 생성률 (반복 act 는 t 를 act 길이로 감는다). */
+		public float rate(Animation a, EmitterDef e, float t) {
+			boolean once = a != null && !a.looping() && a.duration > 0;
+			if (once && t > a.duration) {
 				return 0;
 			}
-			if (anim != null && e.channel() >= 0 && e.channel() < anim.channelGroups.size()) {
-				return Math.max(0, anim.channel(e.channel(), 8, t, 0));
+			if (a != null && a.looping() && a.duration > 0) {
+				t %= a.duration;
 			}
-			if (oneShot() && e.channel() >= 0 && t > BURST) {
+			if (a != null && e.channel() >= 0 && e.channel() < a.channelGroups.size()) {
+				return Math.max(0, a.channel(e.channel(), 8, t, 0));
+			}
+			if (once && e.channel() >= 0 && t > BURST) {
 				return 0; // 링크 번호가 있는데 채널이 없는 1회성 (boltHit 의 emitter1 600/초) → 처음 0.1초만 [근사]
 			}
 			return Math.max(0, e.fxc().rate());
@@ -123,6 +151,21 @@ public final class EffectLibrary {
 		for (AnimationSet s : AnimationSet.loadAll(wad)) {
 			anims.putIfAbsent(s.name, s);
 		}
+		// SEM_ 은 같은 이름("SEM_soundEmitter")이 여러 번 정의된다 → 오브젝트 그룹 앞의 마지막 정의를 쓴다 (WAD 순차 적재)
+		Map<String, List<int[]>> semAt = new HashMap<>();
+		Map<String, Integer> cxtAt = new HashMap<>();
+		List<WadTag> tags = wad.tags();
+		for (int i = 0; i < tags.size(); i++) {
+			WadTag t = tags.get(i);
+			if (!t.hasData()) {
+				continue;
+			}
+			if (SoundEmitter.isEmitter(t.name(), t.data())) {
+				semAt.computeIfAbsent(t.name(), k -> new ArrayList<>()).add(new int[]{i});
+			} else if (t.magic() == Skeleton.MAGIC) {
+				cxtAt.putIfAbsent(t.name(), i);
+			}
+		}
 		for (WadTag t : wad.resources()) {
 			if (!t.hasData() || t.magic() != GoInstance.MAGIC || t.size() < 0x40) {
 				continue;
@@ -132,15 +175,17 @@ public final class EffectLibrary {
 			if (sk == null) {
 				continue;
 			}
-			EffectDef d = build(wad, fx, gi, sk, anims);
+			EffectDef d = build(wad, fx, gi, sk, anims, semAt, cxtAt);
 			byName.put(t.name().toLowerCase(Locale.ROOT), d);
 		}
 	}
 
-	private static EffectDef build(WadFile wad, FxResources fx, GoInstance gi, Skeleton sk, Map<String, AnimationSet> anims) {
+	private static EffectDef build(WadFile wad, FxResources fx, GoInstance gi, Skeleton sk, Map<String, AnimationSet> anims,
+								   Map<String, List<int[]>> semAt, Map<String, Integer> cxtAt) {
 		String model = null;
 		String sound = null;
 		Animation anim = null;
+		List<Animation> acts = List.of();
 		List<EmitterDef> em = new ArrayList<>();
 		List<FxResources.Field> fields = new ArrayList<>();
 		for (String r : Skeleton.groupRefs(wad, sk.name)) {
@@ -152,6 +197,7 @@ public final class EffectLibrary {
 				AnimationSet set = anims.get(r);
 				if (set != null && !set.groups.isEmpty() && !set.groups.getFirst().acts.isEmpty()) {
 					anim = set.groups.getFirst().acts.getFirst();
+					acts = List.copyOf(set.groups.getFirst().acts);
 				}
 			} else if (r.startsWith("FXC_")) {
 				FxResources.Emitter e = fx.emitters.get(r);
@@ -165,8 +211,21 @@ public final class EffectLibrary {
 				}
 			}
 		}
+		SoundEmitter sem = null;
+		List<int[]> cands = sound != null ? semAt.get(sound) : null;
+		if (cands != null) {
+			int at = cxtAt.getOrDefault(sk.name, Integer.MAX_VALUE);
+			int best = cands.getFirst()[0];
+			for (int[] c : cands) {
+				if (c[0] < at) {
+					best = c[0];
+				}
+			}
+			WadTag t = wad.tags().get(best);
+			sem = SoundEmitter.parse(t.name(), t.data());
+		}
 		return new EffectDef(gi.name().toLowerCase(Locale.ROOT), gi.object(), wad, gi.scale() > 0 ? gi.scale() : 1f, model, sk, anim,
-				List.copyOf(em), List.copyOf(fields), sound);
+				List.copyOf(em), List.copyOf(fields), sound, acts, sem);
 	}
 
 	/** 이펙트 이름 (대소문자 무시, "go" 접두 생략 가능) → 정의. 없으면 null. */

@@ -29,8 +29,13 @@ public final class HitVolumes {
 	public static final int PART_BODY = 1, PART_LEFT = 2, PART_RIGHT = 3, PART_TWIN = 11;
 
 	/** 구 하나의 원본 (관절 또는 무기 부착). */
-	private record Src(int joint, float[] local, float radius, int part, float[] attach) {
+	private record Src(int joint, float[] local, float radius, int part, float[] attach, int fx) {
 	}
+
+	/** 마지막 {@link #sweptHit} 적중: 피격 구의 SheetFX(MFX 템플릿, 0 = 없음)와 접촉점 (두 구 중심 사이, 반지름 비). 피격자 쪽에 기록. */
+	private int lastFx;
+	private final Vector3f lastPoint = new Vector3f();
+	private boolean lastValid;
 
 	private final List<Src> srcs = new ArrayList<>();
 	private float[][] cur = new float[0][];
@@ -42,7 +47,7 @@ public final class HitVolumes {
 		for (int b = 0; b < h.balls.size(); b++) {
 			if (h.ballJoint[b] < jointCount) {
 				float[] ball = h.balls.get(b);
-				srcs.add(new Src(h.ballJoint[b], new float[]{ball[0], ball[1], ball[2]}, ball[3], h.ballPart(b), null));
+				srcs.add(new Src(h.ballJoint[b], new float[]{ball[0], ball[1], ball[2]}, ball[3], h.ballPart(b), null, h.ballFx(b)));
 			}
 		}
 		resize();
@@ -66,7 +71,7 @@ public final class HitVolumes {
 				part = PART_RIGHT;
 			}
 			float[] at = bw[Math.min(w.cdv.ballJoint[b], bw.length - 1)];
-			srcs.add(new Src(locator, new float[]{ball[0], ball[1], ball[2]}, ball[3], part, at));
+			srcs.add(new Src(locator, new float[]{ball[0], ball[1], ball[2]}, ball[3], part, at, w.cdv.ballFx(b)));
 		}
 		resize();
 		return this;
@@ -152,11 +157,47 @@ public final class HitVolumes {
 					continue;
 				}
 				if (swept(prev[i], cur[i], victim.prev[k], victim.cur[k])) {
+					float[] a = cur[i], v = victim.cur[k];
+					float t = a[3] + v[3] > 1e-4f ? v[3] / (a[3] + v[3]) : 0.5f;
+					victim.lastPoint.set(v[0] + (a[0] - v[0]) * t, v[1] + (a[1] - v[1]) * t, v[2] + (a[2] - v[2]) * t);
+					victim.lastFx = victim.srcs.get(k).fx;
+					victim.lastValid = true;
 					return true;
 				}
 			}
 		}
 		return false;
+	}
+
+	/** 마지막으로 맞은 구의 SheetFX (MFX 템플릿 번호, 피격 기록이 없으면 −1). */
+	public int lastHitFx() {
+		return lastValid ? lastFx : -1;
+	}
+
+	/** 마지막 접촉점 (월드, 기록이 없으면 null). */
+	public Vector3f lastHitPoint() {
+		return lastValid ? new Vector3f(lastPoint) : null;
+	}
+
+	/** 몸(PartType 1) 구 중 첫 SheetFX (적중 기록 없이 피격 재질을 고를 때, 없으면 0). */
+	public int bodyFx() {
+		for (Src s : srcs) {
+			if (s.part == PART_BODY && s.fx > 0) {
+				return s.fx;
+			}
+		}
+		return 0;
+	}
+
+	/** 부위 part 구의 이전·현재 중심 쌍 [x0,y0,z0, x1,y1,z1, r] (무기-월드 베기 판정용). */
+	public List<float[]> sweeps(int part) {
+		List<float[]> out = new ArrayList<>();
+		for (int i = 0; i < srcs.size(); i++) {
+			if (srcs.get(i).part == part) {
+				out.add(new float[]{prev[i][0], prev[i][1], prev[i][2], cur[i][0], cur[i][1], cur[i][2], cur[i][3]});
+			}
+		}
+		return out;
 	}
 
 	/** 두 구가 각각 a0→a1, b0→b1 로 선형 이동할 때 [0,1] 구간에서 최소 거리 ≤ 반지름 합인지. */

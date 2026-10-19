@@ -25,7 +25,16 @@ import java.util.function.Consumer;
  *   <li>부서지면 렌더에서 빼고, 그 GO 의 Marker 오브젝트(대개 Id 101)를 파괴 → DestructionSensor (예 ARENA06 "all broken" 36 개,
  *       ATHN03A 철문)가 반응한다.</li>
  * </ul>
- * 파편 모델(*Brk*_0/1)·파편 애니·오브 방출(OrbEmitter)·Fade Time 은 미구현 [근사: 즉시 사라짐].
+ * Brkb 템플릿 (생성자 0x1DD768, 0x3C 바이트) [확실: 키·오프셋]:
+ * <pre>
+ *   +0x18 s16 Type (0 보통, 2 석상, 3 재부착)      +0x1A s16 #cb865a1c
+ *   +0x1C f32 Hit Points  +0x20 f32 #c3441d8c (3.0)  +0x24 f32 Fade Time
+ *   +0x28 s16 #b9a0d2ad = OrbEmitter 템플릿 (900 "small obj break", −1 = 없음; 0x1DDE70 → 0x2258D8)
+ *   +0x2A s16 #49322803 = 다른 경로(마법?)의 OrbEmitter  +0x2C/+0x2E s16 = Bonus 템플릿 (0x1DDF34 → 0x1D4DB8)
+ *   +0x30 비트: 0x1 #93191d85 (파편 물리 객체 0xC10, 0x1DE218), 0x2 Force Feedback
+ * </pre>
+ * 판정 (0x1DE4D8 → 0x1DDDF0): hp −= 공격 레코드 +0x19 (피해 바이트), ≤ 0 이면 이벤트 1009, OrbEmitter 방출, 그 뒤 0x1DDF70 이 GO 애니를
+ * 0초부터 재생하고 이벤트 1018. 물체 GO 는 이펙트 GO 와 같은 구성 (ANM 파편 애니 + MDL + FXC 먼지 + SEM 소리) → {@code MagicFx.breakObject}.
  */
 public final class Breakables {
 
@@ -37,12 +46,22 @@ public final class Breakables {
 		public float hp;
 		boolean broken;
 		final Set<Long> hits = new HashSet<>();
+		/** Brkb 템플릿 노드, OrbEmitter 템플릿 (−1 없음), Fade Time (초), 인스턴스 월드 행렬 (행벡터). */
+		public String template;
+		public int orbEmitter = -1;
+		public float fadeTime;
+		public float[] matrix;
 
 		Item(String owner, Vector3f center, float radius, float hp) {
 			this.owner = owner;
 			this.center = center;
 			this.radius = radius;
 			this.hp = hp;
+		}
+
+		/** OrbEmitter 노드 (없으면 null). */
+		public String orbNode() {
+			return orbEmitter >= 0 ? String.format(Locale.ROOT, "/TweakTemplates/OrbEmitter/%03d/", orbEmitter) : null;
 		}
 
 		public boolean broken() {
@@ -81,12 +100,29 @@ public final class Breakables {
 			}
 			String node = String.format(Locale.ROOT, "/TweakTemplates/Brkb/%03d/", b.template());
 			float hp = tweaks != null ? tweaks.f(node, "Hit Points", 1f) : 1f;
-			items.add(new Item(b.owner(), center, radius, Math.max(1, Math.round(hp)))); // 타수 (0.9999991 처럼 하위 비트 잡음 → 반올림)
+			Item it = new Item(b.owner(), center, radius, Math.max(1, Math.round(hp))); // 0.9999991 처럼 하위 비트 잡음 → 반올림
+			it.template = node;
+			it.fadeTime = tweaks != null ? tweaks.f(node, "Fade Time", 1f) : 1f;
+			if (tweaks != null) {
+				it.orbEmitter = (short) tweaks.rawHash(node, 0xB9A0D2AD).orElse(-1); // s16 (상위 2바이트는 덤프 잡음)
+			}
+			it.matrix = g.matrix();
+			items.add(it);
 		}
 	}
 
 	public List<Item> items() {
 		return items;
+	}
+
+	/** 소유 GO 이름 → 물체 (없으면 null). */
+	public Item item(String owner) {
+		for (Item it : items) {
+			if (it.owner.equalsIgnoreCase(owner)) {
+				return it;
+			}
+		}
+		return null;
 	}
 
 	/**
@@ -104,7 +140,7 @@ public final class Breakables {
 			if (a == null || !it.hits.add(((long) hero.moveSerial() << 16) | a.index())) {
 				continue;
 			}
-			it.hp -= 1; // 물체는 피해량이 아니라 타수 (Brkb Hit Points 1 = 한 번) [추정]
+			it.hp -= Math.max(1, a.damage()); // 0x1DE5A0: 공격 레코드 +0x19 (피해 바이트) 만큼 [확실: 코드], 0 이하 피해는 1 [근사]
 			if (it.hp > 0) {
 				continue;
 			}

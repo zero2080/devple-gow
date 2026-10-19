@@ -215,6 +215,7 @@ public final class GameScene implements Scene {
 		magicFx = new devple.gow.engine.fx.MagicFx(session.rom); // 원작 이펙트 GO (40 문서)
 		hero.magic.setSink(magicFx.sink((name, at) -> session.sound.play(name, at)));
 		magicFx.bindHero(hero.combat, hero::jointWorld);
+		wireEffects();
 		hudBinding.castable = hero.magic::has;
 		boolean seamless = arrival != null && (arrival.kind() == LevelLink.Kind.SEAMLESS || arrival.kind() == LevelLink.Kind.WALK);
 		link = new LevelLink(levelName, seamless ? arrival.from() : null, w -> Files.exists(session.rom.resolve(w + ".WAD")));
@@ -781,6 +782,7 @@ public final class GameScene implements Scene {
 		});
 		f.combat().onSound((h, p) -> session.sound.play(h, p));
 		if (magicFx != null) {
+			magicFx.addWad(kind.assets()); // 적 WAD 의 이펙트 GO·PlayFX/MFX 템플릿 (40 문서 §9)
 			magicFx.bind(f.combat(), devple.gow.engine.fx.MagicFx.joints(f), false); // 적 기술 PlayFX·적중 피 (40 문서)
 		}
 		f.setIncomingScale(hero::incomingScale);
@@ -1034,14 +1036,12 @@ public final class GameScene implements Scene {
 		}
 		Vector3f p = hero.ctl.position;
 		nav.update(dt, p);
-		breakables.update(hero.combat, world, owner -> {
-			level.hideInstance(owner);
-			System.out.println("파괴: " + owner);
-		});
+		breakables.update(hero.combat, world, this::onBreak);
 		cameraRig.update(dt, p, hero.ctl.yaw, !hero.ctl.grounded);
 		session.sound.setUnderwater(cameraRig.underwater()); // 수중 카메라 → 소리 수중 처리 (29 문서 §10)
 		world.tick(dt, p.x, p.y, p.z);
 		magicFx.update(hero.magic, p, hero.ctl.yaw, enemies.stream().map(Enemy::fighter).toList(), dt, cam.eye);
+		magicFx.weaponWorld(hero.combat, (n, at) -> session.sound.play(n, at)); // 무기-월드 베기 Slice Hit (40 문서 §6)
 		if (hero.player.hp <= 0) {
 			heroDied();
 		}
@@ -1114,6 +1114,7 @@ public final class GameScene implements Scene {
 		if (wasAir) {
 			wasAir = false;
 			session.sound.play(surface, c.position, 3); // LAND
+			magicFx.land(surfaceFx(c.position), c.position, c.yaw); // MFX Jump Land Effect (0x221EA8)
 		}
 		var cur = c.animator().current();
 		String n = cur != null ? cur.name : "";
@@ -1129,6 +1130,66 @@ public final class GameScene implements Scene {
 				magicFx.footstep(surfaceFx(c.position), c.position, c.yaw); // MFX Run Dust Name (40 문서 §6.3)
 			}
 		}
+	}
+
+	/** 이펙트 연결 (40/41 문서): 레벨·적 WAD 이펙트 GO, SEM 소리 → SoundManager, 충돌 질의. */
+	private void wireEffects() {
+		magicFx.addWad(level.assets());
+		kinds.values().stream().filter(k -> k != null).forEach(k -> magicFx.addWad(k.assets()));
+		magicFx.setSounds(new devple.gow.engine.fx.EffectSystem.Sounds() {
+			public int play(String snd, Vector3f at, float near, float far) {
+				int h = session.sound.play(snd, at);
+				if (h > 0 && far > near && near > 0) {
+					session.sound.setRange(h, near, far);
+				}
+				return h;
+			}
+
+			public void move(int h, Vector3f at) {
+				session.sound.setPosition(h, at);
+			}
+
+			public void stop(int h) {
+				session.sound.stop(h);
+			}
+		});
+		magicFx.setSurface(new devple.gow.engine.fx.MagicFx.Surface() {
+			public float[] cast(Vector3f from, Vector3f to) {
+				Vector3f d = new Vector3f(to).sub(from);
+				float len = d.length();
+				LevelCollision.Hit h = len > 1e-3f ? col.raycast(from, d.div(len), len) : null;
+				if (h == null) {
+					return null;
+				}
+				int fx = h.tri().info() != null ? h.tri().info().sheetFx() : 0;
+				return new float[]{h.point().x, h.point().y, h.point().z, h.tri().n().x, h.tri().n().y, h.tri().n().z, fx};
+			}
+
+			public float[] floor(Vector3f p, float maxDrop) {
+				LevelCollision.Floor f = col.floorAt(p.x, p.y, p.z, maxDrop);
+				return f == null ? null : new float[]{f.y(), f.tri().info() != null ? f.tri().info().sheetFx() : 0};
+			}
+		});
+	}
+
+	/** 부서지는 물체 (41 문서): 정적 메시 숨김 → 물체 GO 파괴 애니·먼지·소리, Brkb OrbEmitter 오브. */
+	private void onBreak(String owner) {
+		level.hideInstance(owner);
+		Breakables.Item it = breakables.item(owner);
+		if (it == null) {
+			return;
+		}
+		if (it.matrix != null) {
+			magicFx.breakObject(owner, new org.joml.Matrix4f().set(it.matrix), it.fadeTime);
+		}
+		List<OrbDrops.Orb> orbs = OrbDrops.rollNode(orbTweaks, it.orbNode(), rnd, hero.player.hp, hero.player.mp);
+		for (OrbDrops.Orb o : orbs) {
+			hero.player.pickupOrb(o.type(), o.points());
+		}
+		if (!orbs.isEmpty()) {
+			session.sound.play("SND_PICKUPS_ORBS_E");
+		}
+		System.out.println("파괴: " + owner + " 오브 " + orbs.size());
 	}
 
 	private int surfaceFx(Vector3f p) {

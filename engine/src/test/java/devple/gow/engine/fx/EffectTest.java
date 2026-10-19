@@ -8,6 +8,8 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.List;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -148,5 +150,100 @@ class EffectTest {
 		alive[0] = false;
 		fx.update(1 / 60f, eye);
 		assertTrue(att.done());
+	}
+
+	/** 메두사 머리 GO (mewh): act "On"/"off" 를 이름으로 (40 문서 §4.1, 0x1970D0 / 0x196B18). */
+	@Test
+	void medusaHeadActs() throws Exception {
+		EffectSystem fx = EffectSystem.headless();
+		fx.add(wad("R_MEDHD0"));
+		EffectLibrary.EffectDef head = fx.library().resolve("goMewH");
+		assertNotNull(head);
+		assertEquals("MDL_MEWH", head.model());
+		assertEquals(15, head.skeleton().size());
+		assertNotNull(head.act("On"));
+		assertTrue(head.act("On").looping() && head.act("off").looping());
+		EffectSystem.Effect e = fx.play("goMewH", out -> {
+			out.identity();
+			return true;
+		}, Float.MAX_VALUE);
+		assertTrue(e.setAct("Off"), "Hash127Upper 이므로 대소문자 무시");
+		Vector3f eye = new Vector3f();
+		for (int i = 0; i < 30; i++) {
+			fx.update(1 / 60f, eye);
+		}
+		assertEquals(0f, e.rates()[0], 1e-6f, "Off: 이미터 꺼짐");
+		e.setAct("On");
+		assertEquals("On", e.actName());
+		for (int i = 0; i < 60; i++) {
+			fx.update(1 / 60f, eye);
+		}
+		assertFalse(e.done(), "머리는 첫 act(main 0.03초) 수명으로 끝나지 않는다");
+	}
+
+	/** SEM_ 이미터: 같은 이름 SEM_soundEmitter 가 여럿 → 오브젝트 그룹 앞의 정의. 이펙트 재생 = 슬롯 1 소리, 반복 이펙트는 stop 이 끈다. */
+	@Test
+	void effectSounds() throws Exception {
+		EffectSystem fx = EffectSystem.headless();
+		fx.add(wad("R_PERMK"));
+		fx.add(wad("R_MEDHD0"));
+		EffectLibrary lib = fx.library();
+		assertEquals("SND_MEDUSA_RAY_LOOP", lib.resolve("goEyeBeam").sem().sound(1));
+		assertEquals("SND_MEDUSA_RAY_SHOT", lib.resolve("goMedHeadFlash").sem().sound(1));
+		assertEquals("SND_CHESTOPEN", lib.resolve("goChest").sem().sound(1));
+		assertNotEquals(lib.resolve("goChest").sem().sounds(), lib.resolve("goStrikeGrp").sem().sounds(),
+				"strikegrp 는 자기 그룹 앞의 SEM_soundEmitter");
+		List<String> played = new ArrayList<>();
+		List<Integer> stopped = new ArrayList<>();
+		fx.sounds = new EffectSystem.Sounds() {
+			public int play(String snd, Vector3f at, float near, float far) {
+				played.add(snd);
+				return played.size();
+			}
+
+			public void move(int h, Vector3f at) {
+			}
+
+			public void stop(int h) {
+				stopped.add(h);
+			}
+		};
+		EffectSystem.Effect beam = fx.play("goEyeBeam", EffectSystem.Anchor.at(new Vector3f(), 0));
+		fx.play("goMedHeadFlash", EffectSystem.Anchor.at(new Vector3f(), 0));
+		fx.update(1 / 60f, new Vector3f());
+		assertEquals(List.of("SND_MEDUSA_RAY_LOOP", "SND_MEDUSA_RAY_SHOT"), played);
+		beam.stop();
+		assertEquals(List.of(1), stopped, "반복 광선 소리만 끈다");
+	}
+
+	/** 부서지는 물체 GO = 이펙트 GO 구성 (41 문서): ARENA06 항아리 파괴 애니 1.667초 + SEM SND_POTTERYSMASH, Brkb OrbEmitter. */
+	@Test
+	void breakableObjects() throws Exception {
+		WadFile arena = wad("ARENA06");
+		EffectLibrary lib = new EffectLibrary();
+		lib.add(arena);
+		EffectLibrary.EffectDef pot = lib.resolve("gopotlgdirtyabrk8");
+		assertNotNull(pot);
+		assertTrue(pot.oneShot());
+		assertEquals(1.667f, pot.lifetime(), 1e-3f);
+		assertNotNull(pot.model());
+		assertEquals("SND_POTTERYSMASH", pot.sem().sound(1));
+		Tweaks tw = new Tweaks();
+		tw.load(wad("R_PERMK"));
+		tw.load(arena);
+		var b = new devple.gow.engine.game.Breakables(new devple.gow.tools.level.LevelData(arena), tw);
+		assertTrue(b.items().stream().allMatch(i -> i.orbEmitter == -1 && i.fadeTime == 3f), "Brkb 000 \"No Orbs\": +0x28 = −1, Fade Time 3");
+		WadFile a3 = wad("ATHN03A");
+		Tweaks t3 = new Tweaks();
+		t3.load(wad("R_PERMK"));
+		t3.load(a3);
+		var b3 = new devple.gow.engine.game.Breakables(new devple.gow.tools.level.LevelData(a3), t3);
+		var barrel = b3.item("gobreakbarrel2");
+		assertEquals(900, barrel.orbEmitter, "HydraBreakSmall → OrbEmitter 900 small obj break");
+		assertEquals("small obj break", t3.s(barrel.orbNode(), "Instance Name", null));
+		var orbs = devple.gow.engine.game.OrbDrops.rollNode(t3, barrel.orbNode(), new java.util.Random(1), 100, 100);
+		assertFalse(orbs.isEmpty(), "Normal Weapon Prob 1 → Weapon Template 50 (붉은 오브)");
+		assertEquals(2, orbs.getFirst().type());
+		assertEquals(8f, b3.item("gobreakablewooddoor").hp, "Breakable5 Hit Points 8");
 	}
 }
