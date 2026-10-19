@@ -461,7 +461,7 @@ public final class Combatant {
 		if (b.level() > owner.bladeLevel()) {
 			return -1;
 		}
-		if (b.magic() == 7 && !owner.artemisEquipped()) {
+		if (b.magic() == 7 && !owner.artemisOwned()) { // 7 = 보유 조건 (장착 아님, 10 문서 §2.3)
 			return -1;
 		}
 		if (b.magic() >= 3 && b.magic() <= 6 && (b.magic() != owner.selectedMagic() || !owner.hasMagic(b.magic()))) {

@@ -27,6 +27,12 @@ run {
 	if (project.hasProperty('gowDebug')) {
 		systemProperty 'gow.debug', 'true'
 	}
+	if (project.hasProperty('gowScript')) {
+		systemProperty 'gow.script', project.property('gowScript')
+	}
+	if (project.hasProperty('gowGiveAll')) {
+		systemProperty 'gow.giveAll', 'true'
+	}
 }
 
 dependencies {

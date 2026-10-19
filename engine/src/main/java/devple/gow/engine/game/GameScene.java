@@ -163,6 +163,13 @@ public final class GameScene implements Scene {
 			throw new UncheckedIOException(ex);
 		}
 		grab = new devple.gow.engine.combat.GrabSync(hero.ctl, hero.combat);
+		if (System.getProperty("gow.giveAll") != null) {
+			for (int id = 3; id <= 7; id++) {
+				hero.player.addItem(id, 1);
+			}
+			hero.player.level.put(Weapon.BLADES, 2);
+			hero.player.mp = hero.player.maxMp();
+		}
 		grab.onSound(n -> session.sound.play(n));
 		// 마법 (35 문서): 대상 = 살아있는 적 전체, 소리 → SoundManager, HUD 선택 마법 아이콘
 		hero.magic.setTargets(() -> enemies.stream().map(Enemy::fighter).filter(f -> !f.dead()).toList());
@@ -473,6 +480,26 @@ public final class GameScene implements Scene {
 	private Engine pendingEngine;
 
 	/**
+	 * 디버그/검증용 스크립트 입력: {@code -Dgow.script="L1:0.5:0.4,R1:0.7:0.05,SQUARE:2:0.05"} (버튼:시작초:누름초).
+	 * {@code -Dgow.giveAll} 이면 시작 시 마법 4종·아르테미스의 검·블레이드 Lv2 지급.
+	 */
+	private final devple.gow.engine.input.ScriptedInput debugInput = parseDebugScript();
+
+	private static devple.gow.engine.input.ScriptedInput parseDebugScript() {
+		String sc = System.getProperty("gow.script");
+		if (sc == null || sc.isBlank()) {
+			return null;
+		}
+		List<devple.gow.engine.input.ScriptedInput.Step> steps = new ArrayList<>();
+		for (String part : sc.split(",")) {
+			String[] f = part.trim().split(":");
+			steps.add(new devple.gow.engine.input.ScriptedInput.Step(Float.parseFloat(f[1]), Float.parseFloat(f[2]),
+					PadButton.valueOf(f[0].toUpperCase())));
+		}
+		return new devple.gow.engine.input.ScriptedInput(0, steps);
+	}
+
+	/**
 	 * SpawnEnemy (36 문서 §4): TemplateId = AI1 번호.
 	 * <ol>
 	 *   <li>레벨 RSRCS 적 WAD 중 그 AI1 이 있는 종류</li>
@@ -671,6 +698,10 @@ public final class GameScene implements Scene {
 			return;
 		}
 		Input in = e.input();
+		if (debugInput != null) {
+			debugInput.advance(dt);
+			in = debugInput;
+		}
 		if (time < autoRun) {
 			in = new Input(e.window().handle()) {
 				@Override

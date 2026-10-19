@@ -45,6 +45,11 @@ public final class HeroRig implements AutoCloseable {
 	private final AnimatedModel model;
 	/** 혼돈의 블레이드 (lWeapOH/rWeapOH 부착, 34 문서). 없으면 null. */
 	private final devple.gow.engine.asset.BladeModels blades;
+	private devple.gow.engine.asset.ArtemisBladeModel artemis;
+	private int artemisStageLoaded = -1;
+	private final Path rom;
+	/** BERSERKENTER 0.22 의 SCRIPT 이벤트 (SCR_EnableBerserkBlade) / BERSERKEXIT 의 SCR_DisableBerserkBlade 해시 (Hash127Upper). */
+	private static final int SCR_ENABLE_BERSERK = 0xe9283e7e, SCR_DISABLE_BERSERK = 0x33681849;
 	private final Shader shader;
 	private int lastHits;
 	private final AnimationSet animSet;
@@ -75,11 +80,13 @@ public final class HeroRig implements AutoCloseable {
 		animSet = set;
 		combatData = new CombatData(permk, CombatData.heroFiles(), set);
 		combat = new Combatant(combatData, animator, owner());
-		combat.setDamageScale(() -> rules.playerScale(difficulty, player.costume, bladeLevel(), godMode.active()));
+		combat.setDamageScale(() -> rules.playerScale(difficulty, player.costume, bladeLevel(), godMode.active(),
+				player.artemisEquipped ? Math.min(2, player.level.get(Weapon.ARTEMIS)) : -1));
 		// 원작 CDV 히트 볼륨: CDV_hero + 블레이드(R_WPN<costume>_<level> 의 CDV_MAIBlade, 레벨 무관하게 같은 구) — 34 문서
 		Path wpn = rom.resolve("R_WPN" + costume + "_" + Math.max(0, Math.min(5, bladeLevel())) + ".WAD");
 		combat.setHitVolumes(HitVolumes.forHero(assets.wad(), sk, java.nio.file.Files.exists(wpn) ? WadFile.load(wpn) : null));
 		blades = devple.gow.engine.asset.BladeModels.load(rom, costume, bladeLevel(), shader);
+		this.rom = rom;
 		hittable = new Hittable() {
 			public Vector3f position() {
 				return ctl.position;
@@ -176,7 +183,11 @@ public final class HeroRig implements AutoCloseable {
 			}
 
 			public boolean artemisEquipped() {
-				return false;
+				return player.artemisEquipped;
+			}
+
+			public boolean artemisOwned() {
+				return player.owned(Weapon.ARTEMIS);
 			}
 
 			public int selectedMagic() {
@@ -228,6 +239,12 @@ public final class HeroRig implements AutoCloseable {
 			}
 		}
 		hitCounter.update(dt);
+		// 무기 전환 (원작 player.flags 0x20): 분기 데이터가 고른 BERSERKENTER/EXIT 기술의 스크립트 이벤트를 따른다
+		if (combat.activeScript(SCR_ENABLE_BERSERK) != null && !player.artemisEquipped) {
+			player.artemisEquipped = true;
+		} else if (combat.activeScript(SCR_DISABLE_BERSERK) != null && player.artemisEquipped) {
+			player.artemisEquipped = false;
+		}
 		magic.select(in, ctl.position); // 방향키 마법 선택 (원작 sub_001D7E10)
 		magic.update(combat, in, dt);
 	}
@@ -236,8 +253,25 @@ public final class HeroRig implements AutoCloseable {
 		Matrix4f w = ctl.world(new Matrix4f(), alpha);
 		var pose = ctl.animator().pose();
 		model.draw(cam, aspect, w, pose, white);
-		if (blades != null) {
-			blades.draw(cam, aspect, w, ctl.animator().skeleton(), pose.world(ctl.animator().skeleton()), white);
+		var sk = ctl.animator().skeleton();
+		if (player.artemisEquipped) {
+			int stage = Math.min(2, player.level.get(Weapon.ARTEMIS));
+			if (stage != artemisStageLoaded) {
+				if (artemis != null) {
+					artemis.close();
+				}
+				try {
+					artemis = devple.gow.engine.asset.ArtemisBladeModel.load(rom, stage, shader);
+				} catch (IOException ex) {
+					artemis = null;
+				}
+				artemisStageLoaded = stage;
+			}
+			if (artemis != null) {
+				artemis.draw(cam, aspect, w, sk, pose.world(sk), white);
+			}
+		} else if (blades != null) {
+			blades.draw(cam, aspect, w, sk, pose.world(sk), white);
 		}
 	}
 
@@ -246,6 +280,9 @@ public final class HeroRig implements AutoCloseable {
 		model.close();
 		if (blades != null) {
 			blades.close();
+		}
+		if (artemis != null) {
+			artemis.close();
 		}
 		shader.close();
 		assets.close();

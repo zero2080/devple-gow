@@ -228,3 +228,21 @@ GO 부착과 애니 구동이 미구현이라 같은 색·수명의 파티클로
 - 제우스 차지 연출(boltCharge* 애니 혼합, goBoltChargeUp), 연속 입력 큐 2개, rWeapIH 관절 기준 발사 위치.
 - 원작 FXC/PTC 이펙트를 GO 단위로 붙이기, 미니게임 버튼 아이콘 HUD 클립 표시, Wiggle Meter.
 - 마법 선택·섬광·차지 버튼 비트(0x10/0x80)의 실제 패드 대응 확인.
+
+## 9. 아르테미스의 검 (리드, 2026-10-19)
+| 항목 | 구현 | 근거 |
+|------|------|------|
+| 전환 | L1 홀드 + R1 → BERSERKENTER(555), 아르테미스 방어(BERBLOCKPARRY/IDLE) 중 R1 → BERSERKEXIT(556) | CombatFile 분기 데이터 그대로 |
+| 장착 시점 | BERSERKENTER 0.22 의 SCRIPT `SCR_EnableBerserkBlade`(0xE9283E7E), 해제 = BERSERKEXIT 의 `SCR_DisableBerserkBlade`(0x33681849) | 실행 파일 문자열의 Hash127Upper 와 이벤트 해시 일치 [확실] |
+| 분기 조건 | magic 7 = **보유**(장착 아님) → `CombatOwner.artemisOwned()` 신설. 기존 코드는 "장착" 으로 검사해 전환 자체가 불가능했음 (버그 수정) | 10 문서 §2.3 |
+| 장착 중 기술 | 분기 flags 0x2000 (BER* 콤보) 열림 — `PlayerState.artemisEquipped` | 10 문서 §2.4 |
+| 피해 | 블레이드 레벨 배율 대신 `/Player/BerserkBlade/Stage n Damage Multiplier` 1.75 / 2.25 / 3.0 | 10 문서 §5.3, TWK |
+| 모델 | `R_BRSRK<단계>.WAD` 의 `berserkblade` + `MDL_berserkBlade` 를 `rWeapOH` 에 부착, 장착 중 혼돈의 블레이드 숨김 | 부착 관절 [추정], 스크린샷 `work/artemis.png` 로 손에 쥔 모습 확인 |
+
+`ArtemisBladeTest`: 장착 → BERCOMBOH1 피해 5 × 1.75, 찌르기 4 × 1.75 → L1+R1 해제.
+
+### 검증용 디버그 옵션 (GameScene)
+```bash
+./gradlew :engine:run -PgowGiveAll "-PgowScript=L1:0.5:0.5,R1:0.75:0.05,SQUARE:2.2:0.05" --args="--game ATHN01A"
+```
+`gowScript` = 버튼:시작초:누름초 목록 (패드 입력 대신 재생), `gowGiveAll` = 마법 4종 + 아르테미스의 검 + 블레이드 Lv2 지급.

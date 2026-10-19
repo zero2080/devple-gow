@@ -15,6 +15,11 @@ public interface CombatOwner {
 
 	boolean artemisEquipped();
 
+	/** 아르테미스의 검 보유 (분기 magic 7 조건, 원작 0x3044C2&amp;0x40). 장착 여부와 다르다. */
+	default boolean artemisOwned() {
+		return artemisEquipped();
+	}
+
 	/** 선택 마법 아이템 ID (3–6, 없으면 0). */
 	int selectedMagic();
 

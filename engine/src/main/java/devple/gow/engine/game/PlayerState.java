@@ -22,6 +22,8 @@ public final class PlayerState {
 	public int deaths;
 	public int itemFlags;
 	public Weapon selectedMagic;
+	/** 아르테미스의 검 장착 중 (원작 player.flags&amp;0x20). BERSERKENTER/EXIT 의 SCR_Enable/DisableBerserkBlade 이벤트로 바뀐다. */
+	public boolean artemisEquipped;
 	public final Map<Weapon, Integer> level = new EnumMap<>(Weapon.class);
 	public final Map<Weapon, Integer> invested = new EnumMap<>(Weapon.class);
 

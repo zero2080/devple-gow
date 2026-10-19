@@ -19,11 +19,22 @@ public final class DamageRules {
 
 	/** 플레이어가 주는 피해 배율. */
 	public float playerScale(int difficulty, int costume, int bladeLevel, boolean godMode) {
+		return playerScale(difficulty, costume, bladeLevel, godMode, -1);
+	}
+
+	/**
+	 * @param artemisStage 아르테미스의 검 장착 시 단계 0–2 (원작 player.flags&amp;0x20), 아니면 -1.
+	 *                     장착 중에는 블레이드 레벨 배율 대신 {@code /Player/BerserkBlade/Stage n Damage Multiplier} (1.75/2.25/3.0)
+	 */
+	public float playerScale(int difficulty, int costume, int bladeLevel, boolean godMode, int artemisStage) {
 		float m = tw.f("/GlobGame/" + DIFFICULTY[difficulty] + "/", "Damage Mult", 1f)
 				* tw.f("/Player/Costume " + costume + "/", "Damage Mult", 1f);
 		String wl = "/Player/Weapon Level " + bladeLevel + "/";
 		if (godMode) {
 			m *= tw.f(wl, "God Mode Dmg Mult", 2f);
+		}
+		if (artemisStage >= 0) {
+			return m * tw.f("/Player/BerserkBlade/", "Stage " + artemisStage + " Damage Multiplier", 1.75f);
 		}
 		return m * tw.f(wl, "Dmg Mult", 1f);
 	}
