@@ -33,7 +33,7 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 | 27 | [구현: 통합 게임 씬](27-impl-game-scene.md) | 레벨+크레토스+HUD 동작 |
 | 28 | [구현: ESC 엔티티 런타임 (ScriptWorld)](28-impl-script-world.md) | 센서·발동·이벤트·스폰 완료 (테스트 8) |
 | 29 | [구현: 오디오 런타임 (SoundManager: 그레인 실행기, 3D, 음악 스트림)](29-impl-audio.md) | 완료·게임 연결 (테스트 9) |
-| 30 | [구현: 레벨 카메라 시스템 (CameraRig)](30-impl-camera.md) | 선택·레일·전환·스크립트/관절 카메라·AresCamera1(0x1F67C0) 완료 |
+| 30 | [구현: 레벨 카메라 시스템 (CameraRig)](30-impl-camera.md) | 선택·레일·전환·스크립트/관절 카메라·AresCamera1(0x1F67C0)·레벨 시작/도착(레일 비용 0x1F1648·0x400, 다른 슬롯 CMV) 완료 |
 | 31 | [구현: 환경 / 이펙트 (안개, 하늘, 비, 물, 파티클, 머티리얼 애니메이션)](31-impl-environment-fx.md) | 1차 완료 (테스트 5, 스크린샷 4레벨) |
 | 33 | [구현: 컷신 재생 (MoviePlayer / MovieScene, JCodec MPEG-2)](33-impl-video.md) | 재생기 완료 (테스트 3, 스크린샷 3) |
 | 34 | [구현: 무기 궤적 / 원작 히트박스 (블레이드 부착, CDV 구, PartType, 스윕 판정)](34-impl-hitboxes.md) | 완료 (테스트 3, 디버그 시트) |
@@ -46,7 +46,7 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 | 40 | [구현: 원작 이펙트 GO (이펙트 이름 → GO 인스턴스 → MDL/ANM/FXC/PTC, ANM 타입 10 채널 = FXC 곡선, 부착·수명, PlayFX/Concussion/MFX 템플릿)](40-impl-effects.md) | 마법 4종·적중 피·발소리 먼지 연결 (테스트 5, 스크린샷 7) |
 | 41 | [구현: 부서지는 물체 (Breakable 비헤이비어, Brkb 템플릿, Marker 101 → 파괴 센서)](41-impl-breakables.md) | 1차 (테스트 1) |
 | 42 | [구현: 버튼 안내 1024·질문 Internal 0xB·Animator 모드, 하네스 2 단계 (이웃 GlobalData·전역 이벤트)](42-impl-use-button-animator.md) | 1차 (테스트 3) |
-| 43 | [검증: 전 레벨 시각 QA (효과 켬 105 레벨, SCR_Sky 하늘·배경 안개·반투명 패스 순서, 시작 act 자세·SCR_Mirror 반사)](43-visual-qa.md) | 완료 (의심 4 → 2, 테스트 3 + 4) |
+| 43 | [검증: 전 레벨 시각 QA (효과 켬 105 레벨, SCR_Sky 하늘·배경 안개·반투명 패스 순서, 시작 act 자세·SCR_Mirror 반사 §6, 시작 카메라 §7)](43-visual-qa.md) | 완료 (정상 97, 의심 2, 테스트 3 + 4 + 4) |
 | 90 | [현황 / 로드맵](90-status-roadmap.md) | 수시 갱신 |
 
 ## 게임 실행

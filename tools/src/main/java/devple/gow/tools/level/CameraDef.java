@@ -33,6 +33,8 @@ public record CameraDef(String name, float[] local, String rail, int mode, int r
 	public static final int MAGIC = 0x00000009;
 	public static final int F_TRACK = 0x100;
 	public static final int F_RAIL_ANGLES = 0x200;
+	/** 레일 각도 판정·자르기를 레일 접선 좌표계(Z = 접선, X = 위 × 접선)에서 한다 (0x1F12F0/0x1F1648/0x1F3354). */
+	public static final int F_RAIL_TANGENT = 0x400;
 	public static final int F_FIXED_LOOK = 0x40000;
 	public static final int F_HOLD_JUMP = 0x800 | 0x4000;
 	/** 수중 카메라: 카메라 관리자(0x1EF620)가 플래그를 0x29F170 에 복사 → 0x8000 이면 수중 소리 (0x1EFB90, 29 문서 §10). */

@@ -52,6 +52,14 @@ public final class SceneNav {
 		void message(int id, float seconds);
 
 		void orbs(String emitter, Vector3f at);
+
+		/**
+		 * 이웃 레벨 스크립트의 카메라 조작 — 원작 카메라 관리자는 슬롯 구분 없이 하나라 이웃 스크립트의 SwitchCamera(Internal 0x8), CMV 질의
+		 * on/off(Internal 0x9), Vis Attr11_1 (CMV 볼륨 on/off) 도 그대로 먹는다 (30 문서 §7). name != null = SwitchCamera, query != null = 0x9,
+		 * owners != null = Attr11_1 (on).
+		 */
+		default void neighbourCamera(String name, Boolean query, List<String> owners, boolean on) {
+		}
 	}
 
 	private final LevelData level;
@@ -200,6 +208,26 @@ public final class SceneNav {
 					if (t != null) {
 						host.teleport(t.position(), (float) Math.atan2(t.world[8], t.world[10]));
 					}
+				}
+			}
+
+			@Override
+			public void camera(String name) {
+				host.neighbourCamera(name, null, null, false);
+			}
+
+			@Override
+			public void internal(int func, List<Object> args) {
+				if (func == 0x9 && !args.isEmpty()) {
+					Object a = args.get(0);
+					host.neighbourCamera(null, a instanceof Number n ? n.floatValue() != 0 : !(a instanceof Boolean b) || b, null, false);
+				}
+			}
+
+			@Override
+			public void vis(ScriptEntity source, List<String> objects, int[] values) {
+				if (values.length > 4 && values[4] != 0) {
+					host.neighbourCamera(null, null, objects, values[4] == 1);
 				}
 			}
 

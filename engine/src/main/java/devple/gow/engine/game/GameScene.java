@@ -52,7 +52,10 @@ public final class GameScene implements Scene {
 	 * 다른 레벨에서 넘어올 때의 도착 정보 (36 문서 §3). kind: SEAMLESS/WALK = 위치·방향 유지(pos, yaw),
 	 * WARP = from 레벨 이름으로 도착 Start 를 찾는다. from = 떠나온 레벨 (SEAMLESS/WALK 면 다른 슬롯에 남아 충돌이 유지됨).
 	 */
-	public record Arrival(LevelLink.Kind kind, String from, float[] pos, float yaw) {
+	public record Arrival(LevelLink.Kind kind, String from, float[] pos, float yaw, devple.gow.engine.level.CameraRig.Handoff camera) {
+		public Arrival(LevelLink.Kind kind, String from, float[] pos, float yaw) {
+			this(kind, from, pos, yaw, null);
+		}
 	}
 
 	/** 스폰된 적 한 마리 (전투 + 렌더 모델 + 스크립트 액터). */
@@ -232,6 +235,7 @@ public final class GameScene implements Scene {
 			loadOther(link.other());
 		}
 		cameraRig = new devple.gow.engine.level.CameraRig(level.data());
+		cameraRig.setOther(otherData); // 다른 슬롯 레벨의 CMV·카메라도 질의 (원작 두 슬롯 상주)
 		// 카메라 전환 → 전역 이벤트 1037 (인자0 = 카메라 이름, 원작 0x1EEE88)
 		cameraRig.onSwitch(n -> {
 			if (world != null) {
@@ -249,16 +253,23 @@ public final class GameScene implements Scene {
 		cam.fovDeg = 60;
 		cam.near = 2;
 		cam.far = 30000;
-		if (!arrivalCam.isEmpty()) {
-			cameraRig.request(arrivalCam); // Warp 도착 Start 의 CameraName
-		}
-		cameraRig.update(0, hero.ctl.position, hero.ctl.yaw, false);
 		bridge = new devple.gow.engine.boss.CombatScriptBridge(world);
 		if (boss != null) {
 			boss.attach(arena());
 		}
 		world.start();
 		world.placePlayer(spawn.x, spawn.y, spawn.z, seamless);
+		// 시작 카메라는 생성 시 스크립트(CreationSensor → Vis Attr11_1 CMV 끔, 예 ATHN02D MedusaHeadCam) 뒤에 고른다 — 원작은 레벨이
+		// 이웃 슬롯에 먼저 올라와 있다가 들어오므로 그 시점엔 생성 스크립트가 이미 돌았다 [추정]. Warp_Jump 순서: 볼륨 선택(0x1EFC98 →
+		// 0x1EDF48(0)) 뒤 Start 의 CameraName 을 SwitchCamera (0x1A8E10).
+		if (seamless && arrival.camera() != null) {
+			cameraRig.resume(arrival.camera());
+		}
+		cameraRig.update(0, hero.ctl.position, hero.ctl.yaw, false);
+		if (!arrivalCam.isEmpty()) {
+			cameraRig.request(arrivalCam); // Warp 도착 Start 의 CameraName
+			cameraRig.update(0, hero.ctl.position, hero.ctl.yaw, false);
+		}
 		if (Float.isNaN(col.groundHeight(spawn.x, spawn.y + STEP, spawn.z, 64))) {
 			nav.settleArrival(spawn); // 움직이는 발판 위 도착점 (ATHN05D WarpFrom4A)
 		}
@@ -453,6 +464,9 @@ public final class GameScene implements Scene {
 		if (nav != null) {
 			nav.setOther(wad, otherData, otherCol, nav.neighbourListener());
 		}
+		if (cameraRig != null) {
+			cameraRig.setOther(otherData);
+		}
 	}
 
 	/** 현재 + 다른 슬롯 레벨 바닥 + 움직이는 발판 중 높은 것 (NaN = 없음). */
@@ -492,6 +506,22 @@ public final class GameScene implements Scene {
 			@Override
 			public void message(int id, float seconds) {
 				showMessage(id, seconds);
+			}
+
+			@Override
+			public void neighbourCamera(String name, Boolean query, List<String> owners, boolean on) {
+				if (cameraRig == null) {
+					return;
+				}
+				if (name != null) {
+					cameraRig.request(name);
+				}
+				if (query != null) {
+					cameraRig.setVolumeQuery(query);
+				}
+				if (owners != null) {
+					owners.forEach(o -> cameraRig.setOwnerVolumes(o, on));
+				}
 			}
 
 			@Override
@@ -748,6 +778,9 @@ public final class GameScene implements Scene {
 		}
 		leaving = true;
 		System.out.println("레벨 전환 → " + wad + " (" + a.kind() + ", " + a.from() + " 에서)");
+		if (a.kind() != LevelLink.Kind.WARP && a.camera() == null && cameraRig != null) {
+			a = new Arrival(a.kind(), a.from(), a.pos(), a.yaw(), cameraRig.handoff()); // 이음: 카메라 상태 유지 (30 문서 §7)
+		}
 		pendingEngine.scenes().transitionTo(new GameScene(session, wad, a));
 	}
 
