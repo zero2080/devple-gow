@@ -203,4 +203,132 @@ class EnemyClimbTest {
 		assertEquals("rope attack!", f.brain().lastLeaf().name());
 		assertEquals(EnemyNav.Mode.ROPE, f.nav().mode());
 	}
+
+	private static ScriptEntity entity(Level lv, String name) {
+		for (ScriptEntity e : lv.world().entities()) {
+			if ((e.group() + "#" + e.id()).equals(name)) {
+				return e;
+			}
+		}
+		throw new AssertionError(name);
+	}
+
+	@Test
+	void wallSpawnActionComesFromSpawnSlotAndEndsOnTheWall() throws Exception {
+		EnemyFactory.Kind skc = kind("R_SKC.WAD");
+		Level lv = level("ATHN02B.WAD");
+		// 스폰 슬롯 7 (SpawnAction, 기본 −1): ATHN02B ClimbWallEnemies2 = 504 SKSWALLSPAWN, ATHN01D 그물 해골 = 없음
+		ScriptEntity e = entity(lv, "ClimbWallEnemies2#66");
+		assertEquals(504, ((Number) lv.world().slot(e, "SpawnAction")).intValue());
+		Level d = level("ATHN01D.WAD");
+		assertEquals(-1, ((Number) d.world().slot(entity(d, "CargoRopeEnemies1#150"), "SpawnAction")).intValue());
+		EnemyFighter f = skc.spawn(23);
+		float[] q = e.position();
+		f.pos.set(q[0], q[1], q[2]);
+		f.setNavWorld(EnemyNav.of(lv.nav()));
+		f.setFoe(target(new Vector3f(f.pos).add(0, -300, 200), 0));
+		assertTrue(f.startSpawnAction(504), "루트 액션 A504 (분기 0x148242 = 지상 초기 상태로 Match)");
+		assertEquals(504, f.combat().move().id());
+		assertEquals("SKSwallSpawn", f.combat().clipName());
+		assertTrue(f.invulnerable(), "0–0.83 INVULNERABLE");
+		f.update(DT);
+		assertEquals(EnemyNav.Mode.WALL, f.nav().mode(), "동작 중 벽을 잡음");
+		for (int i = 0; i < 60 && f.combat().active() && f.combat().move().id() == 504; i++) {
+			f.update(DT);
+			assertEquals(EnemyNav.Mode.WALL, f.nav().mode());
+		}
+		for (int i = 0; i < 150 && f.combat().active() && f.combat().move().id() == 504; i++) {
+			f.update(DT);
+		}
+		assertFalse(f.combat().active() && f.combat().move().id() == 504, "2 초 뒤 끝");
+		assertEquals(EnemyNav.Mode.WALL, f.nav().mode(), "벽 자세로 끝남 → 벽 상태 유지");
+	}
+
+	@Test
+	void wallHitReactionsComeFromAttackerWallTagsAndKeepTheEnemyOnTheWall() throws Exception {
+		EnemyFactory.Kind sks = kind("R_SKS.WAD");
+		Level lv = level("ATHN01D.WAD");
+		EnemyFighter f = spawn(sks, 21, lv, "CargoRopeEnemies1#150");
+		assertEquals(EnemyNav.Mode.WALL, f.nav().mode());
+		assertEquals(0x20, f.stateMask());
+		// 지상 공격 자세 태그(10) → 벽 상태용 반응 분기 없음 (A101–A123 은 지상 0x2 전용)
+		f.combat().fireFrom(CombatInput.EV_HIT, -1, 100, 0, 10);
+		f.update(DT);
+		assertFalse(f.combat().active(), "지상 태그 → 반응 없음");
+		// 영웅 WALLJABRIGHT (자세 태그 71) → A175 WALLHITRIGHT2 (자신 HP ≥ 6)
+		assertTrue(f.hp >= 6);
+		f.combat().fireFrom(CombatInput.EV_HIT, -1, 100, 0, 71);
+		f.update(DT);
+		assertTrue(f.combat().active());
+		assertEquals(175, f.combat().move().id());
+		assertEquals("wallHitRight2", f.combat().clipName());
+		for (int i = 0; i < 90; i++) {
+			f.update(DT);
+			assertEquals(EnemyNav.Mode.WALL, f.nav().mode(), "벽 피격 반응은 벽에 붙은 채 (wallHit* 애니 = 한 손 매달림)");
+		}
+		// HP ≤ 5: A172 WALLHITLEFT (태그 72) → AUTO [0–0.6] WALLCLIMBATL 반격
+		f.hp = 4;
+		while (f.combat().active()) {
+			f.update(DT);
+		}
+		f.combat().fireFrom(CombatInput.EV_HIT, -1, 100, 0, 72);
+		f.update(DT);
+		assertEquals(172, f.combat().move().id());
+		assertEquals(EnemyNav.Mode.WALL, f.nav().mode());
+	}
+
+	@Test
+	void ropeHitReactionOnlyOnTraverseRope() throws Exception {
+		EnemyFactory.Kind skc = kind("R_SKC.WAD");
+		Level lv = level("ATHN02B.WAD");
+		EnemyFighter f = spawn(skc, 23, lv, "RopeEnemies2#90");
+		for (int i = 0; i < 180 && f.nav().mode() != EnemyNav.Mode.ROPE; i++) {
+			f.update(DT);
+		}
+		assertEquals(EnemyNav.Mode.ROPE, f.nav().mode());
+		assertEquals(EnemyNav.SUB_TRAVERSE, f.nav().rope().sub(), "ATHN02B gorope8 = f1 만 → 0x20000");
+		assertEquals(0x80, f.stateMask());
+		f.combat().fireFrom(CombatInput.EV_HIT, -1, 100, 0, 10);
+		f.update(DT);
+		assertEquals(165, f.combat().move().id(), "A165 ROPEHOHR (분기 0x1482C0 = 줄 0x80)");
+		for (int i = 0; i < 60; i++) {
+			f.update(DT);
+			assertEquals(EnemyNav.Mode.ROPE, f.nav().mode());
+		}
+	}
+
+	@Test
+	void netSkeletonsSpreadOverTheNetByEncirclementCells() throws Exception {
+		EnemyFactory.Kind sks = kind("R_SKS.WAD");
+		Level lv = level("ATHN01D.WAD");
+		EnemyFighter a = spawn(sks, 21, lv, "CargoRopeEnemies1#150");
+		EnemyFighter b = spawn(sks, 21, lv, "CargoRopeEnemies1#150");
+		assertEquals(EnemyNav.Mode.WALL, b.nav().mode());
+		Hittable hero = target(new Vector3f(a.pos).add(0, 40, 0), 1);
+		for (EnemyFighter f : new EnemyFighter[]{a, b}) {
+			f.setFoe(hero);
+			f.brain().setSightBlocked((eye, to) -> { // GameScene 과 같은 벽 칸 판정 (그물 너머 칸 제외)
+				Vector3f d = new Vector3f(to).sub(eye);
+				float len = d.length();
+				return len > 1f && lv.nav().wallcast(eye, d.div(len), len - 1f) != null;
+			});
+		}
+		int overlap = 0, frames = 0;
+		for (int i = 0; i < 60 * 16; i++) {
+			a.update(DT);
+			b.update(DT);
+			if (i > 60 * 4) {
+				frames++;
+				if (a.pos.distance(b.pos) < 12f) {
+					overlap++;
+				}
+			}
+		}
+		// 원작 AI_MoveTo 목표 = 포위 칸 (칸은 대상당 한 적만, 0x1CDBF0) → 벽 평면 투영이 좌우로 갈라진다.
+		// 대상 직행(이전 근사)이면 719/719 프레임 겹침, 칸 투영이면 약 절반 (칸이 벽 법선 방향으로만 다르면 같은 점에 투영 — 원작도 같은 투영,
+		// 원작의 생물끼리 충돌 밀어내기는 미분석)
+		assertTrue(overlap < frames * 2 / 3, "겹친 프레임 " + overlap + "/" + frames);
+		assertEquals(EnemyNav.Mode.WALL, a.nav().mode());
+		assertEquals(EnemyNav.Mode.WALL, b.nav().mode());
+	}
 }

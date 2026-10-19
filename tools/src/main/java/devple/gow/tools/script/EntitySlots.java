@@ -59,8 +59,10 @@ public final class EntitySlots {
 		base(8);
 		add(9, "PlayerName", STRING, "").add(9, FILTER, INT, 0).add(9, "CameraName", STRING, "");
 		add(10, "MaximumCount", INT, 0).add(10, "unk1", INT, -1).add(10, "SpawnAtStart", BOOL, false).add(10, "Respawn", BOOL, false)
-				.add(10, "TemplateId", INT, 0).add(10, "unk5", INT, 0).add(10, "unk6", INT, 0).add(10, "unk7", INT, -1)
-				.add(10, "unk8", INT, 0).add(10, "Patrol", STRING, "");
+				.add(10, "TemplateId", INT, 0).add(10, "unk5", INT, 0).add(10, "unk6", INT, 0).add(10, "SpawnAction", INT, -1)
+				.add(10, "InitState", INT, 0).add(10, "Patrol", STRING, "");
+		// 7 SpawnAction: 생성 직후 요청할 적 CombatFile 액션 ID (기본 -1 = 없음; 500 SPAWN, 504 SKSWALLSPAWN, 523 사다리, 0..2 도발) —
+		//   0x1AC850 → 생성 데이터 +6 → Enemy1 초기화 0x22CB18 (AI +0x94). 8 InitState: 5 면 석화 메시지 0x407 (0x22CBF8) [확실: 코드 경로, 32 문서]
 		base(10);
 		add(11, "Name0", STRING, "").add(11, "Name1", STRING, "").add(11, "unk2", FLOAT, 0f);
 		for (int i = 3; i <= 5; i++) {

@@ -241,9 +241,12 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 			// 벽·줄 위에서는 전투 중이면 목표 = 대상 자신 (DTre "get the hero!" / "rope attack!") [근사: 원작은 포위 칸을 투영]
 			Hittable tg = brain.target();
 			boolean clinging = nav.mode() == EnemyNav.Mode.WALL || nav.mode() == EnemyNav.Mode.ROPE;
-			Vector3f goal = clinging && tg != null && brain.state() == AiBrain.State.COMBAT ? tg.position()
-					: brain.hasGoal ? brain.goal : null;
-			Boolean goalClinging = clinging && tg != null ? tg.locomotionState() == nav.conditionState() : null;
+			// 원작 AI_MoveTo 0x1CF9D0 의 목표 = 포위 칸 (0x1CDBF0) 또는 칸 상자 밖이면 대상 (0x1CD300) — 벽·줄 위에서도 같은 목표를 벽 평면/줄에 투영한다.
+			// 칸이 대상 주위 무작위 칸이라 같은 벽 위 적들이 좌우로 흩어진다 (32 문서 §같은 벽 위 여러 적) [확실: 호출 경로]
+			Vector3f goal = brain.hasGoal ? brain.goal
+					: clinging && tg != null && brain.state() == AiBrain.State.COMBAT ? tg.position() : null;
+			boolean goalIsTarget = goal != null && tg != null && goal.distanceSquared(tg.position()) < 1f;
+			Boolean goalClinging = clinging && tg != null ? goalIsTarget && tg.locomotionState() == nav.conditionState() : null;
 			nav.update(pos, brain.move, goal, goalClinging, busy, dt);
 			if (!Float.isNaN(nav.faceYaw())) {
 				yaw = nav.faceYaw();
@@ -332,6 +335,28 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 	}
 
 	private static final Vector3f ZERO = new Vector3f();
+
+	/** 생성 액션 요청 중 (원작 Enemy1 초기화 시점의 상태 = 지상 → 분기 상태 마스크 0x2). */
+	private boolean spawning;
+
+	/**
+	 * 스폰 엔티티 슬롯 7 (SpawnAction) 의 생성 액션 (원작 SpawnEnemy 0x1AC850 → 생성 데이터 +6 → Enemy1 초기화 0x22CB18, 기본 -1 = 없음).
+	 * 해골 R_SKS: 500/501/502/550 SPAWN (땅에서 솟음, goSpawnHole), 504 SKSWALLSPAWN (벽에서 나옴, PlayFX 034 WallSpawn, 0–0.83 무적),
+	 * 0..2 TAUNT. 루트 액션 분기 플래그가 0x148242 (지상 전용) 라 초기 상태(지상)로 Match 한다 — 벽 옆 스폰은 동작 중에 벽을 잡는다.
+	 *
+	 * @return 시작했는지
+	 */
+	public boolean startSpawnAction(int action) {
+		if (action < 0 || hp <= 0) {
+			return false;
+		}
+		spawning = true;
+		try {
+			return combat.request(action);
+		} finally {
+			spawning = false;
+		}
+	}
 
 	/** 자신의 이동 상태 (지상/공중/벽/줄). */
 	public EnemyNav nav() {
@@ -551,7 +576,7 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 
 	@Override
 	public int stateMask() {
-		return nav.combatMask();
+		return spawning ? 0x2 : nav.combatMask();
 	}
 
 	@Override

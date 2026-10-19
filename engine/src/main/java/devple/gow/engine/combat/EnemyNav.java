@@ -16,7 +16,8 @@ import org.joml.Vector3f;
  *   <li>지상 속도: 목표 = Sold+0x178 × |스틱| (m/s ×16), 가속 +0x16C / 감속 +0x170 (0x1EAEC8) [확실]. 스틱 = AI 이동 의도 (0x1CF9D0: AI1 0x68 %).</li>
  *   <li>벽: AI 목표를 벽 평면(좌우·상하)에 투영 (0x1CF5D0), 좌우 Sold+0x10C / 상하 +0x110 (0x1C8D34). 더 못 가면 AI1 0x8A ms 뒤 점프(놓기)
  *       (0x1CF894 → sub_001CF1C8 = 입력 +0x30 비트 1) [추정: 조건]. 아래 끝이 바닥이면 지상, 위 끝은 WallPullup 능력이면 올라섬.</li>
- *   <li>줄: 줄 방향으로 목표 쪽 이동 (Sold+0x158), 목표가 줄을 따라 16 안이면 놓고 떨어짐 (0x1CFEC4: cos 45° · 16 → sub_001CF1C8) [추정: 해석].</li>
+ *   <li>줄: 줄 방향으로 목표 쪽 이동 (Sold+0x158). 놓기 (0x1CFCE0–0x1CFEF4 → sub_001CF1C8): 수평 줄·짚라인은 목표가 16 넘게 아래이고 45° 보다 가파르면,
+ *       매단 줄은 목표가 아래이고 매단 점에서 수평 16 넘게 떨어지면. 분기 마스크 0x80 은 하위 0x20000 (수평 줄) 만 [확실].</li>
  * </ul>
  * 충돌 세계가 없으면(헤드리스 AI 테스트) 지상 이동만 한다.
  */
@@ -44,8 +45,25 @@ public final class EnemyNav {
 	public record WallHit(Vector3f point, Vector3f normal, boolean climbable) {
 	}
 
-	/** 줄 선분 (a → b). */
-	public record Rope(Vector3f a, Vector3f b) {
+	/** 줄 하위 상태 (owner+0x174, 0x1C5C20 → 0x1C5DA4: 줄 객체 +0x374 플래그) [확실]. */
+	public static final int SUB_CHAIN = 0x10000, SUB_TRAVERSE = 0x20000, SUB_ZIPLINE = 0x40000;
+
+	/**
+	 * 줄 선분 (a → b) 과 잡았을 때의 하위 상태 sub. 줄 초기화 0x216DC4 가 SCR_RopeSkinned 플래그로 +0x374 를 정한다:
+	 * f3 → 4, 아니면 f1(끝점 고정) → 1 (0x218488), f2 → |2. 잡기 0x1C5DA4: 4 → 0x10000, 1&amp;2 → 0x40000 (짚라인), 1 → 0x20000 (양끝 고정 수평 줄),
+	 * 그 밖(매단 줄) → 하위 비트 없음 (+0x2D8 |= 0x2004000) [확실].
+	 */
+	public record Rope(Vector3f a, Vector3f b, int sub) {
+		/** 하위 상태 미지정: 수평이면 수평 줄(0x20000), 아니면 매단 줄 (데이터 없는 테스트용). */
+		public Rope(Vector3f a, Vector3f b) {
+			this(a, b, horizontal(a, b) ? SUB_TRAVERSE : 0);
+		}
+
+		private static boolean horizontal(Vector3f a, Vector3f b) {
+			Vector3f d = new Vector3f(b).sub(a);
+			return Math.abs(d.y) < 0.5f * d.length();
+		}
+
 		public boolean horizontal() {
 			Vector3f d = new Vector3f(b).sub(a);
 			return Math.abs(d.y) < 0.5f * d.length();
@@ -103,7 +121,17 @@ public final class EnemyNav {
 
 			public Rope rope(Vector3f p, float r) {
 				NavRope nr = nw.nearestRope(p, r);
-				return nr == null ? null : new Rope(nr.top(), nr.end());
+				if (nr == null) {
+					return null;
+				}
+				// RopeDef 분류 = 원작 +0x374: ZIPLINE (f2) → 0x40000, TRAVERSE (f1 만) → 0x20000, HANG → 0
+				// (f3 짧은 사슬 → 0x10000 은 NavRope 에 플래그가 없어 HANG 과 같이 0 [근사: 분기 마스크·AI 분기는 같음])
+				int sub = switch (nr.type()) {
+					case ZIPLINE -> SUB_ZIPLINE;
+					case TRAVERSE -> SUB_TRAVERSE;
+					case HANG -> 0;
+				};
+				return new Rope(nr.top(), nr.end(), sub);
 			}
 		};
 	}
@@ -178,13 +206,13 @@ public final class EnemyNav {
 		return rope;
 	}
 
-	/** 원작 owner+0x174 상태 비트. */
+	/** 원작 owner+0x174 상태 비트 (줄은 하위 상태 0x10000/0x20000/0x40000 포함). */
 	public int stateBits() {
 		return switch (mode) {
 			case GROUND -> ST_GROUND;
 			case AIR -> ST_AIR;
 			case WALL -> ST_WALL;
-			case ROPE -> ST_ROPE;
+			case ROPE -> ST_ROPE | (rope != null ? rope.sub() : 0);
 		};
 	}
 
@@ -200,14 +228,14 @@ public final class EnemyNav {
 
 	/**
 	 * 전투 분기 허용 상태 마스크 (Combat_StateMask 0x207DC0): 지상 0x2, 공중 0x4, 벽 0x20, 줄 0x80.
-	 * 원작 줄은 하위 상태 0x20000 일 때만 0x80 (0x1C5E68: 줄 플래그 +0x374 가 1 만일 때) — 줄 종류 대응 미확인이라 모든 줄 [근사].
+	 * 줄은 **하위 상태 0x20000 (양끝 고정 수평 줄) 일 때만 0x80**, 매단 줄·짚라인·사슬은 0 (상태 조건 없는 분기만) [확실: 0x207E20].
 	 */
 	public int combatMask() {
 		return switch (mode) {
 			case GROUND -> 0x2;
 			case AIR -> 0x4;
 			case WALL -> 0x20;
-			case ROPE -> 0x80;
+			case ROPE -> rope != null && rope.sub() == SUB_TRAVERSE ? 0x80 : 0;
 		};
 	}
 
@@ -230,7 +258,7 @@ public final class EnemyNav {
 		return released;
 	}
 
-	/** 맞거나 죽으면 벽·줄에서 떨어진다 (사망 0x1EBE48 계열) [근사: 벽 피격 반응 wallHit* 미사용]. */
+	/** 죽으면 벽·줄에서 떨어진다 (사망 0x1EBE48 계열) [근사]. 피격 반응(wallHit*·ropeHOHR)은 붙은 채 — CombatFile 데이터 (32 문서). */
 	public void drop() {
 		if (mode == Mode.WALL || mode == Mode.ROPE) {
 			mode = Mode.AIR;
@@ -443,15 +471,29 @@ public final class EnemyNav {
 			snapRope(pos);
 			return;
 		}
-		// 목표의 줄 위 투영점 쪽으로 (0x1CF9D0 줄 분기: vtable+0x30 줄 → 줄 방향과 목표 방향 비교)
+		// 0x1CF9D0 줄 분기 (0x1CFCE0–0x1CFEF4) [확실: 흐름 / 근사: 위치 기준점 = 발]
 		float tGoal = rope.closest(goal);
 		Vector3f gp = rope.point(tGoal);
 		float along = (tGoal - ropeT) * len;
 		float flatGoal = (float) Math.hypot(goal.x - gp.x, goal.z - gp.z);
 		boolean goalOnRope = clinging != null ? clinging : goal.y > gp.y - HAND - STEP && flatGoal < ROPE_GRAB;
-		if (Math.abs(along) <= ROPE_DROP && !goalOnRope) {
-			// 목표 바로 위 (16 안) → 점프 버튼 (sub_001CF1C8(0)) → 놓고 떨어진다
-			drop();
+		Vector3f d = new Vector3f(goal).sub(pos);
+		float dl = d.length();
+		if (rope.sub() == SUB_TRAVERSE || rope.sub() == SUB_ZIPLINE) {
+			// 수평 줄·짚라인: 스틱 = 목표 방향 그대로. 목표가 16 넘게 아래(Δy < −16)이고 방향이 45° 보다 가파르면 (dir.y < −cos45) 점프 버튼 → 놓음
+			if (!goalOnRope && d.y < -ROPE_DROP && dl > 1e-3f && d.y / dl < -0.70710677f) {
+				drop();
+				return;
+			}
+		} else {
+			// 매단 줄(하위 비트 없음)·사슬: 목표가 아래이고 줄 매단 점(+0x70+0x30)에서 목표까지 수평 거리 > 16 이면 (원작은 진행 방향 · 몸 정면 > cos45 도 요구) 점프 → 놓음.
+			// 아니면 스틱 (0, 1, 0) = 그대로 매달림 [근사: 정렬 조건 생략, 흔들기 없음]
+			float flatTop = (float) Math.hypot(goal.x - rope.a().x, goal.z - rope.a().z);
+			if (!goalOnRope && goal.y < pos.y && flatTop > ROPE_DROP) {
+				drop();
+				return;
+			}
+			snapRope(pos);
 			return;
 		}
 		if (Math.abs(along) > (goalOnRope ? KEEP : 2f)) {
