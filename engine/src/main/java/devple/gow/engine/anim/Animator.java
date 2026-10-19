@@ -49,6 +49,17 @@ public final class Animator {
 		fade = previous == null || fadeTime <= 0 ? 1f : 0f;
 	}
 
+	/** 클립 객체로 직접 재생 (전투 기술: 시작 위치 = startPhase × 길이, 속도 = 기술 speed). */
+	public void playClip(Animation a, float startTime, float rate) {
+		previous = current;
+		prevTime = time;
+		current = a;
+		time = startTime;
+		this.rate = rate;
+		fadeTime = tweaks.f(twkNode, a.name + "_Tween", 0.1f);
+		fade = previous == null || fadeTime <= 0 ? 1f : 0f;
+	}
+
 	public void setRate(float r) {
 		rate = r;
 	}

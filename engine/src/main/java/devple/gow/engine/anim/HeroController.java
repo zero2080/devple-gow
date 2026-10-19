@@ -1,5 +1,6 @@
 package devple.gow.engine.anim;
 
+import devple.gow.engine.combat.Combatant;
 import devple.gow.engine.input.Input;
 import devple.gow.tools.anim.Animation;
 import devple.gow.tools.anim.Skeleton;
@@ -18,6 +19,10 @@ import org.joml.Vector3f;
 public final class HeroController {
 
 	public static final float ROOT_FPS = 15f;
+	/** 자동 조준 거리 (TWK /Player/Targeting Range = 10 은 1/16 단위로 추정 → 160 유닛) [추정] */
+	public static final float AUTO_AIM_RANGE = 160f;
+	/** 캐릭터 몸통 반지름 (겹침 방지) */
+	public static final float BODY_RADIUS = 14f;
 	private static final float RUN_THRESHOLD = 0.6f;
 	private static final float TURN_RATE = 14f;
 
@@ -28,16 +33,81 @@ public final class HeroController {
 	public float yaw;
 	private float prevYaw;
 
+	private Animation rootClip;
+	private final Vector3f lastZero = new Vector3f();
+
 	public HeroController(Animator anim) {
 		this.anim = anim;
 		this.zeroJoint = anim.skeleton().indexOf("zeroJoint");
 		anim.play("standIdle", true);
 	}
 
+	/**
+	 * 전투 기술 중: 이동 입력 대신 루트 모션 적용. 원작 데이터에서 몸통(pelvis)은 제자리이고
+	 * zeroJoint 만 이동량을 가진다 (dash: 1초 동안 Z -108) → zeroJoint 변화량을 월드 이동으로 쓴다.
+	 */
+	public void updateCombat(Combatant c, Input in, float camYaw, float dt) {
+		updateCombat(c, in, camYaw, dt, null);
+	}
+
+	/** @param target 자동 조준 대상 위치 (스틱 중립일 때 기술 시작 시 그쪽으로 회전), null 이면 없음 */
+	public void updateCombat(Combatant c, Input in, float camYaw, float dt, Vector3f target) {
+		prevPosition.set(position);
+		prevYaw = yaw;
+		if (c.hitPause() > 0) {
+			return;
+		}
+		Animation cur = anim.current();
+		if (cur != rootClip) {
+			rootClip = cur;
+			lastZero.set(zero());
+			// 기술 시작 시 스틱 방향으로 즉시 회전 (원작 조작감)
+			float sx = in.leftX(), sy = in.leftY();
+			if (Math.hypot(sx, sy) > 0.3) {
+				yaw = camYaw + (float) Math.atan2(-sx, sy);
+			} else if (target != null && target.distance(position) < AUTO_AIM_RANGE) {
+				// 정면 -Z 기준: 방향 (dx, dz) → yaw = atan2(-dx, -dz)
+				yaw = (float) Math.atan2(-(target.x - position.x), -(target.z - position.z));
+			}
+		}
+		anim.update(dt);
+		Vector3f z = zero();
+		if (!cur.looping()) {
+			Vector3f d = new Vector3f(z).sub(lastZero).rotateY(yaw);
+			position.add(d.x, 0, d.z);
+		}
+		lastZero.set(z);
+	}
+
+	/** 다른 몸통과 겹치지 않게 밀어낸다 (원작 캐릭터 간 충돌의 단순화). */
+	public void separate(Vector3f other, float otherRadius) {
+		float dx = position.x - other.x, dz = position.z - other.z;
+		float min = BODY_RADIUS + otherRadius;
+		float d = (float) Math.hypot(dx, dz);
+		if (d < min) {
+			if (d < 1e-3f) {
+				dx = (float) Math.sin(yaw);
+				dz = (float) Math.cos(yaw);
+				d = 1;
+			}
+			position.x = other.x + dx / d * min;
+			position.z = other.z + dz / d * min;
+		}
+	}
+
+	private Vector3f zero() {
+		if (zeroJoint < 0 || anim.current() == null) {
+			return new Vector3f();
+		}
+		float[] p = anim.current().sample(anim.skeleton(), anim.time(), anim.current().looping()).pos[zeroJoint];
+		return new Vector3f(p[0], p[1], p[2]);
+	}
+
 	/** @param camYaw 카메라 Y 회전 (스틱 입력을 카메라 기준으로 해석) */
 	public void update(Input in, float camYaw, float dt) {
 		prevPosition.set(position);
 		prevYaw = yaw;
+		rootClip = null;
 		float sx = in.leftX(), sy = in.leftY();
 		float mag = Math.min(1f, (float) Math.hypot(sx, sy));
 		if (mag < 0.15f) {

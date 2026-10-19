@@ -15,7 +15,7 @@ import java.nio.file.Path;
  *   ./gradlew :engine:run
  *   ./gradlew :engine:run --args="--screenshot work/shot.png"   (몇 프레임 후 캡처하고 종료)
  *   ./gradlew :engine:run --args="--view gow-rom/R_HERO0.WAD [MDL이름]"   (모델 뷰어)
- *   ./gradlew :engine:run --args="--hero [gow-rom]"   (평지에서 크레토스 조작: WASD 이동, 좌우 방향키 카메라)
+ *   ./gradlew :engine:run --args="--hero [gow-rom] [--blade N] [--auto run|combo]"   (평지 조작 + 전투 연습)
  *   ./gradlew :engine:run --args="--anim gow-rom/R_HERO0.WAD MDL_hero hero ANM_hero [애니이름]"   (애니메이션 뷰어)
  * </pre>
  */
@@ -29,7 +29,11 @@ public final class GowMain {
 				shot = args[++i];
 			} else if (args[i].equals("--hero")) {
 				String rom = i + 1 < args.length && !args[i + 1].startsWith("--") ? args[++i] : "gow-rom";
-				first = new HeroTestScene(Path.of(rom), shot != null || java.util.Arrays.asList(args).contains("--screenshot") ? 0.4f : 0);
+				java.util.List<String> al = java.util.Arrays.asList(args);
+				int bi = al.indexOf("--blade");
+				int ai = al.indexOf("--auto");
+				HeroTestScene.Auto auto = ai >= 0 ? HeroTestScene.Auto.valueOf(args[ai + 1].toUpperCase()) : HeroTestScene.Auto.NONE;
+				first = new HeroTestScene(Path.of(rom), auto, bi >= 0 ? Integer.parseInt(args[bi + 1]) : 1);
 			} else if (args[i].equals("--anim") && i + 4 < args.length) {
 				Path wad = Path.of(args[++i]);
 				String mdl = args[++i], skel = args[++i], anm = args[++i];
@@ -43,7 +47,8 @@ public final class GowMain {
 		}
 		try (Engine engine = new Engine("God of War (재구현)", 1280, 720)) {
 			if (shot != null) {
-				engine.captureAfter(30, Path.of(shot));
+				int fi = java.util.Arrays.asList(args).indexOf("--frames");
+				engine.captureAfter(fi >= 0 ? Long.parseLong(args[fi + 1]) : 30, Path.of(shot));
 			}
 			engine.run(first);
 		}
