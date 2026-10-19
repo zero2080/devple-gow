@@ -38,15 +38,18 @@ public final class EscScript {
 	 * </pre>
 	 */
 	public record Entity(int type, int id, int baseId, int param, int unk40, float[] matrix, String name,
-						 List<Integer> targets, List<Handler> handlers, List<String[]> variables) {
+						 List<Integer> targets, List<Handler> handlers, List<String[]> variables, byte[] bytecode) {
 
 		public String typeName() {
 			return type < TYPE_NAMES.length ? TYPE_NAMES[type] : "Type" + type;
 		}
 	}
 
-	/** 핸들러 = 이벤트/파라미터 번호 + 바이트코드. 상수 파라미터는 "Push x; Return; Exit" 형태다. */
-	public record Handler(int id, List<EscOp> code) {
+	/**
+	 * 핸들러 = 이벤트/파라미터 번호 + 바이트코드. 상수 파라미터는 "Push x; Return; Exit" 형태다.
+	 * start = {@link Entity#bytecode()} 안의 시작 오프셋 (VM 실행용).
+	 */
+	public record Handler(int id, int start, List<EscOp> code) {
 	}
 
 	/** 타입 이름은 mogaika 분석 + 엔티티 이름 접두사(...EventSensor, ...Vis 등) 대조. */
@@ -104,9 +107,12 @@ public final class EscScript {
 		ByteBuffer code = e.slice(codeStart, e.limit() - codeStart).order(ByteOrder.LITTLE_ENDIAN);
 		List<Handler> hs = new ArrayList<>();
 		for (int i = 0; i < nh; i++) {
-			hs.add(new Handler(u16(e, 0x54 + i * 4), EscOp.decode(code, u16(e, 0x56 + i * 4))));
+			int start = u16(e, 0x56 + i * 4);
+			hs.add(new Handler(u16(e, 0x54 + i * 4), start, EscOp.decode(code, start)));
 		}
-		return new Entity(type, id, base, param, u16(e, 0x40), m, name, targets, hs, vars);
+		byte[] bc = new byte[code.limit()];
+		code.get(0, bc);
+		return new Entity(type, id, base, param, u16(e, 0x40), m, name, targets, hs, vars, bc);
 	}
 
 	private static int u16(ByteBuffer b, int p) {
