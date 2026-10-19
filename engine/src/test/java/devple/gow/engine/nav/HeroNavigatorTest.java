@@ -320,11 +320,27 @@ class HeroNavigatorTest {
 		assertTrue(b.pos.y > y0 + 25, "줄 오르기 " + y0 + " → " + b.pos.y);
 		assertEquals("ropeUp", b.anim);
 		in.ly = 0;
-		for (int i = 0; i < 180; i++) {
+		// 흔들기 = ○ 누르고 있기 (+0x310 0x10) + 정면 (스틱 +x): 움직이는 쪽으로, 아래쪽 반에서만 500 × 거리 (0x1C6DD4)
+		float maxX = 0;
+		for (int i = 0; i < 300; i++) {
 			in.lx = 1;
+			in.down.add(PadButton.CIRCLE);
+			tick(nav, b, w, in);
+			maxX = Math.max(maxX, Math.abs(b.pos.x));
+		}
+		assertTrue(maxX > 20, "흔들기 " + maxX);
+		assertEquals("ropeswingidle", b.anim);
+		// ○ 를 놓으면 감쇠 (Global Damping) 로 흔들림이 준다
+		for (int i = 0; i < 600; i++) {
+			in.lx = 0;
 			tick(nav, b, w, in);
 		}
-		assertTrue(Math.abs(b.pos.x) > 20, "흔들기 " + b.pos);
+		float late = 0;
+		for (int i = 0; i < 120; i++) {
+			tick(nav, b, w, in);
+			late = Math.max(late, Math.abs(b.pos.x));
+		}
+		assertTrue(late < maxX * 0.5f, "놓으면 줄어듦 " + late + " / " + maxX);
 		in.lx = 0;
 		in.down.add(PadButton.CROSS);
 		tick(nav, b, w, in);
@@ -376,7 +392,300 @@ class HeroNavigatorTest {
 		}
 		assertEquals(NavState.GROUND, nav.state(), "물가로 올라섬");
 		assertEquals(-2, b.pos.y, 0.01f);
-		assertTrue(b.played.contains("swim"));
+		assertTrue(b.played.contains("treadswim"), b.played.toString());
+	}
+
+	/** 좁은 턱 (Narrow 벽): 앞으로 걸어 들어가면 벽 보고 걷기 (0x1C7DE8 → 0x1C7280 0x100000), 좌우 Sold+0x168 1.25 m/s, 턱 끝에서 떨어짐. */
+	@Test
+	void narrowWallWalkSidewaysThenDropsAtEnd() {
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -300, -20, 300, 200, 0, SurfaceAttr.GROUND);
+		wallZ(t, -20, -100, 100, 0, 100, SurfaceAttr.NARROW);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		Body b = new Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		Pad in = new Pad();
+		b.pos.set(0, 0, -8);
+		in.ly = 1;
+		tick(nav, b, w, in);
+		assertEquals(NavState.WALL_WALK, nav.state(), "앞으로 걸어 좁은 턱 벽에 붙음 (× 불필요)");
+		assertFalse(nav.wallBack());
+		assertEquals(-20 + HeroNavigator.WALL_OFF, b.pos.z, 0.01f);
+		assertEquals(0, b.pos.y, 0.01f, "발 = 질의가 맞춘 바닥");
+		assertEquals("wallFrontI", b.anim);
+		for (int i = 0; i < 60; i++) {
+			in.lx = 0.4f; // 스틱 크기 무관
+			tick(nav, b, w, in);
+		}
+		assertEquals(NavState.WALL_WALK, nav.state());
+		assertEquals(20f, HeroNavigator.LEDGE_WALK_SPEED, 1e-4f);
+		assertEquals(20, b.pos.x, 0.05f, "1 초에 20 (0x1C8CBC)");
+		assertEquals(-20 + HeroNavigator.WALL_OFF, b.pos.z, 0.01f);
+		assertEquals("wallFrontR", b.anim);
+		for (int i = 0; i < 600 && nav.state() == NavState.WALL_WALK; i++) {
+			in.lx = 1;
+			tick(nav, b, w, in);
+		}
+		assertNotEquals(NavState.WALL_WALK, nav.state(), "턱 끝 (오른쪽 선분이 벽을 벗어남) → 떨어짐");
+		assertTrue(b.pos.x > 100 - HeroNavigator.WALL_SPREAD - 1 && b.pos.x < 100, "끝 x " + b.pos.x);
+	}
+
+	/** BackPress 벽: 착지한 프레임에 등 뒤 질의 (0x1C7ED0) → 등 대고 걷기 (0x200000, ANIWallBack*), 좌우는 몸 기준. */
+	@Test
+	void backPressWallOnLanding() {
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -300, -20, 300, 200, 0, SurfaceAttr.GROUND);
+		wallZ(t, -20, -100, 100, 0, 60, SurfaceAttr.BACK_PRESS);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		Body b = new Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		Pad in = new Pad();
+		b.yaw = (float) Math.PI; // 정면 +z = 벽 반대
+		b.grounded = false;
+		b.pos.set(0, 1, -8);
+		b.vy = -100;
+		tick(nav, b, w, in);
+		assertTrue(b.grounded);
+		tick(nav, b, w, in);
+		assertEquals(NavState.WALL_WALK, nav.state());
+		assertTrue(nav.wallBack());
+		assertEquals("wallBackI", b.anim);
+		assertEquals(Math.PI, Math.abs(b.yaw), 1e-4, "등을 벽에 (정면 = 법선 +z)");
+		for (int i = 0; i < 30; i++) {
+			in.lx = 1; // 카메라 기준 +x → 몸 기준 왼쪽 (정면 +z, 오른쪽 −x)
+			tick(nav, b, w, in);
+		}
+		assertEquals(10, b.pos.x, 0.05f);
+		assertEquals("wallBackL", b.anim);
+	}
+
+	/** 지상에서 앞으로 걸어 Climbable 벽에 붙음 (0x1C7DE8, × 불필요), 옆 끝에서 막힘 (반환 3 → 0x100, wallClimbAL) → × = 90° 옆 점프 (위 192 · 앞 160). */
+	@Test
+	void climbWallEdgeBlocksThenSideJump() {
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -300, -20, 300, 200, 0, SurfaceAttr.GROUND);
+		wallZ(t, -20, -50, 50, 0, 200, SurfaceAttr.CLIMBABLE);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		Body b = new Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		Pad in = new Pad();
+		b.pos.set(0, 0, -8);
+		in.ly = 1;
+		tick(nav, b, w, in);
+		assertEquals(NavState.WALL_CLIMB, nav.state(), "스틱만으로 벽 오르기");
+		for (int i = 0; i < 20; i++) {
+			in.ly = 1;
+			tick(nav, b, w, in);
+		}
+		for (int i = 0; i < 300 && nav.wallEdge() == 0; i++) {
+			in.lx = -1;
+			in.ly = 0;
+			tick(nav, b, w, in);
+		}
+		float y = b.pos.y;
+		assertEquals(-1, nav.wallEdge(), "왼쪽 끝");
+		float x = b.pos.x;
+		// 왼쪽 선분 (o → o − 오른쪽 × 8 + 정면 × 14.4) 은 벽면 (9.6 앞) 에서 옆으로 8 × 9.6 / 14.4 = 5.33
+		float reach = HeroNavigator.WALL_SPREAD * HeroNavigator.WALL_OFF / HeroNavigator.WALL_PROBE;
+		assertEquals(-50 + reach, x, 0.5f, "끝 x");
+		for (int i = 0; i < 10; i++) {
+			in.lx = -1;
+			in.ly = 0.5f;
+			tick(nav, b, w, in);
+		}
+		assertEquals(x, b.pos.x, 1e-4f, "막힌 쪽으로 밀면 그 자리 (대각선도)");
+		assertEquals(y, b.pos.y, 1e-4f);
+		assertEquals("wallClimbAL", b.anim);
+		in.down.add(PadButton.CROSS);
+		tick(nav, b, w, in);
+		assertEquals(NavState.AIR, nav.state());
+		assertEquals(192f, HeroNavigator.EDGE_JUMP_UP, 1e-4f);
+		assertEquals(HeroNavigator.EDGE_JUMP_UP, b.vy, 1e-3f);
+		assertEquals(-HeroNavigator.EDGE_JUMP_OUT, b.launch.x, 1e-3f, "막힌 쪽 (−x) 으로 160");
+		assertEquals(0, b.launch.z, 1e-3f);
+		assertEquals(-1, HeroNavigator.forward(b.yaw).x, 1e-4f);
+	}
+
+	/** 깊은 물 (수면 0, 바닥 −300) + 동쪽 물가 없음. */
+	static NavWorld deepPool(SurfaceAttr... surface) {
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		SurfaceAttr[] at = surface.length == 0 ? new SurfaceAttr[] {SurfaceAttr.WATER} : surface;
+		floor(t, -400, -400, 400, 400, 0, at);
+		floor(t, -400, -400, 400, 400, -300, SurfaceAttr.GROUND);
+		return new NavWorld(LevelCollision.of(t));
+	}
+
+	/** 물 위 떠 있기 (0x80): 목표 Sold+0x1D8 4.5 m/s, × = 점프 (수직 244), 얕은 물 (수면 아래 28.16 안 바닥) 은 걷는다. */
+	@Test
+	void treadSpeedJumpAndShallowWater() {
+		NavWorld w = deepPool();
+		Body b = new Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		Pad in = new Pad();
+		tick(nav, b, w, in);
+		assertEquals(NavState.SWIM, nav.state());
+		assertEquals(HeroNavigator.Water.TREAD, nav.water());
+		assertEquals(-HeroNavigator.SWIM_DEPTH, b.pos.y, 1e-3f, "떠 있는 발 = 수면 − 키 × 0.8 (0x1E57D8)");
+		for (int i = 0; i < 120; i++) {
+			in.ly = 1;
+			tick(nav, b, w, in);
+		}
+		assertEquals(72f, HeroNavigator.TREAD_SPEED, 1e-3f);
+		assertEquals(HeroNavigator.TREAD_SPEED, nav.swimSpeed(), 1e-3f, "물 위는 7.5 가 아니라 4.5 m/s");
+		assertEquals("treadswim", b.anim);
+		in.down.add(PadButton.CROSS);
+		tick(nav, b, w, in);
+		assertEquals(NavState.AIR, nav.state(), "물 위에서 × = 점프 (0x1E9C2C)");
+		assertEquals(HeroNavigator.JUMP, b.vy, 1e-3f);
+		assertEquals("jumpAir", b.anim);
+		// 얕은 물: 수면 0 아래 20 에 바닥 → 서서 걷는다
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -100, -100, 100, 100, 0, SurfaceAttr.WATER);
+		floor(t, -100, -100, 100, 100, -20, SurfaceAttr.GROUND);
+		NavWorld sw = new NavWorld(LevelCollision.of(t));
+		Body b2 = new Body();
+		HeroNavigator nav2 = new HeroNavigator(b2, sw, null);
+		tick(nav2, b2, sw, new Pad());
+		assertEquals(NavState.GROUND, nav2.state());
+	}
+
+	/** 물에 떨어짐 (0x1CA098): 떠 있는 높이까지 공중 낙하 → 수직 속도 max(× 0.4, −64) → 부력 15 m/s² 로 떠올라 TREAD. */
+	@Test
+	void fallIntoWaterSinksThenFloatsUp() {
+		NavWorld w = deepPool();
+		Body b = new Body();
+		b.grounded = false;
+		b.pos.set(0, 100, 0);
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		Pad in = new Pad();
+		for (int i = 0; i < 120 && nav.state() != NavState.SWIM; i++) {
+			tick(nav, b, w, in);
+		}
+		assertEquals(NavState.SWIM, nav.state());
+		assertEquals(HeroNavigator.Water.SINK, nav.water());
+		float lowest = b.pos.y;
+		boolean damped = false;
+		for (int i = 0; i < 240 && nav.water() != HeroNavigator.Water.TREAD; i++) {
+			tick(nav, b, w, in);
+			lowest = Math.min(lowest, b.pos.y);
+			if (b.pos.y < -HeroNavigator.SWIM_DEPTH && !damped) {
+				damped = true;
+				assertTrue(nav.waterVy() >= HeroNavigator.ENTRY_MIN_VY - 1e-3f, "들어갈 때 −64 로 자름: " + nav.waterVy());
+			}
+		}
+		assertTrue(damped);
+		assertEquals(HeroNavigator.Water.TREAD, nav.water());
+		assertEquals(-HeroNavigator.SWIM_DEPTH, b.pos.y, 1e-3f);
+		// 판정 높이를 지나는 프레임은 낙하 속도 그대로 (원작도 이동 뒤 질의, ≤ 450/60 = 7.5) + −64 에서 부력 240 → 64² / 480 ≈ 8.5
+		assertTrue(lowest < -HeroNavigator.SWIM_DEPTH - 8 && lowest > -HeroNavigator.SWIM_DEPTH - 8.5f - 8, "가장 깊은 발 " + lowest);
+		assertEquals(240f, HeroNavigator.BUOYANCY, 1e-3f);
+	}
+
+	/** 잠수 (0x200): □ 아래 / △ 위 (Sold+0x1D4 7.5 m/s), 수면에 60 이상으로 닿으면 물 밖 도약 (0x1C9750: × min(2, 366 / vy)). */
+	@Test
+	void diveThenLeapOutOfWater() {
+		NavWorld w = deepPool();
+		Body b = new Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		Pad in = new Pad();
+		tick(nav, b, w, in);
+		for (int i = 0; i < 90; i++) {
+			in.down.add(PadButton.SQUARE);
+			tick(nav, b, w, in);
+		}
+		assertEquals(HeroNavigator.Water.DIVE, nav.water());
+		assertEquals(-HeroNavigator.SWIM_SPEED, nav.waterVy(), 1e-3f, "아래 7.5 m/s");
+		assertTrue(b.pos.y < -100, "잠수 깊이 " + b.pos.y);
+		assertTrue(b.played.contains("swim"), b.played.toString());
+		for (int i = 0; i < 600 && nav.state() == NavState.SWIM; i++) {
+			in.down.add(PadButton.TRIANGLE);
+			tick(nav, b, w, in);
+		}
+		assertEquals(NavState.AIR, nav.state(), "물 밖 도약");
+		assertEquals(HeroNavigator.SWIM_SPEED * 2, b.vy, 1e-3f, "min(2, 244 × 1.5 / 120) = 2 배");
+		assertTrue(nav.divingIn());
+		assertEquals("swimdive", b.anim);
+		// 천천히 올라오면 (위 버튼 없이 부력 없음 → 수직 0) 잠수 상태 그대로, 수면에 닿으면 TREAD
+		Body b2 = new Body();
+		HeroNavigator nav2 = new HeroNavigator(b2, w, null);
+		tick(nav2, b2, w, in);
+		in.down.add(PadButton.SQUARE);
+		tick(nav2, b2, w, in);
+		assertEquals(HeroNavigator.Water.DIVE, nav2.water());
+		for (int i = 0; i < 120; i++) {
+			tick(nav2, b2, w, in);
+		}
+		assertEquals(HeroNavigator.Water.DIVE, nav2.water(), "잠수 중 부력 없음");
+		assertEquals(0, nav2.waterVy(), 1e-3f);
+	}
+
+	/** 잠수 돌진 (R1, 0x1C9E70): 1 초 충전 → 22 m/s (352), 조종 시간 0.1 + 1 초 뒤 끝. 0.5 초 이하 충전은 돌진 없음. */
+	@Test
+	void underwaterDashChargesAndReleases() {
+		NavWorld w = deepPool();
+		Body b = new Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		Pad in = new Pad();
+		tick(nav, b, w, in);
+		in.down.add(PadButton.SQUARE);
+		tick(nav, b, w, in);
+		for (int i = 0; i < 20; i++) {
+			tick(nav, b, w, in);
+		}
+		for (int i = 0; i < 25; i++) {
+			in.down.add(PadButton.R1);
+			tick(nav, b, w, in);
+		}
+		tick(nav, b, w, in);
+		assertFalse(nav.dashing(), "0.4 초 충전은 돌진 없음");
+		for (int i = 0; i < 61; i++) {
+			in.down.add(PadButton.R1);
+			tick(nav, b, w, in);
+			assertTrue(nav.dashCharging());
+		}
+		assertEquals("swimDashPU", b.anim);
+		tick(nav, b, w, in);
+		assertTrue(nav.dashing());
+		assertEquals(352f, HeroNavigator.DASH_MAX, 1e-3f);
+		assertEquals(HeroNavigator.DASH_MAX, nav.swimSpeed(), 2f, "충전 1 초 → 22 m/s");
+		assertEquals("swimdash", b.anim);
+		for (int i = 0; i < 70; i++) {
+			tick(nav, b, w, in);
+		}
+		assertFalse(nav.dashing(), "조종 시간 1.1 초 뒤 끝");
+		assertTrue(nav.swimSpeed() < HeroNavigator.DASH_MAX - 100, "감속 " + nav.swimSpeed());
+	}
+
+	/** 물 위에서 앞으로 가다 Climbable 벽 → 벽 오르기 (0x1C7DA8), 높은 곳에서 깊은 물로 떨어지면 다이빙 자세 (0x1CA318), NoDiving 물은 안 함. */
+	@Test
+	void treadClimbsWallAndAirDivePose() {
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -400, -20, 400, 400, 0, SurfaceAttr.WATER);
+		floor(t, -400, -20, 400, 400, -300, SurfaceAttr.GROUND);
+		wallZ(t, -20, -100, 100, -200, 100, SurfaceAttr.CLIMBABLE);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		Body b = new Body();
+		b.pos.set(0, 0, 40);
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		Pad in = new Pad();
+		for (int i = 0; i < 120 && nav.state() != NavState.WALL_CLIMB; i++) {
+			in.ly = 1;
+			tick(nav, b, w, in);
+		}
+		assertEquals(NavState.WALL_CLIMB, nav.state(), "물 위에서 벽 오르기");
+		for (SurfaceAttr[] at : new SurfaceAttr[][] {{SurfaceAttr.WATER}, {SurfaceAttr.WATER, SurfaceAttr.NO_DIVING}}) {
+			NavWorld pw = deepPool(at);
+			Body d = new Body();
+			d.grounded = false;
+			d.pos.set(0, 600, 0);
+			HeroNavigator dn = new HeroNavigator(d, pw, null);
+			for (int i = 0; i < 240 && dn.state() != NavState.SWIM; i++) {
+				tick(dn, d, pw, new Pad());
+			}
+			boolean noDive = at.length > 1;
+			assertEquals(!noDive, d.played.contains("swimdive"), d.played.toString());
+			assertEquals(NavState.SWIM, dn.state());
+		}
 	}
 
 	@Test

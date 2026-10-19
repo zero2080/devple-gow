@@ -12,10 +12,10 @@ import org.joml.Vector3f;
  * <pre>
  * 진입 조건 (표면 속성 = 충돌 시트 비트, 38 문서 §1)
  *   공중 + 정면 턱 질의 (0x1E3A80: 손 높이 바닥, NoWallHang·Slide 아님) → LEDGE_HANG (벽보다 먼저)
- *   공중 + 정면 벽 질의 (0x1E47E0) Climbable → WALL_CLIMB        지상 + 벽 쪽 스틱 + ×  → WALL_CLIMB
- *   공중 + 정면 벽 질의 Ladder / 지상 + 벽 쪽 스틱 → LADDER
+ *   공중 정면 / 지상 앞으로 걸음 (0x1C7DA8) + 벽 질의 (0x1E47E0, 마스크 0x1008001C) → 면으로 고름 (0x1C7280):
+ *     Climbable → WALL_CLIMB,  Ladder → LADDER,  Narrow·NarrowNoBB → WALL_WALK 벽 보고,  BackPress → WALL_WALK 등 대고 (착지 프레임 등 뒤 질의도)
  *   잡기 점 (발 + 키) 32 안의 줄 (공중, 또는 지상 + ×)  → ROPE (RopeSim) / ROPE_TRAVERSE / ZIPLINE (줄 종류 = SCR_RopeSkinned)
- *   발밑 바닥 Water → SWIM,  Narrow → 균형 걷기 (지상 유지, 애니·속도만),  Death → 사망 통지
+ *   깊은 Water (공중에서 떨어짐 / 걸어 들어감) → SWIM (TREAD 떠 있기 / SINK 가라앉음 / DIVE 잠수, 38 §11),  Narrow 바닥 → 균형 걷기,  Death → 사망 통지
  *   지상 + R1 + 가까운 오브젝트 → PUSH (PushPull) / INTERACT (CSM·상자·레버·크랭크·TAndF — 붙음 유지 규칙은 {@link #interact})
  * </pre>
  * 속도·가속·줄 손 높이·잡기 반경·점프·중력은 원작 Sold_000 / GlobGame 값 ({@link NavTuning}, 38 문서 §2.2), 벽·턱 판정 기하는 원작 선분 질의 (§2.4),
@@ -144,7 +144,7 @@ public final class HeroNavigator {
 
 	/**
 	 * 매단 줄 흔들기 힘 = Sold+0x148 500 × 붙은 거리 (m) (0x1C6BE8: f21 = +0x148 × 영웅 +0x294) 를 0.25 초 창 (0x29DBF4) 동안
-	 * 2 × 남은 시간 배로 매달림 힘 (0x218470) 에 준다 [확실: 크기·창 / 추정: 방향 = 스틱 수평 방향, 창은 스틱을 새로 밀 때 다시 열림].
+	 * 2 × 남은 시간 배로 매달림 힘 (0x218470) 에 준다 — 창은 잡을 때 한 번 (0x1C5D80), 그 뒤는 흔들기 버튼을 누르는 동안 F (방향·부호 = {@link #swingForce}) [확실].
 	 */
 	public static final float SWING_FORCE = K.get(NavTuning.ROPE_SWING_FORCE), SWING_WINDOW = 0.25f;
 	/** 점프 수직 초속 Sold+0xC4 15.25 → 244 (0x1E9E88, 정점 = 244² / 1600 ≈ 37 유닛) [확실]. */
@@ -154,6 +154,10 @@ public final class HeroNavigator {
 			DOUBLE_MIN_VY = K.units(NavTuning.DOUBLE_MIN_VY);
 	/** 공중 수평: 목표 Sold+0xEC 7.5 → 120 × 스틱, 가속 +0xD8 → 120 /s², 회전 프레임당 +0xE4 0.05 (0x1EB650) [확실: 값 / 추정: 회전]. */
 	public static final float AIR_SPEED = K.units(NavTuning.AIR_SPEED), AIR_ACCEL = K.units(NavTuning.AIR_ACCEL), AIR_TURN = K.get(NavTuning.AIR_TURN);
+	/** 좁은 턱 벽 따라 걷기 Sold+0x168 1.25 → 20 (0x1C8CBC, 스틱 크기 무관) [확실]. */
+	public static final float LEDGE_WALK_SPEED = K.units(NavTuning.LEDGE_WALK);
+	/** 벽 옆 끝 점프: 앞 Sold+0x114 10 → 160, 위 +0x120 12 → 192 (0x1E9CD0) [확실]. */
+	public static final float EDGE_JUMP_OUT = K.units(NavTuning.EDGE_JUMP_OUT), EDGE_JUMP_UP = K.units(NavTuning.EDGE_JUMP_UP);
 	/** 벽에서 등 뒤 점프: 벽 반대 Sold+0x11C 10 → 160, 위 +0x118 17 → 272 (0x1E9D9C) [확실]. */
 	public static final float BACK_JUMP_OUT = K.units(NavTuning.WALL_AWAY), BACK_JUMP_UP = K.units(NavTuning.BACK_JUMP_UP);
 
@@ -167,14 +171,17 @@ public final class HeroNavigator {
 	private boolean balancing;
 	private float stateTime, cooldown;
 	private final Vector3f wallN = new Vector3f();
+	/** 지난 틱 공중이었음 (착지 프레임 = 원작 +0x2D8 0x80), 등 대고 걷기 (+0x174 0x200000), 벽 옆 끝 (+0x2D8 0x100 왼쪽 −1 / 0x200 오른쪽 +1). */
+	private boolean airborne, wallBack;
+	private int wallEdge;
 	private float ledgeY;
 	private NavRope rope;
 	private float ropeT, zipSpeed, zipDir;
 	/** 매단 줄 시뮬레이션 (줄마다 하나, 매 틱 진행) 과 흔들기 힘 창. */
 	private final java.util.Map<NavRope, RopeSim> sims = new java.util.IdentityHashMap<>();
-	private float pumpTimer;
-	private boolean pumpHeld;
-	private final Vector3f pumpDir = new Vector3f();
+	/** 잡은 뒤 흔들기 창 (0x29DBF4), 저역 통과한 흔들기 힘 크기 (+0x298), 잡을 때 몸 오른쪽·뒤 (0x303FC0 / 0x303FB0). */
+	private float pumpTimer, swingForce;
+	private final Vector3f swingRight = new Vector3f(), swingBack = new Vector3f();
 	private float waterY;
 	/** 사다리 수직 속도·미끄럼 중 (0x1C8A88), 줄 속도 (+ = 아래)·미끄럼 중 (0x1C6448), 수영 속도 (0x1CA868). */
 	private float ladderVel, ropeVel, swimSpeed;
@@ -269,6 +276,8 @@ public final class HeroNavigator {
 	public boolean update(Input in, float camYaw, float dt) {
 		stateTime += dt;
 		cooldown -= dt;
+		boolean justLanded = body.grounded() && airborne;
+		airborne = !body.grounded() && !active();
 		prevFeet = hasLast ? new Vector3f(lastFeet) : null;
 		lastFeet.set(body.position());
 		hasLast = true;
@@ -283,6 +292,10 @@ public final class HeroNavigator {
 		switch (state) {
 			case WALL_CLIMB, LADDER -> {
 				climb(in, dt);
+				return true;
+			}
+			case WALL_WALK -> {
+				wallWalk(in, camYaw, dt);
 				return true;
 			}
 			case LEDGE_HANG -> {
@@ -332,8 +345,9 @@ public final class HeroNavigator {
 			if ((a & SurfaceAttr.DEATH.bit()) != 0) {
 				listener.deathSurface();
 			}
+			divingIn = noDiveFall = false;
 			if ((a & SurfaceAttr.WATER.bit()) != 0 && deepWater(p, f.y())) {
-				enterSwim(f.y());
+				enterWater(f, 0);
 				return true;
 			}
 			if (in.pressed(PadButton.USE)) {
@@ -345,6 +359,17 @@ public final class HeroNavigator {
 					return true;
 				}
 			}
+		}
+		if (!body.grounded()) {
+			// 물 들어가기 (0x1C9BB8 공중 경로, 수직 속도 ≤ 0): 이번 틱에 발이 깊은 물 수면에 닿으면 (엔진 충돌은 수면도 바닥) 물 상태로
+			if (body.vy() <= 0) {
+				NavWorld.Floor wf = world.floor(p.x, p.y + 1, p.z, -body.vy() * dt + 2);
+				if (wf != null && wf.has(SurfaceAttr.WATER) && deepWater(p, wf.y())) {
+					enterWater(wf, body.vy());
+					return true;
+				}
+			}
+			airDive(p);
 		}
 		if (cooldown > 0) {
 			return false;
@@ -364,16 +389,22 @@ public final class HeroNavigator {
 			}
 		}
 		// 벽: 정면 (공중, 0x1C7D40) 또는 스틱 방향 (지상 [근사: 원작 지상 진입 0x1C7E1C 조건 +0x2D8 0x80 / 국소 속도 미해석])
-		Vector3f dir = body.grounded() && mag > 0.5f ? stick : fwd;
-		WallProbe w = probeWall(p, dir, null);
-		if (w != null) {
-			boolean into = w.n().dot(dir) < -0.6f;
-			if (into && w.tri().has(SurfaceAttr.LADDER) && (!body.grounded() || mag > 0.5f)) {
-				enterClimb(w, true);
+		// 벽: 공중 = 정면 (0x1C7D40), 지상 = 앞으로 움직이면 (지역 앞 속도 &gt; 0) 그 방향 (0x1C7DE8 → 0x1E47E0 a3 = 0, 마스크 0x1008001C) [확실].
+		// 붙는 상태는 첫 적중 면이 고른다 (0x1C7280): BackPress → 등 대고 걷기, Narrow·NarrowNoBB → 벽 보고 걷기, Ladder → 사다리, 그 밖 → 벽 오르기
+		boolean moving = body.grounded() && mag > 0.5f;
+		Vector3f dir = moving ? stick : fwd;
+		if (!body.grounded() || moving) {
+			WallProbe w = probeWall(p, dir, null);
+			if (w != null && w.n().dot(dir) < -0.6f) {
+				enterWall(w, w.tri().has(SurfaceAttr.BACK_PRESS));
 				return true;
 			}
-			if (into && w.tri().has(SurfaceAttr.CLIMBABLE) && (!body.grounded() || in.pressed(PadButton.CROSS))) {
-				enterClimb(w, false);
+		}
+		// 착지한 프레임 (+0x2D8 0x80, 0x1CB380): 앞이 비면 등 뒤로 다시 질의 (0x1C7ED0 t0 = 1) [확실] — 엔진은 BackPress 벽만 [근사: 원작은 마스크 전체]
+		if (justLanded) {
+			WallProbe w = probeWall(p, new Vector3f(fwd).negate(), null);
+			if (w != null && w.tri().has(SurfaceAttr.BACK_PRESS)) {
+				enterWall(w, true);
 				return true;
 			}
 		}
@@ -390,9 +421,14 @@ public final class HeroNavigator {
 	record Ledge(float y, Vector3f point, Vector3f feet, Vector3f n, LevelCollision.Tri top) {
 	}
 
-	/** 붙는 벽 마스크: 원작 bitfield0 & 0x1008001C (Narrow·Climbable·Ladder·BackPress·NarrowNoBB) 중 엔진이 쓰는 Climbable·Ladder. */
-	private static boolean climbSurface(LevelCollision.Tri t) {
-		return t.has(SurfaceAttr.CLIMBABLE) || t.has(SurfaceAttr.LADDER);
+	/** 붙는 벽 마스크: 원작 bitfield0 &amp; 0x1008001C (Narrow·Climbable·Ladder·BackPress·NarrowNoBB, 0x1E4988) [확실]. */
+	static boolean climbSurface(LevelCollision.Tri t) {
+		return t.has(SurfaceAttr.CLIMBABLE) || t.has(SurfaceAttr.LADDER) || narrowSurface(t);
+	}
+
+	/** 좁은 턱 벽 마스크 0x10080004 (Narrow·BackPress·NarrowNoBB, 0x1E4CF4 바닥 맞춤 / 0x1C7398 상태 고르기) [확실]. */
+	static boolean narrowSurface(LevelCollision.Tri t) {
+		return t.has(SurfaceAttr.NARROW) || t.has(SurfaceAttr.NARROW_NO_BB) || t.has(SurfaceAttr.BACK_PRESS);
 	}
 
 	/** 면 법선을 선분 시작점 쪽으로 (엔진 충돌은 양면). */
@@ -451,7 +487,17 @@ public final class HeroNavigator {
 		if (nh.lengthSquared() < 1e-6f) {
 			return null;
 		}
-		return new WallProbe(pos.sub(0, FOOT, 0), nh.normalize(), h1.tri());
+		nh.normalize();
+		if (narrowSurface(h1.tri())) {
+			// 좁은 턱 (0x1E4D08): 새 위치에서 아래로 (+0x130.y 6.4 + max(이동, 3.2)) · 벽 쪽으로 반 깊이 선분이 바닥 (법선 y &gt; 0.1) 에 맞아야 하고,
+			// 발 = 그 바닥 (내비 위치 = 바닥 + 6.4) [확실]. 못 맞으면 실패 (턱 끝 → 떨어짐). 엔진 이동량은 틱당 3.2 미만이라 창 = 3.2
+			LevelCollision.Hit fl = world.segment(pos, new Vector3f(pos).sub(0, FOOT + LEDGE_WINDOW, 0).fma(-WALL_OFF, nh));
+			if (fl == null || fl.tri().n().y <= 0.1f) {
+				return null;
+			}
+			pos.y = fl.point().y + FOOT;
+		}
+		return new WallProbe(pos.sub(0, FOOT, 0), nh, h1.tri());
 	}
 
 	/** 세 점 평면의 법선 (from 쪽), 퇴화하면 def. */
@@ -549,7 +595,19 @@ public final class HeroNavigator {
 
 	// ---- 벽 오르기 / 사다리 ----
 
+	/** 벽 상태 고르기 (원작 0x1C7280: 면 bitfield0 0x80000 → 0x200000, 0x10000004 → 0x100000, 0x10 → 사다리 0x400000, 그 밖 벽 오르기) [확실]. */
+	private void enterWall(WallProbe w, boolean back) {
+		LevelCollision.Tri t = w.tri();
+		wallEdge = 0;
+		if (t.has(SurfaceAttr.BACK_PRESS) || narrowSurface(t)) {
+			enterWallWalk(w, t.has(SurfaceAttr.BACK_PRESS) || back);
+		} else {
+			enterClimb(w, t.has(SurfaceAttr.LADDER));
+		}
+	}
+
 	private void enterClimb(WallProbe w, boolean ladder) {
+		wallEdge = 0;
 		state = ladder ? NavState.LADDER : NavState.WALL_CLIMB;
 		stateTime = 0;
 		wallN.set(w.n());
@@ -581,6 +639,10 @@ public final class HeroNavigator {
 		if (Math.abs(sy) < 0.2f) {
 			sy = 0;
 		}
+		if (in.pressed(PadButton.CROSS) && wallEdge != 0 && !ladder) {
+			edgeJump();
+			return;
+		}
 		if (in.pressed(PadButton.CROSS)) {
 			// 원작 0x1E9D9C: 벽 점프는 등 뒤로만 — 스틱이 벽 반대 (벽 쪽 성분 < 0 → 0x11C 이탈 속도 음수), 좌우 속도 ≤ 좌우 최대의 절반,
 			// 면이 NoBackJumps 가 아닐 때. 돌아서서 (0x1E9A88) 벽 반대로 Sold+0x11C, 위로 +0x118 [확실]. 그 밖의 × 는 무시.
@@ -610,6 +672,11 @@ public final class HeroNavigator {
 				vy *= k;
 			}
 		}
+		// 벽 옆 끝 (+0x2D8 0x100 / 0x200, 0x1C7A24): 막힌 쪽으로 미는 동안은 질의 없이 그 자리 [확실]
+		if (!ladder && (wallEdge < 0 && vx < 0 || wallEdge > 0 && vx > 0)) {
+			body.play(anims.get(wallEdge < 0 ? "ANIClimbAL" : "ANIClimbAR"), false);
+			return;
+		}
 		Vector3f cand = new Vector3f(p).fma(vx * dt, right).add(0, vy * dt, 0);
 		Vector3f into = new Vector3f(wallN).negate();
 		// 올라가는 중 (0x1C78FC: 수직 속도 &gt; 0) 턱 판정이 먼저: 사다리는 내려섬 (ANILDis1, 지상 상태), 벽은 턱 매달리기 (0x1C75F8) [확실]
@@ -631,6 +698,11 @@ public final class HeroNavigator {
 			wallFlags(w.tri());
 			p.set(w.feet());
 			faceWall();
+			wallEdge = 0;
+		} else if (!ladder && vx != 0 && (wallEdge = edgeSide(cand, into)) != 0) {
+			// 한쪽 선분만 붙는 면에 맞음 (0x1E52D4, t1 = 1): 옛 위치로 되돌리고 3 (왼쪽 0x100) / 5 (오른쪽 0x200) → 0x1C7280 [확실]
+			body.play(anims.get(wallEdge < 0 ? "ANIClimbAL" : "ANIClimbAR"), false);
+			return;
 		} else if (vy > 0) {
 			// 턱 판정이 안 되는 꼭대기 (엔진 보조 [근사]): 벽 너머 위 바닥이면 올라서고, 벽 위에 걸친 발판 (돛대 꼭대기처럼 몸 바로 위 바닥) 이면 그 위로
 			Vector3f over = new Vector3f(p).fma(-(WALL_OFF + 16), wallN);
@@ -693,6 +765,99 @@ public final class HeroNavigator {
 		}
 		ladderVel = sy > 0 ? LADDER_SPEED : sy < 0 ? -LADDER_SPEED : 0;
 		return ladderVel;
+	}
+
+	/**
+	 * 벽 옆 끝 판정 (0x1E52D4 – 0x1E53A8, 벽 오르기 중 t1 = 1): 두 선분 중 한쪽만 붙는 면 (Climbable·Ladder, 좁은 턱 면 제외 — 좁은 턱은 0 을 돌려 떨어짐) 에 맞으면
+	 * 그 반대쪽이 막힌 쪽. 왼쪽 선분 (−오른쪽 × 8) 이 빗나가면 −1 (반환 3 → +0x2D8 0x100), 오른쪽이면 +1 (반환 5 → 0x200), 둘 다 맞거나 둘 다 빗나가면 0 [확실: 코드 / 근사: 머리 선분 조건 생략].
+	 */
+	int edgeSide(Vector3f feet, Vector3f fwd) {
+		Vector3f f = new Vector3f(fwd.x, 0, fwd.z).normalize();
+		Vector3f o = new Vector3f(feet).add(0, FOOT, 0);
+		Vector3f right = rightOf(f);
+		LevelCollision.Hit h1 = world.segment(o, new Vector3f(o).fma(-WALL_SPREAD, right).fma(WALL_PROBE, f));
+		LevelCollision.Hit h2 = world.segment(o, new Vector3f(o).fma(WALL_SPREAD, right).fma(WALL_PROBE, f));
+		boolean m1 = h1 != null && climbSurface(h1.tri()) && !narrowSurface(h1.tri());
+		boolean m2 = h2 != null && climbSurface(h2.tri()) && !narrowSurface(h2.tri());
+		return m1 == m2 ? 0 : m1 ? 1 : -1;
+	}
+
+	/** 벽 옆 끝인지 (−1 왼쪽 / +1 오른쪽 / 0). */
+	public int wallEdge() {
+		return wallEdge;
+	}
+
+	/**
+	 * 벽 옆 끝 점프 (0x1E9C9C: 벽 상태 + +0x2D8 0x300 + ×): 몸 좌표축을 90° 돌리고 (0x100 → +0x70 = 옛 +0x50, 0x200 → 반대) 지역 속도
+	 * (0, Sold+0x120 12, Sold+0x114 10) → 위 192 · 앞 160, +0x2D8 0x1000020 (다시 붙지 않음) [확실: 값·90° / 추정: 도는 쪽 = 막힌 쪽].
+	 */
+	private void edgeJump() {
+		Vector3f face = state == NavState.WALL_WALK && wallBack ? new Vector3f(wallN) : new Vector3f(wallN).negate();
+		Vector3f dir = rightOf(face).mul(wallEdge);
+		body.setYaw(yawOf(dir));
+		wallEdge = 0;
+		leave(new Vector3f(dir).mul(EDGE_JUMP_OUT), EDGE_JUMP_UP, "ANIJump");
+	}
+
+	// ---- 좁은 턱 벽 따라 걷기 (+0x174 0x100000 벽 보고 / 0x200000 등 대고) ----
+
+	/** 좁은 턱 진입 (0x1C7280): 벽 보고면 정면 = −법선, 등 대고 (BackPress) 면 정면 = 법선 (0x1C8000: +0x70 = ∓+0x220), 발은 질의가 맞춘 바닥. */
+	private void enterWallWalk(WallProbe w, boolean back) {
+		state = NavState.WALL_WALK;
+		stateTime = 0;
+		wallBack = back;
+		wallN.set(w.n());
+		wallFlags(w.tri());
+		body.position().set(w.feet());
+		body.setYaw(yawOf(back ? new Vector3f(wallN) : new Vector3f(wallN).negate()));
+		body.setVy(0);
+		body.setGrounded(false);
+		body.launch().zero();
+		body.play(anims.get(back ? "ANIWallBack" : "ANIWallFront"), true);
+	}
+
+	/**
+	 * 좁은 턱 벽 따라 걷기 (0x1C8C70): 지역 좌우 속도 = (스틱 · 몸 오른쪽) 의 부호 × Sold+0x168 1.25 m/s (크기 무관), 상하 0.
+	 * 매 틱 벽 질의 (0x1E47E0) 로 벽 + 9.6 과 발밑 바닥에 맞추고, 실패하면 (턱 끝·바닥 없음) 떨어진다 (0x1E52D4: 좁은 턱 면은 막힘 대신 0 → 0x1E9030(2)) [확실].
+	 * × = 벽 반대 점프 (0x1E9D9C: 좌우 속도 ≤ 12 + 스틱 벽 반대, NoBackJumps 아님), ○ = 놓기 [엔진].
+	 */
+	private void wallWalk(Input in, float camYaw, float dt) {
+		Vector3f p = body.position();
+		Vector3f face = wallBack ? new Vector3f(wallN) : new Vector3f(wallN).negate();
+		Vector3f right = rightOf(face);
+		boolean stick = stickMag(in) > 0.2f;
+		Vector3f sd = stickDir(in, camYaw);
+		float side = stick ? sd.dot(right) : 0, away = stick ? sd.dot(wallN) : 0;
+		// 스틱 좌우 성분 부호 (원작은 1e-4 문턱, 엔진은 대각선 떨림을 막으려 0.3)
+		float vx = Math.abs(side) > 0.3f ? Math.signum(side) * LEDGE_WALK_SPEED : 0;
+		if (in.pressed(PadButton.CROSS) && vx == 0 && away > 0.3f && !noBackJumps) {
+			body.setYaw(yawOf(wallN));
+			leave(new Vector3f(wallN).mul(BACK_JUMP_OUT), BACK_JUMP_UP, "ANIWJump");
+			return;
+		}
+		if (in.pressed(PadButton.CIRCLE)) {
+			leave(new Vector3f(), 0, "ANIFall");
+			return;
+		}
+		if (vx != 0) {
+			Vector3f cand = new Vector3f(p).fma(vx * dt, right);
+			WallProbe w = probeWall(cand, new Vector3f(wallN).negate(), wallN);
+			if (w == null) {
+				leave(new Vector3f(), 0, "ANIFall");
+				return;
+			}
+			wallN.set(w.n());
+			wallFlags(w.tri());
+			p.set(w.feet());
+			body.setYaw(yawOf(wallBack ? new Vector3f(wallN) : new Vector3f(wallN).negate()));
+		}
+		String k = wallBack ? "ANIWallBack" : "ANIWallFront";
+		body.play(anims.get(vx < 0 ? k + "L" : vx > 0 ? k + "R" : k), false);
+	}
+
+	/** 지금 등 대고 걷기인지 (+0x174 0x200000). */
+	public boolean wallBack() {
+		return wallBack;
 	}
 
 	// ---- 턱 매달리기 ----
@@ -803,8 +968,12 @@ public final class HeroNavigator {
 				RopeSim sim = sim(r);
 				sim.attach(ropeT * sim.length());
 				ropeT = sim.dist() / sim.length();
-				pumpTimer = 0;
-				pumpHeld = false;
+				// 잡을 때 (0x1C5D54): 몸 오른쪽 +0x50 → 0x303FC0, 뒤 +0x70 → 0x303FB0, 흔들기 창 0x29DBF4 = 0.25 초 [확실]
+				Vector3f face = forward(body.yaw());
+				swingRight.set(rightOf(face));
+				swingBack.set(face).negate();
+				pumpTimer = SWING_WINDOW;
+				swingForce = 0;
 				body.play(anims.get("ANIRope"), true);
 			}
 		}
@@ -839,7 +1008,9 @@ public final class HeroNavigator {
 		}
 		float sy = in.leftY(), sx = in.leftX();
 		String a = anims.get("ANIRope");
-		ropeVel = ropeVelocity(sy, dt);
+		// 흔들기 버튼 (+0x310 0x10 ← 논리 0x40000 ← 패드 비트 5 = ○, 0x1D8108) 을 누르고 있으면 오르내리기 대신 흔들기 (0x1C61FC) [확실: 비트 / 추정: ○]
+		boolean swing = in.held(PadButton.CIRCLE);
+		ropeVel = swing ? 0 : ropeVelocity(sy, dt);
 		if (ropeVel != 0) {
 			// 줄 위치 (m) += 속도 / 16 · dt, [0.25, 길이 − 0.25] (0x1C6578 → 0x2183B0)
 			float want = sim.dist() + ropeVel / NavTuning.UNITS_PER_METER * dt;
@@ -857,24 +1028,59 @@ public final class HeroNavigator {
 				}
 			}
 		}
-		// 흔들기: 스틱을 새로 밀면 0.25 초 창 동안 힘 = 스틱 방향 × 500 × 거리 × 2 × 남은 시간 (0x1C6BE8)
-		if (Math.abs(sx) > 0.3f || Math.abs(sy) > 0.3f && ropeVel == 0) {
-			Vector3f d = stickDir(in, camYaw);
-			if (!pumpHeld || d.dot(pumpDir) < 0.5f) {
-				pumpDir.set(d);
-				pumpTimer = SWING_WINDOW;
-				body.setYaw(yawOf(d));
+		if (swing) {
+			if (Math.hypot(sx, sy) > 0.3f) {
+				body.setYaw(yawOf(stickDir(in, camYaw))); // 흔드는 면 = 몸 정면 [근사: 원작 줄 위 회전 미해석]
 			}
-			pumpHeld = true;
 			a = anims.get("ANIRopeIdle");
-		} else {
-			pumpHeld = false;
 		}
 		// 매 프레임 매달림 힘을 준다 (0x1C71A8 → 0x218470, 줄이 잠들지 않음)
-		sim.setForce(new Vector3f(pumpDir).mul(pumpTimer > 0 ? SWING_FORCE * sim.dist() * 2 * pumpTimer : 0));
-		pumpTimer = Math.max(0, pumpTimer - dt);
+		sim.setForce(swingForce(sim, swing, dt));
 		placeOnRope();
 		body.play(a, false);
+	}
+
+	/**
+	 * 매단 줄 흔들기 힘 (0x1C6BC8 – 0x1C71A8) [확실: 디스어셈블]. u = 매단 점 − 영웅 줄 점 (0x303FD0), F = Sold+0x148 500 × 붙은 거리 (m).
+	 * <pre>
+	 * 잡은 뒤 0.25 초 창 (0x29DBF4): 방향 T = u × (잡을 때 오른쪽), A = (잡을 때 뒤 × −u) · 잡을 때 오른쪽,
+	 *   A &gt; 0 이면 û·뒤 ≤ 0.1 일 때 +F × 2 × 남은 창, 아니면 û·뒤 ≥ −0.1 일 때 −F × 2 × 남은 창 → 잡은 정면 쪽으로 한 번 민다.
+	 * 창 뒤에는 흔들기 버튼 (+0x310 0x10) 을 누르고 있을 때 (줄 미끄럼 0x8000 아님): T = u × (지금 오른쪽 +0x50), 줄 점 속도 v 로
+	 *   (v × u) · 오른쪽 &gt; 0 (앞으로 움직임) 이면 û·뒤 ≤ 0.1 일 때 +F, 아니면 û·뒤 ≥ −0.1 일 때 −F — 움직이는 쪽으로, 아래쪽 반에서만 민다.
+	 * 크기는 +0x298 에 프레임당 0.1 저역 통과 (0x1C7170), 힘 = T̂ × 그 값 → 0x218470 매달림 힘.
+	 * </pre>
+	 */
+	private Vector3f swingForce(RopeSim sim, boolean swing, float dt) {
+		Vector3f u = sim.pointAt(0, new Vector3f()).sub(sim.pointAt(sim.dist(), new Vector3f()));
+		if (u.lengthSquared() < 1e-8f) {
+			return new Vector3f();
+		}
+		Vector3f un = new Vector3f(u).normalize();
+		float big = SWING_FORCE * sim.dist();
+		float f = 0;
+		Vector3f t;
+		if (pumpTimer > 0) {
+			t = new Vector3f(u).cross(swingRight);
+			float side = new Vector3f(swingBack).cross(new Vector3f(u).negate()).dot(swingRight);
+			float d = un.dot(swingBack);
+			f = side > 0 ? (d <= 0.1f ? big * 2 * pumpTimer : 0) : (d >= -0.1f ? -big * 2 * pumpTimer : 0);
+			pumpTimer = Math.max(0, pumpTimer - dt);
+		} else {
+			Vector3f face = forward(body.yaw());
+			Vector3f right = rightOf(face), back = new Vector3f(face).negate();
+			t = new Vector3f(u).cross(right);
+			if (swing && !ropeSlide) {
+				Vector3f v = sim.velocityAt(sim.dist(), new Vector3f());
+				float side = new Vector3f(v).cross(u).dot(right);
+				float d = un.dot(back);
+				f = side > 0 ? (d <= 0.1f ? big : 0) : (d >= -0.1f ? -big : 0);
+			}
+		}
+		swingForce += (f - swingForce) * 0.1f;
+		if (t.lengthSquared() < 1e-8f) {
+			return new Vector3f();
+		}
+		return t.normalize().mul(swingForce);
 	}
 
 	/**
@@ -953,59 +1159,330 @@ public final class HeroNavigator {
 		body.play(anims.get("ANIZipLine"), false);
 	}
 
-	// ---- 수영 ----
+	// ---- 물 (원작 0x1C9BB8 물 상태 + 0x1CA448 수영 갱신, 38 문서 §11) ----
 
 	/**
-	 * 수면 아래에 헤엄 깊이(16) + 4 안쪽으로 단단한 바닥이 있으면 얕은 물 — 헤엄치지 않고 수면 면 위를 걷는다 [추정].
-	 * 헤엄 중 물가 판정(수면 − 20 이상 마른 바닥이면 올라섬)과 같은 기준. 예: ATHN08A/08C 아레스 만은 Water 면(y 1) 아래
-	 * 7.7 에 바다 바닥(y −6.7, TWK /GlobGame/BAR "bay floor" −0.4125·16)이 있어 거인 크레토스가 물을 헤치고 싸운다 —
-	 * 전엔 헤엄 상태로 바닥 아래(y −15)에 갇혔다.
+	 * 물 하위 상태 = 원작 +0x174 비트 [확실: 0x1C93B8 / 0x1C94B0 / 0x1C95B0].
+	 * TREAD 0x80 물 위 떠 있기 (ANITread / ANITreadSwim, 4.5 m/s, × = 점프), SINK 0x100 물에 떨어진 직후 가라앉았다가 부력으로 떠오름,
+	 * DIVE 0x200 잠수 (□ 아래 · △/× 위, R1 충전 돌진, 빠르게 떠오르면 물 밖으로 도약).
+	 */
+	public enum Water {
+		TREAD, SINK, DIVE
+	}
+
+	/** 물 위 떠 있기 목표 속도 Sold+0x1D8 4.5 → 72 (0x1C93B8 → +0x164, 0x1CA7EC) [확실]. */
+	public static final float TREAD_SPEED = K.units(NavTuning.TREAD);
+	/** 부력 Sold+0x1F0 15 m/s² → 240 (0x1CAC68: 0x80/0x100 에서 월드 수직 속도 += 이 값 × dt) [확실]. */
+	public static final float BUOYANCY = K.units(NavTuning.BUOYANCY);
+	/** 물에 들어갈 때 수직 속도 = max(× 0.4, −64) (0x1CA0E8) [확실]. */
+	public static final float ENTRY_DAMP = 0.4f, ENTRY_MIN_VY = -64f;
+	/** 잠수 중 수면에 닿을 때 수직 속도 ≥ Sold+0x1D4 × 16 × 0.5 = 60 이면 물 밖 도약 (0x1C9DB8), 속도 × min(2, 점프 × 1.5 / 수직 속도) (0x1C9DE4) [확실]. */
+	public static final float LEAP_MIN_VY = SWIM_SPEED * 0.5f, LEAP_GAIN_MAX = 2f, LEAP_JUMP_SCALE = 1.5f;
+	/**
+	 * 잠수 돌진 (R1, 0x1C9E70): 누르는 동안 충전, 떼면 k = clamp((충전 − Sold+0x1F8) / (+0x1FC − +0x1F8)) 가 0 보다 크면 속도 lerp(+0x200, +0x204, k),
+	 * 조종 시간 +0x2B8 = lerp(+0x208, +0x20C, k) + 1 (1 이상인 동안 상하 조종, 0 이 되면 끝) [확실].
+	 */
+	public static final float DASH_CHARGE_MIN = K.get(NavTuning.DASH_CHARGE_MIN), DASH_CHARGE_MAX = K.get(NavTuning.DASH_CHARGE_MAX),
+			DASH_MIN = K.units(NavTuning.DASH_MIN), DASH_MAX = K.units(NavTuning.DASH_MAX), DASH_STEER_MIN = K.get(NavTuning.DASH_STEER_MIN),
+			DASH_STEER_MAX = K.get(NavTuning.DASH_STEER_MAX);
+	/** 공중 다이빙 자세 (0x1CA318): 낙하 속도 &gt; 점프 초속이면 0.4 초, 앞 속도 &gt; 80 이면 0.35 초 뒤까지의 궤적 선분 (0x1C98D8) [확실: 값]. */
+	public static final float DIVE_LOOK_FALL = 0.4f, DIVE_LOOK_RUN = 0.35f, DIVE_RUN_SPEED = 80f;
+
+	private Water water = Water.TREAD;
+	/** 물속 월드 수직 속도 (+0xE0.y), 잠수 수직 속도 (+0x260.y). */
+	private float waterVy, diveVy;
+	/** 아직 떠 있는 높이 위에서 떨어지는 중 (공중 물리), 다이빙 (+0x2D8 0x100000), 이번 낙하는 다이빙 안 함 (0x200000), 수면이 NoDiving. */
+	private boolean plunging, divingIn, noDiveFall, waterNoDiving;
+	/** 잠수 돌진: 충전 중 (+0x2D8 0x40000), 돌진 중 (0x80000), 충전 시간·조종 시간 (+0x2B8), 속도 (+0x2C4). */
+	private boolean dashCharging, dashing;
+	private float dashCharge, dashTime, dashSpeed;
+
+	public Water water() {
+		return water;
+	}
+
+	/** 수면 높이 (물 상태일 때). */
+	public float waterSurface() {
+		return waterY;
+	}
+
+	/** 지금 공중 다이빙 자세인지 (+0x2D8 0x100000). */
+	public boolean divingIn() {
+		return divingIn;
+	}
+
+	/**
+	 * 깊은 물: 수면 아래 SWIM_DEPTH (28.16) 안에 단단한 바닥이 없다. 원작은 내비 위치 (발 + 6.4) 가 수면 − 21.76 아래로 내려가야 물 상태가 되므로
+	 * (0x1E57D8) 그보다 얕으면 바닥에 서서 걷는다 [확실: 기준 높이]. 예: ATHN08A/08C 아레스 만은 Water 면(y 1) 아래 7.7 에 바다 바닥 —
+	 * 거인 크레토스가 물을 헤치고 싸운다.
 	 */
 	private boolean deepWater(Vector3f p, float surface) {
-		NavWorld.Floor bed = world.floor(p.x, surface - 0.5f, p.z, SWIM_DEPTH + 4);
+		NavWorld.Floor bed = world.floor(p.x, surface - 0.5f, p.z, SWIM_DEPTH);
 		return bed == null || bed.has(SurfaceAttr.WATER);
 	}
 
-	private void enterSwim(float surface) {
+	/**
+	 * 물 들어가기 (0x1CA098): 아직 떠 있는 높이보다 위면 공중 물리로 계속 떨어지다가 (plunging) 그 높이를 지나면 수직 속도 × 0.4 (최소 −64) 로 SINK,
+	 * 처음부터 그 높이 아래면 바로 TREAD 로 맞춘다 (0x1E57D8 a3 = 1: 위에 있으면 수면 맞춤).
+	 */
+	private void enterWater(NavWorld.Floor surface, float vy) {
 		state = NavState.SWIM;
 		stateTime = 0;
-		waterY = surface;
-		swimSpeed = 0;
-		body.position().y = surface - SWIM_DEPTH;
+		waterY = surface.y();
+		waterNoDiving = surface.has(SurfaceAttr.NO_DIVING);
+		Vector3f l = body.launch();
+		swimSpeed = (float) Math.hypot(l.x, l.z);
+		Vector3f p = body.position();
+		float line = waterY - SWIM_DEPTH;
+		diveVy = 0;
+		dashCharging = dashing = false;
+		noDiveFall = false;
+		if (vy < 0 && p.y > line) {
+			water = Water.SINK;
+			plunging = true;
+			waterVy = vy;
+		} else {
+			water = Water.TREAD;
+			plunging = false;
+			waterVy = 0;
+			p.y = line;
+		}
 		body.setVy(0);
 		body.setGrounded(false);
 		body.launch().zero();
-		body.play(anims.get("ANISwimIdle"), true);
+		body.play(waterAnim(), true);
+	}
+
+	/** 원작 가속 도우미 0x1E5FE0: 목표가 0 이 아니면 |목표| ≥ min, 같은 부호로 커지면 acc, 아니면 dec 만큼 다가감 [확실]. */
+	static float accel(float target, float cur, float acc, float dec, float min) {
+		if (Math.abs(target) > 1e-4f) {
+			target = target < 0 ? Math.min(target, -min) : Math.max(target, min);
+		} else {
+			target = 0;
+		}
+		if (cur < target) {
+			return Math.min(target, cur + (target > 0 ? acc : dec));
+		}
+		return Math.max(target, cur - (target < 0 ? acc : dec));
 	}
 
 	private void swim(Input in, float camYaw, float dt) {
 		Vector3f p = body.position();
 		float mag = stickMag(in);
-		// 원작 0x1CA5F4: 정면을 스틱 방향으로 프레임당 Sold+0x1E8 비율로 돌리고, 정면 속도를 목표 (+0x1D4 × 스틱, 최소 +0x1DC) 로 가감속 (+0x1E0/+0x1E4)
+		// 물속 버튼 (0x1D7FD0, +0x174 0x380): 논리 0x1000 (□) → +0x310 0x40 아래, 0x2000/0x4000 (△/×) → 0x20 위, 잠수 중 0x800 (R1) → 0x800 돌진 [확실]
+		boolean down = in.held(PadButton.SQUARE), up = in.held(PadButton.TRIANGLE) || in.held(PadButton.CROSS);
+		// 점프: 물 위 떠 있기 (+0x174 0x80) 에서만 × (0x1E9C2C → 0x1E9E88: 수직 속도 += Sold+0xC4) [확실]
+		if (water == Water.TREAD && in.pressed(PadButton.CROSS)) {
+			Vector3f f = forward(body.yaw()).mul(swimSpeed);
+			leave(f, JUMP, swimSpeed < NavTuning.UNITS_PER_METER ? "ANIVJump" : "ANIJump");
+			return;
+		}
+		// 수평: 정면을 스틱 쪽으로 프레임당 Sold+0x1E8 (0x1CA5F4), 목표 = (떠 있기 +0x1D8 / 그 밖 +0x1D4) × 스틱 (최소 +0x1DC), 가감속 +0x1E0/+0x1E4
 		float target = 0;
 		if (mag > 0.2f) {
 			float want = yawOf(stickDir(in, camYaw));
 			float d = (float) Math.IEEEremainder(want - body.yaw(), 2 * Math.PI);
 			body.setYaw(body.yaw() + d * Math.min(1f, SWIM_TURN * 60f * dt));
-			target = Math.max(SWIM_MIN, SWIM_SPEED * mag);
+			target = (water == Water.TREAD ? TREAD_SPEED : SWIM_SPEED) * mag;
 		}
-		swimSpeed = target > swimSpeed ? Math.min(target, swimSpeed + SWIM_ACCEL * dt) : Math.max(target, swimSpeed - SWIM_DECEL * dt);
-		String a = anims.get(swimSpeed > 1.6f ? "ANISwim" : "ANISwimIdle");
-		if (swimSpeed > 0) {
-			Vector3f fwd = forward(body.yaw());
-			Vector3f cand = new Vector3f(p).fma(swimSpeed * dt, fwd);
+		swimSpeed = Math.max(0, accel(target, swimSpeed, SWIM_ACCEL * dt, SWIM_DECEL * dt, target > 0 ? SWIM_MIN : 0));
+		// 수직
+		if (water == Water.DIVE) {
+			dashUpdate(in, dt);
+			// 0x1CAA58: 목표 = □ 아래 / △·× 위 × +0x1D4 (돌진 조종 중엔 돌진 속도, 가감속도 같은 비율)
+			float vmax = SWIM_SPEED, k = 1;
+			if (dashing && dashTime >= 1) {
+				vmax = dashSpeed;
+				k = dashSpeed / SWIM_SPEED;
+			}
+			diveVy = accel(down ? -vmax : up ? vmax : 0, diveVy, SWIM_ACCEL * k * dt, SWIM_DECEL * k * dt, 0);
+			if (dashCharging) {
+				// 충전 중 감속: 속도 ×= 1 − 0.1 × 60·dt (0x1CAAC4)
+				float s = Math.max(0, 1 - 0.1f * 60f * dt);
+				swimSpeed *= s;
+				diveVy *= s;
+			}
+			waterVy = diveVy;
+		} else if (plunging) {
+			waterVy = Math.max(-FALL_MAX, waterVy - GRAVITY * dt);
+		} else {
+			waterVy += BUOYANCY * dt;
+		}
+		Vector3f fwd = forward(body.yaw());
+		Vector3f cand = new Vector3f(p).fma(swimSpeed * dt, fwd).add(0, waterVy * dt, 0);
+		if (water != Water.DIVE && swimSpeed > 0) {
+			// 물가: 수면 − 32 이상 마른 바닥에 닿으면 올라선다 [근사: 원작 0x1EA5F0 지상 판정 미해석]
 			NavWorld.Floor f = world.floor(cand.x, waterY + 24, cand.z, 200);
 			if (f != null && !f.has(SurfaceAttr.WATER) && f.y() >= waterY - SWIM_DEPTH - 4) {
-				// 물가: 올라선다
 				p.set(cand.x, f.y(), cand.z);
 				land(null);
 				return;
 			}
-			Vector3f c = new Vector3f(cand).add(0, SWIM_DEPTH, 0);
-			world.collideSphere(c, BODY);
-			p.set(c.x, waterY - SWIM_DEPTH, c.z);
+			// 물 위에서 벽 오르기 (0x1C7DA8: +0x174 0x80 이고 앞으로 가면 0x1E47E0 → 0x1C7280) [확실]
+			if (water == Water.TREAD) {
+				WallProbe w = probeWall(p, fwd, null);
+				if (w != null && w.n().dot(fwd) < -0.6f) {
+					p.y += 1.6f; // 0x1C7E54: 위치 y += 1.6, 수직 속도 0.1
+					enterClimb(w, w.tri().has(SurfaceAttr.LADDER));
+					return;
+				}
+			}
 		}
-		body.play(a, false);
+		// 벽 밀어내기 (몸 구), 물 밑바닥
+		float off = water == Water.DIVE ? HANG * 0.5f : SWIM_DEPTH;
+		Vector3f c = new Vector3f(cand).add(0, off, 0);
+		world.collideSphere(c, BODY);
+		cand.x = c.x;
+		cand.z = c.z;
+		NavWorld.Floor bed = world.floor(cand.x, Math.max(cand.y, p.y) + FOOT, cand.z, 400);
+		if (bed != null && !bed.has(SurfaceAttr.WATER) && cand.y < bed.y()) {
+			cand.y = bed.y();
+			waterVy = Math.max(0, waterVy);
+			diveVy = Math.max(0, diveVy);
+		}
+		// 수면 따라가기 (원작은 매 프레임 0x1E57D8 로 +0x230 갱신)
+		NavWorld.Floor s = world.floor(cand.x, waterY + 8, cand.z, 16);
+		if (s != null && s.has(SurfaceAttr.WATER)) {
+			waterY = s.y();
+			waterNoDiving = s.has(SurfaceAttr.NO_DIVING);
+		}
+		float line = waterY - SWIM_DEPTH;
+		// 물 상태 전환 (0x1C9BB8)
+		if (water == Water.DIVE) {
+			// 0x1E57D8 a3 = 1 (떠 있기 아님): 판정 높이보다 위 (f12 &lt; y) 일 때만 수면
+			if (cand.y > line + 1e-3f) {
+				if (waterVy >= LEAP_MIN_VY) {
+					// 물 밖 도약 (0x1C9750): 공중 + 다이빙 (+0x2D8 0x100000), ANIDive1, 속도 × min(2, 점프 × 1.5 / 수직 속도)
+					float k = Math.min(LEAP_GAIN_MAX, JUMP * LEAP_JUMP_SCALE / waterVy);
+					p.set(cand.x, line, cand.z);
+					leave(new Vector3f(fwd).mul(swimSpeed * k), waterVy * k, "ANIDive1");
+					divingIn = true;
+					return;
+				}
+				water = Water.TREAD;
+				cand.y = line;
+				waterVy = diveVy = 0;
+				dashCharging = dashing = false;
+			}
+		} else {
+			if (plunging && cand.y <= line) {
+				plunging = false;
+				waterVy = Math.max(waterVy * ENTRY_DAMP, ENTRY_MIN_VY);
+			}
+			if (!plunging) {
+				// 0x1E57D8 a3 = 1: 떠 있기 중이거나 판정 높이 위면 수면 높이로 맞추고 수직 속도 0 → TREAD, 아니면 SINK
+				if (water == Water.TREAD || cand.y >= line) {
+					cand.y = line;
+					waterVy = 0;
+					water = Water.TREAD;
+				} else {
+					water = Water.SINK;
+				}
+				if (waterVy >= 0) {
+					divingIn = false; // 0x1C9C6C: 수직 속도 ≥ 0 이면 다이빙 끝
+				}
+				// 잠수 (0x1C9CC8 / 0x1C9D18): 잠수 능력 (+0x2DC 0x20) + □ (+0x310 0x40) + 지역 수직 속도 ≤ 0 [확실: 조건 / 추정: 영웅은 처음부터 잠수 가능]
+				if (down) {
+					water = Water.DIVE;
+					diveVy = Math.min(0, waterVy);
+					waterVy = diveVy;
+				}
+			}
+		}
+		p.set(cand);
+		body.play(waterAnim(), false);
+	}
+
+	/** 잠수 돌진 (0x1C9E70 – 0x1CA094, 0x1C9F58): 돌진 중이면 조종 시간을 줄이고, 아니면 R1 충전 → 떼면 돌진 [확실: 식 / 추정: 영웅은 돌진 능력 +0x2DC 0x200000 있음]. */
+	private void dashUpdate(Input in, float dt) {
+		if (dashing) {
+			dashTime -= dt;
+			if (dashTime <= 0) {
+				dashing = false;
+			}
+			return;
+		}
+		if (in.held(PadButton.R1)) {
+			if (!dashCharging) {
+				dashCharging = true;
+				dashCharge = 0;
+			} else {
+				dashCharge += dt;
+			}
+			return;
+		}
+		if (!dashCharging) {
+			return;
+		}
+		dashCharging = false;
+		float k = Math.max(0, Math.min(1, (dashCharge - DASH_CHARGE_MIN) / (DASH_CHARGE_MAX - DASH_CHARGE_MIN)));
+		if (k <= 0) {
+			return;
+		}
+		dashSpeed = DASH_MIN + (DASH_MAX - DASH_MIN) * k;
+		dashTime = DASH_STEER_MIN + (DASH_STEER_MAX - DASH_STEER_MIN) * k + 1;
+		dashing = true;
+		// 지역 속도 = (0, 수직 × r, (+0x1D4 − |수직|) × r), r = 돌진 / +0x1D4
+		float r = dashSpeed / SWIM_SPEED;
+		swimSpeed = Math.max(0, SWIM_SPEED - Math.abs(diveVy)) * r;
+		diveVy *= r;
+	}
+
+	/** 물속 정면 속도 (+0x260.z) / 수직 속도 (월드). */
+	public float swimSpeed() {
+		return swimSpeed;
+	}
+
+	public float waterVy() {
+		return waterVy;
+	}
+
+	/** 잠수 돌진 중인지 / 충전 중인지. */
+	public boolean dashing() {
+		return dashing;
+	}
+
+	public boolean dashCharging() {
+		return dashCharging;
+	}
+
+	/** 물 애니 (0x1C93B8 / 0x1C94B0 / 0x1C95B0): 속도 1.6 이하 = 멈춤 애니. */
+	private String waterAnim() {
+		float speed = (float) Math.hypot(swimSpeed, water == Water.DIVE ? diveVy : 0);
+		return switch (water) {
+			case TREAD -> anims.get(speed <= 1.6f ? "ANITread" : "ANITreadSwim");
+			case SINK -> divingIn ? anims.get(waterVy >= 0 ? "ANISwim" : "ANIDive2") : anims.get(swimSpeed <= 1.6f ? "ANITread" : "ANISwim");
+			case DIVE -> dashCharging ? anims.get("ANIDiveDashC")
+					: dashing || speed > SWIM_SPEED + NavTuning.UNITS_PER_METER ? anims.get("ANIDiveDash")
+					: anims.get(speed <= 1.6f ? "ANISwimIdle" : "ANISwim");
+		};
+	}
+
+	/**
+	 * 공중 다이빙 자세 (0x1CA318, 공중 갱신): 낙하가 점프 초속보다 빠르거나 앞 속도 &gt; 80 이면 0.4 / 0.35 초 뒤까지의 포물선 궤적 선분 (0x1C98D8) 이
+	 * 처음 만나는 면이 NoDiving 이 아닌 물이면 ANIDive1 (0x1C9750, +0x2D8 0x100000), 다른 면 (NoDiving 물·땅) 이면 이번 낙하는 다이빙 안 함 (0x200000)
+	 * [확실: 조건 / 근사: 원작은 0.35–0.4 구간 선분 다음 시작점 선분].
+	 */
+	private void airDive(Vector3f p) {
+		if (divingIn || noDiveFall) {
+			return;
+		}
+		Vector3f l = body.launch();
+		float t = body.vy() < -JUMP ? DIVE_LOOK_FALL : Math.hypot(l.x, l.z) > DIVE_RUN_SPEED ? DIVE_LOOK_RUN : -1;
+		if (t < 0) {
+			return;
+		}
+		Vector3f to = new Vector3f(p).fma(t, l).add(0, body.vy() * t - 0.5f * GRAVITY * t * t, 0);
+		LevelCollision.Hit h = world.segment(p, to);
+		if (h == null) {
+			return;
+		}
+		if (h.tri().has(SurfaceAttr.WATER) && !h.tri().has(SurfaceAttr.NO_DIVING)) {
+			divingIn = true;
+			body.play(anims.get("ANIDive1"), true);
+		} else {
+			noDiveFall = true;
+		}
 	}
 
 	// ---- 밀기 / 상황 동작 ----

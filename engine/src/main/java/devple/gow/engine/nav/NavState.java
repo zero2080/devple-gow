@@ -13,6 +13,8 @@ public enum NavState {
 	LEDGE_HANG,
 	/** 벽 오르기 (Climbable 면) ANIClimb 블렌드 bClimb / ANIClimbIdle */
 	WALL_CLIMB,
+	/** 좁은 턱 벽 따라 걷기 (Narrow·NarrowNoBB 벽 = 벽 보고 ANIWallFront*, BackPress 벽 = 등 대고 ANIWallBack*, 원작 +0x174 0x100000 / 0x200000) */
+	WALL_WALK,
 	/** 사다리 (Ladder 면) ANILadderU/D, 꼭대기 ANILDis1 */
 	LADDER,
 	/** 매단 줄 오르기·흔들기 ANIRope / ANIRopeU/D / ANIRopeSW* */
