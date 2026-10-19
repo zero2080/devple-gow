@@ -26,6 +26,12 @@
 | `0x1F1AA0` / `0x1F1280` / `0x1F12F0` | 레일 지역 탐색 / 거리 비용 / 거리+각도 비용 | 확실 |
 | `0x1F3BC0` | 3차 Hermite (p0, v0, p1, v1, s) | 확실 |
 | `0x1DCC20` | 영웅을 카메라 대상으로 등록: 오프셋 (0, 1.5·16, 0) | 확실 |
+| `0x1EE5D8` | 후보 목록 0x306CF0 (개수 0x29F134) 에 GO 추가 (중복 무시) — SwitchCamera·볼륨 질의 콜백 공용 | 확실 |
+| `0x1EEE88` | 새 상태 push 뒤 **전역 이벤트 0x40D(1037)**, 인자 = 카메라 이름 | 확실 (ATHN02C AlcWall/MintWall 이 "SparkCam13" 으로 받음) |
+| `0x1F3A38` | 상태 초기화: CAM GO 에 애니가 있고(+0x104→+0x88) 플래그 **0x1000** 이면 0x1004B8/0x131038 로 애니 처음부터 | 확실 (분기), 의미 추정 |
+| `0x1F38C8` | 카메라 이름이 `"AresCamera1"`(0x29F194) 이면 전용 함수 `0x1F67C0` | 확실 |
+| `0x1C3370` | 아레스 클래스(Enemy1 하위 클래스 2, vtable 0x2BB2D0, 생성 0x1CEBA0 의 class 2) 갱신: 매 프레임 `SwitchCamera("AresCamera1", 0)` | 확실 |
+| `0x1F67C0` / `0x1F5C58` | AresCamera1: 대상 목록 0x304790 (최대 10, 활성 2개) + 레일 t 비용 콜백 (두 대상 화면 각, "f line angle" 60, 가중 50/10/40) | 호출 구조만 확실, 비용 세부 미해석 |
 
 ## 2. 동작 (재구현 규칙)
 **선택** — 매 틱 대상점이 든 모든 CMV hull 의 카메라 + 스크립트 요청 = 후보. 활성 목록에서 후보가 아닌 것을 지우고 새 후보를 뒤에 붙인다.
@@ -75,7 +81,52 @@ rig.current(); rig.pose();                      // 현재 카메라 이름 / 상
 - 벽 관통: 레벨 카메라는 설계 위치/레일 위에만 있으므로 벽 안에 들어가지 않는다. 볼륨 밖 Follow 근사에는 충돌 회피가 없다.
 
 ## 5. 남은 것
-- IdleCam 류(0x08 = 1): 관절 ANM 으로 움직이는 인트로 팬 카메라 — 관절 애니메이션 미지원이라 후보에서 뺐다 (ATHN01A 시작 9.5초 인트로).
-- 원작 Follow / 특수 카메라(AresCamera1 0x1F67C0, 다중 대상 0x10000, 화면 데드존 0x98..0xA4, 0x400 접선 분기), 카메라 흔들림/필터/DOF 템플릿.
+- IdleCam 류: 관절 애니 카메라 자체는 §6 으로 지원하지만, **CMV 볼륨으로 뽑히는** IdleCam(ATHN01A 시작 9.5초 인트로)은 기존 시작 동작을 바꾸지 않으려고 아직 볼륨 후보에서 뺀다 (스크립트 요청은 허용).
+- 원작 Follow / AresCamera1 비용 함수 정밀화(0x1F5C58), 다중 대상 0x10000 일반화(BMI "Camera Target Weight"), 화면 데드존 0x98..0xA4, 0x400 접선 분기, 카메라 흔들림/필터/DOF 템플릿.
 - 영웅 상태 마스크(플래그 하위 바이트)로 후보 거르기 — 상태 비트 매핑이 추정이라 아직 적용 안 함.
 - Hermite 속도항, 컷 시 입력 방향 1초 유지(0x1DCE80).
+
+## 6. 스크립트·보스 카메라 (관절 애니 카메라, AresCamera1)
+
+### 6.1 스크립트가 카메라를 켜는 방법 [확실: ESC 바이트코드]
+레벨 스크립트는 카메라 엔티티 타입이 따로 없다. **EventSensor 의 Action** 이 `Internal 0x9(false)` (CMV 질의 끔) + `Internal 0x8 SwitchCamera("이름")` 을
+부르고, 지연(Delay) 된 짝 센서가 `Internal 0x9(true)` 로 질의를 되켠다. 질의를 끈 동안은 후보가 비어 **마지막 카메라가 유지**되므로 한 번의 요청으로 충분하다.
+ATHN01E 히드라 (이벤트 1035 = 기술 시작, Filter 250 = 히드라):
+
+| ESC | 조건(기술) | 동작 |
+|---|---|---|
+| BossLeftFight | 806 / 807 / 808 / 809 | 질의 끔 + grabLeftCam / leftStrugCam / leftFailCam (2초 뒤 켬) / leftWinCam (3.33초 뒤 켬) |
+| BossRightFight | 802 / 803 / 804 / 805 | grabRightCam / rightStrugCam / rightFailCam / rightWinCam (같은 규칙) |
+| BossFInalGame | 810 / 811 / 812 / 813 / 816 | bossKillCam / "bossKillStrug" / bossKillWinCam (1.13초 뒤 켬) / bossKillFailCam (4초) / bossKillFail04Cam (3.33초) |
+| PinLeft / PinRight (Filter 253 / 252) | 114 / 110 | 아기 히드라 돛대 핀 pinLeftCam / pinRightCam (2.5초 뒤 켬) |
+| a01Mp01BossIntro | 컷신 끝 501 | SpawnCam, `camGRPdeckCine-VisCamOFFidle` 이 7.2초 뒤 질의 켬 |
+
+- `"bossKillStrug"` 은 CAM_bossKillStrugCam 과 이름이 달라 원작 조회(0x17A7B8, 정확한 이름)도 실패한다 → bossKillCam 이 계속 쓰인다 (ANM 12.5초가 처형 전체를 덮음).
+- 보스 잡기 동기(BossSync) 중에도 스크립트·카메라는 그대로 돈다 — 동기는 영웅/보스 기술만 맞추고 카메라는 1035 이벤트로 바뀐다.
+- ATHN02D 메두사 방: MedusaHeadCam/MedusaSpawnCam (CMV 우선순위 100), DoorReveal·MedusaRipZone 이 같은 0x9/0x8 패턴. ATHN08A/C 의 FireBallCam(PokeCam) 은 Vis Attr11_1 로 CMV 를 켜고 끔.
+
+### 6.2 관절 애니 카메라 [확실: 데이터 + 0x1F3A38]
+- 카메라 오브젝트(예 `gobossleftfight`: 관절 BossLeftFight / grabLeftCam / leftFailCam / leftWinCam, ANM_bossleftfight act 1 개 3.37초)는 **월드 원점 인스턴스**이고,
+  카메라와 같은 이름의 관절이 있으면 그 관절을, 없으면 관절 0 을 따른다 (LevelData 와 같은 규칙). CAM 0x08 = 1 표시는 관절이 있는 카메라 일부에만 있어 판정에 쓰지 않는다.
+- 카메라 월드 = CAM 로컬 · (ANM 표본 관절 월드 · 인스턴스). 위치는 대개 고정이고 회전이 패닝한다 (grabLeftCam: −Z 가 (−0.87,−0.34,−0.36) → (−0.47,−0.04,−0.88), 히드라 머리를 따라감).
+- 플래그 **0x1000** (전부 0x434FE/0x34FE 계열): 이 카메라가 새 상태로 들어올 때 애니를 0 초부터 [원작 0x1F3B60 분기]. 애니 끝은 마지막 프레임 유지 [추정].
+- 이 카메라들은 0x100 이 없고 0x40000 → 위치 고정 + 주시점 = 행렬 × (0,0,−1.6) — 즉 관절 −Z 를 그대로 본다.
+- 전환마다 `CameraRig.onSwitch` → `ScriptWorld.postEvent(1037, 이름)` (원작 0x1EEE88).
+
+### 6.3 AresCamera1 [근사]
+- 원작: Enemy1 생성 0x1CEBA0 이 템플릿(+0x18 → 0x243700 결과) +0x80 값으로 클래스를 고른다: 0 일반(0x360 바이트), 1 (0x400), **2 아레스(0x370, vtable 0x2BB2D0)** [분기 확실, 필드가 어느 TWK 값인지 추정 — goBAR/goBA2]. 그 갱신이 **매 프레임** `SwitchCamera("AresCamera1", 0)` — CMV 없이도 아레스가 살아 있는 동안 후보.
+  카메라 갱신 0x1F3768 이 이름을 비교해 0x1F67C0 으로 간다. CAM_AresCamera1 (ATHN08A/08C, 플래그 0x57DFE, 피치 모드 1, 요 모드 2, 거리 [120,160], 레일 NCV_AresCamRail = 아레나 +z 쪽 반지름 ≈210 반원).
+- 엔진: `AresFight.tick` → `BossArena.requestCamera(ARES_CAMERA, 아레스 위치)` → `CameraRig.request(name, second)`.
+  주시점 = 영웅 대상 + 0.35·(아레스 대상 − 영웅 대상) (/GlobGame/BAR "Camera Target Weight" 0.35), 레일 t = 시선(영웅 − P)과 영웅→아레스 선의 수평 각이 "f line angle" 60° 에 가장 가까운 점,
+  눈 = 주시점 − 방향·clamp(|주시점 − P|, 120, 160). 원작 비용 0x1F5C58(두 대상 화면 각·가중)은 미해석.
+
+### 6.4 보스 쪽 보정 (37 문서)
+- 히드라 방향을 스폰 엔티티 방향으로 **고정** (위치만 고정하던 것을 방향까지). GameScene 이 보스 스폰 방향을 엔티티 행렬에서 읽도록 고침 (BossRig 와 같은 규칙).
+  잡기 카메라가 월드 고정 오브젝트라 동기 장면도 스폰 방향 기준으로 저작됐다고 본다 [추정] — 고치기 전엔 AI 가 히드라를 영웅 쪽으로 돌려 HERO_TO_BOSS 정렬된 크레토스가 망대 밖 허공에 놓였다.
+
+### 6.5 검증
+- `BossCameraTest` (헤드리스, 실데이터): 히드라 잡기 1035(806/802) → grabLeftCam/grabRightCam, 질의 끔 유지, ANM 0x1000 재시작(0.5초 뒤 애니 시간 0.4–0.6), 연타 → *StrugCam, 성공 → *WinCam → 3.33초 뒤 볼륨 카메라 복귀,
+  처형 810 → bossKillCam (bossKillStrugCam 은 안 켜짐) → 812 BossKillWinCam, 아레스 1·3단계 AresCamera1 활성 + 주시점 0.35, 잡기 동기 중 유지. 모든 장면에서 크레토스가 화면(4:3 절두체) 안.
+- 스크린샷 (`work/shots/`, 커밋 안 함): `cam_hydra_grab0.png` (잡기 직후 망대 위 크레토스 + 내려찍은 머리), `cam_hydra.png` (grabLeftCam 1.7초: 머리 쪽으로 패닝),
+  `cam_hydra_strug.png` (leftStrugCam: 망대 위에서 두 팔로 턱을 받치는 크레토스), `cam_hydra_kill.png` / `cam_hydra_kill2.png` (bossKillCam 처형 연출), `cam_ares1.png`, `cam_ares3.png`.
+

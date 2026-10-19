@@ -92,6 +92,9 @@ final class BossRig {
 	final Hittable heroHit;
 	final ScriptHost host = new ScriptHost();
 	final ScriptWorld world;
+	/** 레벨 카메라 (GameScene 과 같은 연결: SwitchCamera / Internal 0x9 / Vis Attr11_1 / 보스 요청). */
+	final devple.gow.engine.level.CameraRig cam;
+	final List<String> cams = new ArrayList<>();
 	final CombatScriptBridge bridge;
 	final BossFight fight;
 	final List<EnemyFighter> enemies = new ArrayList<>();
@@ -152,7 +155,13 @@ final class BossRig {
 			public Result receive(CombatFile.Attack a, Combatant at, float d, Vector3f kn) { return hero.takeHit(a, at, d); }
 		};
 		fight = BossDirector.create(level, ROM, perm);
-		world = new ScriptWorld(new LevelData(levelWad), host, listener());
+		LevelData data = new LevelData(levelWad);
+		cam = new devple.gow.engine.level.CameraRig(data);
+		world = new ScriptWorld(data, host, listener());
+		cam.onSwitch(n -> {
+			cams.add(n);
+			world.postEvent(1037, n, 0, 0, null);
+		});
 		bridge = new CombatScriptBridge(world);
 		arena = new BossArena() {
 			public HeroController heroCtl() { return ctl; }
@@ -161,6 +170,7 @@ final class BossRig {
 			public void damageHero(float a) { heroHp = Math.max(0, heroHp - a); }
 			public ScriptWorld world() { return world; }
 			public CombatScriptBridge bridge() { return bridge; }
+			public void requestCamera(String name, Vector3f second) { cam.request(name, second); }
 		};
 		grab = new devple.gow.engine.combat.GrabSync(ctl, hero);
 		for (EnemyFactory.Kind k : fight.kinds().values()) {
@@ -220,6 +230,28 @@ final class BossRig {
 				}
 				if (r.op() == LevelOp.WARP || r.op() == LevelOp.LOAD_FOR_WARP) {
 					warp = r.op() + " " + r.wad();
+				}
+			}
+
+			@Override
+			public void camera(String name) {
+				log.add(String.format("cam %s @%.2f", name, time));
+				cam.request(name);
+			}
+
+			@Override
+			public void internal(int func, List<Object> args) {
+				if (func == 0x9 && !args.isEmpty()) {
+					Object a = args.get(0);
+					log.add(String.format("cam query %s @%.2f", a, time));
+					cam.setVolumeQuery(a instanceof Number n ? n.floatValue() != 0 : !(a instanceof Boolean b) || b);
+				}
+			}
+
+			@Override
+			public void vis(ScriptEntity source, List<String> objects, int[] values) {
+				if (values.length > 4 && values[4] != 0) {
+					objects.forEach(o -> cam.setOwnerVolumes(o, values[4] == 1));
 				}
 			}
 
@@ -292,6 +324,7 @@ final class BossRig {
 			}
 		}
 		fight.update(pad, DT);
+		cam.update(DT, ctl.position, ctl.yaw, false);
 		world.tick(DT, ctl.position.x, ctl.position.y, ctl.position.z);
 		pad.next();
 	}

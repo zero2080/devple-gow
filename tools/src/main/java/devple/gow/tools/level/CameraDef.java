@@ -23,7 +23,8 @@ import java.util.List;
  * 0xCC 전환표 12 × 32B: char[24] 이전 카메라 이름, f32 전환 시간, u32 동순위 우선 플래그
  * </pre>
  * 플래그 0x74: 0x100 대상 추적(궤도 카메라), 0x40000 고정 주시(0x100 없을 때), 0x200 레일 탐색에 각도 범위 반영,
- * 0x400 레일 접선 기준 각도, 0x800/0x4000 점프 중 대상 높이 고정, 0x2000 갱신 생략(일시), 0x10000 다중 대상 가중 평균,
+ * 0x400 레일 접선 기준 각도, 0x800/0x4000 점프 중 대상 높이 고정, 0x1000 활성화 시 소유 오브젝트 애니 재시작, 0x2000 갱신 생략(일시),
+ * 0x10000 다중 대상 가중 평균,
  * 0x80000 청취자 거리 제한 해제, 0x100000 청취자 비율 = 0xAC. 근거: 0x1F3768, 0x1F29A0, 0x1F1AA0, 0x1EE8E0 (30 문서).
  */
 public record CameraDef(String name, float[] local, String rail, int mode, int railKind, float[] params, float[] fov,
@@ -34,6 +35,10 @@ public record CameraDef(String name, float[] local, String rail, int mode, int r
 	public static final int F_RAIL_ANGLES = 0x200;
 	public static final int F_FIXED_LOOK = 0x40000;
 	public static final int F_HOLD_JUMP = 0x800 | 0x4000;
+	/** 활성화 시 소유 오브젝트 애니를 처음부터 다시 튼다 (0x1F3B60 → 0x1004B8/0x131038). */
+	public static final int F_RESTART_ANIM = 0x1000;
+	/** 여러 카메라 대상 가중 ("Camera Target Weight", AresCamera1 0x1F67C0). */
+	public static final int F_MULTI_TARGET = 0x10000;
 
 	/** 런타임 파라미터 (0x70.., 거리 단위는 이미 ×16 한 월드 유닛). */
 	public record Params(float fovRad, int flags, int pitchMode, int yawMode, float distScale, float railMax, float railMin,

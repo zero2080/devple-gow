@@ -24,4 +24,11 @@ public interface BossArena {
 
 	default void sound(String name) {
 	}
+
+	/**
+	 * 스크립트 밖 카메라 요청 (Internal 0x8 SwitchCamera 와 같은 한 프레임 후보). second = 두 번째 카메라 대상 (없으면 null).
+	 * 원작 아레스 클래스 갱신 0x1C3370 이 매 프레임 "AresCamera1" 을 요청한다 (30 문서 §6).
+	 */
+	default void requestCamera(String name, org.joml.Vector3f second) {
+	}
 }
