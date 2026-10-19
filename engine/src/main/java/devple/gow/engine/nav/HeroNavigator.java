@@ -214,7 +214,7 @@ public final class HeroNavigator {
 				enterSwim(f.y());
 				return true;
 			}
-			if (in.pressed(PadButton.R1)) {
+			if (in.pressed(PadButton.USE)) {
 				Interactables.Item it = items.nearest(p, BODY + 14);
 				// 놓은 뒤 되감기는 중인 오브젝트는 0 으로 돌아갈 때까지 잡히지 않는다 (원작: 잡기 클래스 비트 0x400000 / 0x30000 을 끄고 0 에서 다시 켬,
 				// CSM 0x2160B4 → 0x216254, 레버 0x21287C → 0x21290C) [확실]
@@ -721,7 +721,7 @@ public final class HeroNavigator {
 	private void interact(Input in, float camYaw, float dt) {
 		Interactables.Item it = item;
 		phaseTime += dt;
-		boolean held = in.held(PadButton.R1);
+		boolean held = in.held(PadButton.USE);
 		TaskProgress t = it.task();
 		switch (it.kind) {
 			case LEVER -> {
@@ -747,7 +747,7 @@ public final class HeroNavigator {
 				}
 			}
 			case LIFT -> {
-				boolean press = in.pressed(PadButton.R1);
+				boolean press = in.pressed(PadButton.USE);
 				if (phase == PH_GRAB && phaseTime >= clip(it.startAnim, 0) - EPS) {
 					phase = PH_MAIN;
 					phaseTime = 0;
@@ -812,7 +812,8 @@ public final class HeroNavigator {
 
 	private void push(Input in, float camYaw, float dt) {
 		Interactables.Item it = item;
-		if (in.pressed(PadButton.R1) || in.pressed(PadButton.CIRCLE) || in.pressed(PadButton.CROSS)) {
+		// 원작 밀기 (모드 1, 0x1C4258): 사용 버튼을 누르고 있는 동안만 붙어 있음, 떼면 놓음 [확실]. × = 상자 차기 (ANIStartKickBox, 미구현 → 놓음)
+		if (!in.held(PadButton.USE) || in.pressed(PadButton.CROSS)) {
 			listener.pushDetach(it);
 			end();
 			return;

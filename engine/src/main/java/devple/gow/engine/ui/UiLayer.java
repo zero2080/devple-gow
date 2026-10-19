@@ -78,7 +78,12 @@ public final class UiLayer implements AutoCloseable {
 
 	/** 고정 틱: 패드 → FLP 마스크, 한 프레임 진행. */
 	public void update(Engine e) {
-		player.pad(acceptInput ? UiPad.mask(e.input()) : 0);
+		update(e.input());
+	}
+
+	/** 입력 소스를 지정해 진행 (디버그 스크립트 입력 재생). */
+	public void update(devple.gow.engine.input.Input in) {
+		player.pad(acceptInput ? UiPad.mask(in) : 0);
 		player.tick();
 	}
 

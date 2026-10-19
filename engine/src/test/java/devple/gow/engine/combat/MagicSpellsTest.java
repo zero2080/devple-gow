@@ -101,7 +101,7 @@ class MagicSpellsTest {
 		r.magic.setTargets(() -> List.of(en, side));
 		boolean[] shatterCb = {false};
 		en.onShatter(() -> shatterCb[0] = true);
-		ScriptedInput in = new ScriptedInput(0, List.of(new ScriptedInput.Step(0.1f, 3f, PadButton.R2)));
+		ScriptedInput in = new ScriptedInput(0, List.of(new ScriptedInput.Step(0.1f, 3f, PadButton.L2)));
 		float stoneAt = -1, mpBefore = r.ps.mp;
 		for (float t = 0; t < 3.5f; t += DT) {
 			r.tick(in, en.pos);
@@ -143,7 +143,7 @@ class MagicSpellsTest {
 		EnemyFighter behind = EnemyFactory.load(r.rom.resolve("R_MIN.WAD"), r.perm, -1).spawn();
 		behind.pos.set(0, 0, 120); // 뒤쪽 (광선 원뿔 밖), Nuke L 반경 15 × 16 = 240 안
 		r.magic.setTargets(() -> List.of(behind));
-		ScriptedInput in = new ScriptedInput(0, List.of(new ScriptedInput.Step(0.1f, 3.5f, PadButton.R2),
+		ScriptedInput in = new ScriptedInput(0, List.of(new ScriptedInput.Step(0.1f, 3.5f, PadButton.L2),
 				new ScriptedInput.Step(1.5f, 0.05f, PadButton.CIRCLE)));
 		float mpBefore = r.ps.mp;
 		for (float t = 0; t < 3.5f && !behind.petrified(); t += DT) {
@@ -160,7 +160,7 @@ class MagicSpellsTest {
 	@Test
 	void medusaNukeNotAtStage0() throws Exception {
 		Rig r = new Rig(4);
-		ScriptedInput in = new ScriptedInput(0, List.of(new ScriptedInput.Step(0.1f, 2f, PadButton.R2),
+		ScriptedInput in = new ScriptedInput(0, List.of(new ScriptedInput.Step(0.1f, 2f, PadButton.L2),
 				new ScriptedInput.Step(1.5f, 0.05f, PadButton.CIRCLE)));
 		for (float t = 0; t < 2f; t += DT) {
 			r.tick(in, new Vector3f(0, 0, -150));
@@ -204,7 +204,7 @@ class MagicSpellsTest {
 		Rig r = new Rig(5);
 		TrainingDummy far = new TrainingDummy(new Vector3f(0, 0, -400), 500, 1000); // 25m
 		r.c.setTarget(far);
-		ScriptedInput in = new ScriptedInput(0, List.of(new ScriptedInput.Step(0.1f, 0.9f, PadButton.R2)));
+		ScriptedInput in = new ScriptedInput(0, List.of(new ScriptedInput.Step(0.1f, 0.9f, PadButton.L2)));
 		int maxBolts = 0;
 		for (float t = 0; t < 3f; t += DT) {
 			r.tick(in, far.pos);
@@ -227,7 +227,7 @@ class MagicSpellsTest {
 		TrainingDummy far = new TrainingDummy(new Vector3f(0, 0, -300), 500, 1000);
 		r.c.setTarget(far);
 		// R2 홀드 + □ 홀드(차지): Stage 2 Ch2 Threshold 0.75 × Charge Time 0.75 = 0.56초
-		ScriptedInput in = new ScriptedInput(0, List.of(new ScriptedInput.Step(0.1f, 0.8f, PadButton.R2),
+		ScriptedInput in = new ScriptedInput(0, List.of(new ScriptedInput.Step(0.1f, 0.8f, PadButton.L2),
 				new ScriptedInput.Step(0.1f, 0.8f, PadButton.SQUARE)));
 		for (float t = 0; t < 2f; t += DT) {
 			r.tick(in, far.pos);
@@ -247,7 +247,7 @@ class MagicSpellsTest {
 		TrainingDummy far = new TrainingDummy(new Vector3f(0, 0, -2000), 500, 1000); // Reach 25m=400 밖
 		r.c.setTarget(a);
 		r.magic.setTargets(() -> List.of(a, b, far));
-		ScriptedInput in = new ScriptedInput(0, List.of(new ScriptedInput.Step(0.1f, 0.1f, PadButton.R2)));
+		ScriptedInput in = new ScriptedInput(0, List.of(new ScriptedInput.Step(0.1f, 0.1f, PadButton.L2)));
 		int maxSouls = 0;
 		for (float t = 0; t < 6f; t += DT) {
 			r.tick(in, a.pos);

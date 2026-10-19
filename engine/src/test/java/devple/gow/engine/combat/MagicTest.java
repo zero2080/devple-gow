@@ -64,7 +64,7 @@ class MagicTest {
 				moves.add(Integer.parseInt(s.split(" ")[1]));
 			}
 		});
-		ScriptedInput in = new ScriptedInput(0, List.of(new ScriptedInput.Step(0.1f, 2.5f, PadButton.R2)));
+		ScriptedInput in = new ScriptedInput(0, List.of(new ScriptedInput.Step(0.1f, 2.5f, PadButton.L2)));
 		float dt = 1 / 60f;
 		for (float t = 0; t < 3.5f; t += dt) {
 			in.advance(dt);

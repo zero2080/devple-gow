@@ -402,19 +402,19 @@ class HeroNavigatorTest {
 			}
 		});
 		Pad in = new Pad();
-		in.down.add(PadButton.R1);
+		in.down.add(PadButton.USE);
 		tick(nav, b, w, in);
 		assertEquals(NavState.PUSH, nav.state());
 		for (int i = 0; i < 60; i++) {
 			in.ly = 1; // camYaw 0: 스틱 위 = -z = 상자 쪽
+			in.down.add(PadButton.USE); // 원작 밀기 = 사용 버튼을 누르고 있는 동안 (0x1C4258)
 			tick(nav, b, w, in);
 		}
 		assertTrue(box.pos.z < -60, "상자 밀림 " + box.pos);
 		assertEquals(box.pos.z + 40, moved.z, 0.01f);
 		assertEquals(box.radius + HeroNavigator.BODY, b.pos.z - box.pos.z, 0.5f); // 영웅은 상자 뒤에서 같이 움직임
 		in.ly = 0;
-		in.down.add(PadButton.R1);
-		tick(nav, b, w, in);
+		tick(nav, b, w, in); // 사용 버튼을 뗌 → 놓기
 		assertEquals(List.of("attach 503", "detach 503"), ev);
 		assertEquals(NavState.GROUND, nav.state());
 	}
@@ -431,10 +431,11 @@ class HeroNavigatorTest {
 		Interactables.Item box = items.add(new Interactables.Item(Interactables.Kind.PUSH, "box", v(0, 0, -40), 1, 1, "pushIdle", null, "box", 16));
 		nav.setItems(items);
 		Pad in = new Pad();
-		in.down.add(PadButton.R1);
+		in.down.add(PadButton.USE);
 		tick(nav, b, w, in);
 		for (int i = 0; i < 240; i++) {
 			in.ly = 1;
+			in.down.add(PadButton.USE);
 			tick(nav, b, w, in);
 		}
 		assertTrue(box.pos.z > -70 + 16 * 0.8f - 1, "벽에서 멈춤 " + box.pos);
@@ -478,7 +479,7 @@ class HeroNavigatorTest {
 			}
 		});
 		Pad in = new Pad();
-		in.down.add(PadButton.R1);
+		in.down.add(PadButton.USE);
 		tick(nav, b, w, in);
 		assertEquals(NavState.INTERACT, nav.state());
 		int ticks = 1;
@@ -497,7 +498,7 @@ class HeroNavigatorTest {
 		for (int i = 0; i < 30; i++) {
 			tick(nav, b, w, in);
 		}
-		in.down.add(PadButton.R1);
+		in.down.add(PadButton.USE);
 		tick(nav, b, w, in);
 		assertEquals(NavState.GROUND, nav.state());
 	}
@@ -530,7 +531,7 @@ class HeroNavigatorTest {
 		});
 		Pad in = new Pad();
 		for (int i = 0; i < 60; i++) { // 1 초 누르고 있음
-			in.down.add(PadButton.R1);
+			in.down.add(PadButton.USE);
 			tick(nav, b, w, in);
 		}
 		assertEquals(NavState.INTERACT, nav.state());
@@ -544,7 +545,7 @@ class HeroNavigatorTest {
 			tick(nav, b, w, in);
 		}
 		assertTrue(chest.progress < half - 0.1f, "−4 로 되감김");
-		in.down.add(PadButton.R1);
+		in.down.add(PadButton.USE);
 		tick(nav, b, w, in);
 		assertEquals(NavState.GROUND, nav.state(), "되감는 동안은 못 잡음");
 		for (int i = 0; i < 60; i++) {
@@ -554,7 +555,7 @@ class HeroNavigatorTest {
 		// 이번엔 끝까지 누르고 있음 → chestGrab 끝에 100 % → chestOpen 0.633 초 뒤 놓음
 		int ticks = 0;
 		do {
-			in.down.add(PadButton.R1);
+			in.down.add(PadButton.USE);
 			tick(nav, b, w, in);
 			ticks++;
 		} while (nav.state() == NavState.INTERACT && ticks < 400);
@@ -584,15 +585,15 @@ class HeroNavigatorTest {
 		crank.maxBack = 15;
 		nav.setItems(items);
 		Pad in = new Pad();
-		in.down.add(PadButton.R1);
+		in.down.add(PadButton.USE);
 		tick(nav, b, w, in);
 		for (int i = 0; i < 30; i++) { // 스틱 없이 누르고만 있음 → 안 돎
-			in.down.add(PadButton.R1);
+			in.down.add(PadButton.USE);
 			tick(nav, b, w, in);
 		}
 		assertEquals(0, crank.task().time);
 		for (int i = 0; i < 60; i++) {
-			in.down.add(PadButton.R1);
+			in.down.add(PadButton.USE);
 			in.ly = 1;
 			tick(nav, b, w, in);
 		}
@@ -600,7 +601,7 @@ class HeroNavigatorTest {
 		float at = crank.task().time;
 		in.ly = 0;
 		for (int i = 0; i < 30; i++) {
-			in.down.add(PadButton.R1);
+			in.down.add(PadButton.USE);
 			tick(nav, b, w, in);
 		}
 		assertEquals(1.0f, crank.task().speed, 0.02f, "스틱을 놓으면 −Dec · dt");
@@ -644,7 +645,7 @@ class HeroNavigatorTest {
 			}
 		});
 		Pad in = new Pad();
-		in.down.add(PadButton.R1);
+		in.down.add(PadButton.USE);
 		tick(nav, b, w, in);
 		tick(nav, b, w, in);
 		assertEquals(1f, door.task().speed, 1e-4f, "붙잡을 때 한 번 +Acc");
@@ -656,7 +657,7 @@ class HeroNavigatorTest {
 		int ticks = 0;
 		while (!door.done && ticks < 600) {
 			if (ticks % 6 == 0) { // 초당 10 번
-				in.down.add(PadButton.R1);
+				in.down.add(PadButton.USE);
 			}
 			tick(nav, b, w, in);
 			ticks++;
@@ -698,7 +699,7 @@ class HeroNavigatorTest {
 			}
 		});
 		Pad in = new Pad();
-		in.down.add(PadButton.R1);
+		in.down.add(PadButton.USE);
 		tick(nav, b, w, in);
 		int ticks = 1;
 		while (nav.state() == NavState.INTERACT && ticks < 120) {

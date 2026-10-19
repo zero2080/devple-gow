@@ -94,7 +94,7 @@ public final class MedusaGaze {
 		float used = 0;
 		boolean head = c.activeScript(SCR_HEAD) != null;
 		float per = tw.f(n, st + "Drain", 12.5f) * dt;
-		boolean held = in == null || in.held(PadButton.R2);
+		boolean held = in == null || in.held(PadButton.L2);
 		canHold = held && mp >= per;
 		boolean was = beam;
 		beam = head && held && mp >= per;

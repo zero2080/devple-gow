@@ -13,7 +13,7 @@
 | 받는 쪽 | EventSensor mode 2 (보낸 쪽이 볼륨 안) — ATHN01E `XFCcaptainCSM-main-r2` → a01MP04 → 501 → `LoadWad(Athn01D)`, PAND01C `handleTrig-r2`, ATHN01D `CaptainsWobbleDoor…GotKey`, PAND05A `statuesR2-EventR2`, PAND02D `R2Statue-volume-EventUSEwrld` | [확실: 데이터] |
 
 - 버튼: 아이콘이 `R2ButtonStatic`이고 엔티티 이름에도 "R2"가 붙어 있어 원작에서는 R2로 불린 버튼이다 [강한 추정].
-  엔진은 R2를 마법에 쓰고(10 문서 §16 미확정) R1을 상호작용에 쓰므로 **R1**으로 보낸다 [근사]. 아이콘은 원작대로 R2를 보인다.
+  ~~엔진은 R1으로 보낸다~~ → Pad_Read 비트 순서로 확정되어 엔진도 **R2** (`PadButton.USE`), 마법은 L2 (10 문서 §16).
 - 엔진:
   - `SceneNav.EVENT_USE` 정의.
   - `GameScene`: R1을 누르고 전투 동작 중이 아니면 1024를 보낸다(mode 2라서 볼륨 밖에서는 아무 일도 없다).
@@ -26,7 +26,12 @@
   - PAND01C `handleTrig-yes1`: `arg1 == 1019 ∧ arg0 == 1` → 메시지 258 → 1040 → `LoadWad(Pand01B)`
   - PAND01BB `HMsgSensorYES/NO`: 1005, 예 1 / 아니오 2
   - ATHN01D 선장 문: 1013
-- 엔진 `GameScene`: 질문 메시지를 띄운 채 ×(예 = 1) / △(아니오 = 0)를 기다려 1021을 보낸다 [근사: 원작 메뉴 UI 대신 메시지 + 버튼, 아니오 값은 PAND01BB의 2와 다를 수 있음].
+- 메뉴 내용 (원작 0x1B9EC0) [확실]: GameMgr +0xA0 = 줄, +0xAC/+0xB0 = "Yes"/"No", +0x208 = **12** (메뉴 상태), +0x278 = 기본 선택 1. 답 = **선택 번호 (1부터)**, 예 1 / 아니오 2 (PAND01BB `HMsgSensorNO` = 2와 일치).
+- 메시지 본문에 메뉴가 들어 있다: 1019 = "손잡이를 가져가시겠습니까? ---- *예 / 아니오" (`*` = 기본 선택). 1005·1013도 같은 형식이다.
+- HUD FLP `MenuTemplates` (FLP_HUDK): 프레임 = 10·줄 수 + 선택지 수 (`GotoFrame2`는 1부터 → 1줄 2지 = 12 = 원작 값). `PS2_MenuTemplate_Event = n`이면 FLP가 `Pause_Check = 5`, `MenuTemplate_State = n`으로 연다.
+  - 위/아래는 HUD 버튼 스프라이트(`/:PressUp`·`/:PressDown`)가 `PS2_Menu_Choice`와 TemplateChoice On/Off를 바꾼다.
+  - 확정은 **○** (입력 마스크 0x20, 한국판 배치) → `PS2_Done = 1`.
+- 엔진: `QuestionMenu`가 메시지를 나누고, `GameScene.openQuestion`이 줄·선택지·기본 선택을 HUD 변수에 넣고 이벤트를 보낸다. 메뉴가 열린 동안 게임 틱은 멈추고, `PS2_Done`이 오면 `PS2_Menu_Choice`를 읽어 1021을 보낸다. 디버그 스크립트 입력(`-PgowScript`)도 메뉴 중에는 HUD로 간다 (확인: ↓ → 2, ○ → `질문 1019 답 2`).
 - 하네스: 질문에는 항상 "예"로 답한다.
 
 ## 3. Animator 효과 (0x1AB0B8) [확실: 코드]
@@ -76,12 +81,13 @@
 |---|---|
 | `verify/TraversalTest.backtrackingNeedsNoForcedEvents` | 세 전환이 강제 없이 열리고, 강제 뒤에만 나온 전환이 하나도 없음 |
 | `verify/TraversalTest.hiddenObjectsNeedOnlyTheRingPuzzle` | 숨김 표시 = PAND00C 엘리베이터 레버뿐. ATHN01D·PAND01BB는 이웃 상태로 다시 돌림 |
+| `game/QuestionMenuTest` | 질문 본문 → 줄·선택지·기본 선택·프레임 12 |
 | `nav/AnimatorModeTest` | 회전방 정방향 → Marker 202 → LevelData:1 참 / 역방향(끝에서 시작) → 거짓 / 0x10 정지·0x11 이어서·0x8 시간 유지 / `$` 무시 |
 
 ## 6. 남은 것
 
-- 1024 실제 버튼: 38 문서 §3.4 — 원작 '사용' 버튼 = 패드 비트 1 (표준 배치 R2) [확실], 엔진은 R1 유지 [근사]. 마법 버튼 배치(10 문서 §16)와 함께 정리 필요.
-- 질문 메뉴 UI(원작 `Menu %d`, Yes/No 선택 커서)와 아니오 값.
+- ~~1024 실제 버튼~~: R2 [확실], 엔진 반영 (마법 L2, 대시 R1).
+- ~~질문 메뉴 UI·아니오 값~~: 원작 HUD 메뉴 템플릿, 아니오 = 2 (§2).
 - Animator 재생 방식 4/1/2 이름과 0x100A60 내부. 재질 애니(`$…`, 모드 10/11/16)는 미구현.
 - ~~발판 애니 렌더 자세~~: 애니가 한 번이라도 돈 오브젝트는 `LevelScene.poseInstance` → 구운 메시 대신 `AnimatedModel`(관절 월드 = 애니 × 인스턴스)로 그린다 (PAND02AA 회전방 벽·레버 확인).
 - PAND00C 고리 퍼즐 풀이(하네스).

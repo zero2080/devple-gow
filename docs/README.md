@@ -61,7 +61,7 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 ./gradlew :engine:run -PgowFxLog -PgowMagicStage=2 "-PgowScript=LEFT:0.3:0.05,R2:0.6:3,CIRCLE:1.5:0.05" --args="--hero --enemy R_MIN"   # 원작 이펙트 GO (40 문서)
 ./gradlew :engine:run --args="--movie SEMO01"          # 컷신 재생 (ISO 직접 읽기, --wide = PSW, START/× 건너뛰기)
 ```
-조작: WASD 이동, J □(약공) / I △(강공) / L ○(잡기) / K ×(점프) / Q L1(방어) / E R1, C R2(마법), 방향키 = 오른쪽 스틱(회피),
+조작: WASD 이동, J □(약공) / I △(강공) / L ○(잡기) / K ×(점프) / Q L1(방어) / E R1(대시) / Z L2(마법) / C R2(사용: 상자·문·레버·밀기·세이브, 원작과 같음), 방향키 = 오른쪽 스틱(회피),
 Shift L3 + 오른쪽 Shift R3 = 신들의 분노, Enter = START(일시정지). 게임패드 자동 인식.
 
 ## 빌드 / 도구 실행

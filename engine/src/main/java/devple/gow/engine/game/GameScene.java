@@ -93,8 +93,8 @@ public final class GameScene implements Scene {
 	private boolean otherScenePending;
 	/** 표시 중인 메시지 번호 (-1 없음): 닫힐 때 이벤트 1040(번호) 를 플레이어가 보낸다 (원작 0x1B8ECC/0x1B8F98/0x1B9170). */
 	private int messageId = -1;
-	/** 열린 질문 메시지 번호 (Internal 0xB, −1 = 없음). */
-	private int questionId = -1;
+	/** 열린 질문 메시지 번호 (Internal 0xB, −1 = 없음), 선택지 수, 지금 선택 (1 부터). */
+	private int questionId = -1, questionChoices, questionChoice;
 	private float stepTimer;
 	private boolean wasAir;
 	private boolean leaving;
@@ -177,6 +177,8 @@ public final class GameScene implements Scene {
 				}
 				if (powerUp && name.equals("PS2_PSMDone") && "1".equals(String.valueOf(value).replace(".0", ""))) {
 					onPowerUpClosed();
+				} else if (questionId >= 0 && name.equals("PS2_Done") && "1".equals(String.valueOf(value).replace(".0", ""))) {
+					answerQuestion(vars.get("PS2_Menu_Choice"));
 				} else if (saveAsk && name.equals("PS2_Done") && "1".equals(String.valueOf(value).replace(".0", ""))) {
 					onSaveAnswered("1".equals(String.valueOf(vars.get("PS2_Menu_Choice")).replace(".0", "")));
 				} else if (paused && !powerUp && !saveAsk && saveFlow == null
@@ -567,10 +569,8 @@ public final class GameScene implements Scene {
 						System.out.println("해금 기록 실패: " + ex.getMessage());
 					}
 				}
-				if (func == 0xB && !args.isEmpty()) { // 질문 (원작 0x21D9C8 → GameMgr +0x152C): 메시지 + 예/아니오 → 1021 (답, 메시지 번호)
-					questionId = (int) num(args.get(0));
-					showMessage(questionId, Float.MAX_VALUE);
-					messageId = -1; // 질문은 1040 대신 1021
+				if (func == 0xB && !args.isEmpty()) { // 질문 (원작 0x21D9C8 → GameMgr +0x152C) → HUD 메뉴 템플릿 → 1021 (선택 번호, 메시지 번호)
+					openQuestion((int) num(args.get(0)));
 				}
 				if (func == 0x9 && !args.isEmpty()) {
 					Object a = args.get(0);
@@ -879,6 +879,49 @@ public final class GameScene implements Scene {
 	/** 질문 답 (원작 GameMgr 0x1B8F4C). */
 	static final int EVENT_ANSWER = 1021;
 
+	/**
+	 * 질문 메뉴 (원작 0x1B9EC0): GameMgr 이 HUD 메뉴 템플릿을 채운다 — 줄 = 메시지, 선택지 "Yes"/"No", 상태 +0x208 = 12, 기본 선택 +0x278 = 1.
+	 * 메시지 본문이 "질문 줄 ---- *예 / 아니오" 형식이라 (1005·1013·1019) 그대로 나눈다: 위 = PS2_MenuTemplate_Line1..3, 아래 = Menu1..5,
+	 * '*' = 기본 선택. FLP MenuTemplates 프레임 = 10·줄 수 + 선택지 수 (GotoFrame2 는 1 부터: 1 줄 2 지 = 12 = 원작 값) [확실: FLP 배치].
+	 */
+	private void openQuestion(int id) {
+		QuestionMenu q = QuestionMenu.of(session.messages, id);
+		List<String> lines = q.lines(), choices = q.choices();
+		int def = q.defaultChoice();
+		UiVariables v = hud.variables();
+		for (int i = 1; i <= 3; i++) {
+			v.set("PS2_MenuTemplate_Line" + i, i <= lines.size() ? lines.get(i - 1) : "");
+		}
+		for (int i = 1; i <= 5; i++) {
+			v.set("PS2_MenuTemplate_Menu" + i, i <= choices.size() ? choices.get(i - 1) : "");
+		}
+		questionId = id;
+		questionChoices = choices.size();
+		questionChoice = def;
+		v.set("PS2_Menu_Choice", questionChoice);
+		v.event("PS2_MenuTemplate_Event", q.frame());
+		session.sound.play("SND_IG_POPUP");
+		System.out.println("질문 " + id + ": " + String.join(" / ", lines) + " → " + choices);
+	}
+
+	/**
+	 * 확정 (HUD FLP 가 위/아래로 PS2_Menu_Choice 와 TemplateChoice On/Off 를 바꾸고, 확정 시 Pause_Check 5 → PS2_Done = 1) →
+	 * 1021 (선택 번호 1.., 질문 번호, 0, 영웅) (원작 0x1B8F4C, PAND01BB: 예 1 / 아니오 2).
+	 */
+	private void answerQuestion(Object choice) {
+		int c = 1;
+		try {
+			c = (int) Float.parseFloat(String.valueOf(choice));
+		} catch (NumberFormatException ignored) {
+			// 선택 없음 → 기본 1
+		}
+		world.postEvent(EVENT_ANSWER, Math.clamp(c, 1, Math.max(1, questionChoices)), questionId, 0, world.player());
+		hud.variables().event("PS2_MenuTemplate_Event", 0);
+		System.out.println("질문 " + questionId + " 답 " + c);
+		questionId = -1;
+	}
+
+
 	private void showMessage(int id, float seconds) {
 		String text = session.messages != null ? session.messages.get(id) : null;
 		messageId = id;
@@ -1011,7 +1054,12 @@ public final class GameScene implements Scene {
 		if (!powerUp) {
 			hudBinding.update(hero.player, hud.variables());
 		}
-		hud.update(e);
+		if (debugInput != null && questionId >= 0) {
+			debugInput.advance(dt); // 질문 메뉴 중에는 게임 틱이 멈추므로 스크립트 입력을 여기서 진행해 HUD 로 (검증용)
+			hud.update(debugInput);
+		} else {
+			hud.update(e);
+		}
 		if (levelHud != null) {
 			if (bridge != null) {
 				enemyMeters.update(hud.variables(), bridge.meterTargets());
@@ -1040,19 +1088,14 @@ public final class GameScene implements Scene {
 			hud.variables().event("PS2_PauseMenu_Event", 1);
 			return;
 		}
-		if (e.input().pressed(PadButton.R1) && !hero.combat.active() && nearSavePoint()) {
+		if (e.input().pressed(PadButton.USE) && !hero.combat.active() && nearSavePoint()) {
 			askSave();
 			return;
 		}
-		if (questionId >= 0 && (e.input().pressed(PadButton.CROSS) || e.input().pressed(PadButton.TRIANGLE))) {
-			// 원작 0x1B8F4C: PostEvent(1021, 답 +0x278, 질문 +0x152C, 0, 영웅). 예 = 1 (메뉴 "Yes"/"No" 0x1B9EE8) [근사: 메뉴 UI 대신 메시지 + ×/△]
-			world.postEvent(EVENT_ANSWER, e.input().pressed(PadButton.CROSS) ? 1 : 0, questionId, 0, world.player());
-			questionId = -1;
-			messageTimer = 0;
-			hud.variables().event("PS2_MessageTemplate_Event", 0);
-			return;
+		if (questionId >= 0) {
+			return; // 질문 메뉴가 열려 있는 동안 게임은 멈춘다 (원작 HUD Pause_Check 5, 입력은 HUD FLP 가 받음)
 		}
-		if (e.input().pressed(PadButton.R1) && !hero.combat.active()) {
+		if (e.input().pressed(PadButton.USE) && !hero.combat.active()) {
 			world.postEvent(SceneNav.EVENT_USE, 0, 0, 0, world.player()); // 버튼 안내 센서 (mode 2 = 볼륨 안일 때만 반응)
 		}
 		if (e.input().pressed(PadButton.SELECT)) {

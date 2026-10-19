@@ -5,7 +5,7 @@ import devple.gow.engine.input.PadButton;
 
 /**
  * 분기 입력 코드(10 문서 §2.5) ↔ 엔진 패드. 코드 1–10 = 버튼, 11 이상 = 자동/이벤트.
- * 코드 6(마법)은 원작 패드 비트 0(표준 배치 L2)이지만 문서 §16 미확정 → R2 로 매핑 (흔히 알려진 조작).
+ * 코드 6(마법) = 패드 비트 0 = L2, 코드 9 = 비트 1 = R2 (사용 버튼), 코드 8 = R1 (대시) [확실: Pad_Read 비트 순서, {@link PadButton#USE}].
  */
 public final class CombatInput {
 
@@ -22,10 +22,10 @@ public final class CombatInput {
 			case 3 -> PadButton.TRIANGLE;
 			case 4 -> PadButton.CIRCLE;
 			case 5 -> PadButton.L1;
-			case 6 -> PadButton.R2;
+			case 6 -> PadButton.L2; // 마법: 패드 비트 0 = L2 (PadButton.USE 주석)
 			case 7 -> PadButton.L3;
 			case 8 -> PadButton.R1;
-			case 9 -> PadButton.L2;
+			case 9 -> PadButton.R2; // 패드 비트 1 = R2 (영웅 기술에는 안 쓰임, 사용 버튼)
 			case 10 -> PadButton.R3;
 			default -> null;
 		};

@@ -2,7 +2,7 @@
 
 분석: [10 문서](10-combat-system.md) §10·§12 (이번 단계에서 확장). 패키지 `devple.gow.engine.combat` (+ `fx/MagicFx`).
 실행: `./gradlew :engine:run --args="--hero --enemy R_MIN --auto magic"` (← 메두사 선택 → R2 홀드 광선 → 석화 → □ 로 파괴).
-연습 씬은 마법 4종을 모두 보유한 상태로 시작한다. 방향키로 선택하고 R2 로 시전한다.
+연습 씬은 마법 4종을 모두 보유한 상태로 시작한다. 방향키로 선택하고 L2 로 시전한다 (원작 배치, 10 문서 §16).
 
 ## 1. 발동 경로: 영웅 기술의 SCRIPT 이벤트 = SCR_ 명령
 영웅 CombatFile 의 SCRIPT(8) 이벤트 해시는 **SCR_ 명령 이름의 Hash127Upper** 다 [확실: 전부 대조됨].
