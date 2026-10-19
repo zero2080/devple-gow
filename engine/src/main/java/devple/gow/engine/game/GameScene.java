@@ -35,7 +35,7 @@ import java.util.Random;
 /**
  * 통합 게임 씬: 원본 레벨(배치·충돌·카메라) + 크레토스(이동·전투·성장) + 레벨 스크립트(ScriptWorld) + 적 + 원작 HUD.
  * <ul>
- *   <li>지면: 충돌 시트의 바닥 높이 추종 + 중력 (9.82 m/s², 1m ≈ 16 유닛 — 추정)</li>
+ *   <li>지면: 충돌 시트의 바닥 높이 추종 + 중력 (/GlobGame/ Gravity 50 m/s², 1m = 16 유닛, 최대 낙하 Sold+0xDC — 38 문서 §2.2)</li>
  *   <li>벽: 허리 높이 구(반지름 12) 밀어내기</li>
  *   <li>카메라: CMV 볼륨이 고른 레벨 카메라 위치에서 크레토스를 바라봄, 없으면 추적 카메라</li>
  *   <li>스크립트: 메시지 → HUD 메시지 창, 체크포인트 → 재시작 위치, 데스존 → 사망, LoadWad/Warp/Load → 레벨 전환, SpawnEnemy → 적 생성</li>
@@ -45,7 +45,7 @@ import java.util.Random;
 public final class GameScene implements Scene {
 
 	public static final float UNITS_PER_METER = 16f;
-	private static final float GRAVITY = 9.82f * UNITS_PER_METER;
+	private static final float GRAVITY = devple.gow.engine.nav.HeroNavigator.GRAVITY;
 	private static final float STEP = 14f;
 
 	/**
@@ -1358,7 +1358,7 @@ public final class GameScene implements Scene {
 			c0.vy = 0;
 			c0.grounded = true;
 		} else {
-			c0.vy -= GRAVITY * dt;
+			c0.vy = Math.max(c0.vy - GRAVITY * dt, -devple.gow.engine.nav.HeroNavigator.FALL_MAX);
 			p.y += c0.vy * dt;
 			c0.grounded = false;
 			if (!Float.isNaN(g) && p.y < g) {

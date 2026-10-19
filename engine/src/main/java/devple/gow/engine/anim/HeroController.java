@@ -2,6 +2,7 @@ package devple.gow.engine.anim;
 
 import devple.gow.engine.combat.Combatant;
 import devple.gow.engine.input.Input;
+import devple.gow.engine.nav.HeroNavigator;
 import devple.gow.engine.nav.NavBody;
 import devple.gow.tools.anim.Animation;
 import devple.gow.tools.anim.Skeleton;
@@ -35,10 +36,10 @@ public final class HeroController implements NavBody {
 	private float prevYaw;
 
 	/**
-	 * 점프 초속 (유닛/s). 원작 점프 파라미터 키는 미복원 → 정점 높이 ≈ 45 유닛(크레토스 키 1.2배)이 되도록
-	 * v = √(2·g·h), g = 9.82×16 [추정]. 2단 점프도 같은 값.
+	 * 점프 초속 (유닛/s) = 크라토스 TWK_Sold_000 +0xC4 15.25 m/s × 16 = 244 (0x1E9E88, 내비게이션 공용 점프 0x1E9B68) [확실].
+	 * 중력 /GlobGame/ Gravity 50 m/s² (800) 와 함께 정점 ≈ 37 유닛. 점프는 전투 기술이 아니라 내비게이션 코드다 (×  = +0x310 비트 1).
 	 */
-	public static final float JUMP_SPEED = (float) Math.sqrt(2 * 9.82 * 16 * 45);
+	public static final float JUMP_SPEED = HeroNavigator.JUMP;
 
 	/** 수직 속도 / 지면 여부 / 사용한 점프 수 (물리는 게임 씬이 적분). */
 	public float vy;
@@ -53,6 +54,8 @@ public final class HeroController implements NavBody {
 	/** 지상 이동 모양 (균형 걷기 등, null = 기본) / 속도 배율. */
 	private String walkOverride, idleOverride;
 	private float speedScale = 1f;
+	/** 마지막 지상 이동 속도 / 공중 정면 수평 속도 (원작 +0x260 z, 0x1EB650). */
+	private float groundSpeed, airSpeed;
 
 	public HeroController(Animator anim) {
 		this.anim = anim;
@@ -129,13 +132,16 @@ public final class HeroController implements NavBody {
 		if (grounded) {
 			jumps = 1;
 			anim.play(moving ? "jumpAir" : "jumpUp", true);
-		} else if (jumps < 2) {
+			airSpeed = moving ? groundSpeed : 0;
+			vy = Math.max(vy, 0) + JUMP_SPEED; // 0x1E9E78: 현재 수직 속도에 더함
+		} else if (jumps < 2 && vy < HeroNavigator.DOUBLE_MAX_VY && vy > HeroNavigator.DOUBLE_MIN_VY) {
+			// 0x1EA130: 수직 속도가 (Sold+0xD0, +0xCC) 안일 때만, 수직 속도 = +0xC8
 			jumps = 2;
 			anim.play("jumpdoubleair", true);
+			vy = HeroNavigator.DOUBLE_JUMP;
 		} else {
 			return false;
 		}
-		vy = JUMP_SPEED;
 		grounded = false;
 		return true;
 	}
@@ -153,6 +159,7 @@ public final class HeroController implements NavBody {
 			wasGrounded = true;
 			jumps = 0;
 			launch.zero();
+			airSpeed = 0;
 			anim.play("land", true); // ANILand
 		}
 		if (anim.current() != null && anim.current().name.equals("land") && !anim.finished()
@@ -171,22 +178,31 @@ public final class HeroController implements NavBody {
 			yaw += d * Math.min(1f, TURN_RATE * dt);
 			anim.play(walkOverride != null ? walkOverride : mag > RUN_THRESHOLD ? "walkBlend2" : "walkBlend1", false);
 			float speed = walkOverride != null ? clipSpeed(anim.find("walkBlend1")) * speedScale : clipSpeed(anim.current());
+			groundSpeed = speed;
 			// 정면 -Z 를 yaw 만큼 회전
 			position.add((float) -Math.sin(yaw) * speed * dt, 0, (float) -Math.cos(yaw) * speed * dt);
 		}
 		anim.update(dt);
 	}
 
-	/** 공중: 스틱으로 공중 제어(걷기 속도), 하강 시 ANIFall "fallv". */
+	/**
+	 * 공중 (원작 0x1EB650): 정면을 스틱 쪽으로 프레임당 Sold+0xE4 비율로 돌리고, 정면 수평 속도를 목표
+	 * Sold+0xEC × (스틱 · 정면) 쪽으로 Sold+0xD8 가속 (둘 다 7.5 m/s → 120) [확실: 값 / 추정: 회전 보간]. 하강 시 ANIFall "fallv".
+	 */
 	private void airUpdate(Input in, float camYaw, float dt) {
 		wasGrounded = false;
 		float sx = in.leftX(), sy = in.leftY();
 		float mag = Math.min(1f, (float) Math.hypot(sx, sy));
+		float target = 0;
 		if (mag > 0.15f) {
 			float dirYaw = camYaw + (float) Math.atan2(-sx, sy);
-			yaw += wrap(dirYaw - yaw) * Math.min(1f, TURN_RATE * dt);
-			float speed = 48f * mag;
-			position.add((float) -Math.sin(yaw) * speed * dt, 0, (float) -Math.cos(yaw) * speed * dt);
+			yaw += wrap(dirYaw - yaw) * Math.min(1f, HeroNavigator.AIR_TURN * 60f * dt);
+			target = HeroNavigator.AIR_SPEED * mag * (float) Math.max(0, Math.cos(wrap(dirYaw - yaw)));
+		}
+		float acc = HeroNavigator.AIR_ACCEL * dt;
+		airSpeed = target > airSpeed ? Math.min(target, airSpeed + acc) : Math.max(target, airSpeed - acc);
+		if (airSpeed != 0) {
+			position.add((float) -Math.sin(yaw) * airSpeed * dt, 0, (float) -Math.cos(yaw) * airSpeed * dt);
 		}
 		position.fma(dt, launch);
 		if (vy < 0 && anim.finished()) {
@@ -259,6 +275,7 @@ public final class HeroController implements NavBody {
 	@Override
 	public void setGrounded(boolean g) {
 		grounded = g;
+		airSpeed = 0; // 내비게이터가 붙이거나 놓을 때 (놓는 속도는 launch)
 		if (g) {
 			wasGrounded = true;
 			jumps = 0;
