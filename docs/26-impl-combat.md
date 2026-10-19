@@ -50,7 +50,7 @@
 | 스켈레톤 `min`(55관절), `MDL_MIN`, `ANM_min`(41) | R_MIN.WAD |
 | 기술·피격 반응·사망 | CombatFile 050–053 (루트 액션 REQUEST0 / EV_HIT_REACT / EV_DEATH) |
 | HP 90, Damage Multiplier, Block 40%, Circle Health Threshold 25 | TWK `/TweakTemplates/AI1/050/` |
-| 의사결정 | **단순 AI** (원작 AI 코드 미분석): 60 유닛 밖이면 `walkFront` 로 접근, 안이면 0.8~1.8초마다 공격 목록(10,11,20,21,22,40,41,44)에서 무작위 요청, 피격 시 Block% 확률로 BLOCK(17) |
+| 의사결정 | ~~단순 AI~~ → 원작 AI 로 대체됨 ([32 문서](32-impl-enemy-ai.md)). 예전 규칙(결정 트리 없는 적에만 남음): 60 유닛 밖이면 `walkFront` 로 접근, 안이면 0.8~1.8초마다 공격 목록(10,11,20,21,22,40,41,44)에서 무작위 요청, 피격 시 Block% 확률로 BLOCK(17) |
 
 `Combatant` 를 영웅/적 공용으로 일반화:
 - 피격자 파이프라인 `takeHit` (무적 → 방어 이벤트 16 → 누적 피해·poise → 사망 14 / 잡기 원 21 / 반응 13)
