@@ -61,6 +61,7 @@ public final class HeroTestScene implements Scene {
 	private HeroController ctl;
 	private Combatant combat;
 	private TrainingDummy dummy;
+	private devple.gow.engine.asset.BladeModels blades;
 	private WadAssets minAssets;
 	private Shader skinnedMin;
 	private AnimatedModel minModel;
@@ -121,6 +122,15 @@ public final class HeroTestScene implements Scene {
 		combat = new Combatant(data, animator, owner());
 		DamageRules rules = new DamageRules(tw);
 		combat.setDamageScale(() -> rules.playerScale(1, 0, bladeLevel, godMode.active()));
+		try {
+			// 원작 CDV 히트박스 + 블레이드 모델 (34 문서)
+			Path wpn = rom.resolve("R_WPN0_" + Math.max(0, Math.min(5, bladeLevel)) + ".WAD");
+			combat.setHitVolumes(devple.gow.engine.combat.HitVolumes.forHero(hero.wad(), sk,
+					java.nio.file.Files.exists(wpn) ? WadFile.load(wpn) : null));
+			blades = devple.gow.engine.asset.BladeModels.load(rom, 0, bladeLevel, skinned);
+		} catch (IOException ex) {
+			throw new UncheckedIOException(ex);
+		}
 		heroHittable = new Hittable() {
 			public Vector3f position() {
 				return ctl.position;
@@ -140,6 +150,10 @@ public final class HeroTestScene implements Scene {
 
 			public boolean invulnerable() {
 				return player.hp <= 0 || combat.invulnerable();
+			}
+
+			public devple.gow.engine.combat.HitVolumes hitVolumes() {
+				return combat.hitVolumes();
 			}
 
 			public Result receive(CombatFile.Attack a, Combatant attacker, float dmg, Vector3f knock) {
@@ -320,7 +334,11 @@ public final class HeroTestScene implements Scene {
 		} else if (enemy.deadTime() < 3f) {
 			minModel.draw(cam, e.window().aspect(), enemy.world(new Matrix4f(), alpha), enemy.animator().pose(), e.renderer().white());
 		}
-		model.draw(cam, e.window().aspect(), world, ctl.animator().pose(), e.renderer().white());
+		var pose = ctl.animator().pose();
+		model.draw(cam, e.window().aspect(), world, pose, e.renderer().white());
+		if (blades != null) {
+			blades.draw(cam, e.window().aspect(), world, ctl.animator().skeleton(), pose.world(ctl.animator().skeleton()), e.renderer().white());
+		}
 		if (hud != null) {
 			hud.render(e);
 		}
@@ -329,6 +347,9 @@ public final class HeroTestScene implements Scene {
 	@Override
 	public void exit(Engine e) {
 		model.close();
+		if (blades != null) {
+			blades.close();
+		}
 		skinned.close();
 		grid.close();
 		box.close();

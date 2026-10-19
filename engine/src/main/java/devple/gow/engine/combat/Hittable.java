@@ -28,6 +28,11 @@ public interface Hittable {
 		return false;
 	}
 
+	/** 원작 CDV 피격 볼륨 (몸 구). null 이면 공격자는 정면 구 근사를 쓴다 (34 문서). */
+	default HitVolumes hitVolumes() {
+		return null;
+	}
+
 	/** 무적(이벤트 9) 또는 사망. */
 	boolean invulnerable();
 

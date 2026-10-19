@@ -10,6 +10,7 @@
 ./gradlew -q :tools:run --args="anim:sheet gow-rom/R_HERO0.WAD MDL_hero combo3A work/anim/combo.png --frames 6"
 ./gradlew -q :tools:run --args="anim:sheet gow-rom/R_HERO0.WAD MDL_hero maiMin01 out.png --ext gow-rom/R_MIN.WAD"  # 외부 그룹
 ./gradlew -q :tools:run --args="anim:batch gow-rom"                                  # 전체 WAD 검증
+./gradlew -q :tools:run --args="anim:sheet gow-rom/R_HERO0.WAD MDL_hero combo3A out.png --weapon gow-rom/R_WPN0_2.WAD --hit"  # 블레이드 부착 + CDV 구
 ```
 `pose` 의 애니메이션 자리에 `bind`(정점 원본), `idle`(스켈레톤 아이들 포즈) 도 쓸 수 있다.
 공통 옵션: `--skel CXT` `--anm ANM_x` `--ext 다른.wad` `--lod N` `--inst N`(체인/인스턴스) `--yaw 도`.
@@ -122,7 +123,7 @@ M[j] = world[j]                 (그 밖: 정점이 관절 로컬 공간)
 |-------|------|------|
 | 0 | 관절 회전 (p2 = 3 오일러 전용? / 4 쿼터니언 포함) | **해석 완료** |
 | 5 | 관절 이동 | **해석 완료** |
-| 10 | 관절 부속 데이터. 히어로는 6개 슬롯 — 슬롯 1 은 같은 트랙 포맷의 float 위치(관절 107/109 `lWeapOH`/`rWeapOH` = 블레이드 사슬 궤적으로 추정), 슬롯 2 는 60fps 관절 번호(106/107/109) 레코드 | 부분 |
+| 10 | 오브젝트별 범용 채널 (슬롯 의미는 오브젝트 클래스가 정함). 히어로 슬롯 1 = **무기 로케이터 `lWeapOH`/`rWeapOH` 모델 공간 위치**(블레이드 사슬 궤적), 슬롯 2 = 관절별 u8 부착 상태 — 2.8절 | **히어로 해석 완료** |
 | 11 | 사운드 이미터/부서지는 물체 쪽 (통, 상자, 레버) | 미해석 |
 | 3, 8, 9 | 머티리얼 색 / UV 스크롤 / 텍스처 시트 (03·07 문서 영역) | 미해석 |
 | 12 | `loddetailgroup` 등 | 미해석 |
@@ -211,11 +212,27 @@ for frame f = 0 .. frames-1:
 ### 2.6 루트 모션 / 특수 관절
 - `zeroJoint`(히어로 105, `main` 의 자식이며 `pelvis` 의 형제)에 **루트 이동**이 들어 있다: `dash` z 0.14 → -74, `evadeFront` → -146 (정면 -Z 로 전진), `wallJumpUp` y +60, `jumpUp` y +9.4. 메시는 이 관절에 스키닝되지 않으므로 게임은 zeroJoint 위치를 오브젝트 이동으로 옮긴다고 판단.
 - 루프 걷기 계열은 zeroJoint z 가 상수 (`walkBlend1` -3.2, `walkBlend2`/`runLand` -8.0, `standIdle` 3.64) — blendParam(3.5/5.0)과 함께 이동 속도 파라미터로 추정 (미확정).
-- `synchJoint`(106, 아이들 z = -20 = 정면 20단위)는 잡기/처형(`maiMin*`) 상대 위치 기준, `lWeapOH`/`rWeapOH`(107/109)는 블레이드(외부 모델) 부착점.
+- `synchJoint`(106, 아이들 z = -20 = 정면 20단위)는 잡기/처형(`maiMin*`) 상대 위치 기준, `lWeapOH`/`rWeapOH`(107/109)는 블레이드(외부 모델 `R_WPN*` 의 `maiblade`) 부착점 — 위치는 타입 10 (2.8절).
 - 미노타우로스 `axeOut`(54)는 바닥에 놓인 도끼 위치용으로 보인다 (가시성은 타입 10/11 또는 스크립트 담당, 미해석).
 
 ### 2.7 이벤트 / 사운드
 act 안에서 명시적인 이벤트(사운드·히트 프레임) 테이블은 찾지 못했다. 히어로 act 이름은 `TWK_goHero` / `TWK_CombatFile_*` 튜닝 테이블이 이름으로 참조하므로(02 문서) 히트 판정·사운드 타이밍은 TWK 쪽에 있을 가능성이 높다 → 06/1x 단계.
+
+### 2.8 타입 10 채널 (무기 궤적 / 부착 상태)
+디스크립터(2.3) 의 `+0x10 u32` 가 **원소 크기**다: 회전 2(s16), 이동 4(f32), 타입 10 은 슬롯마다 4 또는 1. `+0x00 u16` 은 툴 쓰레기(같은 act 라도 R_HERO0/1/4 에서 0xBE10/0x2110/0xC010).
+
+**원소 크기 4** = 2.4절 트랙 포맷 그대로(f32 절대 / s16 가산). 히어로 슬롯 1(전체 996 act):
+- 엔트리 1개, baseStream 0x1A0, 비트맵 2워드 `0x7000, 0x0070` → 스트림 428–430, 436–438 = **관절 107 `lWeapOH`, 109 `rWeapOH` 의 x/y/z**.
+- 두 관절은 `main`(0) 의 자식(부모 = 모델 원점), inverse bind 없음, 아이들 위치 0 → 값이 곧 **모델 공간 위치**. 회전은 타입 0 트랙(스트림 428–431, 436–439)에 있다.
+- 측정(`combo3A`): 평소엔 손목에서 1.5–1.6 (손에 쥔 상태), 프레임 6–14(0.2–0.47초) 왼쪽 OH 가 정면 −Z 로 최대 76 단위까지 날아갔다 돌아온다 = **블레이드 사슬 투척 궤적**. `standIdle` 에서는 y=32.6, 등 뒤(`leftBladeBack`/`rightBladeBack` 위치) = 등에 멘 상태.
+- 재생: `Animation.channelTracks` 로 파싱, `bake` 때 `locatorTrack()` 조건(성분 x/y/z, 부모 0, inverse bind 없음, 쿼터니언, 같은 act 타입 5 가 안 건드림, 이름 `*WeapOH`)을 만족하면 이동 테이블에 합친다. 이름 조건 없이 고르면 통나무 조각(`logShard*`), `zeroJoint`, `Axe2Out` 등 의미 미상 채널이 걸려서(anim:batch 통계) 히어로 바인딩만 적용한다. 전체 batch: 적용 4518 act × 2관절, 실패/NaN 0.
+- 다른 오브젝트의 원소 크기 4 슬롯은 대부분 스트림 8(= "관절 2 x" 위치가 아니라 스칼라 채널 번호로 보임), 값 250–1055 (`airImpale` 슬롯 3–5, 통·모래주머니·횃불) — 미해석.
+
+**원소 크기 1** = 12B 엔트리 `{u16 id(관절 번호), u8 flags, u8 offHi, u16 count, u16 start, u16 hold, u16 offLo}` + `u8 값[count]` (`Animation.ByteTrack`, `byteChannel(joint, t)`).
+- 히어로 슬롯 2 (1/60초 프레임): 관절 106(synchJoint)=1, 107/109=0 — 히어로 세트 전체에서 상수.
+- 미노타우로스 `ANM_min` 슬롯 1: 관절 54(`axeOut`) 대부분 0, `maiMin01` 에서 87프레임에 관절 36=1→0, 54=0→1 (도끼가 손에서 바닥 로케이터로 넘어감), `maiMin04` 반대 방향 → **부착 관절 전환(무기 소유/가시성) 플래그** [추정]. 엔진은 아직 가시성에 쓰지 않는다.
+
+블레이드 오브젝트·충돌 구는 34 문서.
 
 ## 3. 엔진용 샘플러 API
 
@@ -242,7 +259,7 @@ float[] rootMotion = pose.pos[sk.indexOf("zeroJoint")];       // 루트 이동
 
 ## 5. 미해결 질문
 - jointMap 에 스켈레톤 범위 밖 번호(관절 수, 관절 수+1)가 들어간 경우의 행렬 (오브젝트 루트/카메라 행렬로 추정). 현재는 짝 관절 행렬로 대체.
-- 타입 10/11/3/8/9/12 채널 상세, 가시성(통 껍데기 `barrelVisDisapear`, 바닥 도끼) 제어 주체.
+- 타입 10 의 히어로 외 슬롯(스트림 8 스칼라), 11/3/8/9/12 채널 상세, 가시성(통 껍데기 `barrelVisDisapear`, 바닥 도끼 — u8 채널 추정) 제어 주체.
 - act 0x04 f32, 0x18 f32, 디스크립터의 u16/u32 미상 필드, 세트 flags bit0.
 - 블렌드 그룹(blendIndex/blendParam) 의 정확한 혼합 공식, zeroJoint 상수 z 값의 의미(속도?).
 - 저장 로컬 행렬이 아이들 성분과 다른 128개 CXT 에서 게임이 처음에 어느 쪽을 쓰는지.

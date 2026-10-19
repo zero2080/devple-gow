@@ -1,5 +1,6 @@
 package devple.gow.tools.anim;
 
+import devple.gow.tools.level.BallHull;
 import devple.gow.tools.model.GowModel;
 import devple.gow.tools.model.PreviewRenderer;
 import devple.gow.tools.model.TriMesh;
@@ -23,6 +24,7 @@ import java.util.List;
  *   anim:pose  &lt;wad&gt; &lt;MDL_x&gt; &lt;anim|bind|idle&gt; &lt;t&gt; &lt;out.png&gt;
  *   anim:sheet &lt;wad&gt; &lt;MDL_x&gt; &lt;anim&gt; &lt;out.png&gt; [--frames N]
  * 공통 옵션: --skel CXT이름  --anm ANM이름  --ext 다른.wad (외부 그룹 0x10003 연결)  --lod N  --inst N  --yaw 도
+ * sheet 옵션: --weapon R_WPN0_n.WAD (블레이드를 lWeapOH/rWeapOH 에 부착)  --hit (CDV 구: 빨강 = 무기/공격, 초록 = 몸)
  * </pre>
  */
 public final class Cli {
@@ -43,6 +45,8 @@ public final class Cli {
 		int inst = Integer.parseInt(opt(a, "--inst", "0"));
 		int frames = Integer.parseInt(opt(a, "--frames", "8"));
 		double yaw = Double.parseDouble(opt(a, "--yaw", "30"));
+		String weapon = opt(a, "--weapon", null);
+		boolean hit = a.remove("--hit");
 		if (a.size() < 2) {
 			System.err.println("usage: anim:<info|skel|list|pose|sheet> <wad> ...");
 			System.exit(1);
@@ -65,7 +69,18 @@ public final class Cli {
 				if (a.get(0).equals("pose")) {
 					pose(r, a.get(3), Float.parseFloat(a.get(4)), Path.of(a.get(5)), yaw);
 				} else {
-					sheet(r, a.get(3), frames, Path.of(a.get(4)), yaw);
+					WeaponAttach wa = weapon != null ? WeaponAttach.blades(WadFile.load(Path.of(weapon))) : null;
+					BallHull body = null;
+					if (hit) {
+						for (String ref : Skeleton.groupRefs(wad, r.skel.name)) {
+							for (var t : wad.resources()) {
+								if (ref.startsWith("CDV_") && t.name().equals(ref) && t.data() != null && BallHull.is(t.data())) {
+									body = new BallHull(t.name(), t.data());
+								}
+							}
+						}
+					}
+					sheet(r, a.get(3), frames, Path.of(a.get(4)), yaw, wa, hit ? body : null, hit);
 				}
 			}
 			case "batch" -> batch(Path.of(a.get(1)));
@@ -144,6 +159,7 @@ public final class Cli {
 		int skels = 0, badSkel = 0, sets = 0, acts = 0, baked = 0, nan = 0, span = 0, ext = 0, extAttached = 0, fail = 0, models = 0, oorModels = 0;
 		float worstLocal = 0, worstInv = 0;
 		java.util.Map<String, Integer> errors = new java.util.TreeMap<>();
+		java.util.Map<String, Integer> locators = new java.util.TreeMap<>();
 		for (Path p : wads) {
 			WadFile w = WadFile.load(p);
 			List<Skeleton> sks;
@@ -189,6 +205,13 @@ public final class Cli {
 							}
 							an.bake(sk);
 							baked++;
+							for (AnimTrack ct : an.channelTracks) {
+								if (an.locatorTrack(sk, ct)) {
+									for (int st : ct.streams()) {
+										locators.merge(sk.joints.get(st / 4).name(), 1, Integer::sum);
+									}
+								}
+							}
 							if (!an.posTracks.isEmpty() && !an.rotTracks.isEmpty() && Math.abs(an.posFrameTime - an.frameTime) > 1e-6f) {
 								errors.merge("회전/위치 frameTime 다름", 1, Integer::sum);
 							}
@@ -227,6 +250,7 @@ public final class Cli {
 		System.out.printf("wads=%d skeletons=%d (오차 초과 %d, 최대 local=%.4f inv=%.4f) anmSets=%d external=%d/%d acts=%d baked=%d fail=%d nan=%d spanOver=%d models=%d oorModels=%d%n",
 				wads.size(), skels, badSkel, worstLocal, worstInv, sets, extAttached, ext, acts, baked, fail, nan, span, models, oorModels);
 		errors.forEach((k, v) -> System.out.println("  " + v + " × " + k));
+		System.out.println("타입 10 로케이터 위치 스트림 (관절 이름별): " + locators);
 	}
 
 	/** 모델 + 스켈레톤 + 애니메이션 세트 묶음. */
@@ -313,7 +337,45 @@ public final class Cli {
 	}
 
 	/** 두 줄: 위 = 3/4 시점, 아래 = 측면. 프레임 전체에 같은 프레이밍 사용 (이동이 보이도록). */
-	private static void sheet(Rig r, String anim, int n, Path png, double yaw) throws Exception {
+	/** 포즈된 메시 + (선택) 부착 블레이드 + (선택) CDV 구 링. */
+	static TriMesh compose(Rig r, Pose pose, WeaponAttach wa, BallHull body, boolean hit) {
+		TriMesh tm = r.mesh.posed(r.skel, pose);
+		float[][] w = pose.world(r.skel);
+		List<float[]> bodyBalls = new ArrayList<>();
+		List<float[]> weaponBalls = new ArrayList<>();
+		if (body != null) {
+			for (int b = 0; b < body.balls.size(); b++) {
+				int j = body.ballJoint[b];
+				if (j < w.length) {
+					(body.ballPart(b) == 1 ? bodyBalls : weaponBalls).add(WeaponAttach.posedBall(body, b, w[j]));
+				}
+			}
+		}
+		if (wa != null) {
+			for (Skeleton.Joint jt : r.skel.joints) {
+				if (!jt.name().endsWith("WeapOH")) {
+					continue;
+				}
+				if (wa.model != null) {
+					tm.subs.addAll(wa.posed(w[jt.index()]).subs);
+				}
+				if (hit && wa.cdv != null) {
+					float[][] bw = wa.world(w[jt.index()]);
+					for (int b = 0; b < wa.cdv.balls.size(); b++) {
+						weaponBalls.add(WeaponAttach.posedBall(wa.cdv, b, bw[Math.min(wa.cdv.ballJoint[b], bw.length - 1)]));
+					}
+				}
+			}
+		}
+		if (hit) {
+			tm.subs.add(WeaponAttach.rings(bodyBalls, 0x40E040));
+			tm.subs.add(WeaponAttach.rings(weaponBalls, 0xFF3030));
+		}
+		return tm;
+	}
+
+	private static void sheet(Rig r, String anim, int n, Path png, double yaw, WeaponAttach wa, BallHull body, boolean hit)
+			throws Exception {
 		Animation an = r.anims == null ? null : r.anims.find(anim);
 		if (an == null) {
 			throw new IllegalArgumentException("애니메이션 없음: " + anim);
@@ -323,7 +385,7 @@ public final class Cli {
 		float[] bb = {Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE};
 		for (int i = 0; i < n; i++) {
 			float t = n == 1 ? 0 : len * i / (n - 1);
-			TriMesh tm = r.mesh.posed(r.skel, an.sample(r.skel, t, false));
+			TriMesh tm = compose(r, an.sample(r.skel, t, false), wa, body, hit);
 			meshes.add(tm);
 			float[] b = tm.bounds();
 			for (int k = 0; k < 3; k++) {

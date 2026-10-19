@@ -209,7 +209,7 @@ public final class HeroController {
 	public Matrix4f world(Matrix4f out, float alpha) {
 		Vector3f p = new Vector3f(prevPosition).lerp(position, alpha);
 		float y = prevYaw + wrap(yaw - prevYaw) * alpha;
-		return out.translation(p).rotateY(y + (float) Math.PI);
+		return out.translation(p).rotateY(y); // 메시 정면 = 모델 -Z (34 문서 §4: 이전 +π 는 등을 보이게 했다)
 	}
 
 	public Animator animator() {

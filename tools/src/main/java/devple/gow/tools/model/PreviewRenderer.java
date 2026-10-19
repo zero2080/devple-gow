@@ -46,7 +46,9 @@ public final class PreviewRenderer {
 		float s = size / ext;
 		int si = 0;
 		for (TriMesh.Sub sub : m.subs) {
-			int hue = palette(si++);
+			// 이름이 "#RRGGBB" 로 시작하는 서브메시는 그 색 (히트박스 디버그 등)
+			int hue = sub.name != null && sub.name.length() >= 7 && sub.name.charAt(0) == '#'
+					? Integer.parseInt(sub.name.substring(1, 7), 16) : palette(si++);
 			int n = sub.pos.size();
 			float[] sx = new float[n], sy = new float[n], sz = new float[n];
 			for (int i = 0; i < n; i++) {

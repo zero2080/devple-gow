@@ -24,12 +24,31 @@ import java.util.Map;
  * 0x40 u32 globalIndex  세트 전체에서의 act 번호 (그룹 firstAct + j)
  * 0x64 StateDescr[dataTypeCount] 20B: { u16 ?, u16 trackCount, u32 ?, u32 offset(act 기준), f32 frameTime, u32 ? }
  * </pre>
- * 데이터 타입 0 = 관절 회전, 5 = 관절 이동 ({@link AnimTrack}). 그 밖의 타입(3 머티리얼, 8 UV, 9 텍스처 시트,
- * 10/11/12 오브젝트 부속)은 아직 해석하지 않고 디스크립터만 보관한다.
+ * 데이터 타입 0 = 관절 회전, 5 = 관절 이동 ({@link AnimTrack}).
+ * 타입 10 = 오브젝트 클래스가 슬롯별 의미를 정하는 범용 채널. 디스크립터 +0x10 = 원소 크기 (4 = f32 이동 트랙과 같은 포맷,
+ * 1 = 관절별 u8 상태). 히어로 슬롯 1 = 무기 로케이터 {@code lWeapOH}/{@code rWeapOH} 의 모델 공간 위치(블레이드 사슬 궤적),
+ * 슬롯 2 = 관절별 부착 상태 바이트 (60 fps). 05 문서 2.8절.
+ * 그 밖의 타입(3 머티리얼, 8 UV, 9 텍스처 시트, 11/12)은 디스크립터만 보관한다.
  */
 public final class Animation {
 
 	public record StateDescr(int typeId, int unk0, int trackCount, int unk4, int offset, float frameTime, int unk10) {
+	}
+
+	/**
+	 * 타입 10 원소 크기 1 트랙: 12B 엔트리 { u16 id(관절 번호), u8 flags, u8 offHi, u16 count, u16 start, u16 hold, u16 offLo } +
+	 * u8 값[count]. 프레임 단위 = 디스크립터 frameTime (히어로 1/60).
+	 */
+	public record ByteTrack(int id, int start, int count, int hold, int[] values, float frameTime) {
+
+		/** 시간 t 의 값, 범위 밖이면 -1. */
+		public int at(float t) {
+			int f = Math.round(t / frameTime);
+			if (f < start || f > start + count - 1 + hold || count == 0) {
+				return -1;
+			}
+			return values[Math.min(f - start, count - 1)];
+		}
 	}
 
 	public final String name;
@@ -44,6 +63,10 @@ public final class Animation {
 	public final List<StateDescr> descrs = new ArrayList<>();
 	public final List<AnimTrack> rotTracks = new ArrayList<>();
 	public final List<AnimTrack> posTracks = new ArrayList<>();
+	/** 타입 10 f32 채널 트랙 (슬롯 순서). 로케이터 관절 위치로 쓰일 수 있는 것은 bake 때 고른다 ({@link #locatorTrack}). */
+	public final List<AnimTrack> channelTracks = new ArrayList<>();
+	/** 타입 10 u8 채널: 관절별 상태 값 (미노타우로스 maiMin01 에서 도끼 부착 관절 36→54 전환). */
+	public final List<ByteTrack> byteTracks = new ArrayList<>();
 	public final float frameTime;
 	/** 위치 디스크립터의 frameTime (회전과 다르면 경고 대상, 히어로 전체에서는 항상 같음). */
 	public final float posFrameTime;
@@ -76,10 +99,80 @@ public final class Animation {
 			} else if (typeIds[k] == 5) {
 				posTracks.addAll(AnimTrack.parse(b, at + sd.offset, sd.trackCount, true));
 				pft = sd.frameTime;
+			} else if (typeIds[k] == 10) {
+				try {
+					if (sd.unk10 == 4) {
+						channelTracks.addAll(AnimTrack.parse(b, at + sd.offset, sd.trackCount, true));
+					} else if (sd.unk10 == 1) {
+						byteTracks.addAll(parseBytes(b, at + sd.offset, sd.trackCount, sd.frameTime));
+					}
+				} catch (RuntimeException e) {
+					// 오브젝트별 채널 — 해석 실패는 무시 (관절 포즈에는 영향 없음)
+				}
 			}
 		}
 		frameTime = ft > 0 ? ft : pft > 0 ? pft : 1f / 30f;
 		posFrameTime = pft > 0 ? pft : frameTime;
+	}
+
+	private static List<ByteTrack> parseBytes(ByteBuffer b, int at, int entries, float ft) {
+		List<ByteTrack> out = new ArrayList<>();
+		for (int i = 0; i < entries; i++) {
+			int e = at + i * 12;
+			int id = Short.toUnsignedInt(b.getShort(e));
+			int hi = b.get(e + 3) & 0xFF;
+			int cnt = Short.toUnsignedInt(b.getShort(e + 4));
+			int start = Short.toUnsignedInt(b.getShort(e + 6));
+			int hold = Short.toUnsignedInt(b.getShort(e + 8));
+			int data = e + (hi << 16) + Short.toUnsignedInt(b.getShort(e + 10));
+			int[] v = new int[cnt];
+			for (int f = 0; f < cnt; f++) {
+				v[f] = b.get(data + f) & 0xFF;
+			}
+			out.add(new ByteTrack(id, start, cnt, hold, v, ft));
+		}
+		return out;
+	}
+
+	/** 관절 id 의 u8 채널 값 (시간 t), 없으면 -1. */
+	public int byteChannel(int joint, float t) {
+		int v = -1;
+		for (ByteTrack bt : byteTracks) {
+			if (bt.id() == joint) {
+				int x = bt.at(t);
+				if (x >= 0) {
+					v = x;
+				}
+			}
+		}
+		return v;
+	}
+
+	/**
+	 * 타입 10 f32 트랙이 이 스켈레톤의 <b>무기 로케이터</b>({@code *WeapOH}) 위치인지: 모든 스트림이 성분 x/y/z 이고, 관절이
+	 * 루트의 자식, inverse bind 없음(메시가 붙지 않음), 쿼터니언, 같은 act 의 타입 5 이동이 건드리지 않는 관절.
+	 * 슬롯 의미는 오브젝트 클래스가 정하므로 이름으로 히어로 바인딩만 적용한다 — 이름 조건 없이 고르면 통나무 조각/zeroJoint 등
+	 * 의미 미상 채널도 걸린다 (anim:batch 통계, 05 문서 2.8).
+	 */
+	public boolean locatorTrack(Skeleton sk, AnimTrack t) {
+		for (int s : t.streams()) {
+			int j = s / 4;
+			if (s % 4 > 2 || j >= sk.size()) {
+				return false;
+			}
+			Skeleton.Joint jt = sk.joints.get(j);
+			if (jt.parent() != 0 || jt.hasInverseBind() || !jt.quaternion() || !jt.name().endsWith("WeapOH")) {
+				return false;
+			}
+			for (AnimTrack p : posTracks) {
+				for (int ps : p.streams()) {
+					if (ps / 4 == j) {
+						return false;
+					}
+				}
+			}
+		}
+		return true;
 	}
 
 	static String cstr(ByteBuffer b, int at, int max) {
@@ -156,11 +249,17 @@ public final class Animation {
 				pos[j * 4 + c] = sk.idlePos[j][c];
 			}
 		}
+		List<AnimTrack> pt = new ArrayList<>(posTracks);
+		for (AnimTrack t : channelTracks) {
+			if (locatorTrack(sk, t)) {
+				pt.add(t);
+			}
+		}
 		float[][] outR = new float[frames][];
 		float[][] outP = new float[frames][];
 		for (int f = 0; f < frames; f++) {
 			apply(rotTracks, rot, f, nj);
-			apply(posTracks, pos, f, nj);
+			apply(pt, pos, f, nj);
 			outR[f] = rot.clone();
 			outP[f] = pos.clone();
 		}
