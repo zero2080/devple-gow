@@ -22,7 +22,7 @@ import java.util.Random;
  *       (스크립트 구동 보스 등)만 예전 단순 규칙(접근 → 무작위 공격)으로 대체</li>
  * </ul>
  */
-public final class EnemyFighter implements Hittable, CombatOwner {
+public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body {
 
 	/** 회전 속도 (rad/s) [근사: 원작 0x1CE240 회전 보간 값 미확인]. */
 	static final float TURN_RATE = 8f;
@@ -143,6 +143,8 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 		this.scale = tmpl.scaleCenter / 100f + tmpl.scaleRange / 100f * (0.5f - rnd.nextFloat());
 		this.combat = new Combatant(new CombatData(wad, combatFiles, set), anim, this);
 		this.nav = new EnemyNav(tmpl.moveCaps, ai != null ? ai.motion(tmpl.soldier) : null, tmpl.pauseMoveMs);
+		nav.setBody(ai != null ? ai.body(tmpl.soldier) : null, scale);
+		nav.setRide(ai != null ? ai.ride(tmpl.soldier) : null);
 		collectLocoClips(set);
 		DecisionTree tree = ai != null ? ai.tree(tmpl.decisionTree) : null;
 		AiData.Soldier sold = ai != null ? ai.soldier(tmpl.soldier) : null;
@@ -368,6 +370,48 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 		nav.setWorld(w);
 	}
 
+	/**
+	 * 생물끼리 밀어내기 (0x1E2DD8, {@link BodyPush}): 이동할 때 others (영웅·다른 적, 자신 포함 가능) 밖으로 자신을 민다.
+	 * GameScene 이 프레임마다 같은 목록을 준다.
+	 */
+	public void setCrowd(java.util.function.Supplier<? extends Iterable<? extends BodyPush.Body>> others) {
+		nav.setCrowd(this, others);
+	}
+
+	@Override
+	public Vector3f feet() {
+		return pos;
+	}
+
+	@Override
+	public float bodyRadius() {
+		return nav.bodyRadius();
+	}
+
+	@Override
+	public float bodyHeight() {
+		return nav.bodyHeight();
+	}
+
+	@Override
+	public float bodyBase() {
+		return nav.bodyBase();
+	}
+
+	@Override
+	public boolean airborne() {
+		return nav.mode() == EnemyNav.Mode.AIR;
+	}
+
+	/** 단단함 = 현재 기술 stateMask 비트 2 (0x1E29A8). 사망 기술이 끝난 시체는 통과 [근사: 원작 시체 처리 미분석]. */
+	@Override
+	public boolean solid() {
+		if (hp <= 0 && !combat.active()) {
+			return false;
+		}
+		return BodyPush.solid(combat);
+	}
+
 	/** 지상 이동 클립 후보 수집: 이름이 앞으로 걷기/달리기인 루프 클립과 그 블렌드 축 값 (TWK _Cycle, 없으면 ANM +0x14). */
 	private void collectLocoClips(AnimationSet set) {
 		java.util.Set<String> names = java.util.Set.of("front", "forward", "walk", "walkfront", "walkforward", "runfront", "runforward", "run");
@@ -417,7 +461,9 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 			}
 			case ROPE -> {
 				boolean moving = nav.moveX() != 0;
-				if (nav.rope() != null && nav.rope().horizontal()) {
+				if (nav.rope() != null && nav.rope().sub() == EnemyNav.SUB_ZIPLINE) {
+					playNav("ANIZipLine", "zipLine");
+				} else if (nav.rope() != null && nav.rope().horizontal()) {
 					playNav(moving ? "ANIBRopeF" : "ANIBRope", moving ? "ropeHOH" : "ropeHOHI");
 				} else {
 					playNav(moving ? "ANIRopeU" : "ANIRope", moving ? "ropeHOH" : "ropeHOHI");

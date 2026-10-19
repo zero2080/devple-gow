@@ -40,6 +40,8 @@
 | 0x200000–0x200180 | TargetSlot_* | 대상 슬롯 초기화(Sold +0x248/+0x24A), 예산 검사 | 확실 |
 | 0x1DC780 / 0x1DC9A8 / 0x1DC8F8 | PlayerMoveHistory_Add/Tick/Count | 영웅 기술 사용 기록 (0x3044D0) | 확실 |
 | 0x203248 | Combat_AskOwnerBlock | OnContact(0x204124)·투사체(0x190F00)에서 owner 방어 콜백 | 확실 |
+| 0x1CF9D0 | AI_MoveTo | 자신 +0x174 별 이동 의도 (지상/벽 0x1CF5D0/줄 0x1CFCE0–0x1CFF20). 출력 a2 = 이동 스틱 (xyz 방향, w 크기), a3 = 두 번째 출력 (매단 줄 회전 (1,0,0,1) [추정]) | 확실(흐름) |
+| 0x1E2DD8 / 0x1E28B0 | Nav_CreaturePush / 콜백 | 생물끼리 밀어내기: 범주 1\|2 질의, 상대 기술 stateMask 비트 2, 수직 캡슐 최근접 거리 → 자기만 깊이만큼 (32 문서 §생물끼리 밀어내기) | 확실 |
 
 ## 2. AI1 템플릿 필드 표 (`/TweakTemplates/AI1/NNN/`)
 등록 함수의 a3−a2 = 템플릿 구조체 오프셋. 이진 TWK 0x20 레코드는 필드 크기만큼만 복사되므로 short/byte/bool 은 **하위 바이트만 유효**
@@ -206,6 +208,8 @@ BlockMod 020(해골)과 050 의 0번 항목은 Move 0 / Limit 0 이라 영웅 �
    - 추가 확인: sub_00116BB0 은 `<클립>_Tween` → act +0x04, `<클립>_Cycle` → act +0x14 (05 문서의 blendParam) 를 **ANM act 레코드에 직접 덮어쓴다**.
      영웅 blendParam(걷기 3.5 / 달리기 5.0)과 실측 루트 이동(48 / 120 유닛/s = 3.0 / 7.5 m/s)이 맞지 않으므로 m/s 속도는 아님 → 블렌드 축 값으로 결론, 속도 출처는 여전히 미확인.
 5. 순찰(Patrol%d / 경로 노드 0x1D4AA0) 상세, AI Mode 2(궁수)·3·4 차이.
+6. ~~생물끼리 밀어내기~~ (32 §생물끼리 밀어내기: 0x1E2DD8 / 0x1E28B0, Sold +0x234/+0x238/+0x23C 몸 상자, Move stateMask 비트 2 = 단단함).
+   ~~적 줄 흔들기·짚라인~~ (32 §줄·짚라인: 매단 줄 AI 스틱 0 = 흔들지 않음, 정면 45° 정렬 후 점프 / 짚라인은 내비게이션이 낮은 끝으로). 남은 것: 매단 줄 위 회전 속도, +0x2D8 비트 31 (밀기 끔) 출처.
 
 ## 생성 액션 (SpawnEnemy 슬롯 7) [확실: 코드 경로]
 SpawnEnemy 슬롯 7 (기본 −1) → 생성 데이터 +6 → Enemy1 초기화 0x22CB18 → AI+0x94: 생성 직후 요청할 적 CombatFile 액션 (500 SPAWN, 504 SKSWALLSPAWN, 0..2 도발 …).
