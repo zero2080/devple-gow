@@ -24,18 +24,22 @@ public final class PreviewRenderer {
 		double[][] views = {{0, 0}, {Math.PI / 2, 0}, {Math.PI / 4, Math.toRadians(-30)}};
 		BufferedImage img = new BufferedImage(size * views.length, size, BufferedImage.TYPE_INT_RGB);
 		for (int v = 0; v < views.length; v++) {
-			draw(m, img, v * size, size, cx, cy, cz, ext * 1.05f, views[v][0], views[v][1]);
+			drawView(m, img, v * size, 0, size, cx, cy, cz, ext * 1.05f, views[v][0], views[v][1]);
 		}
 		ImageIO.write(img, "png", png.toFile());
 	}
 
-	private static void draw(TriMesh m, BufferedImage img, int ox, int size, float cx, float cy, float cz, float ext,
-							 double yaw, double pitch) {
+	/**
+	 * img 의 (ox, oy) 에 size×size 뷰 하나를 그린다. 중심 (cx,cy,cz), 화면 폭 = ext 월드 단위.
+	 * yaw: Y축 회전(0 = 정면), pitch: 아래로 내려다보는 각(음수).
+	 */
+	public static void drawView(TriMesh m, BufferedImage img, int ox, int oy, int size, float cx, float cy, float cz, float ext,
+								double yaw, double pitch) {
 		float[] zb = new float[size * size];
 		java.util.Arrays.fill(zb, Float.POSITIVE_INFINITY);
 		for (int y = 0; y < size; y++) {
 			for (int x = 0; x < size; x++) {
-				img.setRGB(ox + x, y, 0x202830);
+				img.setRGB(ox + x, oy + y, 0x202830);
 			}
 		}
 		double cyw = Math.cos(yaw), syw = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
@@ -65,12 +69,12 @@ public final class PreviewRenderer {
 				double lum = len == 0 ? 0.5 : 0.25 + 0.75 * Math.abs((nx * 0.3 - ny * 0.5 - nz * 0.8) / (len * 1.0)) / 1.0;
 				lum = Math.min(1, lum);
 				int col = shade(hue, lum);
-				fill(img, zb, ox, size, sx[a], sy[a], sz[a], sx[b], sy[b], sz[b], sx[c], sy[c], sz[c], col);
+				fill(img, zb, ox, oy, size, sx[a], sy[a], sz[a], sx[b], sy[b], sz[b], sx[c], sy[c], sz[c], col);
 			}
 		}
 	}
 
-	private static void fill(BufferedImage img, float[] zb, int ox, int size, float x0, float y0, float z0, float x1,
+	private static void fill(BufferedImage img, float[] zb, int ox, int oy, int size, float x0, float y0, float z0, float x1,
 							 float y1, float z1, float x2, float y2, float z2, int col) {
 		int minX = Math.max(0, (int) Math.floor(Math.min(x0, Math.min(x1, x2))));
 		int maxX = Math.min(size - 1, (int) Math.ceil(Math.max(x0, Math.max(x1, x2))));
@@ -93,7 +97,7 @@ public final class PreviewRenderer {
 				int k = y * size + x;
 				if (z < zb[k]) {
 					zb[k] = z;
-					img.setRGB(ox + x, y, col);
+					img.setRGB(ox + x, oy + y, col);
 				}
 			}
 		}
