@@ -224,7 +224,13 @@ public final class AnimatedModel implements AutoCloseable {
 					op *= p.matAnim().value("hdr8", fxTime, 1f);
 				}
 				shader.set("uTint", new org.joml.Vector4f(t[0] * colorScale[0], t[1] * colorScale[1], t[2] * colorScale[2], t[3] * op));
+				// 노멀맵 (원작에 없음, 44 문서): 첫 레이어 텍스처, 불투명·알파 블렌드만
+				boolean nm = (mode == RenderModel.Blend.OPAQUE || mode == RenderModel.Blend.ALPHA)
+						&& devple.gow.engine.render.Renderer.bindNormalMap(shader, p.texture());
 				p.mesh().draw();
+				if (nm) {
+					shader.set("uNmOn", 0);
+				}
 				if (scrolled) {
 					shader.set("uUvOffset", 0f, 0f);
 				}

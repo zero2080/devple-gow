@@ -17,6 +17,10 @@ uniform vec4 uClipPlane; // SCR_Mirror 반사 패스: 월드 평면 (GL_CLIP_DIS
 out vec3 vNormal;
 out vec2 vUv;
 out vec4 vColor;
+// 노멀맵 (원작에 없음, 44 문서): 월드 위치와 눈 위치 (uViewProj 역행렬 — 거울 패스면 반사된 눈)
+uniform int uNmOn;
+out vec3 vWorldPos;
+out vec3 vEye;
 
 void main() {
 	mat4 a = uJoints[int(aJoints.x)];
@@ -27,6 +31,12 @@ void main() {
 	vUv = aUv + uUvOffset;
 	vColor = aColor;
 	vec4 wp = uModel * vec4(p.xyz, 1.0);
+	vWorldPos = wp.xyz;
+	vEye = vec3(0.0);
+	if (uNmOn != 0) {
+		vec4 e = inverse(uViewProj) * vec4(0.0, 0.0, 1.0, 0.0);
+		vEye = e.xyz / e.w;
+	}
 	gl_ClipDistance[0] = dot(wp, uClipPlane);
 	gl_Position = uViewProj * wp;
 }

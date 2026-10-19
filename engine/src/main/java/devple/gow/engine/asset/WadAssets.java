@@ -73,7 +73,7 @@ public final class WadAssets implements AutoCloseable {
 			for (int f = 0; f < out.length; f++) {
 				int[] sub = new int[w * fh];
 				System.arraycopy(argb, f * w * fh, sub, 0, Math.min(sub.length, argb.length - f * w * fh));
-				out[f] = Texture.of(TextureDecoder.toImage(w, fh, sub), true);
+				out[f] = Texture.of(TextureDecoder.toImage(w, fh, sub), true).withNormalSource(n + "#" + f, w, fh, () -> sub);
 			}
 			return out;
 		});
@@ -138,7 +138,8 @@ public final class WadAssets implements AutoCloseable {
 			for (TextureLibrary.Entry e : textures.textures()) {
 				if (e.txr().name().equals(n)) {
 					int[] argb = TextureDecoder.decode(e.gfx(), e.pal(), 0);
-					return Texture.of(TextureDecoder.toImage(e.gfx().width(), e.gfx().height(), argb), true);
+					return Texture.of(TextureDecoder.toImage(e.gfx().width(), e.gfx().height(), argb), true)
+							.withNormalSource(n, e.gfx().width(), e.gfx().height(), () -> TextureDecoder.decode(e.gfx(), e.pal(), 0));
 				}
 			}
 			return null;
@@ -162,7 +163,8 @@ public final class WadAssets implements AutoCloseable {
 		TextureLibrary.Entry f = best;
 		return glTextures.computeIfAbsent(txrName + "@" + f.tagIndex(), n -> {
 			int[] argb = TextureDecoder.decode(f.gfx(), f.pal(), 0);
-			return Texture.of(TextureDecoder.toImage(f.gfx().width(), f.gfx().height(), argb), true);
+			return Texture.of(TextureDecoder.toImage(f.gfx().width(), f.gfx().height(), argb), true)
+					.withNormalSource(n, f.gfx().width(), f.gfx().height(), () -> TextureDecoder.decode(f.gfx(), f.pal(), 0));
 		});
 	}
 
@@ -211,9 +213,11 @@ public final class WadAssets implements AutoCloseable {
 		float[] max = {-Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE};
 		for (TriMesh.Sub s : tm.subs) {
 			float[] v = new float[s.pos.size() * Mesh.STRIDE];
+			// 법선 없는 서브메시 (조명 구운 레벨 메시): 노멀맵 기준용 부드러운 법선 (44 문서). uLit = 0 이라 원래 화면엔 안 쓰인다
+			float[][] smooth = s.hasNormal ? null : devple.gow.engine.render.SmoothNormals.compute(s.pos, s.tris);
 			for (int i = 0; i < s.pos.size(); i++) {
 				float[] p = s.pos.get(i);
-				float[] n = s.normal.get(i);
+				float[] n = smooth != null ? smooth[i] : s.normal.get(i);
 				float[] uv = s.uv.get(i);
 				int[] c = s.color.get(i);
 				int o = i * Mesh.STRIDE;
