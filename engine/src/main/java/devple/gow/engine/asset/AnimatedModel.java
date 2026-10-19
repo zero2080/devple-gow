@@ -27,8 +27,27 @@ public final class AnimatedModel implements AutoCloseable {
 	public static final int MAX_JOINTS = 128;
 
 	private record Part(SkinnedMesh mesh, Texture texture, RenderModel.Blend blend, float[] tint, boolean lit,
-						boolean jointLocal, devple.gow.tools.fx.MaterialAnim.Anim matAnim) {
+						boolean jointLocal, devple.gow.tools.fx.MaterialAnim.Anim matAnim, int[] joints) {
+
+		/** 파트가 쓰는 관절이 모두 숨김이면 그리지 않는다 (ANM u8 가시성, 41 문서 §2). */
+		boolean hiddenBy(boolean[] hidden) {
+			if (hidden == null || joints.length == 0) {
+				return false;
+			}
+			for (int j : joints) {
+				if (j >= hidden.length || !hidden[j]) {
+					return false;
+				}
+			}
+			return true;
+		}
 	}
+
+	/**
+	 * 다음 draw 한 번에 쓸 관절 숨김 표 ({@link devple.gow.tools.anim.Animation#hiddenJoints}). 모델은 이펙트 인스턴스끼리 공유되므로
+	 * 호출자가 그리기 직전에 넣고 바로 뒤 null 로 되돌린다.
+	 */
+	public boolean[] hiddenJoints;
 
 	private final Skeleton skeleton;
 	private List<Part> parts = new ArrayList<>();
@@ -97,6 +116,13 @@ public final class AnimatedModel implements AutoCloseable {
 				v[o + 13] = jb < skeleton.size() ? jb : 0;
 				v[o + 14] = p.weights.get(i);
 			}
+			java.util.TreeSet<Integer> used = new java.util.TreeSet<>();
+			for (int i = 0; i < n; i++) {
+				used.add((int) v[i * SkinnedMesh.STRIDE + 12]);
+				if (v[i * SkinnedMesh.STRIDE + 14] < 1f) {
+					used.add((int) v[i * SkinnedMesh.STRIDE + 13]);
+				}
+			}
 			int[] idx = new int[p.tris.size() * 3];
 			for (int i = 0; i < p.tris.size(); i++) {
 				System.arraycopy(p.tris.get(i), 0, idx, i * 3, 3);
@@ -112,7 +138,8 @@ public final class AnimatedModel implements AutoCloseable {
 				blend = assets.classify(mat, tex != null);
 				tint = l.rgba();
 			}
-			parts.add(new Part(new SkinnedMesh(v, idx), tex, blend, tint, p.hasNormal, p.jointLocal(), assets.materialAnim(p.material)));
+			parts.add(new Part(new SkinnedMesh(v, idx), tex, blend, tint, p.hasNormal, p.jointLocal(), assets.materialAnim(p.material),
+					used.stream().mapToInt(Integer::intValue).toArray()));
 		}
 	}
 
@@ -145,7 +172,7 @@ public final class AnimatedModel implements AutoCloseable {
 			for (Part p : parts) {
 				RenderModel.Blend b = p.blend();
 				boolean solid = b == RenderModel.Blend.OPAQUE || b == RenderModel.Blend.CUTOUT;
-				if (pass == 0 && !solid || pass == 1 && b == RenderModel.Blend.OPAQUE) {
+				if (pass == 0 && !solid || pass == 1 && b == RenderModel.Blend.OPAQUE || p.hiddenBy(hiddenJoints)) {
 					continue;
 				}
 				if (lastLocal == null || lastLocal != p.jointLocal()) {

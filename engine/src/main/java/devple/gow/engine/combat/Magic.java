@@ -54,7 +54,6 @@ public final class Magic {
 	/** 1 TWK 거리 단위 = 16 유닛 (Targeting Range 와 같은 추정, 27 문서). */
 	public static final float UNIT = 16f;
 	private static final String[] NODE = {null, null, null, "Lightning", "MedusaHead", "Thunderbolt", "RaiseTheDead"};
-	private static final float TICK = 0.25f;
 
 	private final Tweaks tw;
 	private final PlayerState player;
@@ -169,41 +168,87 @@ public final class Magic {
 		drain(medusa.update(c, in, ts, stage(4), player.mp, dt, sink));
 		drain(zeus.update(c, in, ts, stage(5), player.mp, dt, sink));
 		drain(hades.update(c, ts, stage(6), dt, sink));
-		lightning(c, dt);
+		lightning(c, in, ts, dt);
 	}
 
 	private boolean lightningOn;
+	public final LightningMash mash = new LightningMash();
+	private float mashRate, lightningReach = 5;
 
 	/** 포세이돈의 분노 루프 기술(*lightningloop) 재생 중 — 이펙트 goLightningAttackMain 유지 (40 문서 §5.4). */
 	public boolean lightningOn() {
 		return lightningOn;
 	}
 
-	private void lightning(Combatant c, float dt) {
+	/** 연타율 = 매시 미터 / Mashometer Max (0x194BD4). 번개 중이 아니면 0. */
+	public float mashRate() {
+		return mashRate;
+	}
+
+	/** 연타로 늘어난 사거리 (TWK 미터): Reach · (1 + 연타율·(Mash Reach Scale − 1)) (0x194C04, f23). */
+	public float lightningReach() {
+		return lightningReach;
+	}
+
+	/**
+	 * 영웅 회전 속도 (라디안/초): 전역 "Mash Max Spin" (0x29D774, 1200 도/초) · 연타율. 원작은 매 프레임 영웅 행렬에
+	 * Y 회전 (1200/180·π · 연타율 · 1/60) 을 곱한다 (0x195160 → sub_00184A98) [확실].
+	 */
+	public float lightningSpin() {
+		return lightningOn ? (float) Math.toRadians(tw.f("/Player/Lightning/", "Mash Max Spin", 1200f)) * mashRate : 0;
+	}
+
+	/**
+	 * SCR_Lightning (0x1948F0) 의 매시·피해 부분. 매시 미터는 {@link LightningMash}. 피해: 사거리 f23 안의 모든 대상
+	 * (0x1DAA20 이 반경 f23·16 안 전투자 수집, 개별 판정 거리 &lt; (f23 + 대상 반지름)·16) 에 대상별 타이머로
+	 * 초당 "Damage Freq" (short, 12) 번, 1회 피해 = DPS · (1 + 연타율·(Mash Damage Scale − 1)) / Damage Freq (0x195718).
+	 * 엔진은 대상 반지름 대신 사거리 ×2 [근사, 기존], 타이머는 하나.
+	 */
+	private void lightning(Combatant c, devple.gow.engine.input.Input in, java.util.List<? extends Hittable> ts, float dt) {
 		String clip = c.clipName();
-		lightningOn = clip != null && clip.toLowerCase().contains("lightningloop");
-		Hittable t = c.target();
-		if (clip == null || !clip.toLowerCase().contains("lightningloop") || t == null || t.invulnerable()) {
+		boolean on = clip != null && clip.toLowerCase().contains("lightningloop");
+		String node = "/Player/Lightning/";
+		int st = stage(3);
+		String sp = "Stage " + st + " ";
+		if (on && !lightningOn) {
+			mash.start();
+			acc = 0;
+		}
+		lightningOn = on;
+		if (!on) {
+			mashRate = 0;
 			acc = 0;
 			return;
 		}
+		boolean allow = (tw.i(node, sp + "Allow Mashing", 0) & 0xFF) != 0;
+		float max = tw.f(node, sp + "Mashometer Max", 1f);
+		mashRate = mash.update(allow, tw.f(node, sp + "Mashometer Drain", 1f), max,
+				in != null && in.pressed(devple.gow.engine.input.PadButton.CIRCLE), dt);
+		float reach = tw.f(node, sp + "Reach", 5f) * (1 + mashRate * (tw.f(node, sp + "Mash Reach Scale", 1f) - 1));
+		float dps = tw.f(node, sp + "Damage Per Second", 30f) * (1 + mashRate * (tw.f(node, sp + "Mash Damage Scale", 1f) - 1));
+		lightningReach = reach;
+		int freq = Math.max(1, tw.i16(node, "Damage Freq", 12));
+		float tick = 1f / freq;
 		acc += dt;
-		if (acc < TICK) {
+		if (acc < tick) {
 			return;
 		}
-		acc -= TICK;
-		String node = "/Player/Lightning/";
-		int st = stage(3);
-		float reach = tw.f(node, "Stage " + st + " Reach", 5f) * UNIT * 2;
+		acc -= tick;
 		Vector3f p = c.owner().position();
-		if (t.position().distance(p) > reach) {
-			return;
+		java.util.List<? extends Hittable> list = ts.isEmpty() && c.target() != null ? java.util.List.of(c.target()) : ts;
+		for (Hittable t : list) {
+			if (t == null || t.invulnerable() || t.hp() <= 0 || t.position().distance(p) > reach * UNIT * 2) {
+				continue;
+			}
+			Vector3f away = new Vector3f(t.position()).sub(p);
+			away.y = 0;
+			if (away.lengthSquared() > 1e-6f) {
+				away.normalize();
+			}
+			away.mul(-tw.f(node, "Ground Impulse Away", -500f));
+			t.receive(LIGHTNING_HIT, c, dps * tick, away);
+			sink.effect("goLightningSingleBolt", t.position()); // 대상에 내리꽂는 가지 (sub_00195B00 근처 [추정])
 		}
-		float dmg = tw.f(node, "Stage " + st + " Damage Per Second", 30f) * TICK;
-		Vector3f away = new Vector3f(t.position()).sub(p).normalize()
-				.mul(-tw.f(node, "Ground Impulse Away", -500f));
-		t.receive(LIGHTNING_HIT, c, dmg, away);
-		sink.effect("goLightningSingleBolt", t.position()); // 대상에 내리꽂는 가지 (sub_00195B00 근처 [추정])
 	}
 
 	/** 번개 피격 판정 (반응 종류 0). */

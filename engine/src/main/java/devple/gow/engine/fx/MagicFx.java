@@ -678,26 +678,41 @@ public final class MagicFx implements AutoCloseable {
 		return played;
 	}
 
+	/** 예전 호출 호환: 지연 = act 길이, 파편 물리 없음. */
+	public EffectSystem.Effect breakObject(String goName, Matrix4f world, float fadeTime) {
+		return breakObject(goName, world, -1, fadeTime, false);
+	}
+
 	/**
 	 * 부서지는 물체 (41 문서): 물체 GO 자체를 이펙트로 재생 — 오브젝트 ANM 첫 act (파편이 흩어지는 애니) + 메시 + FXC 먼지 + SEM 소리
 	 * (pot: SND_POTTERYSMASH). 원작 0x1DDF70 이 GO 애니 컴포넌트를 0초부터 재생(sub_00100578)하고 이벤트 1018 을 보낸다.
-	 * act 가 끝나면 Brkb "Fade Time" 동안 마지막 포즈를 흐리게 한다 [추정: Fade Time 사용처 미확인].
+	 * 파괴 뒤 경과 시간 (+0x24, 0x1DE278) 이 Brkb #c3441d8c (지연, +0x20) ~ 지연 + Fade Time 이면 페이드 (0x1DE6B8),
+	 * 지연 + Fade Time 을 넘으면 제거 [확실: 시점, 추정: 페이드 = 불투명도].
+	 * act 의 u8 채널 = 관절 가시성 (온전한 몸 숨김·조각 보임), Brkb bit 0x1 이면 조각 물리 ({@link BreakDebris}).
 	 *
-	 * @param world 인스턴스 월드 행렬 (열벡터, {@code GoInstance.matrix()} 전치)
+	 * @param world   인스턴스 월드 행렬 (열벡터, {@code GoInstance.matrix()} 전치)
+	 * @param delay   페이드 시작 (초), &lt; 0 이면 act 길이
+	 * @param physics Brkb +0x30 bit 0x1 (#93191d85)
 	 */
-	public EffectSystem.Effect breakObject(String goName, Matrix4f world, float fadeTime) {
+	public EffectSystem.Effect breakObject(String goName, Matrix4f world, float delay, float fadeTime, boolean physics) {
 		EffectSystem.Effect e = fx.play(goName, EffectSystem.Anchor.of(world), -1);
 		if (e == null) {
 			return null;
 		}
 		float dur = e.def.anim() != null ? Math.max(e.def.anim().duration, 0.1f) : 1f;
+		float start = delay >= 0 ? delay : dur;
 		float fade = Math.max(fadeTime, 0);
-		e.setLife(dur + fade);
+		e.setLife(start + fade);
 		e.scale = 1f / Math.max(e.def.scale(), 1e-3f); // 인스턴스 스케일은 world 에 이미 들어 있다
+		e.jointVisibility = true; // u8 트랙: 온전한 몸 숨기고 조각 보이기 (doorVis, barrelVisDisapear, breakgroup1/2)
+		if (physics && e.def.skeleton() != null) {
+			e.debris = new BreakDebris(e.def.skeleton());
+			e.debrisSurface = surface;
+		}
 		perFrame.add(new Runnable() {
 			@Override
 			public void run() {
-				e.alpha = e.time() > dur && fade > 0 ? Math.max(0, 1 - (e.time() - dur) / fade) : 1;
+				e.alpha = e.time() > start && fade > 0 ? Math.max(0, 1 - (e.time() - start) / fade) : 1;
 				if (e.done()) {
 					perFrame.remove(this);
 				}
@@ -933,31 +948,36 @@ public final class MagicFx implements AutoCloseable {
 	}
 
 	/**
-	 * 포세이돈 (SCR_Lightning 0x1948F0): 시작 때 goLightningAttackMain·goLightningRadius 를 만들어 매 프레임 영웅 행렬에 둔다.
-	 * 타이머(0x3368A8)가 (1/60)·연타율·"Stage n Flash Freq" 씩 줄어 0 이 되면 goStrikeGrp 를 반경
-	 * (1 − rnd²) · Reach · (1 + 연타율·(Mash Reach Scale − 1)) · 16 의 임의 방향에 1회 (슬롯 4개 순환). 연타율 = 매시 미터/최대 —
-	 * 엔진은 매시 미터가 없어 0.5 [근사].
+	 * 포세이돈 (SCR_Lightning 0x1948F0) [확실: 식]: 시작 때 goLightningAttackMain·goLightningRadius 를 만든다.
+	 * 매 프레임 AttackMain = 단위 회전 + 영웅 위치 (0x194C08: 회전 없음), Radius = 같은 행렬의 축을 배율 s 로 (0x195500).
+	 * s (0x3368B8, 시작 1) += (f23 − s)·0.05 (프레임당), f23 = 연타로 늘어난 사거리 (TWK 미터, {@link Magic#lightningReach()}).
+	 * 타이머(0x3368A8, 시작 1)가 (1/60)·연타율·"From Above Bolt Freq"(전역 short 0x29D780 = 20) 씩 줄어 0 이하면 1 로 되돌리고
+	 * goStrikeGrp 를 반경 (1 − rnd²)·f23·16, 각 rnd·2π 에 1회 (슬롯 4개 순환, 재사용 슬롯의 이전 GO 는 지움).
+	 * 연타율 0 (연타 없음·1단계) 이면 낙뢰가 없다.
 	 */
 	private void lightning(Magic m, Vector3f heroPos, float heroYaw, float dt) {
 		if (m.lightningOn()) {
 			if (lightningFx == null) {
 				stage("R_LGHTN", stages[3]);
-				EffectSystem.Anchor a = out -> {
-					out.translation(this.heroPos).rotateY(this.heroYaw);
+				radiusScale = 1;
+				lightningFx = fx.play("goLightningAttackMain", out -> {
+					out.translation(this.heroPos);
 					return true;
-				};
-				lightningFx = fx.play("goLightningAttackMain", a);
-				radiusFx = fx.play("goLightningRadius", a);
+				});
+				radiusFx = fx.play("goLightningRadius", out -> {
+					out.translation(this.heroPos).scale(radiusScale);
+					return true;
+				});
 				strikeTimer = 1;
 			}
 			String n = "/Player/Lightning/";
-			int st = stages[3];
-			float mash = 0.5f;
-			float freq = Math.max(1, Math.round(tw.f(n, "Stage " + st + " Flash Freq", 1f)));
+			float mash = m.mashRate();
+			float reach = m.lightningReach();
+			radiusScale += (reach - radiusScale) * (1 - (float) Math.pow(1 - 0.05, dt * 60));
+			float freq = Math.max(0, tw.i16(n, "From Above Bolt Freq", 20));
 			strikeTimer -= dt * mash * freq;
 			if (strikeTimer <= 0) {
 				strikeTimer = 1;
-				float reach = tw.f(n, "Stage " + st + " Reach", 5f) * (1 + mash * (tw.f(n, "Stage " + st + " Mash Reach Scale", 1f) - 1));
 				float u = rnd.nextFloat();
 				float r = (1 - u * u) * reach * Magic.UNIT;
 				float ang = rnd.nextFloat() * (float) Math.PI * 2;
@@ -968,9 +988,16 @@ public final class MagicFx implements AutoCloseable {
 						p.y = fl[0];
 					}
 				}
-				if (fx.play("goStrikeGrp", EffectSystem.Anchor.at(p, ang)) != null) {
+				EffectSystem.Effect prev = strikeSlots[strikeSlot];
+				if (prev != null) {
+					prev.stop();
+				}
+				// 행렬 = 영웅 행렬 (단위 회전) + 오프셋 → 회전 없음
+				strikeSlots[strikeSlot] = fx.play("goStrikeGrp", EffectSystem.Anchor.at(p, 0));
+				if (strikeSlots[strikeSlot] != null) {
 					strikes++;
 				}
+				strikeSlot = (strikeSlot + 1) & 3;
 			}
 		} else {
 			if (lightningFx != null) {
@@ -983,6 +1010,12 @@ public final class MagicFx implements AutoCloseable {
 			}
 		}
 	}
+
+	/** goLightningRadius 배율 (0x3368B8). */
+	private float radiusScale = 1;
+	/** goStrikeGrp 슬롯 4개 (0x336890, 인덱스 0x3368AC). */
+	private final EffectSystem.Effect[] strikeSlots = new EffectSystem.Effect[4];
+	private int strikeSlot;
 
 	/** goStrikeGrp 횟수 (테스트). */
 	public int strikes;

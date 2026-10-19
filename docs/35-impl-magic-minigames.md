@@ -133,6 +133,33 @@ TWK `/Player/MedusaHead` 의 일부 값은 덤프가 float 로 잘못 보여준�
 - 명중: 거리 < 2m, 마지막 명중 후 0.5초 경과 → Damage Per Hit. 누적이 Max Damage 이상이면 소멸 (goDeadDie).
 - 15초가 지나면 전부 소멸한다.
 
+## 4.5 포세이돈의 분노 매시 미터 (`Magic.lightning`, `LightningMash`) — SCR_Lightning 0x1948F0
+튜닝 `/Player/Lightning` (Lightning_RegisterTweaks 0x193F10, 전역 0x29D770–, 단계 표 0x2FF638 + 단계×0x38) [확실: 키·오프셋·형]:
+
+| 키 | 형 / 위치 | 값 |
+|---|---|---|
+| Damage Freq | short 0x29D770 | 12 (초당 피해 횟수) |
+| Mash Max Spin | f32 0x29D774 | 1200 (도/초) |
+| Allow Movement / Movement Speed | bool 0x29D778 / f32 | 거짓 / 10 |
+| From Above Bolt Freq | short 0x29D780 | 20 (낙뢰 goStrikeGrp 빈도) |
+| Stage n Damage Per Second / Magic Drain / Duration / Reach | +0x0 / +0x4 / +0x8 / +0xC | 30·40·50 / 33·42·50 / 1·2·3 / 5 |
+| Stage n Mash Damage Scale / Mash Reach Scale | +0x10 / +0x14 | 1·1.5·1.5 / 1·2·3 |
+| Stage n Mashometer Drain / Max | +0x18 / +0x1C | 1·3·3 / 1·15·10 |
+| Stage n Allow Mashing | bool +0x20 (하위 바이트) | **거짓**·참·참 |
+| Stage n Tint RGB, Bright/Dark Camera Filter, Flash Freq, Fog Template | +0x24.. / short +0x30–0x36 | 0x195BA8 화면 효과 (미구현) |
+
+매 프레임 (0x194B38–0x194C04) [확실]:
+- 미터 0x3368B0: 시전 시작 0. Allow Mashing 이면 `미터 = clamp(미터 − Drain/60, 0, Max)`, 그 프레임 새로 누른 패드 비트 **0x20 = ○** (패드 워드 +0x28 = Pad_Read 0x17C384 의 값, 비트 5) 이면 `+1` (덧셈 뒤 자르지 않음).
+- 연타율 r = 미터 / Max. 피해 DPS' = DPS·(1 + r·(Mash Damage Scale − 1)), 사거리 f23 = Reach·(1 + r·(Mash Reach Scale − 1)).
+- 영웅 Y 회전 += Mash Max Spin·r (도/초) (0x195160 → sub_00184A98, 영웅 행렬에 곱함). Allow Movement 거짓 → 이동 속도 0.
+- 대상: 0x1DAA20 이 반경 f23·16 안 전투자를 모으고, 대상별 슬롯 (0x2FF6F0, 5개) 타이머로 1/Damage Freq 초마다 DPS'/Damage Freq 피해 (0x195718 → 0x204690), 공중이면 Air Impulse, 아니면 Ground Impulse.
+- 지속: 0x3368B4 += 1/60, ≥ Stage Duration 이면 스크립트 끝 (0x1E1AB0).
+- 1단계는 Allow Mashing 거짓 → r = 0 → 낙뢰 없음, 회전 없음.
+
+엔진: `LightningMash` (미터, dt 기준), `Magic.lightning` (위 식, 대상 = 게임 씬 적 목록, 타이머 하나 [근사], 판정 거리 = f23·16·2 [근사, 대상 반지름 대신]),
+`Magic.lightningSpin()` → `HeroRig` 가 영웅 yaw 에 더함, `mashRate()`/`lightningReach()` → `MagicFx` (40 문서 §4.1). Duration 종료는 기존대로 루프 기술 길이 [미구현].
+테스트 `LightningMashTest` (연타 → 7/15, Max 정지, 손 떼면 0, Allow 거짓 → 0, TWK 값).
+
 ## 5. 미니게임
 ### 5.1 RepeatPress 재해석 (0x192160) — `RepeatPressQte` 수정
 이전 구현은 일부 필드 의미가 틀렸다. 고친 내용:
@@ -232,7 +259,7 @@ TWK `/Player/MedusaHead` 의 일부 값은 덤프가 float 로 잘못 보여준�
 | 메두사 광선 / 섬광 / Nuke | goEyeBeam (반복, 손), goMedHeadFlash (1회 0.333초), Concussion 템플릿 goMedHeadNuke (반경 확대) | 머리 GO 대신 영웅 rWeapIH |
 | 제우스 | goBolt + goStdBolt 꼬리 (Arrow 템플릿), 명중 goBoltHit | 차지 goBoltChargeUp 미연결 |
 | 하데스 | goDedRed 영혼, goDeadHit, goDeadDie | |
-| 포세이돈 | goLightningAttackMain (루프), 피해 틱 goLightningSingleBolt | goLightningRadius 미연결 |
+| 포세이돈 | goLightningAttackMain + goLightningRadius (배율 = 연타 사거리), 연타율 × From Above Bolt Freq 로 goStrikeGrp, 피해 틱 goLightningSingleBolt | 화면 틴트·카메라 필터·안개 (0x195BA8) |
 | 석상 먼지 / 파괴 | – (원작 *stonedbrk 파편 모델 미구현) | 회색 파티클 그대로 |
 
 데이터가 없으면 (WAD 없음·이름 미해석) 예전 파티클로 대신한다. 근사였던 스크린샷 `work/shots/35/*.png` 는 40 문서 §8 로 대체.
@@ -247,6 +274,7 @@ TWK `/Player/MedusaHead` 의 일부 값은 덤프가 float 로 잘못 보여준�
 | `hadesSoulsDamageNearbyEnemies` | 영혼 3, MP 75 소모, 근처 두 적 10 단위 피해, 사거리 밖은 무피해 |
 | `MiniGameTest` (6) | 사이클롭스 4 프롬프트 성공 / 무입력 → 242 / 틀린 버튼 즉시 242, 고르곤 180+360 회전 성공 / 무입력 → 261 탈출, 무작위·사분면 |
 | `GrabTest` | 새 RepeatPress 규칙으로도 연타 성공 402 / 무입력 실패 403 |
+| `LightningMashTest` (4) | 포세이돈 매시 미터: ○ 초당 10회 → 연타율 7/15, Max 정지, 손 떼면 5 초 안에 0, Allow Mashing 거짓 → 0, R_PERMK 값 (Damage Freq 12, From Above 20, 1단계 Allow 거짓) |
 
 ## 9. 남은 것
 - 석상 흔들림, `*stonedbrk` 파편 모델, 영웅 석화(적 메두사 EyeAttack).

@@ -81,6 +81,12 @@ public final class EffectSystem implements AutoCloseable {
 		public boolean silent;
 		/** 메시를 그리지 않음 (이미터·소리만). */
 		public boolean hideMesh;
+		/** act 의 u8 채널을 관절 가시성으로 적용 (부서지는 물체, 41 문서 §2) [추정: 다른 GO 에는 아직 안 씀]. */
+		public boolean jointVisibility;
+		/** 파편 물리 (Brkb bit 0x1, {@link BreakDebris}) 와 그 충돌면. tick 에서 조각 관절 행렬을 바꾼다. */
+		public BreakDebris debris;
+		public MagicFx.Surface debrisSurface;
+		private float[][] debrisPose;
 		private int soundHandle;
 		private boolean soundStarted;
 		/** 사용자 배율 (Concussion 반경 등), 인스턴스 스케일과 곱한다. */
@@ -194,6 +200,11 @@ public final class EffectSystem implements AutoCloseable {
 			}
 			float s = def.scale() * scale;
 			world.set(tmp).scale(s);
+			if (debris != null && act != null && def.skeleton() != null) {
+				float at = act == def.anim() ? time : actTime;
+				debrisPose = act.sample(def.skeleton(), at, act.looping()).world(def.skeleton());
+				debris.step(debrisPose, world, debrisSurface, dt);
+			}
 			sound();
 			if (ps == null) {
 				return;
@@ -266,7 +277,13 @@ public final class EffectSystem implements AutoCloseable {
 			float at = act == def.anim() ? time : actTime;
 			Pose pose = act != null && act.hasSkeletalData()
 					? act.sample(def.skeleton(), at, act.looping()) : Pose.idle(def.skeleton());
-			m.draw(cam, aspect, world, pose, white, at, alpha);
+			m.hiddenJoints = jointVisibility && act != null ? act.hiddenJoints(def.skeleton(), at) : null;
+			if (debrisPose != null) {
+				m.draw(cam, aspect, world, debrisPose, white, at, alpha);
+			} else {
+				m.draw(cam, aspect, world, pose, white, at, alpha);
+			}
+			m.hiddenJoints = null;
 		}
 	}
 
