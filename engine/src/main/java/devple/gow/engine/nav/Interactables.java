@@ -22,10 +22,12 @@ import java.util.Locale;
  */
 public final class Interactables {
 
-	public enum Kind { CSM, CHEST, PUSH, LEVER }
+	public enum Kind { CSM, CHEST, PUSH, LEVER, LIFT }
 
 	/** CSM 애니 이름 TWK 키 (해시): 영웅 동작 / 오브젝트 동작 (0x21508C / 0x2150C4). */
 	public static final int CSM_HERO_ANIM = 0xb50a547c, CSM_HERO_ANIM2 = 0xb50a547d, CSM_OBJECT_ANIM = 0xfea292e6;
+	/** TAndF 영웅 애니 (잡기 liftdoor1 / 들기 liftdoor2) 키 해시 (0x2136D4/0x2136F0). */
+	public static final int TANDF_GRAB_ANIM = 0xff5f5921, TANDF_LIFT_ANIM = 0xdc77f412;
 
 	public static final class Item {
 		public final Kind kind;
@@ -43,11 +45,13 @@ public final class Interactables {
 		/** 오브젝트 애니 길이 (초): 과제 진행률의 분모 (원작 0x215928 f13). 애니를 못 찾으면 1 초 [근사]. */
 		public float length = 1f;
 		private TaskProgress task;
+		/** 진행 속도 (붙음 / 떨어짐) 와 연타 유지 시간 (LIFT = TAndF Acc / −Dec / TF Time, 그 밖은 1 / −4 / 0.6). */
+		public float engagedSpeed = TaskProgress.ENGAGED_SPEED, rewindSpeed = TaskProgress.REWIND_SPEED, mashWindow = 0.6f;
 
 		/** 과제 진행 상태 (CSM/CHEST = 과제 id, LEVER = PushPull id 로 1023 을 보낸다). */
 		public TaskProgress task() {
 			if (task == null) {
-				task = new TaskProgress(id, length);
+				task = new TaskProgress(id, length, engagedSpeed, rewindSpeed);
 			}
 			return task;
 		}
@@ -123,8 +127,26 @@ public final class Interactables {
 					}
 					out.items.add(it);
 				}
+				case "IO_TandF" -> {
+					// 들어 올리는 문·함정문 (41 문서 §IO_TandF): R1 로 잡고 연타 — 연타 중 Acc, 멈추면 −Dec 로 내려온다 [추정: 속도 해석·입력]
+					String node = String.format("/TweakTemplates/TAndF/%03d/", b.template());
+					String label = tw != null ? tw.s(node, "Instance Name", "TAndF") : "TAndF";
+					String lift = tw != null ? tw.sHash(node, TANDF_LIFT_ANIM, "liftdoor2") : "liftdoor2";
+					Item it = new Item(Kind.LIFT, p.instance().name(), pos, b.template(), b.id(), lift, null, label, r);
+					it.length = animLength(lv, anm, null, 0);
+					if (it.length < 0.05f) {
+						// 문 ANM 은 길이 0 (오브젝트 트랙만) → TAndF #fe467fe6 (1.5) 를 들어 올리는 시간으로 [추정]
+						it.length = tw != null ? Math.max(0.1f, Float.intBitsToFloat(tw.rawHash(node, 0xfe467fe6).orElse(Float.floatToIntBits(1.5f)))) : 1.5f;
+					}
+					if (tw != null) {
+						it.engagedSpeed = tw.f(node, "Acc", 1f);
+						it.rewindSpeed = -tw.f(node, "Dec", 20f);
+						it.mashWindow = Math.max(0.1f, tw.f(node, "TF Time", 0.25f) * 2);
+					}
+					out.items.add(it);
+				}
 				default -> {
-					// IO_TandF / Breakable: 아직 없음
+					// Breakable: game/Breakables
 				}
 			}
 		}

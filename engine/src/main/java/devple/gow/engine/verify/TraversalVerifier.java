@@ -542,7 +542,7 @@ public final class TraversalVerifier {
 			player[2] = it.pos.z;
 			currentSource[0] = "R1 " + it.owner;
 			switch (it.kind) {
-				case CSM, CHEST -> {
+				case CSM, CHEST, LIFT -> {
 					runTask(w, it, step);
 					addOnce(r.interactions, it.kind + " " + it.owner + " 과제 " + it.id);
 				}
@@ -694,7 +694,7 @@ public final class TraversalVerifier {
 	}
 
 	private static void runTask(ScriptWorld w, Interactables.Item it, Runnable step) {
-		TaskProgress tp = new TaskProgress(it.id, it.length);
+		TaskProgress tp = new TaskProgress(it.id, it.length, it.engagedSpeed, it.rewindSpeed);
 		for (int guard = 0; guard < 3000 && !tp.done; guard++) {
 			TaskProgress.Event e = tp.update(true, DT);
 			if (e != null) {

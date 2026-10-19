@@ -675,7 +675,7 @@ public final class HeroNavigator {
 			} else {
 				idleTime += dt;
 			}
-			engaged = idleTime < MASH_WINDOW;
+			engaged = idleTime < (it.kind == Interactables.Kind.LIFT ? it.mashWindow : MASH_WINDOW);
 		}
 		progress(it, engaged, dt);
 		if (it.task().done) {

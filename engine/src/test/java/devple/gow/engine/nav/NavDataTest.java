@@ -111,6 +111,29 @@ class NavDataTest {
 		assertEquals(RopeDef.Type.TRAVERSE, b.ropes.get("gorope8").type());
 	}
 
+	/** IO_TandF 들어 올리는 문 (ATHN01C goliftdoor1, TAndF 050 "HydraLiftDoor": Acc 1, Dec 20, TF Time 0.25) — 연타 중 오르고 멈추면 빨리 내려온다. */
+	@Test
+	void liftDoorTask() throws Exception {
+		LevelData d = level("ATHN01C");
+		Tweaks tw = new Tweaks();
+		tw.load(d.wad);
+		Interactables.Item lift = Interactables.of(d, tw).byOwner("goliftdoor1");
+		assertNotNull(lift);
+		assertEquals(Interactables.Kind.LIFT, lift.kind);
+		assertEquals(200, lift.id);
+		assertEquals(1f, lift.engagedSpeed, 1e-3f);
+		assertEquals(-20f, lift.rewindSpeed, 1e-3f);
+		assertEquals("liftdoor2", lift.heroAnim);
+		assertTrue(lift.length > 0.1f, "오브젝트 애니 길이 " + lift.length);
+		TaskProgress tp = lift.task();
+		for (int i = 0; i < 30; i++) {
+			tp.update(true, 1 / 60f);
+		}
+		float up = tp.time;
+		tp.update(false, 1 / 60f);
+		assertEquals(Math.max(0, up - 20f / 60f), tp.time, 1e-3f, "놓으면 Dec 20 으로 내려옴");
+	}
+
 	@Test
 	void interactablesFromBehaviors() throws Exception {
 		LevelData d = level("ATHN01D");

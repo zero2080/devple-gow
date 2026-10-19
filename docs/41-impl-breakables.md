@@ -16,3 +16,11 @@
 - [근사/미구현] 파편 애니·Fade Time, 오브 방출(OrbEmitter "large obj break"), 부서지는 소리·이펙트, 마법·발차기 판정.
 - 검증 `BreakablesTest`: ARENA06 36 개 로드, 영웅 □ 로 항아리 파괴 → Marker 101 → LevelData0 ≥ 1.
 - 하네스(36 문서 §7): 걷기 뒤 Breakable 을 모두 파괴(플레이어 대신) → ARENA06 도 강제 없이 ARENA09 로.
+
+## 3. IO_TandF 들어 올리는 문·함정문 (`Interactables.Kind.LIFT`)
+- GO 비헤이비어 `IO_TandF` 37 개 (ATHN01C goliftdoor1/2 "HydraLiftDoor", ATHN05BB 압력 문 4, DEST02, PAND00C/00D/01B/02D/03A–C …).
+  템플릿 `/TweakTemplates/TAndF/<n>/` (25 개): `Acc` 1, `Dec` 20, `TF Time` 0.25, #fe467fe6 1.5, 영웅 애니 liftdoor1(잡기)/liftdoor2(들기)/liftdoor3,
+  소리 SND_LIFTDOOR_GRAB / _LIFT_LP / _STOP, `Reset Sound`. 진행률 이벤트는 IO_CSM 과 같은 코드(0x213F90 → 1023, 인자 1 = id) [확실: 키·값 / 추정: 의미].
+- 엔진: R1 로 잡고 연타 — 마지막 입력 뒤 TF Time × 2 안이면 "붙음" → 진행 속도 +Acc, 아니면 −Dec 로 빠르게 내려온다 (`TaskProgress` 속도 지정).
+  문 ANM 은 길이 0 (오브젝트 트랙만) 이라 들어 올리는 시간 = #fe467fe6 (1.5초) [추정]. 생성자 0x2135D0 의 키→오프셋, 갱신 함수의 정확한 식은 미해석.
+- 검증 `NavDataTest.liftDoorTask` (ATHN01C goliftdoor1: id 200, Acc 1 / Dec 20, 놓으면 1/60 초에 20/60 내려감). 하네스는 CSM 과 같이 진행 (주 경로 강제 없음 유지).

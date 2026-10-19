@@ -32,9 +32,18 @@ public final class TaskProgress {
 	public boolean done;
 	private int lastPercent = Integer.MIN_VALUE, lastSpeed = Integer.MIN_VALUE;
 
+	/** 붙어 있을 때 / 떨어졌을 때 애니 재생 속도 (CSM·레버 1 / −4, IO_TandF = TAndF Acc / −Dec). */
+	private final float engagedSpeed, rewindSpeed;
+
 	public TaskProgress(int taskId, float length) {
+		this(taskId, length, ENGAGED_SPEED, REWIND_SPEED);
+	}
+
+	public TaskProgress(int taskId, float length, float engagedSpeed, float rewindSpeed) {
 		this.taskId = taskId;
 		this.length = Math.max(0, length);
+		this.engagedSpeed = engagedSpeed;
+		this.rewindSpeed = rewindSpeed;
 	}
 
 	/** 0..1. */
@@ -51,7 +60,7 @@ public final class TaskProgress {
 		if (done) {
 			return null;
 		}
-		speed = engaged ? ENGAGED_SPEED : time > 0 ? REWIND_SPEED : 0;
+		speed = engaged ? engagedSpeed : time > 0 ? rewindSpeed : 0;
 		time = Math.max(0, Math.min(length, time + speed * dt));
 		if (engaged && time >= length) {
 			done = true;
