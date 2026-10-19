@@ -302,3 +302,8 @@ synchJoint 의 의미를 추정으로 정하던 것을 **데이터로 검사**: 
   (102 프레임 클립에서 녹색 막대 길이가 프레임마다 늘어남) [추정: 백분율 환산], `PS2_EnemyState_{Event,Value}{n}` = 잡기 가능 시 2(BarFlash) [추정].
 - 검증 `BossMeterTest`: 아기 히드라 2마리 → 슬롯 1·2, HP 50% → 프레임 50 (= 2 + 49 − 1), 사망 → Off. 화면 `--ui gow-rom/ATHN01E.WAD FLP_Athn01E meter`
   (`work/uirt/meter.png`, 원작 히드라 미터 60%).
+
+### 10.x 병합 메모 (Vis 적용 후)
+- 스크립트 Vis 표시/숨김(28 문서)이 적용되어 `FakeDeadBMI-VisOff` 가 장식용 죽은 수호자 석상을 숨긴다 (전에는 싸움 내내 보였음).
+- 등장 동영상 끝(이벤트 231) 에 `FinalMpegStuff-SceneryFlatsOn` 이 용암 배경판을 켜고 p03MP07 을 미리 올린다 — 원작 순서. 카메라가 아레나 밖을 볼 때
+  배경판의 밝은 빛이 화면을 하얗게 채우는 장면이 있다 (블렌드/밝기 원작 대조 필요 [미확인]).

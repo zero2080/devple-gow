@@ -513,6 +513,9 @@ public final class GameScene implements Scene {
 				// Visible (슬롯 0): 1 보임 / 2 숨김 / 0 그대로 — 렌더와 R1 상호작용 (13 문서 Vis)
 				if (values.length > 0 && (values[0] == 1 || values[0] == 2)) {
 					boolean show = values[0] == 1;
+					if (System.getProperty("gow.trace.vis") != null) { // 디버그: Vis 표시/숨김 추적
+						System.out.println("VIS " + source.name() + " " + (show ? "ON " : "OFF ") + objects);
+					}
 					for (String o : objects) {
 						if (show) {
 							level.showInstance(o);
