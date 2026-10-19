@@ -448,6 +448,15 @@ public final class GameScene implements Scene {
 
 			@Override
 			public void internal(int func, List<Object> args) {
+				if (func == 0x2F && !args.isEmpty()) { // CompleteGame(kind): 해금 비트 기록 (11 문서 §2.3)
+					int kind = (int) num(args.get(0));
+					try {
+						int m = Unlocks.complete(SaveGame.dir(), kind, session.difficulty);
+						System.out.printf("CompleteGame(%d) 난이도 %d → 해금 비트 0x%X%n", kind, session.difficulty, m);
+					} catch (IOException ex) {
+						System.out.println("해금 기록 실패: " + ex.getMessage());
+					}
+				}
 				if (func == 0x9 && !args.isEmpty()) {
 					Object a = args.get(0);
 					cameraRig.setVolumeQuery(a instanceof Number n ? n.floatValue() != 0 : !(a instanceof Boolean b) || b); // Internal 0x9 CMV 질의 on/off

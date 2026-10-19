@@ -83,9 +83,9 @@ public final class BonusMenu {
 		refresh();
 	}
 
-	/** 디버그 해금: {@code -Dgow.unlockAll} 이면 전부, 아니면 원작 규칙대로 (아직 클리어 기록이 없으므로 0). */
+	/** 해금 비트: {@code -Dgow.unlockAll} 이면 전부, 아니면 저장된 클리어 기록 ({@link Unlocks}). */
 	public static int unlockBits() {
-		return Boolean.getBoolean("gow.unlockAll") ? ALL_UNLOCKED : 0;
+		return Unlocks.current();
 	}
 
 	private static List<String> range(String[] lines, int from) {

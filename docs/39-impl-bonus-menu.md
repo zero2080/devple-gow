@@ -158,3 +158,9 @@ HUD 변수 오프셋 (`Hud_RegisterFlashVars` 0x1B6490): `BonusName1..8` = +0x11
 - 클리어 해금 비트 저장 (CompleteGame 메시지 → 세이브/설정 파일) — 지금은 디버그 해금만.
 - 의상 선택 화면 (`Costumes_Unlocked`, `CostumeOn/CostumesLeft/Right`) 실제 의상 WAD(R_HERO1..) 적용, OLYMP04 레벨 단독 검증.
 - `PS2_ShellStartState`(1 = 귀중품으로 바로) 를 쓰는 원작 경로 확인.
+
+## 해금 저장 (`Unlocks`)
+- ESC Internal 0x2F `CompleteGame(kind)` (OLYMP02 엔딩 2곳, ARENA27 신들의 도전 1곳) → `GameScene` 이 `Unlocks.complete` 로
+  세이브 디렉터리 `unlocks.properties` (원작 카드 레코드 +0x40 대응) 에 비트를 누적: kind 0 = 난이도 0·1 bit0 / 2 bit1 / 3 bit2, kind 1 = bit3, kind 2 = bit4.
+- 셸은 시작 시 `Unlocks.current()` 로 귀중품 잠금·`PS2_HardMode_Unlocked`·`PS2_Costumes_Unlocked` 를 채운다 (`-Dgow.unlockAll` 이면 0x1F).
+- 검증 `UnlocksTest`.
