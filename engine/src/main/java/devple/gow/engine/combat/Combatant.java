@@ -26,7 +26,8 @@ import java.util.function.Supplier;
 public final class Combatant {
 
 	/**
-	 * 공격 판정 근사: 무기 히트박스 대신 정면 구 (10 문서 §5 의 부위별 히트박스는 미구현).
+	 * 공격 판정 대체(폴백): 정면 구. 공격자/피격자에 CDV 히트 볼륨({@link HitVolumes})이 없거나
+	 * 공격 부위(Attack.part)에 해당하는 구가 없을 때만 쓴다 (34 문서).
 	 * 혼돈의 블레이드는 사슬 무기라 사거리가 길다 (크레토스 키 ≈ 37 유닛).
 	 */
 	public static final float REACH = 55f, HIT_RADIUS = 55f;
@@ -59,6 +60,7 @@ public final class Combatant {
 	private Consumer<String> log = s -> { };
 	/** 애니 이벤트 SOUND(3/40): (이름 해시, 위치). 해시 = TWK 해시 (14 문서). */
 	private java.util.function.BiConsumer<Integer, Vector3f> soundSink = (h, p) -> { };
+	private HitVolumes volumes;
 	public boolean debug;
 	public float reach = REACH, hitRadius = HIT_RADIUS;
 	public int hitCounter;
@@ -93,6 +95,15 @@ public final class Combatant {
 
 	public CombatOwner owner() {
 		return owner;
+	}
+
+	/** 원작 CDV 히트 볼륨 (공격 부위 + 피격 몸). null 이면 정면 구 근사. */
+	public void setHitVolumes(HitVolumes v) {
+		volumes = v;
+	}
+
+	public HitVolumes hitVolumes() {
+		return volumes;
 	}
 
 	public void setTarget(Hittable t) {
@@ -148,6 +159,9 @@ public final class Combatant {
 	/** @param in 영웅 = 패드, AI = null */
 	public void update(Input in, float dt) {
 		hitThisFrame = false;
+		if (volumes != null && anim.current() != null) {
+			volumes.update(anim.pose().world(anim.skeleton()), owner.position(), owner.yaw());
+		}
 		if (hitPause > 0) {
 			hitPause -= dt;
 			return;
@@ -493,10 +507,15 @@ public final class Combatant {
 		}
 	}
 
+	/**
+	 * 공격 판정: 진행률이 판정 구간 [start, end] 안인 공격마다 (부위 히트박스 ∩ 상대 몸) 스윕 검사 → OnContact.
+	 * 부위 = Attack.part = 공격자 CDV 재질 PartType (10 문서 §5.4). 데이터가 없으면 정면 구 근사.
+	 */
 	private void attacks(float t) {
 		if (target == null || target.invulnerable()) {
 			return;
 		}
+		HitVolumes victim = target.hitVolumes();
 		Vector3f p = owner.position();
 		float yaw = owner.yaw();
 		Vector3f hit = new Vector3f((float) -Math.sin(yaw), 0, (float) -Math.cos(yaw)).mul(reach).add(p);
@@ -507,9 +526,12 @@ public final class Combatant {
 			if (t < a.start() || t > a.end()) {
 				continue;
 			}
-			if (!inRange) {
+			boolean real = volumes != null && victim != null && !victim.isEmpty() && volumes.hasPart(a.part());
+			boolean touch = real ? volumes.sweptHit(a.part(), victim) : inRange;
+			if (!touch) {
 				if (debug) {
-					log.accept(String.format("  (빗나감 공격#%d 거리 %.0f)", a.index(), Math.sqrt(dx * dx + dz * dz)));
+					log.accept(String.format("  (빗나감 공격#%d 부위 %d %s)", a.index(), a.part(), real ? "히트박스"
+							: String.format("근사 거리 %.0f", Math.sqrt(dx * dx + dz * dz))));
 				}
 				continue;
 			}

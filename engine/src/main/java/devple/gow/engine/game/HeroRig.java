@@ -9,6 +9,7 @@ import devple.gow.engine.combat.CombatOwner;
 import devple.gow.engine.combat.Combatant;
 import devple.gow.engine.combat.DamageRules;
 import devple.gow.engine.combat.GodMode;
+import devple.gow.engine.combat.HitVolumes;
 import devple.gow.engine.combat.Hittable;
 import devple.gow.engine.input.Input;
 import devple.gow.engine.input.PadButton;
@@ -42,6 +43,8 @@ public final class HeroRig implements AutoCloseable {
 	public final devple.gow.engine.combat.Magic magic;
 	public int difficulty = 1;
 	private final AnimatedModel model;
+	/** 혼돈의 블레이드 (lWeapOH/rWeapOH 부착, 34 문서). 없으면 null. */
+	private final devple.gow.engine.asset.BladeModels blades;
 	private final Shader shader;
 	private int lastHits;
 	private final AnimationSet animSet;
@@ -73,6 +76,10 @@ public final class HeroRig implements AutoCloseable {
 		combatData = new CombatData(permk, CombatData.heroFiles(), set);
 		combat = new Combatant(combatData, animator, owner());
 		combat.setDamageScale(() -> rules.playerScale(difficulty, player.costume, bladeLevel(), godMode.active()));
+		// 원작 CDV 히트 볼륨: CDV_hero + 블레이드(R_WPN<costume>_<level> 의 CDV_MAIBlade, 레벨 무관하게 같은 구) — 34 문서
+		Path wpn = rom.resolve("R_WPN" + costume + "_" + Math.max(0, Math.min(5, bladeLevel())) + ".WAD");
+		combat.setHitVolumes(HitVolumes.forHero(assets.wad(), sk, java.nio.file.Files.exists(wpn) ? WadFile.load(wpn) : null));
+		blades = devple.gow.engine.asset.BladeModels.load(rom, costume, bladeLevel(), shader);
 		hittable = new Hittable() {
 			public Vector3f position() {
 				return ctl.position;
@@ -92,6 +99,10 @@ public final class HeroRig implements AutoCloseable {
 
 			public boolean invulnerable() {
 				return player.hp <= 0 || combat.invulnerable();
+			}
+
+			public HitVolumes hitVolumes() {
+				return combat.hitVolumes();
 			}
 
 			public Result receive(CombatFile.Attack a, Combatant attacker, float dmg, Vector3f knock) {
@@ -216,12 +227,20 @@ public final class HeroRig implements AutoCloseable {
 	}
 
 	public void draw(Camera cam, float aspect, float alpha, Texture white) {
-		model.draw(cam, aspect, ctl.world(new Matrix4f(), alpha), ctl.animator().pose(), white);
+		Matrix4f w = ctl.world(new Matrix4f(), alpha);
+		var pose = ctl.animator().pose();
+		model.draw(cam, aspect, w, pose, white);
+		if (blades != null) {
+			blades.draw(cam, aspect, w, ctl.animator().skeleton(), pose.world(ctl.animator().skeleton()), white);
+		}
 	}
 
 	@Override
 	public void close() {
 		model.close();
+		if (blades != null) {
+			blades.close();
+		}
 		shader.close();
 		assets.close();
 	}

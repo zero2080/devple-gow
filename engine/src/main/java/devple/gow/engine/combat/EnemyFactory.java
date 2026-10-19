@@ -40,8 +40,11 @@ public final class EnemyFactory {
 
 		/** 같은 WAD 의 다른 AI1 템플릿(예 R_SKA: 031 궁수 / 032 궁수 -P / 039 dumbArcher)으로 생성. */
 		public EnemyFighter spawn(int ai1Template) {
-			return new EnemyFighter(assets.wad(), tweaks, skeleton, anims, ai1Template, combatFiles, attacks, block, idle,
+			EnemyFighter f = new EnemyFighter(assets.wad(), tweaks, skeleton, anims, ai1Template, combatFiles, attacks, block, idle,
 					walk, 30f, animNode);
+			// 원작 CDV 히트 볼륨 (34 문서) — 종류마다 같은 CDV, 인스턴스마다 포즈 상태가 따로
+			f.combat().setHitVolumes(HitVolumes.forObject(assets.wad(), skeleton));
+			return f;
 		}
 
 		/** 이 적 WAD 에 해당 AI1 템플릿이 있는지. */

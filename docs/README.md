@@ -10,7 +10,7 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 | 02 | [WAD 컨테이너 포맷](02-wad-format.md) | 완료 (태그 레벨) |
 | 03 | [텍스처 / 팔레트 / 머티리얼 (GFX, PAL, TXR, MAT)](03-texture-format.md) | 완료 |
 | 04 | [모델 / 메시 (MDL, 메시, VIF)](04-model-format.md) | 완료 |
-| 05 | [스켈레톤 / 애니메이션 (CXT 스켈레톤, ANM)](05-animation-format.md) | 완료 (회전·이동 채널, 스키닝; 부속 채널·이벤트 미상) |
+| 05 | [스켈레톤 / 애니메이션 (CXT 스켈레톤, ANM)](05-animation-format.md) | 완료 (회전·이동·무기 궤적(타입 10) 채널, 스키닝; 기타 부속 채널·이벤트 미상) |
 | 06 | [실행 파일(SCKA_300.02) 분석 – 서브시스템 지도 / TWK 해시](06-executable-analysis.md) | 1차 완료 (심화 목록 §10) |
 | 07 | [UI(FLP) / 스크립트(SCR, ESC) / 텍스트·폰트](07-ui-script-text.md) | 완료 (구조·텍스트·바이트코드, 일부 필드 미상) |
 | 08 | [엔진 아키텍처 (Java + LWJGL)](08-engine-architecture.md) | 골격 + 모델 렌더 |
@@ -33,6 +33,7 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 | 29 | [구현: 오디오 런타임 (SoundManager: 그레인 실행기, 3D, 음악 스트림)](29-impl-audio.md) | 완료·게임 연결 (테스트 9) |
 | 30 | [구현: 레벨 카메라 시스템 (CameraRig)](30-impl-camera.md) | 선택·레일·전환 완료 (테스트 5) |
 | 31 | [구현: 환경 / 이펙트 (안개, 하늘, 비, 물, 파티클, 머티리얼 애니메이션)](31-impl-environment-fx.md) | 1차 완료 (테스트 5, 스크린샷 4레벨) |
+| 34 | [구현: 무기 궤적 / 원작 히트박스 (블레이드 부착, CDV 구, PartType, 스윕 판정)](34-impl-hitboxes.md) | 완료 (테스트 3, 디버그 시트) |
 | 90 | [현황 / 로드맵](90-status-roadmap.md) | 수시 갱신 |
 
 ## 게임 실행
@@ -61,6 +62,7 @@ Shift L3 + 오른쪽 Shift R3 = 신들의 분노, Enter = START(일시정지). �
 ./gradlew :engine:run --args="--ui gow-rom/R_SHELLK.WAD FLP_ShellK"                    # FLP UI 런타임 (hud|pause|powerup 모드)
 ./gradlew :tools:run --args="progress:levels gow-rom work/progression/levels.txt"    # 레벨 연결 그래프 (ESC 씬 이동 호출)
 ./gradlew :tools:run --args="combat:tree gow-rom/R_PERMK.WAD ROOT 6 normal"              # 영웅 콤보 트리 (combat:dump / combat:enemies)
+./gradlew :tools:run --args="anim:sheet gow-rom/R_HERO0.WAD MDL_hero combo3A work/hitbox/c.png --weapon gow-rom/R_WPN0_2.WAD --hit"  # 블레이드 + 히트박스
 ./gradlew :tools:run --args="level:info gow-rom/ATHN01A.WAD"                          # 레벨 배치/충돌/볼륨/카메라
 ./gradlew :tools:run --args="script:entities gow-rom/ATHN01A.WAD"                     # ESC 엔티티 슬롯 / 소유 GO / ENV
 ./gradlew :tools:run --args="audio:sbk gow-rom/R_PERMK.WAD work/sound/R_PERMK"          # 사운드 뱅크 요약 + 톤/VAG 팩 WAV 추출

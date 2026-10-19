@@ -355,6 +355,25 @@ if owner.HP <= 0 and 큐 비었음: 이벤트 14(사망) 분기 → 큐
    - 피격자 밀어내기 = 공격.+0x0C 벡터, 피격자 이벤트 16(react = 공격.+0x1B), 공격자 이벤트 22. **피해 없음**.
 4. 막히지 않음(또는 가드 브레이크): `Combat_ApplyHit` 0x2032C0 → 피해·반응, 공격자 이벤트 17.
 
+### 5.1a 부위(Attack.part)와 히트박스 [확실 — 0x13C400, 0x13AAA8, 0x139008, 0x203150, 0x1BED34]
+- 판정 볼륨 = 오브젝트의 **CDV_ BallHull 구**(12 문서). 로더 `sub_00138FD0` 이 인스턴스에 표 포인터를 둔다: +0x4C 재질 엔트리, +0x50 ball별 관절, +0x54 ?, +0x58 ball별 재질 번호, +0x5C 구.
+- 구 월드 위치 `sub_0013AAA8`: `center · M[joint]` (joint = +0x50 바이트, M = 소유 오브젝트 관절 행렬 +0x8C + joint×64, 관절 활성 비트 +0x64 가 꺼지면 무효), 반지름 × 행렬 첫 행 길이.
+- 구 대 구 접촉 `sub_0013C400` → 전역 접촉 레코드 0x2C8F10: +0x24 오브젝트, +0x2C/+0x30 각 쪽 재질 엔트리 포인터, +0x34/+0x36 각 쪽 관절 번호.
+- 접촉 메시지 `sub_00203150`: 재질 엔트리 + [0x337700] 의 값 = **PartType** (프로퍼티 "PartType" 를 0x1BED34 에서 등록, CDV 엔트리 +0x30). 오브젝트 flags(+0xF4)&0x200 이고 PartType 2 이면 3 으로 바꾼다(오른손 무기). 이 값이 상대 쪽 `Combat_OnContact` 의 t0 → `sub_00209AB0(…, part)` 가 `Attack.+0x18 == part` 비교.
+- 무기 오브젝트(flags&0x300)는 OnContact 에서 부모(+0x18 = 크레토스)로 바뀐다 (0x203B50).
+
+| PartType | 볼륨 (CDV 재질) | 쓰는 기술 |
+|---|---|---|
+| 1 | 몸 `BodyCollisionMat` (히어로 관절 4·1 / 미노타우로스 3·1) | DASH, AIRDASH, GRAB, BRUTAL3 |
+| 2 / 3 | 블레이드 `weaponLeftMat` (CDV_MAIBlade, r 13.2) 왼손 / 오른손(flags 0x200) | COMBO3A–F, COMBO6A, BLOCK360, AIR* … / 미노타우로스 `LeftCollisionMat`(관절 26) = 2 |
+| 7 | 히어로 `rightFootCollsionMat` (발 관절 56·60, r 6.8) | ROPEHOH* |
+| 9 | 히어로 `extra1CollsionMat` (pelvis 기준 정면 z −20, r 27) | GRAB, BRUTAL1, IMPALE, PARRY02 (대부분 dmg 0) |
+| 10 | (아르테미스의 검 — CDV 미확인) | BER* |
+| 11 | 블레이드 `weaponTwinCollisionMat` (같은 구) | COMBO4C/4D, BRUTAL1/3, BLOCKFORWARDFLIP |
+| 4/5/0 | 미확인 (영웅 1회씩, 미노타우로스 0) | |
+
+블레이드 구는 `maiblade` 오브젝트 관절 0 로컬이고, 블레이드 오브젝트는 히어로 `lWeapOH`/`rWeapOH` (05 문서 2.8, 타입 10 위치) 에 붙는다. 구현 34 문서.
+
 ### 5.2 피해 `Combat_ApplyHit` 0x2032C0 [확실]
 ```
 dmg = attack.damage × AttackerScale(attacker)          // 0x203720: lb 0x19 × sub_00209e58

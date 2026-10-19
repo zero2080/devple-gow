@@ -142,7 +142,7 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 
 	public Matrix4f world(Matrix4f out, float alpha) {
 		Vector3f p = new Vector3f(prevPos).lerp(pos, alpha);
-		return out.translation(p).rotateY(yaw + (float) Math.PI);
+		return out.translation(p).rotateY(yaw); // 모델 -Z 정면 (34 문서 §4)
 	}
 
 	// ---- Hittable ----
@@ -170,6 +170,11 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 	@Override
 	public boolean grabbable() {
 		return circleHp < 65535 && hp > 0 && hp <= circleHp;
+	}
+
+	@Override
+	public HitVolumes hitVolumes() {
+		return combat.hitVolumes();
 	}
 
 	@Override

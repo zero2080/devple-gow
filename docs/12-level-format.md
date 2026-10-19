@@ -102,8 +102,8 @@ GROUP{ RES goobj (CXT 0x20001, 0x5C 바이트) }GROUP
 | 0x08 | char[8] | "BallHull" |
 | 0x14 / 0x18 | u32 | ball 수 / hull 수 |
 | 0x1C | vec4 | 경계 구 (x, y, z, r) |
-| 0x34 / 0x38 | u32 | 이름 수 / 평면 수 |
-| 0x3C | u32[11] | 오프셋: [0] 이름 char[24][], [4] ball vec4 (x,y,z,r), [5] hull 별 평면 수 u8, [8] hull 중심 vec4, [9] 평면별 이름 번호 u8, [10] 평면 vec4 (n, d) |
+| 0x34 / 0x38 | u32 | 이름(재질 엔트리) 수 / **엔트리 크기** (CMV 24, CDV·ENV·SEV 0x40 — 34 문서. "평면 수" 해석은 틀림) |
+| 0x3C | u32[11] | 오프셋: [0] 재질 엔트리[] (이름 + CDV 는 +0x30 PartType), [1] ball별 관절 u8, [3] ball별 재질 번호 u8, [4] ball vec4 (x,y,z,r), [5] hull 별 평면 수 u8, [8] hull 중심 vec4, [9] 평면별 이름 번호 u8, [10] 평면 vec4 (n, d) |
 
 - 내부 판정: ball 안이거나 hull 의 모든 평면에서 `n·p + d <= 0`. 평면 n 은 관절 스케일이 반영된 비정규 벡터(0.25, 0.5)다 — 로컬 좌표에서 부호만 본다.
 - 이름표: CMV 는 `RCM_<카메라>` (카메라 게임 오브젝트 레지스트리 이름, 실행 파일 `0x13EA98`), SEV 는 `RSE_<이미터>`, CDV/ENV 는 Maya 머티리얼 이름.
