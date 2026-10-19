@@ -75,7 +75,8 @@ snd.has(name); snd.find(name); snd.nameOf(hash);
 | DPMS kind 0/1/2/3 | 메모리 팩 / `NAME.VAG` 전체 디코딩 / `NAME.VPK` 스트림 / 4채널 스트림 | 14 §4 |
 | 4채널 VPK | 채널 (0,1)+(2,3) 믹스, `musicParam(a, b)` = 층 a 볼륨 b/127 | [추정] |
 | 음악 페이드 | 미구현 (즉시 전환) | |
-| ADSR / LFO / 리버브 / 수중 필터 | 미구현 | 14 §8 |
+| ADSR | 완료 | §7 |
+| LFO / 리버브 / 수중 필터 | 미구현 | 14 §8 |
 | 피치 상한 | 192kHz (SPU2 0x3FFF) | 9 개 톤이 초과 |
 
 ## 5. 테스트 (`engine/src/test/.../audio`, 헤드리스, gow-rom 필요)
@@ -106,3 +107,26 @@ OpenAL 경로는 로컬에서 수동 확인 (재생 60 프레임, `alGetError` 0
 | 리스너 | 매 틱 카메라 위치/방향, `update(dt)` |
 
 실행 확인: `--game ATHN01A` 에서 OpenAL 백엔드, 활성 소리 2–3 (시작 지점 앰비언트). 발소리·패드 진동은 미연결.
+
+## 7. SPU ADSR 엔벨로프 (`SpuEnvelope`)
+
+톤(14 문서 §2.4) 의 ADSR1/ADSR2 를 PS1/PS2 SPU 규칙 그대로 48kHz 샘플 단위로 흉내 낸다.
+
+| 비트 | ADSR1 | ADSR2 |
+|------|-------|-------|
+| 15 | 공격 지수 | 서스테인 지수 |
+| 14 | 공격 shift (14-10) | 서스테인 감소 |
+| 12-8 | | 서스테인 shift |
+| 9-8 / 7-6 | 공격 step (+7..+4) | 서스테인 step (증가 +7..+4 / 감소 −8..−5) |
+| 7-4 / 5 | 감쇠 shift (항상 지수 감소, step −8) | 릴리스 지수 |
+| 3-0 / 4-0 | 서스테인 레벨 SL — 감쇠는 `(level>>11) ≤ SL` 까지 | 릴리스 shift (step −8) |
+
+한 단계: `cycles = 1 << max(0, shift−11)`, `step = stepVal << max(0, 11−shift)`; 지수 증가는 레벨 > 0x6000 에서 cycles ×4,
+지수 감소는 step × level / 0x8000 (정수 곱이 0 이 되는 저레벨 구간은 최소 −1 로 끝까지 — 근사).
+
+- **연결**: `SoundInstance.tone` 이 보이스마다 엔벨로프를 만들고, 240Hz 틱마다 200 샘플 진행 → 보이스 gain = 기본 gain × 레벨.
+  `KEY_OFF` / `KILL_VOICES` 그레인과 정지 요청(`stop` 의 루프 보이스)은 **릴리스** 로 넘어가고, 레벨 0 이 되면 보이스 정지.
+  `kill()` (즉시 정지) 과 플러그인·스트림 보이스는 엔벨로프 없이 바로 끈다.
+- **실데이터 분포** (`SpuEnvelopeTest.adsrDistribution`, 톤 8,195 / 305 종): 최다 `80FF/9FCD` ×3,153 = 즉시 공격·최대 유지·선형 릴리스
+  shift 13 (≈ 342ms). `9FCE` 683ms, `9FCC` 171ms, `9FC0` 1ms. 공격 shift 가 큰 `A8FF`·`B2FF`·`B7FF` 는 페이드 인 (환경음·음성).
+- 남은 것: LFO(그레인 4), 리버브(Base Reverb 그룹 / exe 0x29CFE8 프리셋), 수중 필터.

@@ -6,7 +6,9 @@ import devple.gow.tools.audio.SoundBank.Grain;
 import org.joml.Vector3f;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 재생 중인 소리 하나 = 989snd 블록 사운드 핸들러 (IRX 0x63A0 그레인 실행기 재현, 14 문서 §5).
@@ -23,6 +25,8 @@ public final class SoundInstance {
 	final List<SoundInstance> children = new ArrayList<>();
 	/** 보이스 id 와 루프 여부. */
 	final List<int[]> voices = new ArrayList<>();
+	/** 톤 보이스의 SPU ADSR 엔벨로프 (보이스 id → 엔벨로프, 29 문서 §7). 플러그인·스트림 보이스는 없음 (= 1). */
+	final Map<Integer, SpuEnvelope> envs = new HashMap<>();
 	final byte[] regs = new byte[4];
 	/** 핸들러 볼륨 0..127 (자식 사운드 ref vol), pan(도), pitch bend (-32768..32767). */
 	int vol = 127;
@@ -85,7 +89,23 @@ public final class SoundInstance {
 
 	/** 240Hz 한 틱. */
 	void tick() {
-		voices.removeIf(v -> !mgr.backend.playing(v[0]));
+		voices.removeIf(v -> {
+			SpuEnvelope e = envs.get(v[0]);
+			if (e != null) {
+				e.advanceSamples(SpuEnvelope.RATE / SoundManager.TICK_HZ);
+				if (e.off()) {
+					mgr.backend.stop(v[0]);
+				}
+			}
+			if (!mgr.backend.playing(v[0])) {
+				envs.remove(v[0]);
+				return true;
+			}
+			return false;
+		});
+		if (!envs.isEmpty()) {
+			updateVoices();
+		}
 		for (SoundInstance c : children) {
 			if (!c.killed) {
 				c.tick();
@@ -320,12 +340,16 @@ public final class SoundInstance {
 			return; // TONE2 노이즈 등 샘플 없는 톤
 		}
 		AdpcmClip c = mgr.clip(bank, t);
+		SpuEnvelope env = new SpuEnvelope(t.adsr1(), t.adsr2());
+		env.advanceSamples(16); // 첫 틱 전에 즉시 공격(shift 0)은 이미 최대
 		Voice v = baseVoice(t.vol(), t.pan());
+		v.gain *= env.level();
 		v.pitch = bendPitch(t);
 		v.label = name() + " tone@" + Integer.toHexString(t.sampleOffset());
 		int id = mgr.backend.play(c, v);
 		if (id > 0) {
 			voices.add(new int[]{id, c.looped() ? 1 : 0, t.vol(), t.pan(), t.pbLow(), t.pbHigh()});
+			envs.put(id, env);
 		}
 	}
 
@@ -360,15 +384,29 @@ public final class SoundInstance {
 		for (int[] v : voices) {
 			Voice x = baseVoice(v[2], v[3]);
 			x.pitch = bendPitch(v[4], v[5]);
+			SpuEnvelope e = envs.get(v[0]);
+			if (e != null) {
+				x.gain *= e.level();
+			}
 			mgr.backend.update(v[0], x);
 		}
 	}
 
+	/** KEY_OFF: 엔벨로프가 있는 보이스는 릴리스 단계로 (꼬리가 끝나면 tick 이 정지), 없는 보이스는 즉시 정지. */
 	void keyOff() {
-		for (int[] v : voices) {
-			mgr.backend.stop(v[0]);
+		voices.removeIf(this::keyOff);
+	}
+
+	/** @return 보이스를 목록에서 뺐으면 true (즉시 정지). */
+	private boolean keyOff(int[] v) {
+		SpuEnvelope e = envs.get(v[0]);
+		if (e != null && !killed) {
+			e.release();
+			return false;
 		}
-		voices.clear();
+		mgr.backend.stop(v[0]);
+		envs.remove(v[0]);
+		return true;
 	}
 
 	/** 정지 요청: ON_STOP_MARKER 가 있으면 루프 보이스를 끄고 그 뒤 그레인을 실행, 없으면 즉시 정지. */
@@ -385,13 +423,7 @@ public final class SoundInstance {
 		}
 		if (marker >= 0 && !killed && !stopping) {
 			stopping = true;
-			voices.removeIf(v -> {
-				if (v[1] != 0) {
-					mgr.backend.stop(v[0]);
-					return true;
-				}
-				return false;
-			});
+			voices.removeIf(v -> v[1] != 0 && keyOff(v));
 			idx = marker + 1;
 			done = idx >= grains.size();
 			countdown = done ? 0 : Math.max(0, grains.get(idx).delay());

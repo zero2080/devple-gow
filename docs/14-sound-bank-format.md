@@ -110,7 +110,7 @@ A = 8 + 28N:  FileAttributes (989snd 파일 헤더, OpenGOAL 989snd 와 같은 �
 | 4 | s16 | pan |
 | 6 / 7 | s8 | MapLow / MapHigh (효과음은 0) |
 | 8 / 9 | s8 | PBLow / PBHigh (벤드 범위, 반음) |
-| 0xA / 0xC | u16 | ADSR1 / ADSR2 (SPU 형식) — 미구현 |
+| 0xA / 0xC | u16 | ADSR1 / ADSR2 (SPU 형식) — 엔진 구현 29 문서 §7 |
 | 0xE | u16 | flags (1 / 0x41 / 0 / 0x40; 0x8 이면 다른 보이스 할당 경로) |
 | 0x10 | u32 | 샘플 오프셋 (chunk1 기준) |
 | 0x14 | u32 | 샘플 크기 (다음 샘플 오프셋 = 오프셋 + 크기 로 연속) |
