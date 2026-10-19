@@ -313,6 +313,9 @@ class EnemyClimbTest {
 				return len > 1f && lv.nav().wallcast(eye, d.div(len), len - 1f) != null;
 			});
 		}
+		java.util.List<BodyPush.Body> crowd = java.util.List.of(a, b);
+		a.setCrowd(() -> crowd);
+		b.setCrowd(() -> crowd);
 		int overlap = 0, frames = 0;
 		for (int i = 0; i < 60 * 16; i++) {
 			a.update(DT);
@@ -325,10 +328,150 @@ class EnemyClimbTest {
 			}
 		}
 		// 원작 AI_MoveTo 목표 = 포위 칸 (칸은 대상당 한 적만, 0x1CDBF0) → 벽 평면 투영이 좌우로 갈라진다.
-		// 대상 직행(이전 근사)이면 719/719 프레임 겹침, 칸 투영이면 약 절반 (칸이 벽 법선 방향으로만 다르면 같은 점에 투영 — 원작도 같은 투영,
-		// 원작의 생물끼리 충돌 밀어내기는 미분석)
-		assertTrue(overlap < frames * 2 / 3, "겹친 프레임 " + overlap + "/" + frames);
+		// 대상 직행(이전 근사)이면 719/719 프레임 겹침, 칸 투영만이면 약 절반 (칸이 벽 법선 방향으로만 다르면 같은 점에 투영).
+		// 생물끼리 밀어내기 (0x1E2DD8, 벽 오르기는 벽 평면 성분만) 를 더하면 겹침 0
+		assertEquals(0, overlap, "겹친 프레임 " + overlap + "/" + frames);
 		assertEquals(EnemyNav.Mode.WALL, a.nav().mode());
 		assertEquals(EnemyNav.Mode.WALL, b.nav().mode());
+	}
+
+	@Test
+	void bodyBoxesAndRideSpeedsComeFromSold() throws Exception {
+		EnemyFactory.Kind sks = kind("R_SKS.WAD");
+		AiData ai = AiData.load(sks.assets().wad(), permk);
+		// 0x1E6D58: 반폭 +0x234 / 키 +0x238 / 바닥 +0x23C
+		assertEquals(new AiData.Body(0.7f, 2.8f, 0.4f), round(ai.body(20)), "해골 Sold_020");
+		AiData.Body hero = ai.body(0);
+		assertEquals(AiData.Body.HERO.half(), hero.half(), 1e-4, "크라토스 Sold_000 +0x234");
+		assertEquals(AiData.Body.HERO.height(), hero.height(), 1e-4);
+		assertEquals(AiData.Body.HERO.base(), hero.base(), 1e-4);
+		assertEquals(0.99f, AiData.load(kind("R_MIN.WAD").assets().wad()).body(50).half(), 1e-4, "미노타우로스 Sold_050 반폭");
+		AiData.Ride r = ai.ride(20);
+		assertEquals(20f, r.zipSpeed(), 1e-4, "+0x160");
+		assertEquals(10f, r.zipAccel(), 1e-4, "+0x164");
+		assertEquals(17f, r.jump(), 1e-4, "+0xC4 해골 점프");
+		EnemyFighter f = sks.spawn(20);
+		assertEquals(0.7f * 16 * f.scale, f.bodyRadius(), 1e-3, "× 개체 스케일");
+		// CombatFileSet #9C811767 (+0x38) 기본 = 0x1F (비트 2 = 단단함) — 기술이 없을 때 0x1E299C
+		assertEquals(0x1F, sks.tweaks().rawHash("/TweakTemplates/CombatFileSet/020/", 0x9c811767).getAsInt() & 0xFFFF);
+		assertTrue(f.solid());
+	}
+
+	private static AiData.Body round(AiData.Body b) {
+		return new AiData.Body(Math.round(b.half() * 1000) / 1000f, Math.round(b.height() * 1000) / 1000f, Math.round(b.base() * 1000) / 1000f);
+	}
+
+	@Test
+	void moveStateMaskBit2DecidesSolidity() throws Exception {
+		// 0x1E29A8: 상대 현재 기술 +0x12 & 2. R_SKS 기술 157 개 중 stateMask 1 (비트 2 없음) 37 개 = 목 베기 사망·잡기 처형(mai*)·벽 잡기·스폰
+		EnemyFactory.Kind sks = kind("R_SKS.WAD");
+		java.util.Map<Integer, Integer> masks = new java.util.HashMap<>();
+		for (CombatFile cf : CombatFile.fromWad(sks.assets().wad())) {
+			for (CombatFile.Move m : cf.moves()) {
+				masks.put(m.id(), m.stateMask());
+			}
+		}
+		assertEquals(157, masks.size());
+		assertEquals(37, masks.values().stream().filter(v -> (v & 2) == 0).count());
+		for (int id : new int[]{155, 157, 220, 225, 320, 500, 504}) { // deathDecap01, ropeDecap, maiskb00, wallGrabLeft, grabHero01, spawn, SKSwallSpawn
+			assertEquals(0, masks.get(id) & 2, "기술 " + id + " 통과");
+		}
+		EnemyFighter f = sks.spawn(20);
+		assertTrue(f.startSpawnAction(500));
+		assertFalse(f.solid(), "SPAWN 중엔 통과");
+	}
+
+	@Test
+	void deckSkeletonsDoNotStackOnEachOtherOrTheHero() throws Exception {
+		// 대상 없이 한 점에 쌓인 넷: 밀기 없으면 내내 겹침, 있으면 1 초 안에 갈라져 그대로
+		int idleFree = deckCrowd(false, false), idlePushed = deckCrowd(true, false);
+		// 영웅을 둘러싸며 움직이는 넷 (포위 칸): 한 번 훑는 순차 밀어내기 (원작과 같이 자기만, 다른 몸 하나씩) 라 셋 이상 몰리면 한 프레임 남는 겹침은 있을 수 있다
+		int fight = deckCrowd(true, true);
+		System.out.println("deck crowd overlap idle " + idleFree + " → " + idlePushed + ", fighting " + fight);
+		assertTrue(idleFree > 6 * 400, "밀기 없음: 6 쌍 × 프레임 내내 " + idleFree);
+		assertEquals(0, idlePushed, "밀기: 겹침 없음");
+		assertTrue(fight < 10 * 420 / 100, "전투 중 1 % 미만 " + fight);
+	}
+
+	/** 갑판 같은 점에 해골 넷 + 고정 영웅, 8 초 동안 같은 층에서 겹친 (쌍 × 프레임) 수. */
+	private int deckCrowd(boolean push, boolean foe) throws Exception {
+		EnemyFighter.resetSpawnCount();
+		EnemyFactory.Kind sks = kind("R_SKS.WAD");
+		Level lv = level("ATHN01D.WAD");
+		java.util.List<BodyPush.Body> crowd = new java.util.ArrayList<>();
+		java.util.List<EnemyFighter> fs = new java.util.ArrayList<>();
+		// 갑판 위 같은 점에 넷 + 영웅 (그물 해골 스폰점 바로 옆 갑판)
+		EnemyFighter probe = spawn(sks, 21, lv, "CargoRopeEnemies1#150");
+		Vector3f deck = new Vector3f(probe.pos).fma(80, probe.nav().wallNormal());
+		deck.y = lv.nav().groundHeight(deck.x, probe.pos.y, deck.z, 2000);
+		Vector3f heroPos = new Vector3f(deck).fma(60, probe.nav().wallNormal());
+		heroPos.y = lv.nav().groundHeight(heroPos.x, deck.y + 30, heroPos.z, 200);
+		assertFalse(Float.isNaN(heroPos.y));
+		BodyPush.Body hero = BodyPush.hero(heroPos, () -> false, null);
+		crowd.add(hero);
+		Hittable target = target(heroPos, 0);
+		for (int i = 0; i < 4; i++) {
+			EnemyFighter f = sks.spawn(20);
+			f.pos.set(deck).add(i * 0.5f, 0, 0);
+			f.setNavWorld(EnemyNav.of(lv.nav()));
+			if (push) {
+				f.setCrowd(() -> crowd);
+			}
+			if (foe) {
+				f.setFoe(target);
+			}
+			crowd.add(f);
+			fs.add(f);
+		}
+		int bad = 0;
+		for (int t = 0; t < 60 * 8; t++) {
+			for (EnemyFighter f : fs) {
+				f.update(DT);
+			}
+			if (t > 60) {
+				for (int i = 0; i < fs.size(); i++) {
+					EnemyFighter a = fs.get(i);
+					if (Math.abs(a.pos.y - heroPos.y) < a.bodyHeight()
+							&& Math.hypot(a.pos.x - heroPos.x, a.pos.z - heroPos.z) < a.bodyRadius() + hero.bodyRadius() - 1f) {
+						bad++;
+					}
+					for (int j = i + 1; j < fs.size(); j++) {
+						EnemyFighter b = fs.get(j);
+						if (Math.abs(a.pos.y - b.pos.y) < a.bodyHeight() // 같은 층만
+								&& Math.hypot(a.pos.x - b.pos.x, a.pos.z - b.pos.z) < a.bodyRadius() + b.bodyRadius() - 1f) {
+							bad++;
+						}
+					}
+				}
+			}
+		}
+		return bad;
+	}
+
+	@Test
+	void ziplineSkeletonRidesTheAthn01dZiplineDown() throws Exception {
+		EnemyFactory.Kind sks = kind("R_SKS.WAD");
+		Level lv = level("ATHN01D.WAD");
+		NavRope zip = lv.nav().ropes().stream().filter(r -> r.type() == devple.gow.tools.level.RopeDef.Type.ZIPLINE).findFirst().orElseThrow();
+		EnemyFighter f = sks.spawn(21);
+		assertNotEquals(0, f.template().moveCaps & AiTemplate.CAP_ZIPLINE, "021 Zipline 능력");
+		Vector3f hi = zip.top().y >= zip.end().y ? zip.top() : zip.end();
+		Vector3f lo = hi == zip.top() ? zip.end() : zip.top();
+		Vector3f start = new Vector3f(hi).lerp(lo, 0.05f);
+		f.pos.set(start.x, start.y - EnemyNav.HAND - 2, start.z);
+		f.setNavWorld(EnemyNav.of(lv.nav()));
+		f.update(DT);
+		assertEquals(EnemyNav.Mode.ROPE, f.nav().mode());
+		assertEquals(EnemyNav.SUB_ZIPLINE, f.nav().rope().sub());
+		float y0 = f.pos.y;
+		int frames = 0;
+		while (f.nav().mode() == EnemyNav.Mode.ROPE && frames++ < 60 * 20) {
+			f.update(DT);
+		}
+		assertNotEquals(EnemyNav.Mode.ROPE, f.nav().mode(), "끝에서 놓음 (" + frames + " 프레임)");
+		assertTrue(y0 - f.pos.y > 0.8f * (hi.y - lo.y), "낮은 끝까지 내려옴");
+		// 길이 / 320 + 가속 2 초 근처
+		float expect = zip.length() * 0.95f / 320f + 1f;
+		assertEquals(expect, frames * DT, 1.0f, "Sold+0x160 20 m/s, +0x164 10 m/s²");
 	}
 }

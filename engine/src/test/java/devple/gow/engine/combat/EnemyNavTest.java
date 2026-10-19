@@ -228,8 +228,106 @@ class EnemyNavTest {
 			n.update(p, new Vector3f(), new Vector3f(5, 0, 60), false, DT);
 		}
 		assertEquals(EnemyNav.Mode.ROPE, n.mode(), "목표가 매단 점 바로 밑 → 매달림");
-		n.update(p, new Vector3f(), new Vector3f(80, 0, 60), false, DT);
+		float fx0 = (float) -Math.sin(n.ropeYaw());
+		assertTrue(fx0 > 0.7f, "가까운 목표(+x) 쪽으로는 돌았지만 (정렬) 매단 점에서 16 안이라 놓지 않음");
+		// 반대쪽 수평 80 > 16: 몸 정면(+x) 과 목표 방향(−x) 이 180° → 먼저 회전 입력 (1,0,0) 으로 돌고 (0x1CFEFC), 45° 안에 들면 점프 (0x1CFEE8)
+		Vector3f goal = new Vector3f(-80, 0, 60);
+		int frames = 0;
+		while (n.mode() == EnemyNav.Mode.ROPE && frames++ < 120) {
+			n.update(p, new Vector3f(), goal, false, DT);
+			assertEquals(0f, p.x, 1e-3, "매달린 동안 스틱 0 — 줄 위 제자리");
+		}
 		assertEquals(EnemyNav.Mode.AIR, n.mode(), "수평 80 > 16 → 놓음");
+		// 앞 회전은 45° 안에 들자 멈춤 (정면 = +x 에서 45°) → 반대쪽 45° 안까지 90° 를 π rad/s 로 → 약 30 프레임
+		assertTrue(frames > 25 && frames < 40, "정렬까지 프레임 " + frames);
+		float fx = (float) -Math.sin(n.ropeYaw()), fz = (float) -Math.cos(n.ropeYaw());
+		assertTrue(fx < -0.7f && Math.abs(fz) < 0.72f, "목표 쪽 45° 안 " + fx + "," + fz);
+		for (int i = 0; i < 240 && n.mode() != EnemyNav.Mode.GROUND; i++) {
+			n.update(p, new Vector3f(), null, false, DT);
+		}
+		assertEquals(EnemyNav.Mode.GROUND, n.mode());
+		assertTrue(p.x < -20f, "정면으로 뛰어내림 x=" + p.x);
+	}
+
+	@Test
+	void hangingRopeTargetAboveOrOnRopeKeepsHanging() {
+		EnemyNav.Rope hang = new EnemyNav.Rope(new Vector3f(0, 200, 60), new Vector3f(0, 60, 60));
+		EnemyNav n = new EnemyNav(AiTemplate.CAP_ROPE, SKEL, 1000);
+		n.setWorld(ropeWorld(hang));
+		Vector3f p = new Vector3f(0, 100, 60);
+		n.update(p, new Vector3f(), null, false, DT);
+		float y = p.y;
+		for (int i = 0; i < 120; i++) {
+			n.update(p, new Vector3f(), new Vector3f(200, 300, 60), false, DT);
+		}
+		assertEquals(EnemyNav.Mode.ROPE, n.mode(), "목표가 위 → 스틱 0, 매달림 (오르지 않음)");
+		assertEquals(y, p.y, 1e-3);
+		for (int i = 0; i < 120; i++) {
+			n.update(p, new Vector3f(), new Vector3f(200, 0, 60), Boolean.TRUE, false, DT);
+		}
+		assertEquals(EnemyNav.Mode.ROPE, n.mode(), "대상도 줄 (조건 5) → 놓지 않음");
+	}
+
+	private static EnemyNav.World ropeWorld(EnemyNav.Rope r) {
+		return new EnemyNav.World() {
+			public float ground(float x, float y, float z, float drop) {
+				return WORLD.ground(x, y, z, drop);
+			}
+
+			public EnemyNav.WallHit wall(Vector3f o, Vector3f dir, float dist) {
+				return null;
+			}
+
+			public EnemyNav.Rope rope(Vector3f p, float rr) {
+				Vector3f q = r.point(r.closest(p));
+				return q.distance(p) <= rr ? r : null;
+			}
+		};
+	}
+
+	@Test
+	void ziplineRidesDownToLowEndAtSoldSpeedAndLetsGo() {
+		// 짚라인 0x40000: 스틱 무관, 낮은 끝으로 Sold+0x160 20 m/s (320) 까지 +0x164 10 m/s² (160) 가속, 끝 0.25 m 에서 속도 0 으로 놓음 (0x1C60F8, 0x1C6B1C)
+		EnemyNav.Rope zip = new EnemyNav.Rope(new Vector3f(-300, 300, 60), new Vector3f(1300, 100, 60), EnemyNav.SUB_ZIPLINE);
+		EnemyNav n = new EnemyNav(AiTemplate.CAP_ZIPLINE, SKEL, 1000);
+		n.setRide(new AiData.Ride(17f, 20f, 10f, 1.5f));
+		n.setWorld(ropeWorld(zip));
+		Vector3f p = new Vector3f(-280, 300 - EnemyNav.HAND - 4, 60);
+		n.update(p, new Vector3f(), null, false, DT);
+		assertEquals(EnemyNav.Mode.ROPE, n.mode());
+		assertEquals(EnemyNav.ST_ROPE | EnemyNav.SUB_ZIPLINE, n.stateBits());
+		assertEquals(0, n.combatMask(), "짚라인 분기 마스크 0");
+		// 1 초 뒤 속도 160, 2 초 뒤 320 (상한)
+		for (int i = 0; i < 60; i++) {
+			n.update(p, new Vector3f(-1, 0, 0), null, false, DT); // 스틱은 무시 (반대 방향이어도)
+		}
+		assertEquals(160f, n.zipSpeed(), 3f);
+		assertTrue(p.x > -280, "낮은 끝(+x) 쪽으로");
+		int frames = 60;
+		while (n.mode() == EnemyNav.Mode.ROPE && frames++ < 60 * 10) {
+			n.update(p, new Vector3f(), null, false, DT);
+			assertTrue(n.zipSpeed() <= 320f + 1e-3f);
+		}
+		assertEquals(EnemyNav.Mode.AIR, n.mode(), "끝에서 놓음");
+		assertEquals(1300 - 4 * 1600 / zip.a().distance(zip.b()), p.x, 6f, "끝 0.25 m 앞");
+		assertEquals(0f, n.speed(), 1e-3, "월드 속도 0");
+	}
+
+	@Test
+	void ziplineJumpsOffWhenGoalSteeplyBelow() {
+		EnemyNav.Rope zip = new EnemyNav.Rope(new Vector3f(-300, 300, 60), new Vector3f(1300, 100, 60), EnemyNav.SUB_ZIPLINE);
+		EnemyNav n = new EnemyNav(AiTemplate.CAP_ZIPLINE, SKEL, 1000);
+		n.setWorld(ropeWorld(zip));
+		Vector3f p = new Vector3f(-280, 300 - EnemyNav.HAND - 4, 60);
+		n.update(p, new Vector3f(), null, false, DT);
+		for (int i = 0; i < 30; i++) {
+			n.update(p, new Vector3f(), null, false, DT);
+		}
+		assertEquals(EnemyNav.Mode.ROPE, n.mode());
+		// 목표가 거의 바로 아래 (Δy < −16, 45° 보다 가파름) → 점프 버튼 (수평 줄과 같은 AI 분기 0x1CFCE0)
+		n.update(p, new Vector3f(), new Vector3f(p.x + 20, 0, 60), false, DT);
+		assertEquals(EnemyNav.Mode.AIR, n.mode());
+		assertTrue(n.speed() > 0, "짚라인 속도로 날아감 [근사]");
 	}
 
 	@Test
@@ -249,5 +347,166 @@ class EnemyNavTest {
 		assertEquals(EnemyNav.Mode.AIR, n.mode());
 		assertEquals(2, n.conditionState());
 		assertEquals(0x4, n.combatMask());
+	}
+
+	// ------------------------------------------------------------------ 생물끼리 밀어내기 (0x1E2DD8 / 0x1E28B0)
+
+	/** 테스트용 몸: EnemyNav 상태를 그대로 (해골 Sold_020 0.7 / 2.8 / 0.4). */
+	static final class Mob implements BodyPush.Body {
+		final EnemyNav nav;
+		final Vector3f pos;
+		boolean solid = true;
+
+		Mob(int caps, Vector3f pos, java.util.List<BodyPush.Body> crowd) {
+			this.nav = new EnemyNav(caps, SKEL, 1000);
+			nav.setBody(new AiData.Body(0.7f, 2.8f, 0.4f), 1f);
+			nav.setWorld(WORLD);
+			nav.setCrowd(this, () -> crowd);
+			this.pos = pos;
+			crowd.add(this);
+		}
+
+		public Vector3f feet() {
+			return pos;
+		}
+
+		public float bodyRadius() {
+			return nav.bodyRadius();
+		}
+
+		public float bodyHeight() {
+			return nav.bodyHeight();
+		}
+
+		public float bodyBase() {
+			return nav.bodyBase();
+		}
+
+		public boolean airborne() {
+			return nav.mode() == EnemyNav.Mode.AIR;
+		}
+
+		public boolean solid() {
+			return solid;
+		}
+
+		void tick(Vector3f stick, Vector3f goal) {
+			nav.update(pos, stick, goal, false, DT);
+		}
+	}
+
+	private static float flat(Vector3f a, Vector3f b) {
+		return (float) Math.hypot(a.x - b.x, a.z - b.z);
+	}
+
+	@Test
+	void overlappingEnemiesPushThemselvesApartToSumOfRadii() {
+		wallTop = 300f;
+		java.util.List<BodyPush.Body> crowd = new java.util.ArrayList<>();
+		Mob a = new Mob(0, new Vector3f(100, 0, 200), crowd), b = new Mob(0, new Vector3f(104, 0, 200), crowd);
+		assertEquals(0.7f * 16, a.bodyRadius(), 1e-4, "반지름 = Sold +0x234 × 16");
+		a.tick(new Vector3f(), null);
+		// a 가 자기 갱신에서 깊이 전부 (22.4 − 4) 를 밀려남 (자기만 민다) → b 는 이미 떨어져 있어 그대로
+		assertEquals(2 * 11.2f, flat(a.pos, b.pos), 1e-3);
+		assertEquals(104f, b.pos.x, 1e-4);
+		b.tick(new Vector3f(), null);
+		assertEquals(104f, b.pos.x, 1e-4, "b 는 이미 겹치지 않음");
+		assertTrue(a.pos.x < 100, "a 는 b 반대쪽(−x)으로");
+		assertEquals(0f, a.pos.y, 1e-4, "같은 높이 → 수평으로만");
+	}
+
+	@Test
+	void groundEnemyWalkingIntoAnotherIsBlocked() {
+		java.util.List<BodyPush.Body> crowd = new java.util.ArrayList<>();
+		Mob a = new Mob(0, new Vector3f(0, 0, 200), crowd), b = new Mob(0, new Vector3f(60, 0, 200), crowd);
+		for (int i = 0; i < 120; i++) {
+			a.tick(new Vector3f(1, 0, 0), null);
+			b.tick(new Vector3f(), null);
+			assertTrue(flat(a.pos, b.pos) >= 22.4f - 1e-3f, "프레임 " + i + " 거리 " + flat(a.pos, b.pos));
+		}
+		assertEquals(60f - 22.4f, a.pos.x, 0.5f, "b 앞에서 멈춤");
+	}
+
+	@Test
+	void nonSolidOrAirborneOthersArePassedThrough() {
+		java.util.List<BodyPush.Body> crowd = new java.util.ArrayList<>();
+		Mob a = new Mob(0, new Vector3f(0, 0, 200), crowd), b = new Mob(0, new Vector3f(5, 0, 200), crowd);
+		b.solid = false; // stateMask 1 (목 베기·잡기 처형·스폰 등)
+		a.tick(new Vector3f(), null);
+		assertEquals(0f, a.pos.x, 1e-4, "단단하지 않은 상대는 통과");
+		b.solid = true;
+		b.pos.y = 30; // 공중 상대 (낙하 중): 자신 지상이면 밀지 않음 (0x1E2B80)
+		b.nav.setWorld(null);
+		EnemyNav.Mode m = b.nav.mode();
+		assertNotEquals(EnemyNav.Mode.GROUND, m);
+		a.tick(new Vector3f(), null);
+		assertEquals(0f, a.pos.x, 1e-4, "공중 상대는 지상 쪽을 밀지 않음");
+	}
+
+	@Test
+	void airborneEnemyLandingOnAnotherIsPushedOff() {
+		java.util.List<BodyPush.Body> crowd = new java.util.ArrayList<>();
+		Mob a = new Mob(0, new Vector3f(2, 60, 200), crowd), b = new Mob(0, new Vector3f(0, 0, 200), crowd);
+		b.tick(new Vector3f(), null);
+		for (int i = 0; i < 240 && a.nav.mode() != EnemyNav.Mode.GROUND; i++) {
+			a.tick(new Vector3f(), null);
+		}
+		assertEquals(EnemyNav.Mode.GROUND, a.nav.mode());
+		assertTrue(flat(a.pos, b.pos) >= 22.4f - 1e-2f, "머리 위에 서지 않고 옆으로 밀려 착지 " + flat(a.pos, b.pos));
+	}
+
+	@Test
+	void climbersOnSameWallPushApartInsideTheWallPlane() {
+		java.util.List<BodyPush.Body> crowd = new java.util.ArrayList<>();
+		Mob a = new Mob(AiTemplate.CAP_CLIMB, new Vector3f(0, 150, 6), crowd);
+		Mob b = new Mob(AiTemplate.CAP_CLIMB, new Vector3f(3, 150, 6), crowd);
+		b.tick(new Vector3f(), null);
+		a.tick(new Vector3f(), null);
+		assertEquals(EnemyNav.Mode.WALL, a.nav.mode());
+		assertEquals(EnemyNav.Mode.WALL, b.nav.mode());
+		for (int i = 0; i < 10; i++) {
+			a.tick(new Vector3f(), null);
+			b.tick(new Vector3f(), null);
+		}
+		assertTrue(a.pos.distance(b.pos) >= 22.4f - 1e-2f, "벽 위에서도 갈라짐 " + a.pos.distance(b.pos));
+		assertEquals(EnemyNav.WALL_OFF, a.pos.z, 1e-3, "벽 평면 성분만 — 벽에서 떨어지지 않음");
+		assertEquals(EnemyNav.WALL_OFF, b.pos.z, 1e-3);
+		assertEquals(EnemyNav.Mode.WALL, a.nav.mode());
+	}
+
+	@Test
+	void ropeRidersAreNotPushed() {
+		// 줄 이동 0x1C5848 은 0x1E2DD8 을 부르지 않는다
+		java.util.List<BodyPush.Body> crowd = new java.util.ArrayList<>();
+		Mob a = new Mob(AiTemplate.CAP_ROPE, new Vector3f(0, 105, 60), crowd);
+		Mob b = new Mob(AiTemplate.CAP_ROPE, new Vector3f(2, 105, 60), crowd);
+		crowd.clear(); // 잡기 전 공중에서는 밀리므로 따로 잡게 한 뒤
+		a.tick(new Vector3f(), null);
+		b.tick(new Vector3f(), null);
+		crowd.add(a);
+		crowd.add(b);
+		for (int i = 0; i < 30; i++) {
+			a.tick(new Vector3f(), null);
+			b.tick(new Vector3f(), null);
+		}
+		assertEquals(EnemyNav.Mode.ROPE, a.nav.mode());
+		assertEquals(EnemyNav.Mode.ROPE, b.nav.mode());
+		assertEquals(2f, flat(a.pos, b.pos), 1e-3);
+	}
+
+	@Test
+	void heroBodyIsKratosSold000() {
+		BodyPush.Body h = BodyPush.hero(new Vector3f(), () -> false, null);
+		assertEquals(9.6f, h.bodyRadius(), 1e-4);
+		assertEquals(35.2f, h.bodyHeight(), 1e-4);
+		assertEquals(6.4f, h.bodyBase(), 1e-4);
+		assertTrue(h.solid(), "기술 없음 → CombatFileSet 기본 0x1F (비트 2)");
+		// 영웅(r 9.6) 이 해골(r 11.2) 과 겹치면 영웅이 밀려남
+		java.util.List<BodyPush.Body> crowd = new java.util.ArrayList<>();
+		Mob s = new Mob(0, new Vector3f(10, 0, 0), crowd);
+		s.tick(new Vector3f(), null); // 착지 (공중 상대는 지상 영웅을 밀지 않음)
+		Vector3f p = new Vector3f();
+		assertTrue(BodyPush.push(h, p, crowd, null));
+		assertEquals(20.8f, flat(p, s.pos), 1e-3);
 	}
 }

@@ -60,6 +60,31 @@ public final class AiData {
 		public static final Motion DEFAULT = new Motion(8, 80, 80, 8, 3, 0.5f, 2.17f, 3.7f, 2);
 	}
 
+	/**
+	 * 몸 상자 Sold 필드 (단위 m, 월드 = ×16 × 개체 스케일 owner+0x168). 0x1E6D58 이 owner+0x120 상자 (지름, 키, 지름) / +0x130 (0, 바닥, 0) /
+	 * +0x140 키 − 바닥 을 만들고, 생물끼리 밀어내기 0x1E2DD8 / 0x1E28B0 이 이 상자로 캡슐을 만든다 (32 문서 §생물끼리 밀어내기) [확실].
+	 *
+	 * @param half   +0x234 반폭 = 캡슐 반지름 (크라토스 0.6)
+	 * @param height +0x238 키 (크라토스 2.2)
+	 * @param base   +0x23C 바닥 높이 (크라토스 0.4)
+	 */
+	public record Body(float half, float height, float base) {
+		/** 크라토스 Sold_000 (데이터 테스트가 대조). */
+		public static final Body HERO = new Body(0.6f, 2.2f, 0.4f);
+	}
+
+	/**
+	 * 줄·짚라인·점프 Sold 필드 (m/s, 38 문서 §2.2 — 영웅과 같은 오프셋).
+	 *
+	 * @param jump     +0xC4 점프 수직 초속 (0x1E9E88) — 매단 줄에서 놓을 때 (AI 점프 버튼 0x1CF1C8)
+	 * @param zipSpeed +0x160 짚라인 목표 속도 / {@code zipAccel} +0x164 가속 (0x1C60F8 → 0x1E5FE0, 스틱 무관 · 낮은 끝으로)
+	 * @param climb    +0x138 매단 줄 오르내리기 (0x1C6578, × 스틱 — AI 스틱은 0 이라 쓰지 않음)
+	 */
+	public record Ride(float jump, float zipSpeed, float zipAccel, float climb) {
+		/** Sold 가 없을 때 (크라토스 값). */
+		public static final Ride DEFAULT = new Ride(15.25f, 20f, 10f, 1.5f);
+	}
+
 	/** BlockMod 항목 하나 (0x19BEF0): 영웅 기술, 최소 횟수, 최소 방어 %, 한계 횟수. */
 	public record BlockEntry(int move, int min, float minBlock, int limit) {
 	}
@@ -68,6 +93,8 @@ public final class AiData {
 	private final Map<Integer, Soldier> soldiers = new HashMap<>();
 	private final Map<Integer, Stone> stones = new HashMap<>();
 	private final Map<Integer, Motion> motions = new HashMap<>();
+	private final Map<Integer, Body> bodies = new HashMap<>();
+	private final Map<Integer, Ride> rides = new HashMap<>();
 
 	public static AiData load(WadFile... wads) {
 		AiData d = new AiData();
@@ -101,6 +128,11 @@ public final class AiData {
 					if (mo != null) {
 						motions.put(sid, mo);
 					}
+					ByteBuffer sb = soldStruct(t.data(), 0x240);
+					if (sb != null) {
+						bodies.put(sid, new Body(sb.getFloat(0x234), sb.getFloat(0x238), sb.getFloat(0x23C)));
+						rides.put(sid, new Ride(sb.getFloat(0xC4), sb.getFloat(0x160), sb.getFloat(0x164), sb.getFloat(0x138)));
+					}
 				}
 			} catch (RuntimeException e) {
 				// 이름이 숫자가 아니거나 손상된 블록은 건너뜀
@@ -128,6 +160,30 @@ public final class AiData {
 	/** 이동 속도 필드 (없으면 null). */
 	public Motion motion(int id) {
 		return motions.get(id);
+	}
+
+	/** 몸 상자 필드 (없으면 null). */
+	public Body body(int id) {
+		return bodies.get(id);
+	}
+
+	/** 줄·짚라인·점프 필드 (없으면 null). */
+	public Ride ride(int id) {
+		return rides.get(id);
+	}
+
+	/** Sold 구조체 시작 (경로 문자열 NUL 다음) 을 0 으로 둔 버퍼, 크기가 need 보다 작으면 null. */
+	private static ByteBuffer soldStruct(ByteBuffer src, int need) {
+		ByteBuffer b = src.duplicate().order(ByteOrder.LITTLE_ENDIAN);
+		int p = 4;
+		while (p < b.limit() && b.get(p) != 0) {
+			p++;
+		}
+		int base = p + 1;
+		if (base + need > b.limit()) {
+			return null;
+		}
+		return b.position(base).slice().order(ByteOrder.LITTLE_ENDIAN);
 	}
 
 	/** BlockMod 템플릿 (/TweakTemplates/BlockMod/NNN/ "Move i", "Move i Min", "Move i Min Block", "Move i Limit"). */

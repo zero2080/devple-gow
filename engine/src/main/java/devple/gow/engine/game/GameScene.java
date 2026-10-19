@@ -113,6 +113,8 @@ public final class GameScene implements Scene {
 	private float otherFloorTime;
 	private final Map<String, EnemyFactory.Kind> kinds = new HashMap<>();
 	private final List<Enemy> enemies = new ArrayList<>();
+	/** 생물끼리 밀어내기 참여 몸 (영웅 + 적, 프레임마다 다시 채움 — 32 문서 §생물끼리 밀어내기). */
+	private final List<devple.gow.engine.combat.BodyPush.Body> bodies = new ArrayList<>();
 	/** 사운드만 올린 리소스 WAD (exit 때 내림). */
 	private final List<String> soundOnly = new ArrayList<>();
 	/** 사운드 전용 WAD 의 AI1 템플릿 번호 (스폰하지 않음). */
@@ -827,6 +829,7 @@ public final class GameScene implements Scene {
 		f.setDifficulty(session.difficulty);
 		if (bossKind == null && f.brain().tree != null && nav != null) {
 			f.setNavWorld(devple.gow.engine.combat.EnemyNav.of(nav.navWorld)); // 바닥·중력·벽·줄 이동 (32 문서 §적 자신의 벽·줄 이동)
+			f.setCrowd(() -> bodies); // 생물끼리 밀어내기 0x1E2DD8
 		}
 		f.setFoe(hero.hittable());
 		f.brain().setSightBlocked((eye, to) -> { // 인지 시선 가림 (17 문서 §인지)
@@ -1191,6 +1194,7 @@ public final class GameScene implements Scene {
 	}
 
 	private void updateEnemies(float dt) {
+		collectBodies();
 		for (Enemy en : enemies) {
 			EnemyFighter f = en.fighter();
 			boolean wasDead = f.dead();
@@ -1337,6 +1341,17 @@ public final class GameScene implements Scene {
 		return s != null && s.startsWith("SND_") ? s : "SND_FOOTSTEP_PLANK";
 	}
 
+	/** 밀어내기 참여 몸: 영웅 (크라토스 Sold_000) + 내비게이션을 쓰는 적. */
+	private void collectBodies() {
+		bodies.clear();
+		bodies.add(devple.gow.engine.combat.BodyPush.hero(hero.ctl.position, () -> !hero.ctl.grounded, hero.combat));
+		for (Enemy en : enemies) {
+			if (en.fighter().nav().world() != null) {
+				bodies.add(en.fighter());
+			}
+		}
+	}
+
 	/** 지면 추종 + 중력 + 벽 밀어내기. 내비게이터가 위치를 정하는 상태(매달림·줄·밀기 …)면 건너뛴다. */
 	private void physics(float dt) {
 		Vector3f p = hero.ctl.position;
@@ -1370,6 +1385,9 @@ public final class GameScene implements Scene {
 		if (Float.isNaN(g) && p.y < checkpoint.y - 3000) {
 			heroDied(); // 바닥 없는 곳으로 떨어짐
 		}
+		// 생물끼리 밀어내기 (0x1E2DD8 — 벽 충돌 앞, 영웅도 같은 내비게이션 코드)
+		collectBodies();
+		devple.gow.engine.combat.BodyPush.push(bodies.get(0), p, bodies, null);
 		Vector3f c = new Vector3f(p.x, p.y + 20, p.z);
 		boolean pushed = col.collideSphere(c, 12);
 		if (otherCol != null) {

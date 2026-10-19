@@ -17,7 +17,9 @@ import org.joml.Vector3f;
  *   <li>벽: AI 목표를 벽 평면(좌우·상하)에 투영 (0x1CF5D0), 좌우 Sold+0x10C / 상하 +0x110 (0x1C8D34). 더 못 가면 AI1 0x8A ms 뒤 점프(놓기)
  *       (0x1CF894 → sub_001CF1C8 = 입력 +0x30 비트 1) [추정: 조건]. 아래 끝이 바닥이면 지상, 위 끝은 WallPullup 능력이면 올라섬.</li>
  *   <li>줄: 줄 방향으로 목표 쪽 이동 (Sold+0x158). 놓기 (0x1CFCE0–0x1CFEF4 → sub_001CF1C8): 수평 줄·짚라인은 목표가 16 넘게 아래이고 45° 보다 가파르면,
- *       매단 줄은 목표가 아래이고 매단 점에서 수평 16 넘게 떨어지면. 분기 마스크 0x80 은 하위 0x20000 (수평 줄) 만 [확실].</li>
+ *       매단 줄은 스틱 0 (흔들지 않음), 목표가 아래이고 정면 45° 안 + 매단 점에서 수평 16 넘게 떨어지면 점프, 아니면 회전 [추정: 회전 출력].
+ *       짚라인은 스틱 무관 낮은 끝으로 Sold+0x160/+0x164 (0x1C60F8). 분기 마스크 0x80 은 하위 0x20000 (수평 줄) 만 [확실].</li>
+ *   <li>생물끼리 밀어내기 ({@link BodyPush}, 0x1E2DD8): 지상·공중·벽 이동 뒤, 벽 충돌 앞. 줄 위는 없음.</li>
  * </ul>
  * 충돌 세계가 없으면(헤드리스 AI 테스트) 지상 이동만 한다.
  */
@@ -94,6 +96,11 @@ public final class EnemyNav {
 
 		/** 점에서 r 안의 가장 가까운 줄 (없으면 null). */
 		Rope rope(Vector3f p, float r);
+
+		/** 구 (중심 c, 반지름 r) 벽 밀어내기 — c 를 고치고 밀렸으면 true (원작 이동 단계의 벽 충돌 0x1E2100). 기본 = 없음. */
+		default boolean collide(Vector3f c, float r) {
+			return false;
+		}
 	}
 
 	/** 게임 충돌 세계 (정적 충돌 + 발판 + 줄) 어댑터. 벽 = 영웅 충돌 면, Climbable = 표면 비트 3 (38 문서 §1). */
@@ -133,12 +140,22 @@ public final class EnemyNav {
 				};
 				return new Rope(nr.top(), nr.end(), sub);
 			}
+
+			public boolean collide(Vector3f c, float r) {
+				return nw.collideSphere(c, r);
+			}
 		};
 	}
 
 	private final int caps;
 	private final AiData.Motion motion;
 	private final int jumpDelayMs;
+	private AiData.Body body = AiData.Body.HERO;
+	private float scale = 1f;
+	private AiData.Ride ride = AiData.Ride.DEFAULT;
+	/** 생물끼리 밀어내기 (0x1E2DD8): 자기 몸과 주변 생물 (null = 없음). */
+	private BodyPush.Body self;
+	private java.util.function.Supplier<? extends Iterable<? extends BodyPush.Body>> crowd;
 	private World world;
 	private Mode mode = Mode.GROUND;
 	private float speed;
@@ -147,6 +164,10 @@ public final class EnemyNav {
 	private final Vector3f wallN = new Vector3f();
 	private Rope rope;
 	private float ropeT;
+	/** 매단 줄 위 몸 방향 (yaw) — AI 회전 입력 (1,0,0) 으로 대상 쪽으로 돈다 (0x1CFEFC) [추정]. */
+	private float ropeYaw;
+	/** 짚라인: 진행 방향 (+1 = a → b) / 속도 (월드 단위/s). */
+	private float zipDir, zipSpeed;
 	private float stuckMs;
 	/** 벽·줄을 놓은 뒤 착지할 때까지 다시 잡지 않음 [근사: 원작 놓기 직후 상태 미분석]. */
 	private boolean noCatch;
@@ -164,6 +185,42 @@ public final class EnemyNav {
 		this.caps = caps;
 		this.motion = motion != null ? motion : AiData.Motion.DEFAULT;
 		this.jumpDelayMs = jumpDelayMs;
+	}
+
+	/** 몸 상자 (Sold +0x234/+0x238/+0x23C) 와 개체 스케일 (owner+0x168) [추정: 스케일 = AI1 Scale Center/Range]. */
+	public void setBody(AiData.Body b, float scale) {
+		if (b != null) {
+			body = b;
+		}
+		this.scale = scale;
+	}
+
+	/** 줄·짚라인·점프 Sold 필드. */
+	public void setRide(AiData.Ride r) {
+		if (r != null) {
+			ride = r;
+		}
+	}
+
+	/** 생물끼리 밀어내기 대상: self = 이 적의 몸, others = 주변 생물 (자신 포함 가능 — 건너뜀). */
+	public void setCrowd(BodyPush.Body self, java.util.function.Supplier<? extends Iterable<? extends BodyPush.Body>> others) {
+		this.self = self;
+		this.crowd = others;
+	}
+
+	/** 캡슐 반지름 (월드). */
+	public float bodyRadius() {
+		return body.half() * 16f * scale;
+	}
+
+	/** 키 (월드). */
+	public float bodyHeight() {
+		return body.height() * 16f * scale;
+	}
+
+	/** 바닥 높이 (월드). */
+	public float bodyBase() {
+		return body.base() * 16f * scale;
 	}
 
 	public void setWorld(World w) {
@@ -258,7 +315,11 @@ public final class EnemyNav {
 		return released;
 	}
 
-	/** 죽으면 벽·줄에서 떨어진다 (사망 0x1EBE48 계열) [근사]. 피격 반응(wallHit*·ropeHOHR)은 붙은 채 — CombatFile 데이터 (32 문서). */
+	/**
+	 * 벽·줄에서 떨어진다. 죽으면 부름 — 원작 내비게이션 상태 종료 (0x1EBD78 a1 = 4, 0x1EBE2C): 줄이면 놓고 (0x1C4FF8),
+	 * 지상이 아니면 0x1E9030(2) = 낙하 (+0x174 = 8, 속도 유지, HP ≤ 0 이면 사망 기술은 그대로 재생) [확실: 경로 / 추정: 사망 때 a1 = 4].
+	 * 피격 반응(wallHit*·ropeHOHR)은 붙은 채 — CombatFile 데이터 (32 문서).
+	 */
 	public void drop() {
 		if (mode == Mode.WALL || mode == Mode.ROPE) {
 			mode = Mode.AIR;
@@ -268,6 +329,16 @@ public final class EnemyNav {
 			released = true;
 			noCatch = true;
 		}
+	}
+
+	/** 점프 버튼으로 놓기 (0x1CF1C8 → 줄/짚라인 점프): 수평 dir × hs, 수직 vy. */
+	private void jumpOff(Vector3f dir, float hs, float up) {
+		drop();
+		if (dir.lengthSquared() > 1e-6f) {
+			heading.set(dir.x, 0, dir.z).normalize();
+		}
+		speed = hs;
+		vy = up;
 	}
 
 	/**
@@ -313,7 +384,16 @@ public final class EnemyNav {
 		pos.fma(speed * dt, heading); // 공중은 수평 속도 유지 (공중 조종 [근사])
 		if (world == null) {
 			mode = Mode.GROUND;
+			crowdPush(pos, null);
 			return;
+		}
+		crowdPush(pos, null);
+		// 벽 충돌 (0x1E2100, 생물 밀어내기 뒤): 허리 높이 구 [근사: 원작은 상자 모서리 레이]
+		float r = bodyRadius();
+		Vector3f c = new Vector3f(pos.x, pos.y + STEP + r, pos.z); // 구 아래 = 계단 높이 (턱은 넘음)
+		if (world.collide(c, r)) {
+			pos.x = c.x;
+			pos.z = c.z;
 		}
 		float g = world.ground(pos.x, pos.y + STEP, pos.z, 4000);
 		if (!Float.isNaN(g) && pos.y - g <= STEP && vy <= 0) {
@@ -341,6 +421,13 @@ public final class EnemyNav {
 		}
 	}
 
+	/** 생물끼리 밀어내기 (0x1E2DD8). wallNormal = 벽 오르기 중이면 벽 법선. */
+	private void crowdPush(Vector3f pos, Vector3f wallNormal) {
+		if (self != null && crowd != null) {
+			BodyPush.push(self, pos, crowd.get(), wallNormal);
+		}
+	}
+
 	/** 공중 잡기: 줄 (0x1C5C20, 공중 0x4C 상태에서만) → 벽 (0x1EBCE4 → 0x1C7828, 능력 Climb). */
 	private boolean tryCatch(Vector3f pos) {
 		if ((caps & AiTemplate.CAP_ANY_ROPE) != 0) {
@@ -350,6 +437,10 @@ public final class EnemyNav {
 				rope = r;
 				ropeT = r.closest(hand);
 				mode = Mode.ROPE;
+				ropeYaw = (float) Math.atan2(-heading.x, -heading.z);
+				// 짚라인: 낮은 끝 쪽으로 (0x1C5E04), 잡을 때 줄 방향 속도 0 [추정 — 영웅과 같음]
+				zipDir = r.b().y <= r.a().y ? 1 : -1;
+				zipSpeed = 0;
 				vy = 0;
 				speed = 0;
 				snapRope(pos);
@@ -387,9 +478,25 @@ public final class EnemyNav {
 		faceYaw = (float) Math.atan2(wallN.x, wallN.z); // 정면(−Z 회전) = −법선 → 벽을 봄
 	}
 
+	/** 벽 위 밀어내기: 벽 평면 성분만 (0x1E2CA8), 민 자리도 Climbable 이어야 함 (벽 충돌 0x1E2100 대신 [근사]). */
+	private void wallPush(Vector3f pos) {
+		if (self == null || crowd == null || world == null) {
+			return;
+		}
+		Vector3f p = new Vector3f(pos);
+		if (!BodyPush.push(self, p, crowd.get(), wallN)) {
+			return;
+		}
+		WallHit h = world.wall(new Vector3f(p).add(0, CHEST, 0).fma(8, wallN), new Vector3f(wallN).negate(), WALL_OFF + 24);
+		if (h != null && h.climbable()) {
+			pos.set(h.point().x + wallN.x * WALL_OFF, p.y, h.point().z + wallN.z * WALL_OFF);
+		}
+	}
+
 	private void wall(Vector3f pos, Vector3f goal, Boolean clinging, boolean busy, float dt) {
 		faceWall();
 		if (busy || goal == null || world == null) {
+			wallPush(pos);
 			return;
 		}
 		// 0x1CF5D0: 목표 방향을 벽 평면(오른쪽·위)에 투영, 정지 거리 = Sold+0x108 ×16 / 60
@@ -400,6 +507,7 @@ public final class EnemyNav {
 		boolean goalOnWall = clinging != null ? clinging : Math.abs(d.dot(wallN)) < WALL_OFF + 16;
 		if (len < (goalOnWall ? KEEP : Math.max(4f, motion.wallMin() * 16f / 60f))) {
 			stuckMs = 0;
+			wallPush(pos);
 			return;
 		}
 		sx /= len;
@@ -416,6 +524,7 @@ public final class EnemyNav {
 			pos.set(h.point().x + wallN.x * WALL_OFF, cand.y, h.point().z + wallN.z * WALL_OFF);
 			faceWall();
 			stuckMs = 0;
+			wallPush(pos);
 		} else {
 			if (sy > 0 && (caps & AiTemplate.CAP_WALL_PULLUP) != 0) {
 				// 꼭대기 (ANIWallPullup): 벽 너머 바닥으로 올라선다
@@ -458,6 +567,19 @@ public final class EnemyNav {
 		pos.set(p.x, p.y - HAND, p.z);
 	}
 
+	/** 매단 줄 위 회전 속도 (rad/s) — 원작 회전 입력 (1,0,0) 의 줄 위 회전 속도 미분석 [근사]. */
+	public static final float ROPE_TURN = (float) Math.PI;
+	/** 매단 줄에서 점프로 놓을 때 수평 속도 (영웅 HeroNavigator 매단 줄 점프와 같은 40) [근사]. */
+	public static final float ROPE_JUMP_OUT = 40f;
+	/** 짚라인 끝 여유 0.25 m (0x1C6B1C, 영웅과 같음). */
+	public static final float ZIP_END = 4f;
+	private static final float COS45 = 0.70710677f;
+
+	/** 매단 줄 위 몸 방향 yaw (정면 = (−sin, 0, −cos)). */
+	public float ropeYaw() {
+		return ropeYaw;
+	}
+
 	private void rope(Vector3f pos, Vector3f goal, Boolean clinging, boolean busy, float dt) {
 		Vector3f dir = new Vector3f(rope.b()).sub(rope.a());
 		float len = dir.length();
@@ -467,6 +589,13 @@ public final class EnemyNav {
 		}
 		dir.div(len);
 		Vector3f flat = new Vector3f(dir.x, 0, dir.z);
+		if (rope.sub() == SUB_ZIPLINE) {
+			zip(pos, goal, clinging, dir, len, dt);
+			return;
+		}
+		if (rope.sub() != SUB_TRAVERSE) {
+			faceYaw = ropeYaw;
+		}
 		if (busy || goal == null) {
 			snapRope(pos);
 			return;
@@ -479,21 +608,14 @@ public final class EnemyNav {
 		boolean goalOnRope = clinging != null ? clinging : goal.y > gp.y - HAND - STEP && flatGoal < ROPE_GRAB;
 		Vector3f d = new Vector3f(goal).sub(pos);
 		float dl = d.length();
-		if (rope.sub() == SUB_TRAVERSE || rope.sub() == SUB_ZIPLINE) {
-			// 수평 줄·짚라인: 스틱 = 목표 방향 그대로. 목표가 16 넘게 아래(Δy < −16)이고 방향이 45° 보다 가파르면 (dir.y < −cos45) 점프 버튼 → 놓음
-			if (!goalOnRope && d.y < -ROPE_DROP && dl > 1e-3f && d.y / dl < -0.70710677f) {
+		if (rope.sub() == SUB_TRAVERSE) {
+			// 수평 줄: 스틱 = 목표 방향 그대로. 목표가 16 넘게 아래(Δy < −16)이고 방향이 45° 보다 가파르면 (dir.y < −cos45) 점프 버튼 → 놓음
+			if (!goalOnRope && d.y < -ROPE_DROP && dl > 1e-3f && d.y / dl < -COS45) {
 				drop();
 				return;
 			}
 		} else {
-			// 매단 줄(하위 비트 없음)·사슬: 목표가 아래이고 줄 매단 점(+0x70+0x30)에서 목표까지 수평 거리 > 16 이면 (원작은 진행 방향 · 몸 정면 > cos45 도 요구) 점프 → 놓음.
-			// 아니면 스틱 (0, 1, 0) = 그대로 매달림 [근사: 정렬 조건 생략, 흔들기 없음]
-			float flatTop = (float) Math.hypot(goal.x - rope.a().x, goal.z - rope.a().z);
-			if (!goalOnRope && goal.y < pos.y && flatTop > ROPE_DROP) {
-				drop();
-				return;
-			}
-			snapRope(pos);
+			hang(pos, goal, goalOnRope, dt);
 			return;
 		}
 		if (Math.abs(along) > (goalOnRope ? KEEP : 2f)) {
@@ -506,5 +628,75 @@ public final class EnemyNav {
 			}
 		}
 		snapRope(pos);
+	}
+
+	/**
+	 * 매단 줄·사슬 (하위 비트 없음 / 0x10000) — AI 0x1CFD90–0x1CFF20 [확실: 흐름·값 / 추정: 출력 a3 = 회전 입력]:
+	 * 이동 스틱 = 0 (오르내리기·흔들기 입력 없음 — 매단 줄 오르기 Sold+0x138 은 스틱 × 이므로 제자리). 목표가 자신보다 아래일 때만
+	 * <ol>
+	 *   <li>목표 쪽 (수평) 방향 · 몸 정면 (+0x20 행) &gt; cos45 (0x3F34FDF4) 이면 — 줄 매단 점 (줄 객체 행렬 +0x30) 에서 목표까지 수평 거리 &gt; 16 이면
+	 *       점프 버튼 (0x1CF1C8) → 놓기, 아니면 그대로.</li>
+	 *   <li>정렬이 아니면 두 번째 출력 = (1, 0, 0, 1) — 회전 입력으로 보고 대상 쪽으로 돈다 [추정].</li>
+	 * </ol>
+	 * 대상도 줄 (조건 5) 이면 매달린 채 (KEEP 과 같은 뜻).
+	 */
+	private void hang(Vector3f pos, Vector3f goal, boolean goalOnRope, float dt) {
+		snapRope(pos);
+		if (goalOnRope || goal.y >= pos.y) {
+			return;
+		}
+		float gx = goal.x - pos.x, gz = goal.z - pos.z;
+		float gl = (float) Math.hypot(gx, gz);
+		float fx = (float) -Math.sin(ropeYaw), fz = (float) -Math.cos(ropeYaw);
+		float dot = gl < 1e-3f ? 1f : (gx * fx + gz * fz) / gl;
+		if (dot > COS45) {
+			float flatTop = (float) Math.hypot(goal.x - rope.a().x, goal.z - rope.a().z);
+			if (flatTop > ROPE_DROP) {
+				// 점프로 놓기: 몸 정면으로 (영웅 매단 줄 점프 = 정면 40 + 점프 초속 [근사])
+				jumpOff(new Vector3f(fx, 0, fz), ROPE_JUMP_OUT, ride.jump() * 16f);
+			}
+			return;
+		}
+		float want = (float) Math.atan2(-gx, -gz);
+		float diff = (float) Math.IEEEremainder(want - ropeYaw, Math.PI * 2);
+		float stepYaw = ROPE_TURN * dt;
+		ropeYaw += Math.max(-stepYaw, Math.min(stepYaw, diff));
+		faceYaw = ropeYaw;
+		moveX = Math.signum(diff); // 돌고 있음 (애니 ANIRopeU 대신 회전 [근사])
+	}
+
+	/**
+	 * 짚라인 (0x40000) — 내비게이션 0x1C60F8: 스틱과 무관하게 목표 속도 Sold+0x160 으로 가속 +0x164 (0x1E5FE0), 방향 = 낮은 끝 (0x1C5E04),
+	 * 줄 위치를 [0.25 m, 길이 − 0.25 m] 로 자르고 끝에 닿으면 월드 속도 0 으로 놓음 (0x1C6B1C) [확실: 속도 / 추정: 끝 처리 — 영웅과 같음].
+	 * AI (0x1CFCE0) 는 수평 줄과 같은 분기: 목표가 16 넘게 아래 & 45° 보다 가파르면 점프 → 놓음 (짚라인 속도 그대로 날아감 [근사]).
+	 */
+	private void zip(Vector3f pos, Vector3f goal, Boolean clinging, Vector3f dir, float len, float dt) {
+		Vector3f travel = new Vector3f(dir).mul(zipDir);
+		faceYaw = (float) Math.atan2(-travel.x, -travel.z);
+		moveX = 1;
+		if (goal != null) {
+			Vector3f d = new Vector3f(goal).sub(pos);
+			float dl = d.length();
+			boolean goalOnRope = clinging != null && clinging;
+			if (!goalOnRope && d.y < -ROPE_DROP && dl > 1e-3f && d.y / dl < -COS45) {
+				jumpOff(travel, zipSpeed * (float) Math.hypot(travel.x, travel.z), 0);
+				return;
+			}
+		}
+		zipSpeed = Math.min(ride.zipSpeed() * 16f, zipSpeed + ride.zipAccel() * 16f * dt);
+		float gap = Math.min(0.5f, ZIP_END / len);
+		ropeT += zipDir * zipSpeed * dt / len;
+		if (zipDir > 0 ? ropeT >= 1 - gap : ropeT <= gap) {
+			ropeT = Math.max(gap, Math.min(1 - gap, ropeT));
+			snapRope(pos);
+			drop(); // 끝: 월드 속도 0 으로 놓음
+			return;
+		}
+		snapRope(pos);
+	}
+
+	/** 짚라인 속도 (월드 단위/s). */
+	public float zipSpeed() {
+		return zipSpeed;
 	}
 }
