@@ -228,10 +228,14 @@ public final class TraversalVerifier {
 			}
 		};
 
+		// 메시지가 닫히면(표시 시간 뒤) 플레이어가 1040(번호) — GameScene 과 같음 (원작 0x1B8ECC, 아레나 "완료" 메시지 → 워프)
+		Map<Integer, Float> msgDue = new java.util.LinkedHashMap<>();
+		float[] clock = {0};
 		ScriptListener listener = new ScriptListener() {
 			@Override
 			public void message(int id, float sec) {
 				r.messages.put(id, messages.get(id) != null);
+				msgDue.put(id, clock[0] + (sec > 0 ? sec : 4f));
 			}
 
 			@Override
@@ -397,8 +401,22 @@ public final class TraversalVerifier {
 				}
 				movieDone.clear();
 				w.tick(DT, player[0], player[1], player[2]);
+				clock[0] = w.time();
+				for (var it = msgDue.entrySet().iterator(); it.hasNext(); ) {
+					var m = it.next();
+					if (m.getValue() <= clock[0]) {
+						it.remove();
+						w.postEvent(1040, m.getKey(), 0, 0, w.player());
+					}
+				}
 				for (ScriptActor a : List.copyOf(spawned)) {
 					if (!a.destroyed() && w.time() - spawnTime.get(a) > KILL_AFTER) {
+						// 볼륨 안 파괴만 세는 센서(DestructionSensor mode 4, 예 ARENA10 FallenZone "단상 밖으로 떨어뜨리기")가 이 그룹을 보면
+						// 그 볼륨 안에서 처치 (플레이어가 밀어 떨어뜨린 것 대신)
+						float[] in = destructionZone(w, a);
+						if (in != null) {
+							a.moveTo(in[0], in[1], in[2]);
+						}
 						w.destroy(a);
 					}
 				}
@@ -620,6 +638,49 @@ public final class TraversalVerifier {
 	}
 
 	/** 붙어 있는 동안 오브젝트 애니를 끝까지 재생하며 진행률 1023 을 원작 규칙대로 보낸다 ({@link TaskProgress}). */
+	/** 센서가 (직접 또는 대상 엔티티로) 실패 화면 Internal 0x13 을 부르는지 — 엔티티 코드 문자열 검사. */
+	private static boolean failsLevel(ScriptWorld w, ScriptEntity e) {
+		java.util.function.Predicate<ScriptEntity> calls = x -> x.toString().contains("FailedScreen") || x.name().contains("Fail");
+		if (calls.test(e)) {
+			return true;
+		}
+		for (ScriptEntity t : w.entities()) {
+			if (e.targets().contains(t.data.id()) && calls.test(t)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** 그룹을 Filter 로 보는 mode 4 DestructionSensor 의 볼륨 안 한 점 (없으면 null). */
+	private static float[] destructionZone(ScriptWorld w, ScriptActor a) {
+		for (ScriptEntity e : w.entities()) {
+			if (e.type() != 3 || e.mode() != 4 || e.volume == null) { // 3 = DestructionSensor
+				continue;
+			}
+			if (failsLevel(w, e)) {
+				continue; // 실패 구역 (ARENA10 FailZone → FailTransmit → FailedScreen) 은 피한다
+			}
+			Object f = w.slot(e, "Filter");
+			if (!(f instanceof Number n) || n.intValue() != a.group) {
+				continue;
+			}
+			float[] c = e.position();
+			for (int r = 0; r <= 640; r += 32) {
+				for (int dx = -r; dx <= r; dx += 32) {
+					for (int dz = -r; dz <= r; dz += 32) {
+						for (int dy = -256; dy <= 256; dy += 64) {
+							if (e.volume.contains(c[0] + dx, c[1] + dy, c[2] + dz)) {
+								return new float[]{c[0] + dx, c[1] + dy, c[2] + dz};
+							}
+						}
+					}
+				}
+			}
+		}
+		return null;
+	}
+
 	private static void runTask(ScriptWorld w, Interactables.Item it, Runnable step) {
 		TaskProgress tp = new TaskProgress(it.id, it.length);
 		for (int guard = 0; guard < 3000 && !tp.done; guard++) {

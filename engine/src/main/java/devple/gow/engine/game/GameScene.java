@@ -84,6 +84,8 @@ public final class GameScene implements Scene {
 	private final devple.gow.engine.ui.MinigameIcon minigameIcon = new devple.gow.engine.ui.MinigameIcon();
 	private float time;
 	private float messageTimer;
+	/** 표시 중인 메시지 번호 (-1 없음): 닫힐 때 이벤트 1040(번호) 를 플레이어가 보낸다 (원작 0x1B8ECC/0x1B8F98/0x1B9170). */
+	private int messageId = -1;
 	private float stepTimer;
 	private boolean wasAir;
 	private boolean leaving;
@@ -781,7 +783,9 @@ public final class GameScene implements Scene {
 
 	private void showMessage(int id, float seconds) {
 		String text = session.messages != null ? session.messages.get(id) : null;
+		messageId = id;
 		if (text == null) {
+			messageTimer = seconds > 0 ? seconds : 4f;
 			return;
 		}
 		String[] lines = text.replace("----", "\n").split("\n");
@@ -917,6 +921,10 @@ public final class GameScene implements Scene {
 		}
 		if (messageTimer > 0 && (messageTimer -= dt) <= 0) {
 			hud.variables().event("PS2_MessageTemplate_Event", 0);
+			if (messageId >= 0) {
+				world.postEvent(1040, messageId, 0, 0, world.player()); // 메시지 끝 (아레나 "완료" 메시지 → 워프 등)
+				messageId = -1;
+			}
 		}
 		if (saveFlow != null) {
 			updateSaveFlow(dt);
