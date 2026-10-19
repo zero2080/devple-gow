@@ -1,6 +1,7 @@
 #version 410 core
 in vec2 vUv;
 in vec4 vColor;
+noperspective in vec2 vScr;
 
 uniform sampler2D uTex;
 uniform int uUseTex;
@@ -8,10 +9,21 @@ uniform int uSoft;      // 1 = 텍스처 없을 때 원형 부드러운 점
 uniform int uGs;        // 1 = 원작 PTC (GS 규칙: 정점색 0x80 = 1.0, 알파 As/0x80, 미리 곱한 색 출력)
 uniform int uTfx;       // TEX0.TFX: 0 MODULATE, 1 DECAL (2/3 HIGHLIGHT 는 MODULATE 로)
 uniform int uTcc;       // TEX0.TCC: 1 = 텍스처 알파 사용
+uniform int uScreen;    // 1 = 열기 아지랑이 (VU 종류 5): 프레임 복사본을 DECAL 로, 알파 = 정점 알파 (TCC 0)
+uniform sampler2D uFrame;
 
 out vec4 oColor;
 
 void main() {
+	if (uScreen != 0) {
+		float a = clamp(vColor.a, 0.0, 255.0 / 128.0);
+		if (a < 0.004) {
+			discard;
+		}
+		vec3 f = texture(uFrame, clamp(vScr, vec2(0.0), vec2(1.0))).rgb;
+		oColor = vec4(f * min(a, 1.0), min(a, 1.0));
+		return;
+	}
 	if (uGs != 0) {
 		// GS: MODULATE Cs = Ct·Cv/0x80, As = At·Av/0x80 (TCC=0 이면 Av), 텍스처 없으면 Cs = Cv (0..255 → 0x80 은 회색 0.5)
 		// 블렌드 계수 As/0x80 (최대 ≈ 2) → 색에 미리 곱해 내보내고, 블렌드 함수는 ONE / ONE_MINUS_SRC_ALPHA, ONE, REVERSE_SUBTRACT

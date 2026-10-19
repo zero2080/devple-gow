@@ -91,6 +91,13 @@ public final class EffectSystem implements AutoCloseable {
 		public float rateOverride = -1;
 		/** 이미터 속력 배율. */
 		public float speedScale = 1;
+		/**
+		 * 이미터 생성률 배율 = 원작 GO 파티클 컴포넌트 +0xB4 (sub_00227D80 이 종류 &lt; 0xB 인 컴포넌트에 기록, 0x122B00 이
+		 * rate·dt·배율 로 누적) [확실]. MFX 적중 0x221810 의 f12 (주 대상 1 / 그 외 0.125).
+		 */
+		public float rateScale = 1;
+		/** 평면 무늬 (VU 종류 9) 바닥 법선 (월드). 피 자국은 바닥 충돌 법선 (원작 0x1F8990). */
+		public final Vector3f planeNormal = new Vector3f(0, 1, 0);
 		/** 시간 정지 (act 0 초 포즈 유지 — BMI 갑옷 조각이 깨지기 전, 원작 0x1C1B10 이 애니를 0 초에 둔다). */
 		public boolean hold;
 		private final List<ParticleSystem.Emitter> emitters = new ArrayList<>();
@@ -209,6 +216,9 @@ public final class EffectSystem implements AutoCloseable {
 					lp.zero(); // Maya 장면 좌표가 남은 이미터 (Fsliceemit 407,0,1344 등) → 원점 [근사]
 				}
 				world.transformPosition(lp, e.pos);
+				// PTC 0x10/0x20 (파티클이 소유자 회전/이동을 따름) 용 시스템 행렬 = 이펙트 월드 (배율 제거) [확실: 0x15BE18]
+				e.space.set(world).normalize3x3();
+				e.normal.set(planeNormal);
 				// 방향: FXC 로컬 회전(정규화) · dir, 그다음 이펙트 월드 회전
 				float[] d = fx.subtype() == 1 || fx.subtype() == 8 ? fx.dir() : new float[]{0, 1, 0};
 				Vector3f ld = localDir(lt, d);
@@ -218,7 +228,7 @@ public final class EffectSystem implements AutoCloseable {
 				}
 				float at = act == def.anim() ? time : actTime;
 				float ct = act != null && act.looping() && act.duration > 0 ? at % act.duration : at;
-				e.rate = (rateOverride >= 0 ? rateOverride : def.rate(act, ed, at)) * lodScale;
+				e.rate = (rateOverride >= 0 ? rateOverride : def.rate(act, ed, at)) * lodScale * rateScale;
 				e.speed = def.param(act, ed, 4, ct, fx.speed()) * 16 * Math.min(s, 4f) * speedScale;
 				e.speedRnd = def.param(act, ed, 5, ct, fx.speedRnd()) * 16 * Math.min(s, 4f) * speedScale;
 				if (fx.subtype() == 1 || fx.subtype() == 8) {

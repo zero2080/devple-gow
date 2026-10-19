@@ -49,6 +49,17 @@ public final class ParticleSystem implements AutoCloseable {
 		 * rate = 초당 생성 수, speed / speedRnd / cone = 원뿔 모드 속력·폭·퍼짐, sizeScale = 크기 배율 (인스턴스 스케일).
 		 */
 		public float rate = -1, speed = Float.NaN, speedRnd = Float.NaN, cone = Float.NaN, sizeScale = 1;
+		/**
+		 * 소유자 월드 행렬 (회전 + 이동, 배율 없음). PTC 플래그 0x10 / 0x20 이면 파티클이 이 행렬의 회전 / 이동을 따라간다
+		 * (원작 0x15BE18: 시스템 행렬 +0x70 에서 0x10 이 없으면 회전 행을 단위로, 0x20 이 없으면 이동을 0 으로; 이미터는 그 역행렬 공간에
+		 * 생성 0x1227C8, 렌더는 시스템 행렬 · 뷰 0x15E2F8) [확실]. 기본 단위 행렬 = 월드.
+		 */
+		public final Matrix4f space = new Matrix4f();
+		/** 평면 무늬 (VU 종류 9: 피 자국·파문) 의 바닥 법선 (월드). 원작 0x1F8990 은 바닥 충돌 법선으로 축을 만든다 [확실]. */
+		public final Vector3f normal = new Vector3f(0, 1, 0);
+		/** 이 프레임의 파티클 공간 (플래그 반영) 과 역행렬. */
+		final Matrix4f cur = new Matrix4f(), curInv = new Matrix4f();
+		boolean local;
 		float carry;
 
 		Emitter(ParticleDef def) {
@@ -137,6 +148,7 @@ public final class ParticleSystem implements AutoCloseable {
 		eye.set(camEye);
 		dt = Math.min(dt, 0.1f);
 		for (Emitter e : emitters) {
+			updateSpace(e);
 			if (!e.active) {
 				continue;
 			}
@@ -180,6 +192,23 @@ public final class ParticleSystem implements AutoCloseable {
 				wrap(i, d);
 			}
 		}
+	}
+
+	/** PTC 플래그 0x10 (회전) / 0x20 (이동) → 파티클 공간 행렬 (0x15BE18). */
+	private static void updateSpace(Emitter e) {
+		int fl = e.def.ptc() != null && e.def.vu() ? e.def.ptc().flags() & 0x30 : 0;
+		e.local = fl != 0;
+		if (!e.local) {
+			return;
+		}
+		e.cur.identity();
+		if ((fl & 0x10) != 0) {
+			e.cur.set3x3(new Matrix4f(e.space).normalize3x3());
+		}
+		if ((fl & 0x20) != 0) {
+			e.cur.setTranslation(e.space.m30(), e.space.m31(), e.space.m32());
+		}
+		e.cur.invertAffine(e.curInv);
 	}
 
 	/** 카메라 상자 밖으로 나간 비/눈은 반대편으로 되돌린다 (원작: 상자 안 반복). */
@@ -257,6 +286,17 @@ public final class ParticleSystem implements AutoCloseable {
 		v0x[i] = vx[i];
 		v0y[i] = vy[i];
 		v0z[i] = vz[i];
+		if (e.local) {
+			// 이미터 공간 = 시스템 행렬의 역 (0x1227C8): 레코드는 파티클 공간 좌표
+			Vector3f q = e.curInv.transformPosition(new Vector3f(px[i], py[i], pz[i]));
+			Vector3f w = e.curInv.transformDirection(new Vector3f(vx[i], vy[i], vz[i]));
+			p0x[i] = q.x;
+			p0y[i] = q.y;
+			p0z[i] = q.z;
+			v0x[i] = w.x;
+			v0y[i] = w.y;
+			v0z[i] = w.z;
+		}
 	}
 
 	/** 미리 채우기: 비처럼 시작부터 화면에 차 있어야 하는 이미터. */
@@ -297,11 +337,26 @@ public final class ParticleSystem implements AutoCloseable {
 			last = d;
 		}
 		Vector3f a = new Vector3f(), bAx = new Vector3f(), tmp = new Vector3f();
+		// 열기 아지랑이 (종류 5) 는 렌더 버킷 6 (flags &amp; 0x4040) = 마지막 → 다른 파티클을 다 그린 뒤 프레임을 복사해 쓴다
+		defs.sort(java.util.Comparator.comparingInt(d -> d.vu() && d.ptc().vu().kind == 5 ? 1 : 0));
+		boolean copied = false;
+		this.aspect = aspect;
 		for (ParticleDef d : defs) {
+			if (!copied && d.vu() && d.ptc().vu().kind == 5 && !HEAT_OFF) {
+				copied = true;
+				copyFrame();
+				glActiveTexture(GL_TEXTURE1);
+				glBindTexture(GL_TEXTURE_2D, frameTex);
+				glActiveTexture(GL_TEXTURE0);
+				shader.set("uFrame", 1);
+				glBindVertexArray(vao);
+				glBindBuffer(GL_ARRAY_BUFFER, vbo);
+			}
 			if (d.vu()) {
 				renderVu(d, cam, up, right);
 				continue;
 			}
+			shader.set("uScreen", 0);
 			buf.clear();
 			int verts = 0;
 			for (int i = 0; i < count; i++) {
@@ -381,6 +436,7 @@ public final class ParticleSystem implements AutoCloseable {
 
 	// ---- 원작 VU 식 렌더 (16 문서 §2.4) ----
 
+	private float aspect = 1;
 	private final float[][] rec = new float[6][4];
 	private final java.util.Map<ParticleDef, PtcVu.Eval> evals = new java.util.IdentityHashMap<>();
 	private int vuVerts;
@@ -390,6 +446,7 @@ public final class ParticleSystem implements AutoCloseable {
 	/** 원작 q21.z = 1/60 (이전 프레임 위치, 선 길이). */
 	private static final float VU_DT = 1 / 60f;
 	private static final boolean DEBUG = System.getenv("GOW_PTCVU_LOG") != null;
+	private static final boolean HEAT_OFF = "off".equals(System.getenv("GOW_HEAT"));
 
 	/**
 	 * 원작 파티클 마이크로코드 그대로: 출력 0x222 색 (0x80 = 1.0), 위치·크기·방향은 종류별 ({@link PtcVu}). 블렌드 = PTC flags&amp;3
@@ -398,12 +455,13 @@ public final class ParticleSystem implements AutoCloseable {
 	private void renderVu(ParticleDef d, Camera cam, Vector3f up, Vector3f right) {
 		FxResources.Shape sh = d.ptc();
 		PtcVu vu = sh.vu();
-		if (vu.kind == 5) {
-			return; // 화면 굴절 (프레임 버퍼를 텍스처로 쓰는 열기 아지랑이) — 미구현, 그리지 않는다
+		if (vu.kind == 5 && (frameTex == 0 || HEAT_OFF)) {
+			return; // 프레임 복사본이 없으면 (화면 크기 0) 생략, GOW_HEAT=off 비교용
 		}
 		PtcVu.Eval ev = evals.computeIfAbsent(d, k -> vu.newEval());
-		Texture tex = d.texture();
+		Texture tex = vu.kind == 5 ? null : d.texture();
 		shader.set("uGs", 1);
+		shader.set("uScreen", vu.kind == 5 ? 1 : 0);
 		shader.set("uUseTex", tex != null ? 1 : 0);
 		shader.set("uTfx", sh.tfx());
 		shader.set("uTcc", sh.textureAlpha() ? 1 : 0);
@@ -431,7 +489,8 @@ public final class ParticleSystem implements AutoCloseable {
 		vuVerts = 0;
 		Vector3f a = new Vector3f(), b = new Vector3f(), p = new Vector3f(), t = new Vector3f();
 		int kind = vu.kind;
-		int segs = kind == 4 ? vu.fanSegments() : 0;
+		int segs = kind == 4 || kind == 5 ? vu.fanSegments() : 0;
+		Vector3f fw = new Vector3f(cam.target).sub(cam.eye).normalize();
 		// 꼬리 +1/+2 = GS UV (텍셀×16, PRIM FST=1): 보통 (1024,0)/(0,1024) = 64×64 텍스처 전체 [확실: SKLpart 64×64]
 		float du0 = 0, dv0 = 0, du1 = 1, dv1 = 1;
 		if (tex != null && kind != 4 && kind != 7 && kind != 0) {
@@ -450,6 +509,9 @@ public final class ParticleSystem implements AutoCloseable {
 			record(vu, i);
 			vu.eval(ev, rec, Float.floatToRawIntBits(seed[i]) * 2654435761L, age[i], VU_DT);
 			float[][] o = ev.out;
+			if (owner[i].local) {
+				toWorld(owner[i].cur, kind, o);
+			}
 			float sc = owner[i].sizeScale;
 			float u0 = du0, v0 = dv0, u1 = du1, v1 = dv1;
 			if (ev.uvSet) {
@@ -512,6 +574,21 @@ public final class ParticleSystem implements AutoCloseable {
 					b.normalize(Math.abs(s));
 					corners(vu, p, a, b, cr, cg, cb, ca, u0, v0, u1, v1);
 				}
+				case 5 -> { // 열기 아지랑이 (0x3DA): 원반, 텍스처 = 프레임 버퍼 (DECAL), 중심 UV 만 굴절량 0x225.w × 화면 반지름만큼 x 로 민다
+					p.set(o[2][0], o[2][1], o[2][2]);
+					float s = o[2][3] * sc;
+					if (s <= 0) {
+						continue;
+					}
+					float depth = t.set(p).sub(cam.eye).dot(fw);
+					if (depth < cam.near) {
+						continue;
+					}
+					// 화면 반지름 (UV 비율): P00·r/w (0x3C9 mulw.x vf1 = P00 · 반지름), UV 0..1 은 화면 폭
+					float ru = 0.5f * s / (depth * tanHalf * aspect);
+					float[] e = o[1];
+					heat(p, up, right, s, segs, -o[3][3] * ru, ca, e[3] / 128f);
+				}
 				case 9 -> { // 평면 사각형: 위치 0x223 (.w 배율), 축 0x224 (x), 0x225 (y)
 					p.set(o[1][0], o[1][1], o[1][2]);
 					float s = o[1][3] * sc;
@@ -536,15 +613,31 @@ public final class ParticleSystem implements AutoCloseable {
 		rec[0][1] = p0y[i];
 		rec[0][2] = p0z[i];
 		if (vu.kind == 9) {
-			// 바닥 무늬 (피 자국·파문): 원작은 바닥 법선 정렬 코드가 축을 채운다 (0x1F9278) [근사: 수평면]
+			// 바닥 무늬 (피 자국·파문): 원작 0x1F8990 은 바닥 충돌(0x11E190) 법선 n 으로 평면 축 A = norm(d × n), B = norm(A × n) 을 만들고
+			// 파티클마다 n 축 임의 회전 (0x183D00) [확실]. 축은 레코드 q1 / q2.
+			Emitter e = owner[i];
+			Vector3f n = e.local ? e.curInv.transformDirection(nTmp.set(e.normal)) : nTmp.set(e.normal);
+			if (n.lengthSquared() < 1e-8f) {
+				n.set(0, 1, 0);
+			}
+			n.normalize();
+			if (!e.local) {
+				// 원작은 위치도 평면 위에 놓는다 (충돌점 + A·u + B·v + n·Offset): 생성 위치를 이미터를 지나는 평면에 투영
+				float h = (p0x[i] - e.pos.x) * n.x + (p0y[i] - e.pos.y) * n.y + (p0z[i] - e.pos.z) * n.z;
+				rec[0][0] -= n.x * h;
+				rec[0][1] -= n.y * h;
+				rec[0][2] -= n.z * h;
+			}
+			Vector3f a = aTmp.set(Math.abs(n.x) < 0.9f ? 1 : 0, Math.abs(n.x) < 0.9f ? 0 : 1, 0).cross(n).normalize();
+			Vector3f b = bTmp.set(a).cross(n).normalize();
 			float th = seed[i] * 6.2832f;
 			float cs = (float) Math.cos(th), sn = (float) Math.sin(th);
-			rec[1][0] = cs;
-			rec[1][2] = sn;
-			rec[2][0] = -sn;
-			rec[2][2] = cs;
-			rec[3][0] = cs;
-			rec[3][2] = sn;
+			for (int c = 0; c < 3; c++) {
+				float ax = a.get(c) * cs + b.get(c) * sn, bx = b.get(c) * cs - a.get(c) * sn;
+				rec[1][c] = ax;
+				rec[2][c] = bx;
+				rec[3][c] = ax;
+			}
 		} else {
 			rec[1][0] = v0x[i];
 			rec[1][1] = v0y[i];
@@ -558,6 +651,90 @@ public final class ParticleSystem implements AutoCloseable {
 				rec[2][1] = -1;
 			}
 		}
+	}
+
+	private final Vector3f nTmp = new Vector3f(), aTmp = new Vector3f(), bTmp = new Vector3f(), wTmp = new Vector3f();
+
+	/** 파티클 공간 출력 → 월드 (종류별 위치는 점, 방향·축은 벡터). */
+	private void toWorld(Matrix4f m, int kind, float[][] o) {
+		switch (kind) {
+			case 0, 1, 2, 3 -> pos(m, o[1]);
+			case 4, 5 -> pos(m, o[2]);
+			case 7 -> {
+				pos(m, o[2]);
+				pos(m, o[3]);
+			}
+			case 8 -> {
+				pos(m, o[1]);
+				dir(m, o[2]);
+			}
+			case 9 -> {
+				pos(m, o[1]);
+				dir(m, o[2]);
+				dir(m, o[3]);
+			}
+			default -> {
+			}
+		}
+	}
+
+	private void pos(Matrix4f m, float[] v) {
+		m.transformPosition(wTmp.set(v[0], v[1], v[2]));
+		v[0] = wTmp.x;
+		v[1] = wTmp.y;
+		v[2] = wTmp.z;
+	}
+
+	private void dir(Matrix4f m, float[] v) {
+		m.transformDirection(wTmp.set(v[0], v[1], v[2]));
+		v[0] = wTmp.x;
+		v[1] = wTmp.y;
+		v[2] = wTmp.z;
+	}
+
+	/**
+	 * 열기 아지랑이 원반 (종류 5): 정점 UV = 그 정점의 화면 위치 (셰이더가 계산) + 오프셋. 중심만 (du, 0) 만큼 밀고 테두리는 0 →
+	 * 원반 안의 화면이 중심 쪽으로 끌려 휜다. 알파 = 중심 0x222.a → 테두리 0x223.a (0x44 블렌드), 색은 프레임 그대로 (DECAL).
+	 */
+	private void heat(Vector3f p, Vector3f up, Vector3f right, float s, int segs, float du, float ca, float ea) {
+		ensure(segs * 3);
+		for (int k = 0; k < segs; k++) {
+			double a0 = 2 * Math.PI * k / segs, a1 = 2 * Math.PI * (k + 1) / segs;
+			float c0 = (float) Math.cos(a0) * s, s0 = (float) Math.sin(a0) * s, c1 = (float) Math.cos(a1) * s, s1 = (float) Math.sin(a1) * s;
+			put(p.x, p.y, p.z, du, 0, 1, 1, 1, ca);
+			put(p.x + right.x * c0 + up.x * s0, p.y + right.y * c0 + up.y * s0, p.z + right.z * c0 + up.z * s0, 0, 0, 1, 1, 1, ea);
+			put(p.x + right.x * c1 + up.x * s1, p.y + right.y * c1 + up.y * s1, p.z + right.z * c1 + up.z * s1, 0, 0, 1, 1, 1, ea);
+		}
+		vuVerts += segs * 3;
+	}
+
+	// ---- 프레임 버퍼 복사 (종류 5: 원작은 TEXFLUSH 후 프레임 자신을 텍스처로, 0x401) ----
+	private int frameTex, frameW, frameH;
+	private final int[] viewport = new int[4];
+
+	/** 지금 그려진 화면을 텍스처로 복사 (GL 4.1: glCopyTexSubImage2D). */
+	private void copyFrame() {
+		glGetIntegerv(GL_VIEWPORT, viewport);
+		int w = viewport[2], h = viewport[3];
+		if (w <= 0 || h <= 0) {
+			return;
+		}
+		if (frameTex == 0) {
+			frameTex = glGenTextures();
+		}
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, frameTex);
+		if (w != frameW || h != frameH) {
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, (java.nio.ByteBuffer) null);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+			frameW = w;
+			frameH = h;
+		}
+		glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, viewport[0], viewport[1], w, h);
+		glActiveTexture(GL_TEXTURE0);
 	}
 
 	/** PS2 448 줄 기준 1 화소 (×1.5) 의 월드 반폭. */
@@ -656,6 +833,9 @@ public final class ParticleSystem implements AutoCloseable {
 
 	@Override
 	public void close() {
+		if (frameTex != 0) {
+			glDeleteTextures(frameTex);
+		}
 		glDeleteBuffers(vbo);
 		glDeleteVertexArrays(vao);
 		MemoryUtil.memFree(buf);

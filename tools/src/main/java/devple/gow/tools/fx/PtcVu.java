@@ -34,15 +34,15 @@ public final class PtcVu {
 			"clamp(C0+C1*t,0,255)",       // 3  0x0C0
 			"C0+C1*t+C2*t²/2",            // 4  0x0CD
 			"clamp(C0+C1*t+C2*t²/2,0,255)", // 5 0x0DD
-			"mem[C0.x]",                  // 6  0x0ED
-			"lerp(mem[C0.x],mem[C0.x+1])", // 7 0x0F3
+			"mem[C0.x]",                  // 6  0x0ED (절대 VU 주소, 디스크의 PTC 8951 개 중 사용 0)
+			"lerp(mem[C0.x],mem[C0.x+1])", // 7 0x0F3 (사용 0)
 			"drag C0,C1,C2",              // 8  0x0FB
-			"bounce1",                    // 9  0x10A
-			"bounce2",                    // 10 0x12C
+			"plane C0: C1+C2*t, 1 bounce", // 9  0x10A (사용 0)
+			"plane C0: C1+C2*t+C3*t²/2, bounces e=C2.w", // 10 0x12C (사용 0)
 			"C0+C1*t ; prev",             // 11 0x0B8
 			"C0+C1*t+C2*t²/2 ; prev",     // 12 0x0D3
-			"bounce2 ; prev",             // 13 0x161
-			"bounce2 ; prev",             // 14 0x161
+			"plane bounces ; prev",       // 13 0x161 (사용 0)
+			"plane bounces ; prev",       // 14 0x161 (사용 0)
 			"flipbook UV",                // 15 0x1A2
 			"C1*C0",                      // 16 0x0B0
 			"(C1+C2*t)*C0",               // 17 0x0C7
@@ -249,9 +249,17 @@ public final class PtcVu {
 					case 18 -> (c1[i] + c2[i] * t + c3[i] * t2) * c0[i];
 					// 0x0FB: 선형 항력 해 p0 + g·x·t + (v0 − g·x)·x·(1 − e^(−k·t)), x = 슬롯0.x (= 1/k), k = 슬롯0.z
 					case 8 -> c0[i] + c2[i] * s0[0] * t + (c1[i] - c2[i] * s0[0]) * s0[0] * (1 - drag);
-					// 0, 1, 19 = C0; 6/7 (절대 메모리 참조), 9/10/13/14 (바닥 반사) 는 C0 로 근사
+					// 0, 1, 19 = C0; 6/7 (절대 VU 메모리 참조 — 디스크의 PTC 가 쓰지 않음) 는 C0 로
 					default -> c0[i];
 				};
+			}
+			if (op == 9) {
+				plane1(c0, c1, c2, t, v);
+			} else if (op == 10) {
+				planeBounce(c0, c1, c2, c3, t, 0, v);
+			} else if (op == 13 || op == 14) {
+				planeBounce(c0, c1, c2, c3, t, dt, e.res[r - 2]);
+				planeBounce(c0, c1, c2, c3, t, 0, v);
 			}
 			if (op == 15) {
 				// 0x1A2: 프레임 = floor(C0.y · frac(C0.w · t)), 표 = 슬롯 a+1 .. (u0, v0, u1, v1) 정수
@@ -286,6 +294,76 @@ public final class PtcVu {
 		Eval e = newEval();
 		eval(e, record, seed, age, dt);
 		return e.out;
+	}
+
+	/**
+	 * 연산 9 (0x10A) [확실: 마이크로코드]: 평면 C0 = (n, w) (n 쪽이 빈 공간, h = n·p + w), 직선 운동 p = C1 + C2·t.
+	 * B = n·v &lt; 0 (다가감) 이고 t &gt; tc = −h0/B 이면 충돌점에서 v' = v − 2B·n 으로 반사 (반발 계수 없음, 1회). 아니면 C1 + C2·t
+	 * (분기 0x0B6 = 연산 2 코드 재사용).
+	 */
+	public static void plane1(float[] n, float[] p, float[] v, float t, float[] out) {
+		float b = n[0] * v[0] + n[1] * v[1] + n[2] * v[2];
+		float d = n[0] * p[0] + n[1] * p[1] + n[2] * p[2] + n[3];
+		for (int i = 0; i < 4; i++) {
+			out[i] = p[i] + v[i] * t;
+		}
+		if (!(b < 0)) {
+			return;
+		}
+		float tc = -d / b;
+		if (!(tc - t < 0)) {
+			return;
+		}
+		for (int i = 0; i < 3; i++) {
+			float hit = p[i] + v[i] * tc;
+			out[i] = hit + (v[i] - 2 * b * n[i]) * (t - tc);
+		}
+	}
+
+	/**
+	 * 연산 10 (0x12C) / 13·14 (0x161, 이전 프레임 값 함께) [확실: 마이크로코드]: 평면 C0, 포물선 p = C1 + C2·t + C3·t²/2.
+	 * 법선 높이 h(t) = D + B·t + A·t²/2 (D = n·C1 + w, B = n·C2, A = n·C3), 판별식 B² − 2AD ≤ 0 이면 충돌 없음 (0x0D0/0x0D6 = 연산 4/12).
+	 * 아니면 sq = √(B² − 2AD), t₀ = (sq − B)/A (빈 공간 쪽으로 떠나는 근), 비행 시간 2·s/|A| 마다 법선 속력 s ← s·e (e = C2.w)
+	 * 로 최대 10 번 튕기고 (vi5 = 10), 그 뒤는 평면 위 정지 (법선 성분 0). 접선 성분은 p − n·D + (v − n·B)·t + (a − n·A)·t²/2.
+	 *
+	 * @param back 0 이면 현재, dt 면 이전 프레임 (같은 호에서 τ − dt, 접선 t − dt)
+	 */
+	public static void planeBounce(float[] n, float[] p, float[] v, float[] a, float t, float back, float[] out) {
+		float d = n[0] * p[0] + n[1] * p[1] + n[2] * p[2] + n[3];
+		float b = n[0] * v[0] + n[1] * v[1] + n[2] * v[2];
+		float ac = n[0] * a[0] + n[1] * a[1] + n[2] * a[2];
+		float disc = b * b - 2 * ac * d;
+		float tt = t - back;
+		if (!(disc > 0) || ac == 0) {
+			for (int i = 0; i < 4; i++) {
+				out[i] = p[i] + v[i] * tt + a[i] * tt * tt / 2;
+			}
+			return;
+		}
+		float sq = (float) Math.sqrt(disc), inv = 1 / ac;
+		float x = t - (sq - b) * inv; // ACC.x = 마지막 이륙 후 경과
+		float sv = sq, tau = 0, s = 0, e = v[3];
+		boolean rest = true;
+		for (int k = 0; k < 10; k++) {
+			float prev = x, cur = sv;
+			x += sv * 2 * inv;
+			sv *= e;
+			if (k == 9) {
+				break;
+			}
+			if (x <= 0) {
+				tau = prev;
+				s = cur;
+				rest = false;
+				break;
+			}
+		}
+		float tb = tau - back;
+		float off = rest ? 0 : s * tb + ac * tb * tb / 2;
+		for (int i = 0; i < 3; i++) {
+			out[i] = p[i] - n[i] * d + n[i] * off + (v[i] - n[i] * b) * tt + (a[i] - n[i] * ac) * tt * tt / 2;
+		}
+		out[3] = p[3];
 	}
 
 	private static float clamp(float v) {

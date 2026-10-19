@@ -65,6 +65,45 @@ class PtcVuTest {
 	}
 
 	@Test
+	void planeCollisionOps() {
+		float[] n = {0, 1, 0, 0};                         // 바닥 y = 0, 빈 공간 = +y
+		float[] out = new float[4];
+		// 연산 9: 직선, 1 회 반사 (반발 없음). p0 y = 10, v = (2, −5) → tc = 2
+		PtcVu.plane1(n, new float[]{0, 10, 0, 0}, new float[]{2, -5, 0, 0}, 1, out);
+		assertEquals(5, out[1], 1e-5f);                   // 충돌 전 = p + v·t
+		PtcVu.plane1(n, new float[]{0, 10, 0, 0}, new float[]{2, -5, 0, 0}, 3, out);
+		assertEquals(5, out[1], 1e-5f);                   // 반사 후 1 초 = 0 + 5·1
+		assertEquals(6, out[0], 1e-5f);                   // 접선 성분 그대로
+		// 연산 10: 포물선 (중력 −10), 반발 e = C2.w = 0.5. 높이 5 에서 정지 낙하 → 착지 t = 1, 착지 속력 10
+		float[] p = {0, 5, 0, 1}, v = {0, 0, 0, 0.5f}, a = {0, -10, 0, 0};
+		PtcVu.planeBounce(n, p, v, a, 0.5f, 0, out);
+		assertEquals(5 - 5 * 0.25f, out[1], 1e-4f);       // 착지 전 = 포물선
+		PtcVu.planeBounce(n, p, v, a, 1.5f, 0, out);
+		assertEquals(5 * 0.5f - 5 * 0.25f, out[1], 1e-4f); // 1 번 튄 뒤 0.5 초: 속력 5 로 이륙
+		PtcVu.planeBounce(n, p, v, a, 2.5f, 0, out);
+		assertEquals(0.5f * 2.5f - 5 * 0.25f, out[1], 1e-4f); // 두 번째 이륙 (t = 2) 뒤 0.5 초, 속력 2.5
+		PtcVu.planeBounce(n, p, v, a, 100f, 0, out);
+		assertEquals(0, out[1], 1e-4f);                   // 10 회 뒤 평면 위 정지
+		PtcVu.planeBounce(n, p, v, a, 1.5f, 1 / 60f, out);  // 연산 13/14 의 이전 프레임 값 (같은 호)
+		float tb = 0.5f - 1 / 60f;
+		assertEquals(5 * tb - 5 * tb * tb, out[1], 1e-4f);
+	}
+
+	@Test
+	void layeredFogBand() {
+		devple.gow.engine.render.Camera cam = new devple.gow.engine.render.Camera();
+		cam.fovDeg = 60;
+		cam.eye.set(0, 0, 0);
+		cam.target.set(0, 0, -1);                         // 수평: 지평선 = 화면 가운데 = 0.5
+		float[] b = FxEnvironment.band(cam);
+		assertEquals(0.5f, (b[0] + b[1]) / 2, 1e-5f);
+		assertEquals(1 / 3f, b[1] - b[0], 1e-5f);         // 세로 화각 60° = π/3 → 눈금 1/3
+		cam.target.set(0, 1, -1);                         // 45° 위를 보면 화면 전체가 지평선 위 (t &lt; 0.5)
+		b = FxEnvironment.band(cam);
+		assertTrue(b[1] < 0.5f && b[0] < b[1]);
+	}
+
+	@Test
 	void fogDepthAlpha() {
 		// ATHN07 CentreZ 37136: z' = 0x7FFF 경계 ≈ C·n/2048 = 181 → 그 안쪽은 안개 없음, 멀수록 127/128 에 접근
 		assertEquals(0f, FxEnvironment.depthAlpha(37136, 150, 10000), 0);

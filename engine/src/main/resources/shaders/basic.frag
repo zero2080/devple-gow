@@ -17,6 +17,7 @@ uniform vec4 uFogColor2;    // 층 안개 색 2
 uniform vec3 uFogStops;     // 층 안개 색 위치 (화면 위 0 → 아래 1)
 uniform vec4 uFogDepth;     // x = 16·CentreZ·n0 (원작 Z 배율), y = near, z = far (선형화용), w = 배경 알파 (BackPlane_A/128, <0 끔)
 uniform vec2 uFogGs;        // 원작 뷰포트 far f0, near n0 (Z24 = 0x800000 + z', z' = x·(f0−d)/((f0−n0)·d))
+uniform vec2 uFogBand;      // 층 안개: 화면 위/아래의 고도각 눈금 t (원작 0x1208C8, 지평선 0.5). 같으면 화면 높이 비율로
 uniform vec2 uFogScreen;    // 프레임버퍼 높이 (px), 배경 그리기 중이면 y = 1
 uniform float uAlphaRef;    // 알파 테스트 기준 (0 = 기본 0.01)
 uniform float uAlphaMax;    // > 0 이면 알파가 이 값 이상인 픽셀 버림 (CUTOUT 가장자리 패스)
@@ -45,7 +46,8 @@ vec3 applyFog(vec3 c) {
 	float n = uFogDepth.y, f = uFogDepth.z;
 	float zn = gl_FragCoord.z * 2.0 - 1.0;
 	float d = 2.0 * n * f / (f + n - zn * (f - n));
-	vec4 fc = uFogMode == 2 ? layerColor(1.0 - gl_FragCoord.y / max(uFogScreen.x, 1.0)) : uFogColor;
+	float sy = 1.0 - gl_FragCoord.y / max(uFogScreen.x, 1.0);
+	vec4 fc = uFogMode == 2 ? layerColor(uFogBand.x != uFogBand.y ? mix(uFogBand.x, uFogBand.y, sy) : sy) : uFogColor;
 	// 원작 안개 패스 (16 문서 §1.2): Z24 = 0x800000 + z' → 0x127918 이 알파 A8 = 128 − ⌊z'/256⌋ (z' < 256 은 127),
 	// 안개색 스프라이트(0x127000)는 Z = 0x807FFF GREATER 검사라 z' ≥ 0x7FFF (가까운 화소) 에는 안 그린다.
 	// 계수 = A8·Fog_A / 0x80 (0x126CF8 변조, 0x54 블렌드) ≈ Fog_A·(1 − z'/32768).
