@@ -24,7 +24,7 @@ WAD 는 **태그 레코드의 연속 스트림**이다. 압축 없음, little en
 | 0x0028 | GROUP_START | 그룹 시작 — 직전 리소스의 하위 의존 리소스를 묶음 |
 | 0x0032 | GROUP_END | 그룹 끝 |
 | 0x006E | MC_DATA | 메모리카드 저장 정보 (`BKSCKA-30002GodOfWar`) |
-| 0x006F | MC_ICON | 메모리카드 아이콘 |
+| 0x006F | MC_ICON | 원시 파일: 메모리카드 아이콘, 그리고 R_PERMK 의 메시지 테이블 `msgsK.txt` (07 문서) |
 | 0x0070 | MESH_EXTRA | `MSH_*`, `NCV_*` 부가 데이터 |
 | 0x0071 | TWEAK | `TWK_*` 튜닝 테이블 |
 | 0x0072 | TWEAK_REF | `TWK_*` 참조 |
