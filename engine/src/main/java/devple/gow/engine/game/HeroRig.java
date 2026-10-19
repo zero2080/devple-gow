@@ -94,6 +94,26 @@ public final class HeroRig implements AutoCloseable {
 				return ctl.position;
 			}
 
+			public int locomotionState() {
+				var s = nav != null ? nav.state() : null;
+				if (s != null) {
+					switch (s) {
+						case WALL_CLIMB, LEDGE_HANG, LADDER -> {
+							return 1;
+						}
+						case ROPE, ROPE_TRAVERSE, ZIPLINE -> {
+							return 3;
+						}
+						case AIR -> {
+							return 2;
+						}
+						default -> {
+						}
+					}
+				}
+				return ctl.grounded ? 0 : 2;
+			}
+
 			public float hp() {
 				return player.hp;
 			}

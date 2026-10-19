@@ -56,3 +56,8 @@ f.brain().debugString();                 // 상태 요약
 ./gradlew -q :engine:test --tests '*AiBrainTest*' < /dev/null
 ./gradlew -q :engine:run --args="--hero --enemy R_MIN" < /dev/null   # 접근 → 대기 0.5초 → 도끼 공격, 40% 방어
 ```
+
+## 대상 이동 상태 (결정 트리 조건 4/5)
+`Hittable.locomotionState()`: 영웅은 내비게이터 상태로 벽 오르기·턱 매달리기·사다리 → 1, 줄·수평 줄·짚라인 → 3, 공중 → 2, 그 밖 0
+(원작 owner+0x174 비트 0x20/0x400/0x4 → 0x1A14B8/0x1A14D8). 적 자신(조건 4)은 지상/공중만 [근사: 벽을 타는 해골 -C 의 벽 이동 미구현].
+→ DTre_021 (해골 -C) 의 "대상 벽 → attack up!/down!", "대상 로프 → rope attack!" 가지가 실제로 선택된다. 검증 `AiBrainTest.targetLocomotionStateCondition`.

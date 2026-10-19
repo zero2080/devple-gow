@@ -165,6 +165,27 @@ class AiBrainTest {
 		assertTrue(far.brain().state() != AiBrain.State.COMBAT, "반경 밖은 그대로");
 	}
 
+	/** 결정 트리 조건 5 (대상 상태): 영웅이 벽/로프/공중이면 1/3/2 (0x1A14D8). */
+	@Test
+	void targetLocomotionStateCondition() throws Exception {
+		EnemyFighter f = kind("R_MIN.WAD").spawn();
+		int[] st = {0};
+		Hittable base = dummy(new Vector3f(0, 0, -50));
+		f.setFoe(new Hittable() {
+			public Vector3f position() { return base.position(); }
+			public float hp() { return 100; }
+			public int classId() { return 0; }
+			public boolean invulnerable() { return true; }
+			public int locomotionState() { return st[0]; }
+			public Result receive(CombatFile.Attack a, Combatant at, float d, Vector3f kn) { return Result.IGNORED; }
+		});
+		for (int s : new int[]{0, 1, 2, 3}) {
+			st[0] = s;
+			assertEquals(s, (int) f.brain().sense(DecisionTree.C_TARGET_STATE, 0));
+		}
+		assertEquals(0, (int) f.brain().sense(DecisionTree.C_SELF_STATE, 0), "적은 지상");
+	}
+
 	@Test
 	void minotaurApproachesAndAttacksWithTemplateCadence() throws Exception {
 		EnemyFactory.Kind k = kind("R_MIN.WAD");

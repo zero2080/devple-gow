@@ -564,7 +564,8 @@ public final class AiBrain {
 				yield dRow0 < 0 ? -a : a;
 			}
 			case DecisionTree.C_DIST -> len / 16f;
-			case DecisionTree.C_SELF_STATE, DecisionTree.C_TARGET_STATE -> 0; // 지상 (벽/공중/로프 미구현)
+			case DecisionTree.C_SELF_STATE -> self.onGround() ? 0 : 2; // 적은 벽/로프 이동 없음 → 지상/공중
+			case DecisionTree.C_TARGET_STATE -> target.locomotionState(); // 0 지상 1 벽 2 공중 3 로프
 			case DecisionTree.C_IN_FRONT -> dFwd > 0 ? 1 : 0;
 			case DecisionTree.C_ON_SIDE -> dRow0 < 0 ? 1 : 0;
 			case DecisionTree.C_SELF_HP -> self.hp / Math.max(1, self.maxHp());

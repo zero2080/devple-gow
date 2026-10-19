@@ -51,6 +51,13 @@ public interface Hittable {
 		return false;
 	}
 
+	/**
+	 * 이동 상태 (결정 트리 조건 4/5, 0x1A14B8/0x1A14D8: owner+0x174 → 0 지상, 1 벽(0x20), 2 공중(0x4), 3 로프(0x400) — 17 문서 §3).
+	 */
+	default int locomotionState() {
+		return 0;
+	}
+
 	/** 무적(이벤트 9) 또는 사망. */
 	boolean invulnerable();
 
