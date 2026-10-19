@@ -52,11 +52,6 @@ public final class WadAssets implements AutoCloseable {
 		return materials.get(name);
 	}
 
-	public GowModel gowModel(String mdlName) {
-		return gowModels.stream().filter(m -> m.name.equals(mdlName)).findFirst()
-				.orElseThrow(() -> new IllegalArgumentException("모델 없음: " + mdlName));
-	}
-
 	public Texture texture(String txrName) {
 		if (txrName == null || txrName.isEmpty()) {
 			return null;
@@ -82,8 +77,18 @@ public final class WadAssets implements AutoCloseable {
 	}
 
 	/** 파싱된 원본 모델 (없으면 null). */
+	/** MDL 이름으로 원본 모델 (없으면 null). */
 	public GowModel gowModel(String mdlName) {
 		return gowModels.stream().filter(m -> m.name.equals(mdlName)).findFirst().orElse(null);
+	}
+
+	/** 반드시 있어야 하는 모델. */
+	public GowModel requireModel(String mdlName) {
+		GowModel m = gowModel(mdlName);
+		if (m == null) {
+			throw new IllegalArgumentException("모델 없음: " + mdlName);
+		}
+		return m;
 	}
 
 	/** 머티리얼의 첫 레이어 텍스처 이름 (없으면 null). */

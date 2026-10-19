@@ -101,7 +101,7 @@ public final class HeroTestScene implements Scene {
 		Skeleton sk = Skeleton.loadAll(hero.wad()).stream().filter(s -> s.name.equals("hero")).findFirst().orElseThrow();
 		AnimationSet set = AnimationSet.load(hero.wad(), "ANM_hero");
 		skinned = new Shader("skinned.vert", "basic.frag");
-		model = new AnimatedModel(hero, hero.gowModel("MDL_hero"), sk, skinned);
+		model = new AnimatedModel(hero, hero.requireModel("MDL_hero"), sk, skinned);
 		Animator animator = new Animator(sk, set, tw, "/Animation/goHero/");
 		ctl = new HeroController(animator);
 		CombatData data = new CombatData(perm, CombatData.heroFiles(), set);
@@ -147,7 +147,7 @@ public final class HeroTestScene implements Scene {
 			Skeleton msk = Skeleton.loadAll(minAssets.wad()).stream().filter(s -> s.name.equals("min")).findFirst().orElseThrow();
 			AnimationSet mset = AnimationSet.load(minAssets.wad(), "ANM_min");
 			skinnedMin = new Shader("skinned.vert", "basic.frag");
-			minModel = new AnimatedModel(minAssets, minAssets.gowModel("MDL_MIN"), msk, skinnedMin);
+			minModel = new AnimatedModel(minAssets, minAssets.requireModel("MDL_MIN"), msk, skinnedMin);
 			enemy = new EnemyFighter(minAssets.wad(), mtw, msk, mset, 50,
 					List.of("TWK_CombatFile_050", "TWK_CombatFile_051", "TWK_CombatFile_052", "TWK_CombatFile_053"),
 					new int[]{10, 11, 20, 21, 22, 40, 41, 44}, 17, "standIdle", "walkFront", 30f);

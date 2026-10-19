@@ -57,7 +57,7 @@ public final class AnimViewerScene implements Scene {
 		Skeleton sk = Skeleton.loadAll(assets.wad()).stream().filter(s -> s.name.equals(skelName)).findFirst()
 				.orElseThrow(() -> new IllegalArgumentException("스켈레톤 없음: " + skelName));
 		shader = new Shader("skinned.vert", "basic.frag");
-		model = new AnimatedModel(assets, assets.gowModel(mdlName), sk, shader);
+		model = new AnimatedModel(assets, assets.requireModel(mdlName), sk, shader);
 		AnimationSet set = AnimationSet.load(assets.wad(), anmName);
 		anims = set.groups.stream().flatMap(g -> g.acts.stream()).filter(Animation::hasSkeletalData).toList();
 		for (int i = 0; i < anims.size(); i++) {
