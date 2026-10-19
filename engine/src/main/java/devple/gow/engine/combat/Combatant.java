@@ -152,6 +152,10 @@ public final class Combatant {
 	/** {@link #activeScript} 와 같지만 같은 해시의 활성 이벤트 전부 (예 HEADNUKESLAM 의 SCR_MedusaNuke idx 0 + 3). */
 	/** combatant+0x1AC 상태 비트 0x1000 (분기 flags 0x8 의 조건, 10 문서 §2.4). */
 	public static final int STATE_TRIGGER = 0x1000;
+	/** +0x1AC 0x400 차지 완료 (이벤트 33 CHARGE_CHECK 또는 마법 스크립트 sub_001E1AB0, 분기 flags 0x800 의 조건). */
+	public static final int STATE_CHARGED = 0x400;
+	/** +0x1B4 차지 시간 (초): 기술 플래그 0x100 인 동안 누적. */
+	private float holdTime;
 	private int stateBits;
 
 	/** 원작 sub_001E1B70 / sub_001E1BD0: +0x1AC 비트 켜기/끄기. */
@@ -305,6 +309,14 @@ public final class Combatant {
 		}
 		float t = progress();
 		if (move != null) {
+			// +0x1B4 (0x207108): 현재 기술 플래그에 0x100 이 있으면 프레임마다 +1/60, 없으면 0. 기술이 바뀌어도(같은 플래그면) 이어진다
+			// (HITLIE 0x190 → HITLIE 반복 중에도 누적 → CHARGE_CHECK 2.5초 → 일어남)
+			holdTime = (move.flags() & 0x100) != 0 ? holdTime + dt : 0;
+			for (Event e : move.events()) {
+				if (e.type() == 33 && t >= e.start() && t <= e.end() && holdTime >= e.a()) {
+					stateBits |= STATE_CHARGED; // CHARGE_CHECK
+				}
+			}
 			runEvents(t);
 		}
 		poll(in, t);
@@ -489,8 +501,11 @@ public final class Combatant {
 		if ((f & 0x8000) == 0 && ((f & 0x2000) != 0) != owner.artemisEquipped()) {
 			return -1;
 		}
-		if ((f & 0x20000) != 0 || (f & 0x80000) != 0 || (f & 0x800) != 0) {
-			return -1; // 미상 플래그 / 차지는 아직 미지원
+		if ((f & 0x20000) != 0 || (f & 0x80000) != 0) {
+			return -1; // 미상 플래그
+		}
+		if ((f & 0x800) != 0 && (stateBits & STATE_CHARGED) == 0) {
+			return -1; // 차지 완료 필요 (10 문서 §2.4)
 		}
 		if ((f & 0x8) != 0 && (stateBits & STATE_TRIGGER) == 0) {
 			return -1; // combatant+0x1AC&0x1000 필요 (메두사 Nuke: SCR_TriggerMedusaHead 가 켬)
@@ -547,6 +562,9 @@ public final class Combatant {
 		if ((b.flags() & 0x8) != 0) {
 			stateBits &= ~STATE_TRIGGER; // 실행 시 소비
 		}
+		if ((b.flags() & 0x800) != 0) {
+			stateBits &= ~STATE_CHARGED;
+		}
 		if (b.target() == -2) {
 			return; // "(block)" 분기: 이벤트를 소비만 하고 현재 기술 유지 (예 KILLWIN 의 EV_DEATH, 슈퍼아머 EV_HIT_REACT)
 		}
@@ -574,6 +592,8 @@ public final class Combatant {
 		clip = data.animation(m);
 		virtualClip(m);
 		heldAtStart = in != null ? CombatInput.mask(in) : 0;
+		// 기술 시작 시 +0x1AC = 세트 플래그 | (이전 & 0x4004) → 차지·트리거 비트는 새 기술마다 지움, 누른 시간 0 (10 문서 §17)
+		stateBits &= 0x4004;
 		accumDamage = 0;
 		stanceTag = -1;
 		hitLog.clear();

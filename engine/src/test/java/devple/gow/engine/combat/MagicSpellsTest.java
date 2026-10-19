@@ -169,6 +169,23 @@ class MagicSpellsTest {
 		assertFalse(r.moves.contains(64), "단계 0 은 Nuke 불가: " + r.moves);
 	}
 
+	/** 분기 flags 0x800 = 차지 완료(+0x1AC&amp;0x400): HITLIE 의 CHARGE_CHECK(a=2.5) 뒤에야 AUTO → HITGETUPGROUND(194) (10 문서 §2.4). */
+	@Test
+	void chargeCheckGatesGetUp() throws Exception {
+		Rig r = new Rig(4);
+		ScriptedInput none = new ScriptedInput(0, List.of());
+		r.tick(none, null);
+		r.c.forceMove(118);
+		float upAt = -1;
+		for (float t = 0; t < 6f && upAt < 0; t += DT) {
+			r.tick(none, null);
+			if (r.moves.contains(194)) {
+				upAt = t;
+			}
+		}
+		assertTrue(upAt >= 2.4f && upAt < 5f, "2.5초 누워 있다가 일어남: " + upAt + " " + r.moves);
+	}
+
 	@Test
 	void medusaStoneWearsOff() throws Exception {
 		Rig r = new Rig(4);

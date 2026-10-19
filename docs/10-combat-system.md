@@ -207,7 +207,7 @@ WAD 태그 0x72(`Tag_TweakRef` 0x17EC48): `u32 1`, `cstr "/TweakTemplates/Combat
 | 24 | **HIT_PAUSE** | 이 기술이 맞추면 a초 히트스톱(ms 메시지 0x414 를 양쪽에) | 확실 |
 | 25 | HIT_COUNT | 히트 카운터 +1 | 확실 |
 | 26 / 27 | CIRCLE_OFF / ON | 잡기 원(goMiniGameCircle) 표시 | 확실 |
-| 33 | CHARGE_CHECK | combatant.0x1B4(누른 시간) ≥ a → 0x1AC\|=0x400 (차지 완료) | 확실 |
+| 33 | CHARGE_CHECK | combatant.0x1B4 ≥ a → 0x1AC\|=0x400 (차지 완료). 0x1B4 = 현재 기술 플래그 0x100 인 동안 프레임마다 +1/60, 아니면 0 (0x207108) — 버튼이 아니라 "그 상태로 있은 시간" | 확실 |
 | 39 | BONUS | 히트 수 ≥ 마일스톤 → 보너스 템플릿 | 추정 |
 | 41–47 | ATTACH_ON/OFF | 조인트 부착물(발자국/먼지 FX) | 추정 |
 | 48 | CONCUSSION | 충격파(넉백) 템플릿 | 추정 |
@@ -234,7 +234,7 @@ WAD 태그 0x72(`Tag_TweakRef` 0x17EC48): `u32 1`, `cstr "/TweakTemplates/Combat
 | +0xAC.. | (상대, 공격구간) 적중 기록 32개 |
 | +0x1AC | 상태 비트: 0x2 무적, 0x8/0x10 트레일, 0x40 방어불가, 0x400 차지 완료, 0x1000 … (기술 끝날 때 CombatFileSet+0x34 값으로 복원) |
 | +0x1B0 | 공격 자세 태그(이벤트 20) |
-| +0x1B4 | 버튼 누른 시간(차지) |
+| +0x1B4 | 차지 시간: 기술 플래그 0x100 인 동안 누적 (HITLIE 0x190 반복 중에도 이어짐) |
 | +0x1C0 | 분기 큐(링 버퍼: 포인터, +4 용량, +5 대기 인덱스, +6 쓰기) — **입력 버퍼** |
 
 ### 3.2 CombatFileSet 템플릿 (0x202868) [확실]
@@ -707,3 +707,9 @@ OnContact(att, vic, attack):
 7. God 게이지 +0.15/히트는 실제 체감보다 작아 보임 — 다른 충전 경로(오브, 처형) 유무 확인 필요.
 8. RepeatPress 게이지 공식 세부(0x192228–0x192320)와 TimedPress.
 9. 레벨업 비용(빨강 오브)과 HP/MP 레벨 0x3044B6 확인 — 성장 단계(별도 에이전트)와 연계.
+
+## 엔진: 차지 분기 (flags 0x800)
+`Combatant`: 기술 플래그 0x100 동안 `holdTime` 누적 → CHARGE_CHECK(33) 창에서 `holdTime ≥ a` 면 `STATE_CHARGED`(0x400) → 분기 0x800 허용·실행 시 소비.
+기술 시작 시 상태 비트는 0x4004 만 남긴다. 영웅 데이터: HITLIE(118) a=2.5 → 2.5초 누운 뒤 AUTO HITGETUPGROUND(194), IDLECOMBAT(95) a=2.0,
+적 MAISKB04 a=1.0. 마법 스크립트(sub_001E1AB0: 번개·메두사·제우스)가 켜는 0x400 은 각 효과 클래스가 따로 처리 [미연결].
+검증 `MagicSpellsTest.chargeCheckGatesGetUp`.
