@@ -27,6 +27,7 @@ public final class MovieScene implements Scene {
 	private VideoFrame lastShown;
 	private int shown;
 	private boolean skippable = true;
+	private boolean skipped;
 
 	/** 이미 연 재생기로 씬을 만든다 (popSelf = 끝나면 스택에서 스스로 내림). */
 	public MovieScene(MoviePlayer player, boolean popSelf, Runnable onDone) {
@@ -48,12 +49,19 @@ public final class MovieScene implements Scene {
 	 * 게임 쪽 훅: 현재 씬 위에 동영상을 띄운다. 파일을 못 찾으면 바로 onDone (로그만 남김).
 	 * name = 스크립트 PlayMovie 인자 그대로 ("a01Mp03", "Semo02" ...).
 	 */
-	public static void play(Engine engine, String name, Runnable onDone) {
-		play(engine, name, false, onDone);
+	public static MovieScene play(Engine engine, String name, Runnable onDone) {
+		return play(engine, name, false, onDone);
 	}
 
-	public static void play(Engine engine, String name, boolean widescreen, Runnable onDone) {
-		engine.scenes().push(engine, new MovieScene(name, widescreen, onDone));
+	public static MovieScene play(Engine engine, String name, boolean widescreen, Runnable onDone) {
+		MovieScene s = new MovieScene(name, widescreen, onDone);
+		engine.scenes().push(engine, s);
+		return s;
+	}
+
+	/** START/× 로 건너뛰었는지 (onDone 안에서 확인 — 보너스 메뉴 연속 재생 중단 조건). */
+	public boolean skipped() {
+		return skipped;
 	}
 
 	/** false 면 START/× 로 건너뛸 수 없다 (원작의 첫 시청 강제 등). */
@@ -89,6 +97,7 @@ public final class MovieScene implements Scene {
 		player.update(dt);
 		if (skippable && (engine.input().pressed(PadButton.START) || engine.input().pressed(PadButton.CROSS))) {
 			player.skip();
+			skipped = true;
 		}
 		if (player.finished()) {
 			if (player.error() != null) {

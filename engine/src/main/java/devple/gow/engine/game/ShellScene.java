@@ -14,6 +14,8 @@ import java.nio.file.Path;
  * 메뉴가 {@code PS2_Menu_Choice}(1 새 게임, 2 불러오기) + {@code PS2_Done = 1} 을 쓰면 다음 상태로.
  * 새 게임 = 난이도 {@code PS2_Difficulty_Level} 로 {@link GameFlow#START_LEVEL} 진입.
  * 불러오기 = 메뉴의 메모리카드 화면을 {@link MemoryCardFlow} 로 진행 (카드 → 파일 → 확인 → 불러오는 중), △ 취소면 메뉴로 복귀.
+ * 귀중품 = {@link BonusMenu} (PS2_BonusScroll) — 보너스 영상은 {@link devple.gow.engine.video.MovieScene} 을 위에 띄우고 끝나면 메뉴로,
+ * 신들의 시험/캐릭터 공동 묘지는 해당 레벨로 새 게임. 해금 = {@link BonusMenu#unlockBits()} ({@code -Dgow.unlockAll}).
  */
 public final class ShellScene implements Scene {
 
@@ -21,6 +23,7 @@ public final class ShellScene implements Scene {
 	private UiLayer ui;
 	private boolean started;
 	private MemoryCardFlow card;
+	private BonusMenu bonus;
 
 	public ShellScene(Path rom) {
 		this.rom = rom;
@@ -35,7 +38,8 @@ public final class ShellScene implements Scene {
 		}
 		UiVariables v = ui.variables();
 		var snd = GameSession.sharedSound(rom);
-		ShellBinding.init(v, 0);
+		int unlock = BonusMenu.unlockBits();
+		ShellBinding.init(v, unlock);
 		ShellBinding.bindAudio(v, snd);
 		try {
 			if (!snd.loaded().containsKey("R_PERMK.WAD")) {
@@ -50,10 +54,28 @@ public final class ShellScene implements Scene {
 				snd.play(value);
 			}
 		});
+		bonus = new BonusMenu(v, ui.player().messages(), unlock, new BonusMenu.Host() {
+			@Override
+			public void playMovie(String name, java.util.function.Consumer<Boolean> done) {
+				devple.gow.engine.video.MovieScene[] m = new devple.gow.engine.video.MovieScene[1];
+				m[0] = devple.gow.engine.video.MovieScene.play(e, name, () -> done.accept(m[0] != null && m[0].skipped()));
+			}
+
+			@Override
+			public void startLevel(String wad) {
+				startGame(e, 1, wad); // 원작 sub_0021f7c0: 보너스 레벨은 난이도 1 고정
+			}
+
+			@Override
+			public void sound(String name) {
+				snd.play(name);
+			}
+		});
 		ui.player().addCommandListener((cmd, arg) -> {
 			if (card != null) {
 				card.command(cmd, arg);
 			}
+			bonus.command(cmd, arg);
 		});
 		v.addListener((name, value) -> {
 			if (name.equals("PS2_Done") && "1".equals(num(value)) && !started) {
@@ -87,13 +109,20 @@ public final class ShellScene implements Scene {
 	}
 
 	private void startGame(Engine e, int difficulty) {
+		startGame(e, difficulty, GameFlow.START_LEVEL);
+	}
+
+	private void startGame(Engine e, int difficulty, String level) {
+		if (started) {
+			return;
+		}
 		started = true;
 		try {
 			GameSession s = new GameSession(rom);
 			s.difficulty = Math.max(0, Math.min(3, difficulty));
-			s.openingPending = true;
-			System.out.println("새 게임: 난이도 " + s.difficulty + " (" + devple.gow.engine.combat.DamageRules.DIFFICULTY[s.difficulty] + ")");
-			e.scenes().transitionTo(new GameScene(s, GameFlow.START_LEVEL, null, 0));
+			s.openingPending = level.equals(GameFlow.START_LEVEL);
+			System.out.println("새 게임: " + level + " 난이도 " + s.difficulty + " (" + devple.gow.engine.combat.DamageRules.DIFFICULTY[s.difficulty] + ")");
+			e.scenes().transitionTo(new GameScene(s, level, null, 0));
 		} catch (IOException ex) {
 			throw new UncheckedIOException(ex);
 		}
@@ -131,6 +160,7 @@ public final class ShellScene implements Scene {
 			card.update(dt);
 			startGameFromCard(e);
 		}
+		bonus.update(dt);
 		GameSession.sharedSound(rom).update(dt);
 	}
 
