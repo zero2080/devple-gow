@@ -107,11 +107,7 @@ class BossCameraTest {
 		assertEquals(CameraRig.ARES_CAMERA, r.cam.current(), "아레스 클래스 매 프레임 요청: " + r.cams);
 		EnemyFighter b = r.fight.boss();
 		assertTrue(onScreen(r.cam, heroChest(r), 1500), "AresCamera1 안의 크레토스 " + r.ctl.position + " eye " + r.cam.eye());
-		// 주시점이 영웅에서 아레스 쪽으로 0.35
-		Vector3f t = r.cam.pose().target;
-		Vector3f want = new Vector3f(r.ctl.position).add(0, CameraRig.TARGET_HEIGHT, 0)
-				.lerp(new Vector3f(b.pos).add(0, CameraRig.TARGET_HEIGHT, 0), CameraRig.ARES_TARGET_WEIGHT);
-		assertTrue(t.distance(want) < 30, "주시점 " + t + " vs " + want);
+		assertAresFrame(r, b);
 		// 잡기 동기 중에도 유지
 		b.hp = 480;
 		assertTrue(until(r, 20, () -> bossMove(r) == 290 || bossMove(r) == 94 || bossMove(r) == 95), r.bossMoves.toString());
@@ -121,6 +117,23 @@ class BossCameraTest {
 		r.run(0.5f);
 		assertEquals(CameraRig.ARES_CAMERA, r.cam.current());
 		assertTrue(onScreen(r.cam, heroChest(r), 1500), "잡기 중 크레토스 " + r.ctl.position + " eye " + r.cam.eye());
+		assertAresFrame(r, b);
+	}
+
+	/**
+	 * AresCamera1 원작 비용 (0x1F67C0): 눈은 그릇 면 위 (높이 = bowlHeight), 두 관절 화면각 중점을 보고,
+	 * 영웅 가슴과 아레스 관절이 모두 화면 안. 레일 t 는 [0, 끝 매듭].
+	 */
+	static void assertAresFrame(BossRig r, EnemyFighter b) {
+		var a = r.cam.aresState();
+		assertNotNull(a, "AresCamera1 상태");
+		Vector3f eye = r.cam.eye();
+		assertEquals(a.eye.y, eye.y, 0.5f);
+		assertTrue(a.t >= 0, "레일 t " + a.t);
+		Vector3f bossJoint = BossFight.jointWorld(b.animator(), b.world(new org.joml.Matrix4f(), 1), "BAR01JOCVEC1");
+		assertNotNull(bossJoint, "아레스 관절 BAR01JOCVEC1");
+		assertTrue(onScreen(r.cam, bossJoint, 3000), "아레스 관절 " + bossJoint + " eye " + eye + " yaw " + a.yaw + " pitch " + a.pitch);
+		assertTrue(onScreen(r.cam, heroChest(r), 3000), "크레토스 " + r.ctl.position + " eye " + eye);
 	}
 
 	@Test
@@ -129,5 +142,6 @@ class BossCameraTest {
 		r.run(0.5f);
 		assertEquals(CameraRig.ARES_CAMERA, r.cam.current(), r.cams.toString());
 		assertTrue(onScreen(r.cam, heroChest(r), 1500), "AresCamera1 안의 크레토스 " + r.ctl.position + " eye " + r.cam.eye());
+		assertAresFrame(r, r.fight.boss());
 	}
 }

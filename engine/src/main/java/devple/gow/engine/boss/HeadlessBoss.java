@@ -108,7 +108,7 @@ public final class HeadlessBoss {
 	 */
 	public static HeadlessBoss create(String level, Path rom, WadFile permk, WadFile levelWad, ScriptWorld world) {
 		BossFight f = BossDirector.create(level, rom, permk);
-		if (f == null || f instanceof BossDirector.ResourceOnlyFight) {
+		if (f == null || f instanceof BossDirector.ResourceOnlyFight || !f.headless()) {
 			return null;
 		}
 		try {

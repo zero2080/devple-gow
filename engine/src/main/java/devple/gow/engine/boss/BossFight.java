@@ -82,8 +82,25 @@ public abstract class BossFight {
 		return silent.contains(template);
 	}
 
+	/** 순회 검증(HeadlessBoss)이 이 보스전을 맡는지. 격파할 본체가 없는 싸움(ATHN08B 가족 보호)은 false — 웨이브는 일반 처치로. */
+	public boolean headless() {
+		return true;
+	}
+
 	public Map<Integer, EnemyFactory.Kind> kinds() {
 		return kinds;
+	}
+
+	/** 관절 월드 위치 (이름 대소문자 무시, 없으면 null). obj = 오브젝트 월드 행렬. */
+	public static Vector3f jointWorld(devple.gow.engine.anim.Animator anim, org.joml.Matrix4f obj, String joint) {
+		var sk = anim.skeleton();
+		for (int i = 0; i < sk.size(); i++) {
+			if (sk.joints.get(i).name().equalsIgnoreCase(joint)) {
+				float[] m = anim.pose().world(sk)[i];
+				return obj.transformPosition(new Vector3f(m[12], m[13], m[14]));
+			}
+		}
+		return null;
 	}
 
 	public EnemyFighter boss() {

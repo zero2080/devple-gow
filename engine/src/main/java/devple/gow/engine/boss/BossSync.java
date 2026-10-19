@@ -24,7 +24,12 @@ import java.util.function.IntPredicate;
  */
 public final class BossSync {
 
-	public enum Align { NONE, BOSS_TO_HERO, HERO_TO_BOSS }
+	/**
+	 * SYNCH = 두 애니의 synchJoint 를 맞춘다: 영웅 = 보스 · S_보스 · S_영웅⁻¹ (수평 위치·요). 예 포옹 MAIEVIHug*: 가족 xmc synch
+	 * (0, 0, −16) 180°, 영웅 (0, 0, −32) 0° → 영웅은 가족 정면 48 에서 가족을 마주 봄. 분신 잡기 EVIGrabHero*(evi (0,0,−32) 0°,
+	 * 영웅 (0,0,−32) 180°)도 같은 규칙이면 64 앞 [추정: synchJoint 의미].
+	 */
+	public enum Align { NONE, BOSS_TO_HERO, HERO_TO_BOSS, SYNCH }
 
 	private final IntPredicate syncId;
 	private final Align align;
@@ -117,13 +122,29 @@ public final class BossSync {
 				float[] w = ctl.animator().pose().world(sk)[zj];
 				off.set(w[12], w[13], w[14]);
 			}
-			// 영웅 쪽 애니는 보스 정면(-Z)과 마주 보는 축 → 180° 돌린 프레임 (헤드리스 측정: 머리 관절과 ~130 단위) [추정]
+			// 영웅 zeroJoint 는 보스 프레임에서 z 만 뒤집힌 위치다: 보스 물기 애니의 synchJoint(물기가 떨어지는 단상 지점)와 대응 —
+			// BHAbossBiteMiddle (1, 679, -382) <-> 영웅 BHAbossKill zero (1, 682, 383), BiteLeft (-74, 679, -449) <-> BHAbossGrabLeft
+			// zero (-40, 682, 432), BiteRight (69, 679, -451) <-> GrabRight (52, 682, 436). 전엔 180° 회전이라 좌우(x)가 뒤바뀌어 잡기 카메라가
+			// 머리 쪽으로 돌면 크레토스가 화면 밖(카메라 축에서 45-57°)이었다 [추정: 대응 관계는 데이터]. 영웅은 보스를 마주 본다 (요 + π).
 			float yaw = boss.yaw + (float) Math.PI;
-			off.rotateY(yaw).add(boss.pos);
+			off.z = -off.z;
+			off.rotateY(boss.yaw).add(boss.pos);
 			ctl.position.set(off);
 			ctl.prevPosition.set(off);
 			ctl.yaw = yaw;
 			ctl.vy = 0;
+		}
+		if (align == Align.SYNCH) {
+			float[] sb = synch(boss.animator()), sh = synch(ctl.animator());
+			if (sb != null && sh != null) {
+				float ab = (float) Math.atan2(sb[8], sb[10]), ah = (float) Math.atan2(sh[8], sh[10]);
+				// S_h⁻¹(0) = −R(−ah)·p_h → S_b → 보스 월드
+				org.joml.Vector3f v = new org.joml.Vector3f(-sh[12], 0, -sh[14]).rotateY(-ah).rotateY(ab).add(sb[12], 0, sb[14]);
+				v.rotateY(boss.yaw).add(boss.pos.x, 0, boss.pos.z);
+				ctl.position.set(v.x, ctl.position.y, v.z);
+				ctl.prevPosition.set(ctl.position);
+				ctl.yaw = boss.yaw + ab - ah;
+			}
 		}
 		// 연타: 보스 기술(또는 영웅 기술)의 SCR_RepeatPress
 		var rp = bc.activeScript(RepeatPressQte.SCR_REPEAT_PRESS);
@@ -144,6 +165,12 @@ public final class BossSync {
 		}
 		// 타이밍 버튼
 		timedHelper.updateTimed(boss, tw, in);
+	}
+
+	/** 현재 자세의 synchJoint 행렬 (없으면 null). */
+	private static float[] synch(devple.gow.engine.anim.Animator an) {
+		int j = an.skeleton().indexOf("synchJoint");
+		return j < 0 || an.current() == null ? null : an.pose().world(an.skeleton())[j];
 	}
 
 	private static void follow(Combatant c, int move) {
