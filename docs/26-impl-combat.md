@@ -73,3 +73,14 @@
 2. 적 AI: 적 CombatFile(파일 020–023 해골병 등) + AI1 템플릿(HP/방어 확률) 로 Combatant 를 적에도 적용 (fire 기반 반응 기술)
 3. 신들의 분노(L3+R3, 99/1, 7.0715/s), 마법 4종 MP 비용, 히트 카운터 보상, 처치 시 오브
 4. 부위별 히트박스 (무기 관절 rWeapIH 등) 로 판정 정밀화
+
+## 7. 보상 / 신들의 분노 (4단계 일부)
+| 클래스 | 규칙 | 데이터 |
+|-------|------|-------|
+| `game/OrbDrops` | OrbEmitter 슬롯 3개 × (확률, 최소~최대 개수) + 저체력/저마나 추가 드롭 → Orb 템플릿의 Type(0/1/2)·Points | `/TweakTemplates/OrbEmitter/` ("MIN Death" 등, 적 WAD), `/TweakTemplates/Orb/NNN/` (레벨 WAD) |
+| `game/HitCounter` | 1초 무적중 시 리셋, 마일스톤 20개 도달 시 붉은 오브 보상 | `/Player/Bonus/Milestone n Hits`, `/TweakTemplates/Bonus/NNN/` (해시 키 #eed31206 = 오브 수, #2af48b79 = 메시지) |
+| `combat/GodMode` | L3+R3, 게이지 ≥ 99, 블레이드 Lv ≥1(Allow God Mode), 드레인 7.0715/초, ≤1 해제 | `/Player/God Mode On/Off/End Threshold`, `/Player/Weapon Level n/` |
+
+- TWK 의 short/bool 값은 하위 비트만 유효 (`Tweaks.i16`). 예: `Milestone 0 Hits` = 0x3F33000A → 10, Orb `Type` = 0x411D0002 → 2(붉은 오브).
+- `RewardsTest`: MIN Death = 붉은 오브 25 포인트 (10 문서 예시와 일치), 10 히트 → 2개, 신 모드 지속 14.0초.
+- 신 모드 중에는 `CombatOwner.godMode()` 가 참 → 분기 flags 0x100 (파일 005 신 모드 전용 콤보) 이 열리고 피해 ×2 / 받는 피해 감소.

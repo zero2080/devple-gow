@@ -69,6 +69,11 @@ public final class HeroTestScene implements Scene {
 	private UiLayer hud;
 	private final HudBinding hudBinding = new HudBinding();
 	private Hittable heroHittable;
+	private devple.gow.engine.combat.GodMode godMode;
+	private devple.gow.engine.game.HitCounter hitCounter;
+	private Tweaks orbTweaks;
+	private boolean dropped;
+	private int lastHits;
 	private Mesh grid;
 	private Mesh box;
 	private float camYaw;
@@ -101,10 +106,12 @@ public final class HeroTestScene implements Scene {
 		ctl = new HeroController(animator);
 		CombatData data = new CombatData(perm, CombatData.heroFiles(), set);
 		player = new PlayerState(GameRules.load(perm));
+		godMode = new devple.gow.engine.combat.GodMode(tw);
+		hitCounter = new devple.gow.engine.game.HitCounter(tw);
 		player.level.put(devple.gow.engine.game.Weapon.BLADES, bladeLevel);
 		combat = new Combatant(data, animator, owner());
 		DamageRules rules = new DamageRules(tw);
-		combat.setDamageScale(() -> rules.playerScale(1, 0, bladeLevel, false));
+		combat.setDamageScale(() -> rules.playerScale(1, 0, bladeLevel, godMode.active()));
 		heroHittable = new Hittable() {
 			public Vector3f position() {
 				return ctl.position;
@@ -146,7 +153,14 @@ public final class HeroTestScene implements Scene {
 					new int[]{10, 11, 20, 21, 22, 40, 41, 44}, 17, "standIdle", "walkFront", 30f);
 			enemy.pos.set(0, 0, -120);
 			enemy.setFoe(heroHittable);
-			enemy.setIncomingScale(() -> rules.incomingScale(1, 0, bladeLevel, false));
+			enemy.setIncomingScale(() -> rules.incomingScale(1, 0, bladeLevel, godMode.active()));
+			orbTweaks = new Tweaks();
+			orbTweaks.load(perm);
+			orbTweaks.load(minAssets.wad());
+			java.nio.file.Path lvl = rom.resolve("PAND03A.WAD"); // Orb 템플릿 정의가 있는 레벨
+			if (java.nio.file.Files.exists(lvl)) {
+				orbTweaks.load(WadFile.load(lvl));
+			}
 			enemy.combat().onLog(s -> System.out.println("[미노타우로스] " + s));
 			hud = new UiLayer(new WadAssets(rom.resolve("R_PERMK.WAD")), true, "FLP_HUDK", MessageTable.fromWad(perm).orElse(null), new devple.gow.engine.ui.UiVariables());
 		} catch (IOException ex) {
@@ -197,7 +211,7 @@ public final class HeroTestScene implements Scene {
 			}
 
 			public boolean godMode() {
-				return false;
+				return godMode != null && godMode.active();
 			}
 
 			public boolean artemisEquipped() {
@@ -231,6 +245,20 @@ public final class HeroTestScene implements Scene {
 		}
 		camYaw -= in.rightX() * dt * 2;
 		combat.update(in, dt);
+		boolean godPress = (in.pressed(PadButton.L3) && in.held(PadButton.R3)) || (in.pressed(PadButton.R3) && in.held(PadButton.L3));
+		if (godMode.update(combat, godPress, bladeLevel, player.hp, dt)) {
+			System.out.println("신들의 분노 발동");
+		}
+		player.rage = combat.godMeter;
+		while (lastHits < combat.hitCounter) {
+			lastHits++;
+			var r = hitCounter.hit();
+			if (r != null) {
+				player.addRedOrbs(r.redOrbs());
+				System.out.printf("%d 히트 보너스: 붉은 오브 %d (메시지 %d)%n", r.hits(), r.redOrbs(), r.messageId());
+			}
+		}
+		hitCounter.update(dt);
 		if (combat.active()) {
 			Vector3f aim = enemy != null ? (enemy.dead() ? null : enemy.pos) : (dummy.hp > 0 ? dummy.pos : null);
 			ctl.updateCombat(combat, in, camYaw, dt, aim);
@@ -251,6 +279,13 @@ public final class HeroTestScene implements Scene {
 		}
 		if (enemy != null) {
 			enemy.update(dt);
+			if (enemy.dead() && !dropped) {
+				dropped = true;
+				for (var o : devple.gow.engine.game.OrbDrops.roll(orbTweaks, "MIN Death", new java.util.Random(), player.hp, player.mp)) {
+					player.pickupOrb(o.type(), o.points());
+				}
+				System.out.println("미노타우로스 처치 → 붉은 오브 " + player.redOrbs);
+			}
 			ctl.separate(enemy.pos, 22);
 		} else {
 			dummy.update(dt);

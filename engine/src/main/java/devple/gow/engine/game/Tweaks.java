@@ -85,6 +85,32 @@ public final class Tweaks {
 		return v == null ? def : v;
 	}
 
+	/** 키 이름이 복원되지 않은 값용: 해시로 직접 조회. */
+	public OptionalInt rawHash(String node, int hash) {
+		Map<Integer, Integer> m = numbers.get(node);
+		Integer v = m == null ? null : m.get(hash);
+		return v == null ? OptionalInt.empty() : OptionalInt.of(v);
+	}
+
+	/** short/bool 형 값 (상위 바이트 쓰레기 제거). */
+	public int i16(String node, String key, int def) {
+		OptionalInt r = raw(node, key);
+		return r.isPresent() ? (short) r.getAsInt() : def;
+	}
+
+	/**
+	 * 템플릿 노드 찾기: prefix(예 "/TweakTemplates/OrbEmitter/") 아래에서 "Instance Name" 이 name 인 노드.
+	 */
+	public String findTemplate(String prefix, String instanceName) {
+		int h = TweakFile.hash("Instance Name");
+		for (Map.Entry<String, Map<Integer, String>> e : strings.entrySet()) {
+			if (e.getKey().startsWith(prefix) && instanceName.equals(e.getValue().get(h))) {
+				return e.getKey();
+			}
+		}
+		return null;
+	}
+
 	public int nodeCount() {
 		return numbers.size() + strings.size();
 	}
