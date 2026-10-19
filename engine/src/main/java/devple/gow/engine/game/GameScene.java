@@ -592,6 +592,13 @@ public final class GameScene implements Scene {
 	/** 지면 추종 + 중력 + 벽 밀어내기. */
 	private void physics(float dt) {
 		Vector3f p = hero.ctl.position;
+		// 허공 방지: 지상에서 이동한 결과 아래에 바닥이 전혀 없으면(배 가장자리 밖 등) 수평 이동 취소.
+		// 원작의 보이지 않는 벽 / 바다 데스존을 대신하는 근사 — 아래층 바닥이 있는 낙하는 허용
+		if (hero.ctl.grounded && Float.isNaN(col.groundHeight(p.x, p.y + STEP, p.z, 4000))
+				&& !Float.isNaN(col.groundHeight(hero.ctl.prevPosition.x, hero.ctl.prevPosition.y + STEP, hero.ctl.prevPosition.z, 4000))) {
+			p.x = hero.ctl.prevPosition.x;
+			p.z = hero.ctl.prevPosition.z;
+		}
 		float g = col.groundHeight(p.x, p.y + STEP, p.z, 4000);
 		var c0 = hero.ctl;
 		if (!Float.isNaN(g) && p.y - g <= 2f && c0.vy <= 0) {
