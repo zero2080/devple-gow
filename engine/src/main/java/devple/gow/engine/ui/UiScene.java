@@ -1,0 +1,102 @@
+package devple.gow.engine.ui;
+
+import devple.gow.engine.core.Engine;
+import devple.gow.engine.game.GameRules;
+import devple.gow.engine.game.PlayerState;
+import devple.gow.engine.game.Weapon;
+import devple.gow.engine.scene.Scene;
+import devple.gow.tools.wad.WadFile;
+
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+/**
+ * FLP UI 단독 실행 씬 ({@code --ui <wad> <FLP> [mode]}). 검증/디버그용.
+ * <ul>
+ *   <li>menu (기본): 무비를 그대로 재생 — R_SHELLK/FLP_ShellK 메인 메뉴. 방향키 ↑↓, L = ○ 선택, I = △ 뒤로</li>
+ *   <li>hud: 데모 PlayerState 를 {@link HudBinding} 으로 연결 (체력/마법 바, 오브 미터)</li>
+ *   <li>pause / powerup: hud + PS2_PauseMenu_Event / PS2_PSMMenu_Event = 1</li>
+ * </ul>
+ * 스크린샷이 결정적이도록 enter 에서 warm 틱만큼 미리 진행한다.
+ */
+public final class UiScene implements Scene {
+
+	private final Path wad;
+	private final String flpName;
+	private final String mode;
+	private final int warm;
+	private UiLayer ui;
+	private PlayerState ps;
+	private final HudBinding hud = new HudBinding();
+
+	public UiScene(Path wad, String flpName, String mode, int warm) {
+		this.wad = wad;
+		this.flpName = flpName;
+		this.mode = mode == null ? "menu" : mode;
+		this.warm = warm;
+	}
+
+	@Override
+	public void enter(Engine e) {
+		try {
+			ui = UiLayer.load(wad, flpName, null);
+			if (!mode.equals("menu")) {
+				Path perm = Files.exists(wad.resolveSibling("R_PERMK.WAD")) ? wad.resolveSibling("R_PERMK.WAD") : wad;
+				ps = new PlayerState(GameRules.load(WadFile.load(perm)));
+				demoState(ps);
+			}
+		} catch (IOException ex) {
+			throw new UncheckedIOException(ex);
+		}
+		ui.player().addCommandListener((c, a) -> System.out.println("[UI] FSCommand " + c + " " + a));
+		ui.variables().addListener((n, v) -> System.out.println("[UI] " + n + " = " + v));
+		for (int i = 0; i < warm; i++) {
+			if (ps != null) {
+				hud.update(ps, ui.variables());
+			}
+			if (i == 20 && mode.equals("pause")) {
+				ui.variables().event("PS2_PauseMenu_Event", 1);
+			} else if (i == 20 && mode.equals("powerup")) {
+				HudBinding.write(ps, ui.variables());
+				ui.variables().event("PS2_PSMMenu_Event", 1);
+			}
+			ui.player().pad(0);
+			ui.player().tick();
+		}
+		if (System.getProperty("gow.ui.dump") != null || System.getenv("GOW_UI_DUMP") != null) {
+			ui.player().dump(System.out::println);
+		}
+	}
+
+	/** 데모 값: 체력 레벨 1 (최대 125) 중 100, 마법 레벨 2 (최대 125) 중 90, 붉은 오브 1234. */
+	private static void demoState(PlayerState ps) {
+		ps.hpLevel = 1;
+		ps.hp = 100;
+		ps.mpLevel = 2;
+		ps.mp = 90;
+		ps.redOrbs = 1234;
+		ps.itemFlags = 0b1111;
+		ps.level.put(Weapon.BLADES, 1);
+		ps.invested.put(Weapon.BLADES, 300);
+	}
+
+	@Override
+	public void update(Engine e, float dt) {
+		if (ps != null) {
+			hud.update(ps, ui.variables());
+		}
+		ui.update(e);
+	}
+
+	@Override
+	public void render(Engine e, float alpha) {
+		ui.render(e);
+	}
+
+	@Override
+	public void exit(Engine e) {
+		ui.close();
+	}
+}

@@ -22,7 +22,8 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 | 24 | [구현: 이벤트 / 레벨 스크립트 VM](24-impl-script-events.md) | VM 완료 (전 레벨 실행 검증) |
 | 25 | [구현: 애니메이션 전환 / 크레토스 이동](25-impl-hero-locomotion.md) | 평지 이동 완료 |
 | 26 | [구현: 전투 시스템 1·2단계](26-impl-combat.md) | 콤보·피해 검증 (테스트 3) |
-| 2x | 구현 진행 중: UI 런타임(21), 레벨(23) | 진행 중 |
+| 21 | [구현: FLP UI 런타임 (메인 메뉴 / HUD / 일시정지 / 파워업)](21-impl-ui-runtime.md) | 1차 완료 (테스트 2, 스크린샷 4) |
+| 2x | 구현 진행 중: 레벨(23), 적 AI, 통합 게임 | 진행 중 |
 
 ## 빌드 / 도구 실행
 
@@ -36,6 +37,7 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 ./gradlew :tools:run --args="exe:calls work/SCKA_300.02 0x175c98"                  # 등록 함수 호출 인자 표
 ./gradlew :tools:run --args="tweak:dump gow-rom/R_HERO0.WAD work/exe/twk_R_HERO0.txt"  # TWK 튜닝값 (키 이름 복원)
 ./gradlew :tools:run --args="progress:dump gow-rom"                                  # 업그레이드 비용·성장·오브·세이브 구조
+./gradlew :engine:run --args="--ui gow-rom/R_SHELLK.WAD FLP_ShellK"                    # FLP UI 런타임 (hud|pause|powerup 모드)
 ./gradlew :tools:run --args="progress:levels gow-rom work/progression/levels.txt"    # 레벨 연결 그래프 (ESC 씬 이동 호출)
 ./gradlew :tools:run --args="combat:tree gow-rom/R_PERMK.WAD ROOT 6 normal"              # 영웅 콤보 트리 (combat:dump / combat:enemies)
 ```
