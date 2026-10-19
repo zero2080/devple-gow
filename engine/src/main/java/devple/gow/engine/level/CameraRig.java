@@ -105,6 +105,17 @@ public final class CameraRig {
 		/** AresCamera1 상태 (0x1F67C0) 와 그 카메라의 이전 화면. */
 		AresCamera ares;
 		AresCamera.View aresView;
+		/**
+		 * 레일 t 첫 표본(0x1F20F0)의 기준점을 만드는 이전 화면 (눈, 정면). 원작 기준점 = 상태 +0x30 − +0x20·(+0x90·cos(+0x88)·cos(+0x8C))
+		 * — 0x1F29A0 머리에서 +0x90/+0x88/+0x8C 를 (대상 − 눈) 의 시야 좌표 거리·각으로 다시 채우므로 "대상을 이전 시선 축에 투영한 점"
+		 * 눈 + 정면·((T − 눈)·정면) 이다. 새 상태는 직전 상태 복사(0x1F3A38)라 전환이면 직전 카메라 화면을 쓴다 [확실].
+		 * 리셋(0x1EDF48 → 템플릿 0x1F2500: 원점·단위 행렬)이면 해독대로는 (0, 0, T.z) 인데, 그렇게 하면 실제 Warp 도착(ATHN06C → 06B ExCam2,
+		 * ATRET01C → 01B)에서 눈이 벽 속 레일 끝에 걸린다 — 빠진 단계가 있다고 보고 리셋 때는 대상 T 를 쓴다 (null) [근사].
+		 * 이후 프레임은 지역 탐색(0x1F1AA0) + 감쇠라, 시작 t 가 어느 극소에 머물지를 정한다.
+		 */
+		Vector3f viewEye, viewFwd;
+		/** 전환 시간이 있으면(상태 +0x4C &gt; 0) 첫 표본 비용에 −100·(normalize(기준점 − P) · 직전 정면) (0x1F23E0). */
+		boolean fwdBonus;
 
 		Shot(LevelData.PlacedCamera cam) {
 			this.cam = cam;
@@ -191,7 +202,7 @@ public final class CameraRig {
 	 * targets = [아레스 몸(발) 위치, 영웅 관절 "vertebrae4" 월드, 아레스 관절 "BAR01JOCVEC1" 월드] (뒤 둘은 생략 가능).
 	 */
 	public void request(String name, Vector3f... targets) {
-		LevelData.PlacedCamera c = data.camera(name);
+		LevelData.PlacedCamera c = camera(name);
 		if (c != null) {
 			requests.add(c);
 			if (targets != null && targets.length > 0 && targets[0] != null) {
@@ -263,6 +274,85 @@ public final class CameraRig {
 		} else {
 			disabled.add(owner.toLowerCase());
 		}
+	}
+
+	/**
+	 * 다른 레벨 슬롯 (이웃 / 숙주 / Warp 짝). 원작은 두 슬롯 레벨이 함께 상주해 볼륨 질의(충돌 월드 0x29C978)와 RCM_ 이름 조회(0x17A7B8,
+	 * 전역 GO 검색)에 둘 다 걸린다 — 예: ATHN02D(메두사 방) 는 자기 CMV 를 생성 시 끄고 숙주 ATHN02C 의 Room2Cam 들이 방을 잡는다,
+	 * ATHN02D magicPlace 의 CameraName "Room2Cam3" 은 ATHN02C 카메라. null 이면 없음.
+	 */
+	public void setOther(LevelData other) {
+		this.other = other == data ? null : other;
+	}
+
+	private LevelData other;
+
+	/** 이름(RCM_ 선택)으로 카메라: 이 레벨 먼저, 없으면 다른 슬롯 레벨. */
+	private LevelData.PlacedCamera camera(String name) {
+		LevelData.PlacedCamera c = data.camera(name);
+		return c == null && other != null ? other.camera(name) : c;
+	}
+
+	/**
+	 * 이음(LoadCheck)·걷기 전환에서 카메라 상태 넘기기. 원작은 LoadCheck 가 "현재 레벨" 표시만 바꾸고 카메라 관리자(0x29F16C)는 그대로라
+	 * 활성 목록·현재 카메라·상태가 이어진다 (떠나온 레벨이 다른 슬롯에 남아 그 CMV 도 계속 질의됨). levels[i] = 카메라가 속한 WAD 이름.
+	 */
+	public record Handoff(List<String> active, List<String> levels, String current, String currentLevel, Pose pose, float railT) {
+	}
+
+	public Handoff handoff() {
+		List<String> names = new ArrayList<>(), lv = new ArrayList<>();
+		for (LevelData.PlacedCamera c : active) {
+			names.add(c.def().shortName());
+			lv.add(levelOf(c));
+		}
+		Shot s = shots.isEmpty() ? null : shots.getLast();
+		Pose p = new Pose();
+		p.set(cur);
+		return new Handoff(names, lv, s == null || s.cam == null ? null : s.cam.def().shortName(),
+				s == null || s.cam == null ? null : levelOf(s.cam), p, s == null ? -1 : s.t);
+	}
+
+	/** {@link #handoff()} 를 이어받는다 (새 레벨 장면의 첫 갱신 전). */
+	public void resume(Handoff h) {
+		active.clear();
+		for (int i = 0; i < h.active().size(); i++) {
+			LevelData.PlacedCamera c = camera(h.active().get(i), h.levels().get(i));
+			if (c != null && !active.contains(c)) {
+				active.add(c);
+			}
+		}
+		shots.clear();
+		Shot s = new Shot(h.current() == null ? null : camera(h.current(), h.currentLevel()));
+		s.pose.set(h.pose());
+		s.t = h.railT();
+		s.init = true;
+		shots.add(s);
+		if (s.cam == null) {
+			follow = s;
+		}
+		cur.set(h.pose());
+		prev.set(h.pose());
+		first = false;
+		last = current();
+	}
+
+	private String levelOf(LevelData.PlacedCamera c) {
+		return wadName(data.placedCameras.contains(c) || other == null ? data : other);
+	}
+
+	private static String wadName(LevelData d) {
+		return d.wad == null ? "" : d.wad.name();
+	}
+
+	private LevelData.PlacedCamera camera(String name, String level) {
+		if (other != null && wadName(other).equalsIgnoreCase(level)) {
+			LevelData.PlacedCamera c = other.camera(name);
+			if (c != null) {
+				return c;
+			}
+		}
+		return camera(name);
 	}
 
 	/** 현재(가장 최근) 카메라 이름, 없으면 "Follow". */
@@ -368,20 +458,22 @@ public final class CameraRig {
 		List<LevelData.PlacedCamera> cand = new ArrayList<>(requests);
 		requests.clear();
 		if (volumeQuery) {
-			for (LevelData.PlacedVolume v : data.volumes) {
-				if (v.hull().kind != 1 || disabled.contains(v.owner().toLowerCase())) {
-					continue;
-				}
-				float[] l = new float[3];
-				Mat4.transformPoint(v.inverse(), t.x, t.y, t.z, l);
-				BallHull h = v.hull();
-				for (int i = 0; i < h.hulls.size(); i++) {
-					if (inside(h.hulls.get(i), l)) {
-						String n = h.nameOf(i);
-						LevelData.PlacedCamera c = n != null ? data.camera(n) : null;
-						// ANM 관절 카메라(IdleCam 인트로 팬)는 관절 애니메이션 미지원이라 정지 화면이 엉뚱해 후보에서 뺀다 [미구현]
-						if (c != null && !c.def().p().animated() && !cand.contains(c)) {
-							cand.add(c);
+			for (LevelData lv : other != null ? List.of(data, other) : List.of(data)) {
+				for (LevelData.PlacedVolume v : lv.volumes) {
+					if (v.hull().kind != 1 || disabled.contains(v.owner().toLowerCase())) {
+						continue;
+					}
+					float[] l = new float[3];
+					Mat4.transformPoint(v.inverse(), t.x, t.y, t.z, l);
+					BallHull h = v.hull();
+					for (int i = 0; i < h.hulls.size(); i++) {
+						if (inside(h.hulls.get(i), l)) {
+							String n = h.nameOf(i);
+							LevelData.PlacedCamera c = n == null ? null : lv.camera(n) != null ? lv.camera(n) : camera(n);
+							// ANM 관절 카메라(IdleCam 인트로 팬)는 관절 애니메이션 미지원이라 정지 화면이 엉뚱해 후보에서 뺀다 [미구현]
+							if (c != null && !c.def().p().animated() && !cand.contains(c)) {
+								cand.add(c);
+							}
 						}
 					}
 				}
@@ -424,6 +516,14 @@ public final class CameraRig {
 		}
 		CameraDef.Transition tr = transition(best, curName);
 		s.blend = curShot == null ? 0 : tr != null ? tr.blend() : best.def().p().blend();
+		if (curShot != null) { // 리셋(레벨 시작·Warp, 0x1EDF48) 이면 기준점 = 대상 그대로 [근사, 아래 Shot.viewEye 주석]
+			s.viewEye = cur.eye(new Vector3f());
+			s.viewFwd = dir(cur.yaw, cur.pitch, new Vector3f());
+			s.fwdBonus = s.blend > 0;
+			if (curShot.cam != null && curShot.t >= 0 && best.rail() != null && best.rail() == curShot.cam.rail()) {
+				s.t = curShot.t; // 같은 레일이면 t 를 이어받는다 (0x1F3A38: +0x44 레일이 같으면 +0x48 유지)
+			}
+		}
 		if (s.blend <= 0) {
 			shots.clear();
 		}
@@ -529,8 +629,19 @@ public final class CameraRig {
 		}
 		p.dist = Math.abs(dist);
 		if (limited) {
-			p.yaw = clampAngle(p.yaw, dYaw, cp.yawRange());
-			p.pitch = Math.max(dPitch - cp.pitchRange(), Math.min(dPitch + cp.pitchRange(), p.pitch));
+			Vector3f[] frame = railMode ? railFrame(s.cam.rail(), s.t, cp) : null;
+			if (frame != null) {
+				// 0x1F3354: 시선을 레일 접선 좌표계로 옮겨 설계 각 ± 범위로 자른 뒤 되돌린다
+				Vector3f l = toLocal(frame, dir(p.yaw, p.pitch, new Vector3f()));
+				float ly = clampAngle(yawOf(l), dYaw, cp.yawRange());
+				float lp = Math.max(dPitch - cp.pitchRange(), Math.min(dPitch + cp.pitchRange(), pitchOf(l)));
+				Vector3f w2 = toWorld(frame, dir(ly, lp, new Vector3f()));
+				p.yaw = yawOf(w2);
+				p.pitch = pitchOf(w2);
+			} else {
+				p.yaw = clampAngle(p.yaw, dYaw, cp.yawRange());
+				p.pitch = Math.max(dPitch - cp.pitchRange(), Math.min(dPitch + cp.pitchRange(), p.pitch));
+			}
 		}
 		s.init = true;
 	}
@@ -566,29 +677,57 @@ public final class CameraRig {
 		return v;
 	}
 
-	/** 레일 t: 비용 최소점을 이전 t 에서 지역 탐색 (0x1F1AA0, 0x1F20F0), 감쇠 0xA8 로 따라간다. */
+	/** 레일 비용 함수 종류 (0x1F20F0 이 고름). */
+	private enum RailCost {
+		/** 0x1F1280: 레일 점-대상 거리가 [min, max] 밖인 정도. */
+		DISTANCE,
+		/** 0x1F12F0 (플래그 0x200): max(거리 비용, (각도 범위 초과)·1000). */
+		ANGLES,
+		/** 0x1F1648 (각도 범위 있음, 0x200 없음): 대상 방향을 범위 안으로 자른 방향으로 잰 거리가 [min, max] 밖인 정도. */
+		PROJECTED;
+
+		static RailCost of(CameraDef.Params cp) {
+			if (cp.yawRange() < 180 || cp.pitchRange() < 90) {
+				return (cp.flags() & CameraDef.F_RAIL_ANGLES) != 0 ? ANGLES : PROJECTED;
+			}
+			return DISTANCE;
+		}
+	}
+
+	/**
+	 * 레일 t (0x1F29A0): 처음(t &lt; 0)엔 매듭 수 × 4 등분 표본 중 비용 최소(동률이면 앞쪽, 0x1F20F0), 이후 이전 t 에서 지역 탐색(0x1F1AA0)한
+	 * t′ 쪽으로 감쇠 0xA8 로 따라간다.
+	 */
 	private float railParam(Shot s, Vector3f t, float dYaw, float dPitch, boolean limited, float dt) {
 		NcvCurve rail = s.cam.rail();
 		CameraDef.Params cp = s.cam.def().p();
-		boolean angles = limited && (cp.flags() & CameraDef.F_RAIL_ANGLES) != 0;
-		float best;
+		RailCost kind = RailCost.of(cp);
 		if (s.t < 0) {
-			// 처음: 전 구간 표본 → 최소점 (0x1F20F0 대용)
-			best = 0;
-			float bc = Float.MAX_VALUE;
-			int n = 128;
+			Vector3f aim = t;
+			if (s.viewEye != null) {
+				aim = new Vector3f(s.viewFwd).mul(new Vector3f(t).sub(s.viewEye).dot(s.viewFwd)).add(s.viewEye);
+			}
+			float best = 0, bc = Float.MAX_VALUE;
+			int n = Math.max(1, rail.knots.length * 4);
+			float[] r = new float[3];
 			for (int i = 0; i <= n; i++) {
 				float u = rail.tMax() * i / n;
-				float c = railCost(rail, u, t, cp, dYaw, dPitch, angles);
+				float c = railCost(rail, u, aim, cp, dYaw, dPitch, kind);
+				if (s.fwdBonus) {
+					rail.eval(u, r);
+					Vector3f nv = new Vector3f(aim.x - r[0], aim.y - r[1], aim.z - r[2]);
+					if (nv.lengthSquared() > 1e-6f) {
+						c -= 100 * nv.normalize().dot(s.viewFwd);
+					}
+				}
 				if (c < bc) {
 					bc = c;
 					best = u;
 				}
 			}
-			best = descend(rail, best, t, cp, dYaw, dPitch, angles);
 			return best;
 		}
-		best = descend(rail, s.t, t, cp, dYaw, dPitch, angles);
+		float best = descend(rail, s.t, t, cp, dYaw, dPitch, kind);
 		// t += (t' − t)·(1 − 감쇠) (60Hz 기준)
 		float keep = (float) Math.pow(cp.damping(), dt / FRAME);
 		float d = best - s.t;
@@ -603,40 +742,101 @@ public final class CameraRig {
 		return rail.wrap(s.t + d * (1 - keep));
 	}
 
-	private float descend(NcvCurve rail, float t0, Vector3f t, CameraDef.Params cp, float dYaw, float dPitch, boolean angles) {
-		float u = t0, c = railCost(rail, u, t, cp, dYaw, dPitch, angles);
+	/**
+	 * 지역 탐색 0x1F1AA0: 보폭 0.05(0x29F188, 열린 곡선 끝이면 반대로)로 비용이 줄면 그대로 걸어가고, 늘면 보폭 ×(−½). 비용이 같으면
+	 * 이미 출발점에서 보폭 방향으로 와 있으면 ×(−½), 반대쪽이면 받아들인다. 직전 최적점과 후보점 사이가 0.0015(거리²) 이하면 멈춘다.
+	 */
+	private float descend(NcvCurve rail, float t0, Vector3f t, CameraDef.Params cp, float dYaw, float dPitch, RailCost kind) {
+		float m = rail.tMax();
 		float step = 0.05f;
-		int guard = 0;
-		while (Math.abs(step) > 0.0005f && guard++ < 400) {
+		if (m < t0 + step && !rail.closed) {
+			step = -step;
+		}
+		if (m < t0 + step && !rail.closed) {
+			step = -step;
+		}
+		float u = t0, c = railCost(rail, u, t, cp, dYaw, dPitch, kind);
+		float[] pb = new float[3], pc = new float[3];
+		rail.eval(u, pb);
+		for (int guard = 0; guard < 20000; guard++) {
 			float n = rail.wrap(u + step);
-			float nc = railCost(rail, n, t, cp, dYaw, dPitch, angles);
-			if (nc < c) {
+			rail.eval(n, pc);
+			float nc = railCost(rail, n, t, cp, dYaw, dPitch, kind);
+			float dx = pb[0] - pc[0], dy = pb[1] - pc[1], dz = pb[2] - pc[2];
+			int moved = (int) Math.signum(u - t0), dir = (int) Math.signum(step);
+			boolean accept = nc < c || nc == c && moved != dir && moved != 0;
+			if (accept) {
 				u = n;
 				c = nc;
-				step *= 1.5f;
+				System.arraycopy(pc, 0, pb, 0, 3);
 			} else {
 				step *= -0.5f;
+			}
+			if (dx * dx + dy * dy + dz * dz <= 0.0015f || step == 0) {
+				break;
 			}
 		}
 		return u;
 	}
 
-	/** 비용: 레일 점-대상 거리가 [min,max] 밖인 정도, 각도 범위 사용 시 max(거리, 각도 초과·1000) (0x1F1280, 0x1F12F0). */
-	private static float railCost(NcvCurve rail, float u, Vector3f t, CameraDef.Params cp, float dYaw, float dPitch,
-			boolean angles) {
+	/** 거리 d 가 [railMin, railMax] 밖인 정도 (0x1F1280). */
+	private static float rangeCost(float d, CameraDef.Params cp) {
+		return d < cp.railMin() ? cp.railMin() - d : Math.max(0, d - cp.railMax());
+	}
+
+	/** 레일 비용 (0x1F1280 / 0x1F12F0 / 0x1F1648). 각도는 플래그 0x400 이면 레일 접선 좌표계에서 잰다. */
+	private static float railCost(NcvCurve rail, float u, Vector3f t, CameraDef.Params cp, float dYaw, float dPitch, RailCost kind) {
 		float[] r = new float[3];
 		rail.eval(u, r);
-		float dx = t.x - r[0], dy = t.y - r[1], dz = t.z - r[2];
-		float d = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
-		float cost = d < cp.railMin() ? cp.railMin() - d : Math.max(0, d - cp.railMax());
-		if (angles) {
-			Vector3f v = new Vector3f(dx, dy, dz);
-			float py = pitchOf(v), yy = yawOf(v);
-			float pe = py < dPitch - cp.pitchRange() ? dPitch - cp.pitchRange() - py : Math.max(0, py - dPitch - cp.pitchRange());
-			float ye = Math.max(0, Math.abs(wrap180(yy - dYaw)) - cp.yawRange());
-			cost = Math.max(cost, (pe + ye) * 1000);
+		Vector3f v = new Vector3f(t.x - r[0], t.y - r[1], t.z - r[2]);
+		if (kind == RailCost.DISTANCE) {
+			return rangeCost(v.length(), cp);
 		}
-		return cost;
+		Vector3f[] frame = railFrame(rail, u, cp);
+		Vector3f l = frame != null ? toLocal(frame, v) : new Vector3f(v);
+		float py = pitchOf(l), yy = yawOf(l);
+		float pMin = dPitch - cp.pitchRange(), pMax = dPitch + cp.pitchRange();
+		if (kind == RailCost.ANGLES) {
+			float pe = py < pMin ? pMin - py : Math.max(0, py - pMax);
+			float ye = Math.max(0, Math.abs(wrap180(yy - dYaw)) - cp.yawRange());
+			return Math.max(rangeCost(v.length(), cp), (pe + ye) * 1000);
+		}
+		// 0x1F1648: 범위 안으로 자른 방향 → 월드, 그 방향 성분이 거리
+		Vector3f dl = dir(clampAngle(yy, dYaw, cp.yawRange()), Math.max(pMin, Math.min(pMax, py)), new Vector3f());
+		Vector3f dw = frame != null ? toWorld(frame, dl) : dl;
+		return rangeCost(v.dot(dw), cp);
+	}
+
+	/**
+	 * 플래그 0x400 레일의 접선 좌표계 (행 X = 위 × 접선, Y = 접선 × X, Z = 접선; 0x1F12F0/0x1F1648/0x1F3354). 0x400 이 없거나
+	 * 접선이 수직이면 null (= 월드 축).
+	 */
+	private static Vector3f[] railFrame(NcvCurve rail, float u, CameraDef.Params cp) {
+		if (rail == null || (cp.flags() & CameraDef.F_RAIL_TANGENT) == 0) {
+			return null;
+		}
+		float[] tg = new float[3];
+		rail.tangent(u, tg);
+		Vector3f z = new Vector3f(tg[0], tg[1], tg[2]);
+		if (z.lengthSquared() < 1e-12f) {
+			return null;
+		}
+		z.normalize();
+		Vector3f x = new Vector3f(0, 1, 0).cross(z);
+		if (x.lengthSquared() < 1e-12f) {
+			return null;
+		}
+		x.normalize();
+		Vector3f y = new Vector3f(z).cross(x).normalize();
+		return new Vector3f[]{x, y, z};
+	}
+
+	private static Vector3f toLocal(Vector3f[] f, Vector3f v) {
+		return new Vector3f(v.dot(f[0]), v.dot(f[1]), v.dot(f[2]));
+	}
+
+	private static Vector3f toWorld(Vector3f[] f, Vector3f l) {
+		return new Vector3f(f[0]).mul(l.x).add(new Vector3f(f[1]).mul(l.y)).add(new Vector3f(f[2]).mul(l.z));
 	}
 
 	/** 볼륨 밖 기본 카메라 (원작 "Follow", 0x337B68): 진행 방향 뒤에서 천천히 따라감 [추정]. */

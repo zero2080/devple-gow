@@ -15,10 +15,10 @@ engine/build/install/engine/bin/engine --game LEVEL --skip-movies --screenshot s
 ## 1. 결과 요약 (수정 후)
 | 분류 | 수 | 레벨 |
 |---|---|---|
-| 정상 | 84 | 아래 표 (이 중 14 개는 이번 수정으로 개선) |
-| 시작 카메라가 영웅을 못 봄 (효과 무관) | 13 | ATHN01C, ATHN01F, ATHN02C, ATHN02D, ATHN04C, ATHN04D, ATHN06C, ATHN07B, ATRET01B, ATRET01C, PAND01BB, PAND04F, PAND04H |
+| 정상 | 97 | 아래 표 (14 개는 §2 수정으로 개선, 12 개는 §6 시작 카메라 수정으로 해결) |
+| ~~시작 카메라가 영웅을 못 봄~~ | 0 | §6 에서 해결: 레일 비용 원작 해독 (10), 다른 슬롯 레벨 CMV (ATHN02D, ATHN05AA), ATHN01F 는 원작 진입 연출, ATHN07B 는 거울 반사 지오메트리 (§4) |
 | 단독 진입 대상 아님 (부속 WAD) | 4 | ATHN01EE · PAND01CC · PAND03GG (렌더 인스턴스 0), PAND00E (2) — 검은 화면에 영웅만 |
-| 의심 (미해결, §4) | 4 | ATHN05AA, OLYMP02, PAND03A, ATHN01A |
+| 의심 (미해결, §4) | 4 | ATHN07B, OLYMP02, PAND03A, ATHN01A |
 
 ## 2. 찾은 문제와 수정 [확실: 데이터/원작 규칙]
 ### 2.1 하늘 = SCR_Sky 대상 (31 §2, 16 §1.4)
@@ -46,7 +46,7 @@ engine/build/install/engine/bin/engine --game LEVEL --skip-movies --screenshot s
 - 효과: ATHN01D 젖은 판자 + 구름 반사, 그 밖에 가려졌던 빛줄기·광원 후광·풀 (ATHN03A, ATHN04B, ATHN07 횃불, PAND02G 폭포, PAND04C 풀, PAND05B 빛줄기).
 
 ## 3. 레벨별 상태 (수정 후, 240 프레임)
-상태: ○ 정상, ◎ 이번 수정으로 개선, C 시작 카메라 (효과 무관), N 부속 WAD, △ 의심 (§4).
+상태: ○ 정상, ◎ 이번 수정으로 개선, ◎c 시작 카메라 (§6 수정으로 해결), N 부속 WAD, △ 의심 (§4).
 
 | 레벨 | 상태 | 메모 | 레벨 | 상태 | 메모 |
 |---|---|---|---|---|---|
@@ -57,20 +57,20 @@ engine/build/install/engine/bin/engine --game LEVEL --skip-movies --screenshot s
 | ARENA12 | ○ | 붉은 하늘 | PAND00E | N | 인스턴스 2 (부속) |
 | ARENA14 | ○ | | PAND01A | ○ | 횃불·물 |
 | ARENA19 | ○ | 피 효과 | PAND01B | ○ | |
-| ARENA20 | ○ | | PAND01BB | C | LowCam1 이 벽을 봄 (먼지 날씨 정상) |
+| ARENA20 | ○ | | PAND01BB | ◎c | LowCam1 → 석상 방 정면 (§6) |
 | ARENA26 | ○ | | PAND01C | ○ | |
 | ARENA27 | ○ | | PAND01CC | N | 인스턴스 0 |
 | ATHN01A | △ | 비 정상, 오른쪽 물보라 과밝음 (§4) | PAND01D | ○ | |
 | ATHN01B | ○ | 갑판 구멍 빗물·빛줄기 | PAND02A | ○ | |
-| ATHN01C | C | Boat1Cam9, 선실 안 어둠 | PAND02AA | ○ | |
-| ATHN01D | ◎ | 베이지 갑판 → 젖은 판자 (§2.3) | PAND02B | ○ | |
+| ATHN01C | ◎c | Boat1Cam9 → 영웅 뒤 갑판 아래 통로 (§6) | PAND02AA | ○ | |
+| ATHN01D | ◎ | 베이지 갑판 → 젖은 판자 (§2.3) | PAND02B | ○ | 기본 시작 카메라가 모래 둔덕에 반쯤 가림 (§6.5) |
 | ATHN01E | ○ | 비 | PAND02C | ○ | |
 | ATHN01EE | N | 인스턴스 0 | PAND02D | ○ | 물 |
-| ATHN01F | C | 카메라가 벽 쪽 | PAND02DD | ○ | |
+| ATHN01F | ○ | 240 프레임 = heroEntry 진입 연출 AniRvlCam (원작 스크립트, 9.5 초 뒤 SexCam1) | PAND02DD | ○ | |
 | ATHN02A | ○ | 플랑크톤 | PAND02F | ○ | |
 | ATHN02B | ○ | 플랑크톤, 하늘 2 | PAND02G | ◎ | 폭포 반투명 보임 |
-| ATHN02C | C | Room2Cam9, 어둠 | PAND02H | ○ | |
-| ATHN02D | C | 숙주 ATHN02C 카메라 | PAND02I | ○ | |
+| ATHN02C | ◎c | Room2Cam9 → 문 너머 영웅 (§6) | PAND02H | ○ | |
+| ATHN02D | ◎c | 자기 CMV 생성 시 끔 → 숙주 Room2Cam (§6.2) | PAND02I | ○ | |
 | ATHN03A | ◎ | 하늘 group2, 빛 | PAND03A | △ | DMC 결계 바인드 자세 (§4) |
 | ATHN03AA | ○ | | PAND03B | ○ | |
 | ATHN03C | ○ | | PAND03C | ○ | |
@@ -78,25 +78,25 @@ engine/build/install/engine/bin/engine --game LEVEL --skip-movies --screenshot s
 | ATHN03E | ○ | | PAND03E | ○ | |
 | ATHN04A | ◎ | 검은 하늘 → 밤하늘 | PAND03F | ○ | |
 | ATHN04B | ◎ | 광원 후광 | PAND03G | ○ | 증기·불 정상 |
-| ATHN04C | C | camera1 이 벽 | PAND03GG | N | 인스턴스 0 |
-| ATHN04D | C | LedgeCam2 | PAND03H | ○ | |
+| ATHN04C | ◎c | camera1 → 영웅 뒤 복도 (§6) | PAND03GG | N | 인스턴스 0 |
+| ATHN04D | ◎c | LedgeCam2 → 절벽 계단 (§6) | PAND03H | ○ | |
 | ATHN05A | ◎ | 아치 너머 하늘 | PAND03I | ○ | |
-| ATHN05AA | △ | 회색 화면 (§4) | PAND03J | ○ | |
+| ATHN05AA | ◎c | 회색 화면 → 숙주 ATHN05A RublRmCam19 (§6.2) | PAND03J | ○ | |
 | ATHN05B | ○ | | PAND04AA | ◎ | 하늘 2 |
 | ATHN05BB | ○ | | PAND04C | ◎ | 풀 보임 |
 | ATHN05C | ○ | 전투 중 쓰러짐 | PAND04D | ○ | |
 | ATHN05D | ◎ | 문 너머 하늘 | PAND04E | ◎ | 왼쪽 검정 → 하늘 |
 | ATHN06A | ◎ | 검은 하늘 → 수평선 | PAND04EE | ○ | |
-| ATHN06B | ○ | | PAND04F | C | camera2 가 바위 |
-| ATHN06C | C | LwrCam18 | PAND04G | ○ | |
-| ATHN07 | ◎ | 횃불 후광 | PAND04H | C | WarpCam, 어둠 |
-| ATHN07B | C | 이웃 OLYMP01 camMagical6 | PAND04IB | ○ | |
+| ATHN06B | ○ | | PAND04F | ◎c | camera2 → 나무 난간 너머 영웅 (§6) |
+| ATHN06C | ◎c | LwrCam18 → 신전 복도 (§6) | PAND04G | ○ | |
+| ATHN07 | ◎ | 횃불 후광 | PAND04H | ◎c | WarpCam → 문 앞 광장 (§6) |
+| ATHN07B | △ | 카메라 정상, 금색 덩어리 = 거울 반사 사본 (§4) | PAND04IB | ○ | |
 | ATHN08A | ○ | 아레스 | PAND04J | ○ | |
 | ATHN08B | ○ | | PAND05A | ○ | 어두운 밤 절벽 |
 | ATHN08C | ○ | | PAND05B | ◎ | 빛줄기 |
 | ATRET01A | ○ | | SEWR01 | ○ | 층 안개 |
-| ATRET01B | C | FlrCam11 | SEWR02 | ○ | 아래 검은 띠 = 구덩이 (BackPlane −1) |
-| ATRET01C | C | ATHN06C 와 같은 시작 | DEST00 | ○ | |
+| ATRET01B | ◎c | FlrCam11 → 붉은 문 앞 (§6) | SEWR02 | ○ | 아래 검은 띠 = 구덩이 (BackPlane −1) |
+| ATRET01C | ◎c | ATHN06C 와 같음 (§6) | DEST00 | ○ | |
 | HDES01A | ○ | 붉은 층 안개 | DEST01 | ◎ | 하늘 띠 검정 → 모래색 (§2.2) |
 | HDES01B | ○ | | DEST02 | ○ | |
 | HDES01C | ○ | | DEST03 | ○ | |
@@ -104,13 +104,13 @@ engine/build/install/engine/bin/engine --game LEVEL --skip-movies --screenshot s
 | HDES01E | ○ | | OLYMP02 | △ | 유리 바닥 (§4) |
 | | | | OLYMP04 | ○ | |
 
-시작 카메라(C): `--game LEVEL` 의 기본 Start 는 대부분 개발용 지점이라 그 자리 CMV 카메라가 영웅을 보지 않는다 (영웅은 땅 위, `-Dgow.debug`).
-정상 경로(이웃 LoadCheck·Warp 도착)에서는 36/38 문서 순회로 확인된 카메라가 쓰인다 — 시각 효과 문제가 아니다.
+시작 카메라: 처음엔 "기본 Start 가 개발용 지점이라서" 로 보았으나, 원인은 레일 비용 함수 해독 누락과 다른 슬롯 레벨 CMV 미구현이었다 (§6).
 
 ## 4. 남은 의심 (미해결, 근거)
-- **ATHN05AA** 회색 화면: `GOW_HIDE` 이분 탐색 → 숙주 ATHN05A 의 `gosmokeplane2main` (`MAT_smokeFog_lambert364`, 0x44, 텍스처 α 전부 0x80, 정점 α 128 = 불투명)
-  이 y 665–697 의 길거리 연기층이고, 시작 지점 (725, 624, 3017) 이 그 아래·카메라 (694) 가 층 안이다. 데이터대로면 불투명 — 원작은 지붕 위에서 이 층을
-  내려다본다. 단독 시작 지점 문제로 보이며 실제 진입 경로 검증 필요.
+- ~~**ATHN05AA** 회색 화면~~ → §6.2 해결: 자기 CMV 만 질의해 볼륨 밖 Follow 카메라(눈 y 694)가 숙주 ATHN05A 의 길거리 연기층 `gosmokeplane2main`
+  (y 665–697) 안에 있었다. 원작처럼 숙주 CMV 도 질의하면 RublRmCam19 (눈 y 712) 가 방을 내려다본다.
+- **ATHN07B** 금색 덩어리: 카메라(camMagical4/6, 레일 swordSideRail)는 맞다. 화면을 덮는 것은 `gortalfakereflections` (포털 거울 `goportalreflect` 의
+  SCR_Mirror 반사 사본) — `GOW_HIDE=gortalfakereflections` 면 포털 앞 크레토스가 보인다. 거울 패스(31 §7) 몫.
 - **OLYMP02** 바닥: 반투명 유리 바닥 아래가 이제 안개색(0.5, 0.6, 1.0, Fog_A 1 → 배경 전부 안개)으로 밝게 보인다. 원작은 SCR_Mirror 반사가 그 자리를 채운다 (미구현, 31 §7).
 - **PAND03A** 붉은 쐐기: `godmcdog2` (DMC 문 결계, `MAT_fireMat` 가산, 관절 22, ANM_dmcdog2) 가 Vis 끔 없이 보이는데 바인드 자세로 그려져 크게 펼쳐진다.
   이전에는 패스 순서 버그로 뒤 벽에 덮여 거의 안 보였다. ESC 가 Animator 로 루프 애니를 거는 경로 미해석.
@@ -120,3 +120,43 @@ engine/build/install/engine/bin/engine --game LEVEL --skip-movies --screenshot s
 ## 5. 테스트
 `SkyBackgroundTest` (3): SCR_Sky 하늘 배치 (ATHN05A skyLR, ATHN02B 2개, PAND04E 2개, PAND01BB group1224, ATHN01A, ATHN03A group2),
 배경 안개 계수 (DEST01 1, ATHN07 100/128, ATHN01A 층 95/128, PAND01A −1), ATHN01D 판자 ALPHA · 구름 CUTOUT · 구름 인스턴스 y −0.4.
+
+## 6. 시작 카메라 13 레벨 (30 문서 §7)
+`--game LEVEL` 기본 시작과 실제 도착(이웃 LoadCheck 이음 / Warp) 을 모두 봤다. 실제 도착은 신설 `--arrive FROM[@x,y,z[,요°]]` 로 재현
+(FROM 만 = Warp 도착 Start + CameraName, 좌표 = 이음 위치, 지점은 36 하네스의 전환 위치).
+
+### 6.1 레일 비용 함수 [확실: 0x1F20F0/0x1F1AA0 분기, 0x1F1648 해독]
+13 레벨 중 10 개(ATHN01C·02C·04C·04D·06C, ATRET01B·01C, PAND01BB·04F·04H)의 시작 카메라는 플래그 **0x435FE** 레일 카메라
+(0x100 궤도, **0x400**, 0x200 없음, 요 범위 ±60..±88) 다. 원작은 각도 범위가 있으면 0x200 유무로 비용 함수를 고르는데
+(0x200 = 0x1F12F0 각도 초과 ×1000, **없음 = 0x1F1648**: 대상 방향을 범위 안으로 자른 방향으로 잰 거리가 [min, max] 밖인 정도), 엔진은 0x200 이 없으면
+거리 비용 0x1F1280 을 썼다. 그래서 레일이 영웅 곁을 지나가면 **영웅 앞쪽** 점(설계 정면과 반대)을 골랐고, 각도 자르기로 눈이 그 점에서 옆으로 돌아 벽 속에 들어갔다.
+**0x400** = 각도를 레일 접선 좌표계(Z = 접선, X = 위 × 접선)에서 잰다 (비용, 눈 각 자르기 0x1F3354 둘 다) — 설계 정면 (0,0,±1) 레일 카메라가
+"접선 방향/반대 방향을 본다" 는 뜻이 된다. 같이 맞춘 것: 첫 표본 = 매듭 수 × 4 등분 (0x1F20F0), 지역 탐색 = 보폭 0.05 걷기 + ×(−½) (0x1F1AA0),
+전환 시 기준점 = 대상을 직전 시선 축에 투영 + 직전 정면 보너스 (0x1F23E0), 같은 레일 카메라끼리 전환하면 t 유지 (0x1F3A38).
+
+### 6.2 다른 슬롯 레벨 CMV [확실: 볼륨 질의 = 충돌 월드, RCM_ 조회 = 전역 GO]
+- ATHN02D (메두사 방, 숙주 ATHN02C): 생성 센서가 자기 CMV 2 개(MedusaHeadCam, MedusaSpawnCam, 우선순위 100)를 Vis Attr11_1 = 2 로 끈다. 엔진은 생성
+  스크립트 전에 카메라를 골라 MedusaHeadCam 이 남았다 → 시작 카메라를 `world.start()` 뒤에 고르고, 숙주 CMV(Room2Cam*) 도 질의한다.
+  기본 Start (DMC 문 앞 z 2144) 는 Room2Cam3 레일 범위 밖이라 문틀이 영웅을 가린다 — ATHN02D 는 원작에서 단독으로 시작하지 않는 부속 WAD 이고,
+  실제 진입(ATHN02C LoadCheck)에서는 Room2Cam4 가 영웅을 잡는다 (`after_arr/ATHN02D_from02C.png`).
+- ATHN05AA: §4 참고 (RublRmCam19, 눈이 연기층 위).
+
+### 6.3 나머지 둘
+- **ATHN01F**: 240 프레임 화면은 원작 진입 연출이다 — `heroEntry-specialCam` (생성 2 초 뒤 Internal 0x9 끔 + SwitchCamera "AniRvlCam",
+  관절 애니 카메라 cine1camgrp) → `heroEntry-idleOFF` 9.5 초 뒤 질의 켬 → SexCam1. Warp 도착(WarpfromD, CameraName RvlCam)도 같은 연출.
+- **ATHN07B**: 카메라 정상, 거울 반사 사본 (§4).
+
+### 6.4 검증
+- 스크린샷 (`/Users/obeomsu/.claude/jobs/6f65672f/tmp/cam2/`, 커밋 안 함): `before/` (수정 전 13 + ATHN05AA), `after/` (수정 후), `after_arr/` (실제 도착 16 경로),
+  `long/ATHN01F_1000.png` (연출 끝 SexCam1).
+- 헤드리스 비교 (임시 탐침, 눈 → 대상 시선이 정적 충돌(NoPlayerCollision 제외)에 막히지 않는 수): 기본 시작 105 레벨 68 → **73**,
+  36 하네스의 실제 도착 188 건 96 → **117**.
+- `StartCameraTest` 4: 7 레벨 기본 시작 카메라 이름 + 시선, ATHN04C camera1 눈이 영웅 뒤 128, 숙주 CMV (ATHN02D Room2Cam, ATHN05AA 숙주 카메라·연기층 밖),
+  이음 넘기기(ATHN04A → 04C 같은 카메라·눈 연속).
+
+### 6.5 남은 것
+- PAND02B 기본 시작: 레일 camFRMCLFFS 의 두 극소(영웅 앞뒤) 중 먼 쪽을 골라 모래 둔덕이 영웅을 반쯤 가린다 (이전 거리 비용은 가까운 쪽).
+- PAND01BB ← PAND00D Warp: ConHallCam5 (모드 2, 고정 위치) 와 영웅 사이 z −720 의 한쪽 면 벽. 엔진은 레벨 메시를 양면으로 그려 벽 뒷면이 화면을 덮는다
+  — 원작은 뒷면 제거로 보일 것 [추정] (렌더 몫, 08 문서 양면 렌더).
+- ATRET01C ← ATRET01B Warp: Start CameraName LWRCAM11 은 한 프레임 후보라 볼륨 카메라 LwrCam18 로 돌아간다 (원작 SwitchCamera 와 같은 규칙).
+- 리셋(레벨 시작·Warp) 직후 레일 첫 표본 기준점은 해독대로면 (0, 0, T.z) 인데 실제 Warp 도착(ATHN06C → 06B)에서 벽 속에 걸려 대상 T 를 쓴다 [근사] (30 §7.3).

@@ -23,6 +23,7 @@ import java.nio.file.Path;
  *   ./gradlew :engine:run --args="--level gow-rom/ATHN01A.WAD [--cam N|auto] [--col]"   (레벨 배치 뷰어, 23 문서)
  *   ./gradlew :engine:run --args="--game [ATHN01A] [--auto-run s] [--entry 인스턴스]"   (통합 게임: 레벨 + 크레토스 + 전투 + HUD)
  *   ./gradlew :engine:run --args="--game ATHN01E --entry gospawndaddyhydra --boss-demo"   (보스전 자동 연출, 37 문서)
+ *   ./gradlew :engine:run --args="--game ATHN04C --arrive ATHN04A@1232,-80,1301"   (도착 재현: FROM = Warp, FROM@x,y,z[,요°] = 이음, 30 문서 §7)
  *   ./gradlew :engine:run --args="--movie SEMO01 [--wide] [--movie-start 초] [--mute]"   (컷신 재생, 33 문서)
  *   ./gradlew :engine:run --args="--pad-test"   (게임패드 진단: 연결·매핑·버튼 이름)
  * </pre>
@@ -63,8 +64,23 @@ public final class GowMain {
 					var session = new devple.gow.engine.game.GameSession(Path.of("gow-rom"));
 					int ci = java.util.Arrays.asList(args).indexOf("--costume"); // 코스튬 n (R_HERO<n>)
 					session.costume = ci >= 0 ? Integer.parseInt(args[ci + 1]) : 0;
-					first = new devple.gow.engine.game.GameScene(session, lvl,
-							ei >= 0 ? args[ei + 1] : null, ri >= 0 ? Float.parseFloat(args[ri + 1]) : 0);
+					int ai = java.util.Arrays.asList(args).indexOf("--arrive"); // 도착 재현: FROM (Warp) 또는 FROM@x,y,z[,요°] (이음)
+					if (ai >= 0) {
+						String[] a = args[ai + 1].split("@");
+						float[] p = null;
+						float yaw = 0;
+						if (a.length > 1) {
+							String[] q = a[1].split(",");
+							p = new float[]{Float.parseFloat(q[0]), Float.parseFloat(q[1]), Float.parseFloat(q[2])};
+							yaw = q.length > 3 ? (float) Math.toRadians(Float.parseFloat(q[3])) : 0;
+						}
+						var kind = p == null ? devple.gow.engine.game.LevelLink.Kind.WARP : devple.gow.engine.game.LevelLink.Kind.SEAMLESS;
+						first = new devple.gow.engine.game.GameScene(session, lvl,
+								new devple.gow.engine.game.GameScene.Arrival(kind, a[0].toUpperCase(), p, yaw));
+					} else {
+						first = new devple.gow.engine.game.GameScene(session, lvl,
+								ei >= 0 ? args[ei + 1] : null, ri >= 0 ? Float.parseFloat(args[ri + 1]) : 0);
+					}
 				} catch (java.io.IOException ex) {
 					throw new java.io.UncheckedIOException(ex);
 				}
