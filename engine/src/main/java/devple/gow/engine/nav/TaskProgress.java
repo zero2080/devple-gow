@@ -52,7 +52,13 @@ public final class TaskProgress {
 	}
 
 	/**
-	 * 한 프레임. engaged = 영웅이 붙어 있음 (CSM 연타 중 / 레버를 잡고 있음).
+	 * 완료 때 보내는 값. false (CSM 0x215DF0) = 0x215928(1.01, 1, 1) → 100 %, 속도 100.
+	 * true (PushPull 레버 0x2127B0 / 크랭크 0x212998) = 끝에서 속도 0 으로 멈추고 0x2118E8(t, len, 0) → 100 %, 속도 0.
+	 */
+	public boolean stopAtEnd;
+
+	/**
+	 * 한 프레임. engaged = 영웅이 붙어 있음 (오브젝트 +0x190 ≥ 0).
 	 *
 	 * @return 보낼 1023 이벤트 (바뀐 게 없으면 null)
 	 */
@@ -60,16 +66,84 @@ public final class TaskProgress {
 		if (done) {
 			return null;
 		}
-		speed = engaged ? engagedSpeed : time > 0 ? rewindSpeed : 0;
+		return advance(engaged ? engagedSpeed : time > 0 ? rewindSpeed : 0, dt);
+	}
+
+	/**
+	 * 정해진 속도로 한 프레임 (크랭크처럼 속도가 가속/감속되는 오브젝트). 속도 &gt; 0 으로 끝에 닿으면 완료,
+	 * 속도 &lt; 0 으로 0 에 닿으면 멈춘다.
+	 */
+	public Event advance(float spd, float dt) {
+		if (done) {
+			return null;
+		}
+		speed = spd;
 		time = Math.max(0, Math.min(length, time + speed * dt));
-		if (engaged && time >= length) {
+		if (speed > 0 && time >= length - 1e-4f) { // 프레임 시간 누적 오차 (영웅 애니 끝과 같은 틱)
+			time = length;
 			done = true;
+			if (stopAtEnd) {
+				speed = 0;
+				return emit(length, length, 0, true);
+			}
 			return emit(1.01f, 1f, 1f, true);
 		}
-		if (!engaged && time <= 0) {
+		if (speed < 0 && time <= 0) {
 			speed = 0;
 		}
 		return emit(time, length, speed, false);
+	}
+
+	/** IO_TandF 들어 올리는 문 TWK (TAndF 템플릿 +0x18 Acc, +0x1C Dec, +0x20 #fe467fe6, +0x24 #b503fbe4, +0x28 TF Time). */
+	public record LiftParams(float acc, float dec, float maxUp, float maxDown, float tfTime) {
+	}
+
+	/**
+	 * IO_TandF 한 프레임 (원작 0x214400, 위치 +0x1E4 = {@link #time} 0..1, 속도 +0x1C4 = {@link #speed}) [확실: 디스어셈블].
+	 * <pre>
+	 * 붙어 있음:  위치 += 속도 · dt / 4;  위치 ≥ 1 → 완료
+	 *             이번 프레임 누름 (마지막 누름 뒤 시간 0x29DBF0 ≤ 0) → 속도 = min(속도 + Acc, 최대)   — 누를 때마다 한 번 (가속 · dt 아님)
+	 *             마지막 누름 뒤 TF Time 이 지남 → 속도 = max(속도 − Dec · dt, −최대 하강)
+	 *             속도 &lt; 0 이고 위치 ≤ 0 → 0 에서 멈춤
+	 * 떨어짐:     속도 = min(속도, 0); 위치 += 속도 · dt / 4; 속도 = max(속도 − Dec · dt, −최대 하강); 0 에서 멈춤
+	 * 1023 = 0x213F90(위치, 1, 속도)
+	 * </pre>
+	 *
+	 * @param press      이번 프레임 R1 을 새로 눌렀음 (붙어 있을 때만 의미)
+	 * @param sincePress 마지막 누름 뒤 시간 (초)
+	 */
+	public Event lift(boolean attached, boolean press, float sincePress, LiftParams p, float dt) {
+		if (done) {
+			return null;
+		}
+		if (attached) {
+			time += speed * dt * 0.25f;
+			if (time >= 1) {
+				time = 1;
+				done = true;
+				return emit(1, 1, speed, true);
+			}
+			if (press) {
+				speed = Math.min(speed + p.acc(), p.maxUp());
+			} else if (sincePress > p.tfTime()) {
+				speed = Math.max(speed - p.dec() * dt, -p.maxDown());
+			}
+			if (speed < 0 && time <= 0) {
+				time = 0;
+				speed = 0;
+			}
+		} else if (time > 0) {
+			speed = Math.min(speed, 0);
+			time += speed * dt * 0.25f;
+			speed = Math.max(speed - p.dec() * dt, -p.maxDown());
+			if (time <= 0) {
+				time = 0;
+				speed = 0;
+			}
+		} else {
+			speed = 0;
+		}
+		return emit(time, 1, speed, false);
 	}
 
 	/** 원작 0x215928. */

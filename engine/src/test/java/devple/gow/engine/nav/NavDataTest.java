@@ -161,6 +161,59 @@ class NavDataTest {
 		assertEquals(Interactables.Kind.LEVER, pi.byOwner("godoorcrank").kind);
 	}
 
+	/**
+	 * 붙음 유지 규칙의 데이터 (38 문서 §3.4): CSM 비트 #fb908478 (문 0 / 상자 1), ANICSM2, 크랭크 Push Type·Acc/Dec, TAndF 속도 키.
+	 * IO_CSM 은 영웅 ANICSM1 길이 = 오브젝트 애니 길이라서 R1 한 번으로 끝까지 붙어 있으면 100 % 가 된다.
+	 */
+	@Test
+	void attachRulesFromTemplates() throws Exception {
+		LevelData d = level("ATHN01D");
+		Tweaks tw = new Tweaks();
+		tw.load(d.wad);
+		Interactables it = Interactables.of(d, tw);
+		Interactables.Item door = it.byOwner("gotwinkickdoor");
+		Interactables.Item cap = it.byOwner("gonewcaptainunlock");
+		assertFalse(door.hold, "쌍발차기 문 = R1 한 번");
+		assertFalse(cap.hold);
+		assertNull(door.finishAnim, "CSM 44 에 ANICSM2 없음");
+		assertTrue(it.addChest("c", new Vector3f(), 42, 1, tw).hold, "CSM 42 HydraHealth = 누르고 있기");
+		devple.gow.tools.anim.AnimationSet hero = devple.gow.tools.anim.AnimationSet.load(WadFile.load(rom().resolve("R_HERO0.WAD")), "ANM_hero");
+		hero.attachAll(d.wad);
+		assertEquals(door.length, hero.find("doorKick").duration, 0.01f, "영웅 doorKick = 문 애니 0.9 초");
+		assertEquals(cap.length, hero.find("captainsDoorOpen").duration, 0.01f, "captainsDoorOpen 4.83 초");
+		LevelData e = level("ATHN01E");
+		Tweaks et = new Tweaks();
+		et.load(e.wad);
+		assertEquals("captainHangExit", Interactables.of(e, et).byOwner("goxfccaptaincsm").finishAnim);
+		LevelData c = level("PAND02C");
+		Tweaks ct = new Tweaks();
+		ct.load(c.wad);
+		Interactables pc = Interactables.of(c, ct);
+		Interactables.Item crank = pc.byOwner("gocagetriggerhandle");
+		assertEquals(Interactables.Kind.LEVER, crank.kind);
+		assertTrue(crank.crank, "Push 13 Type 1 = 크랭크");
+		assertEquals(3f, crank.acc, 1e-3f);
+		assertEquals(1f, crank.dec, 1e-3f);
+		assertEquals(1.5f, crank.maxSpeed, 1e-3f);
+		assertEquals(20f, crank.rewindAcc, 1e-3f);
+		assertEquals(15f, crank.maxBack, 1e-3f);
+		assertFalse(pc.byOwner("golever").crank, "Push 12 newLeever Type 5 = 레버");
+		LevelData u = level("PAND03A");
+		Tweaks ut = new Tweaks();
+		ut.load(u.wad);
+		assertEquals("leverPullUW", Interactables.of(u, ut).byOwner("gouwlever").heroAnim, "Type 6 = 물속 레버");
+		LevelData l = level("ATHN01C");
+		Tweaks lt = new Tweaks();
+		lt.load(l.wad);
+		Interactables.Item lift = Interactables.of(l, lt).byOwner("goliftdoor1");
+		assertEquals(1f, lift.acc, 1e-3f);
+		assertEquals(20f, lift.dec, 1e-3f);
+		assertEquals(0.25f, lift.tfTime, 1e-3f);
+		assertEquals(1.5f, lift.maxSpeed, 1e-3f);
+		assertEquals(20f, lift.maxBack, 1e-3f);
+		assertNotNull(lift.startAnim, "ANITandF1");
+	}
+
 	/** 과제 진행률의 분모 = 오브젝트 애니 길이 (CSM TWK #fea292e6 act, 없으면 가장 긴 act). 레버도 1023 을 보낸다 (PushPull id). */
 	@Test
 	void taskLengthsFromObjectAnimations() throws Exception {

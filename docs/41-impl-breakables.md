@@ -58,6 +58,6 @@
 - GO 비헤이비어 `IO_TandF` 37 개 (ATHN01C goliftdoor1/2 "HydraLiftDoor", ATHN05BB 압력 문 4, DEST02, PAND00C/00D/01B/02D/03A–C …).
   템플릿 `/TweakTemplates/TAndF/<n>/` (25 개): `Acc` 1, `Dec` 20, `TF Time` 0.25, #fe467fe6 1.5, 영웅 애니 liftdoor1(잡기)/liftdoor2(들기)/liftdoor3,
   소리 SND_LIFTDOOR_GRAB / _LIFT_LP / _STOP, `Reset Sound`. 진행률 이벤트는 IO_CSM 과 같은 코드(0x213F90 → 1023, 인자 1 = id) [확실: 키·값 / 추정: 의미].
-- 엔진: R1 로 잡고 연타 — 마지막 입력 뒤 TF Time × 2 안이면 "붙음" → 진행 속도 +Acc, 아니면 −Dec 로 빠르게 내려온다 (`TaskProgress` 속도 지정).
-  문 ANM 은 길이 0 (오브젝트 트랙만) 이라 들어 올리는 시간 = #fe467fe6 (1.5초) [추정]. 생성자 0x2135D0 의 키→오프셋, 갱신 함수의 정확한 식은 미해석.
+- 엔진: ~~마지막 입력 뒤 TF Time × 2 안이면 "붙음" [근사]~~ → 38 문서 §3.4 원작 식 (0x214400): 누를 때마다 속도 +Acc (최대 #fe467fe6), TF Time 동안 안 누르면 −Dec·dt (최대 −#b503fbe4), 위치 += 속도·dt/4 [확실].
+  검증 하네스만 예전처럼 길이 = #fe467fe6 (1.5초), 속도 Acc 로 끝까지 돌린다.
 - 검증 `NavDataTest.liftDoorTask` (ATHN01C goliftdoor1: id 200, Acc 1 / Dec 20, 놓으면 1/60 초에 20/60 내려감). 하네스는 CSM 과 같이 진행 (주 경로 강제 없음 유지).

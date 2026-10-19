@@ -79,18 +79,67 @@ GO 비헤이비어 `tools/level/GoBehavior` (BHV 서버 0x17, GO CXT 다음 리�
 - ATHN01D `gotwinkickdoor` = IO_CSM 템플릿 44 ("HydraKickDoor", 영웅 애니 #b50a547c = `doorKick`), 과제 id **206**. `gonewcaptainunlock` = 45 / 202 (`captainsDoorOpen`).
 - 원작 0x215928 [확실]: `pct = clamp(round(100·t/len), 0, 100)`, 100 인데 t < len 이면 99, 바뀌면 `PostEvent(0x3FF = 1023, pct, taskId(+0x1CC), …)`. t/len = 오브젝트 애니 시간/길이, 재생 속도 +0x1E0 (입력 없으면 −4 로 되감음).
 - 스크립트: `TwinKickDoor-main-taskP` = 1023 ∧ EventArg(1) == 206 ∧ EventArg(0) ≥ 30 → 동영상 Semo02 → 501 → Warp(ATHN01F). 상자 메시지: 인자 1 == 1 ∧ 인자 0 == 100.
-- ~~구현 [근사]: R1 한 번 = 진행 +12 %~~ → §10.1: 진행률 = **오브젝트 애니 시간 / 길이** (붙어 있으면 속도 1, 떨어지면 −4 로 되감김) [확실: 0x215DF0]. 연타 유지 판정(마지막 R1 0.6 초 안)만 [근사]. 100 % → 완료 (상자는 chestOpen + 오브 이미터 HealthChest/MagicChest/RaidenChest1).
+- ~~구현 [근사]: R1 한 번 = 진행 +12 %~~ → §10.1: 진행률 = **오브젝트 애니 시간 / 길이** (붙어 있으면 속도 1, 떨어지면 −4 로 되감김) [확실: 0x215DF0]. ~~연타 유지 판정(마지막 R1 0.6 초 안) [근사]~~ → §3.4: 문은 R1 한 번에 doorKick 0.9 초 동안 붙어 있어 100 %, 상자는 누르고 있기 [확실]. 100 % → 완료 (상자는 chestOpen + 오브 이미터 HealthChest/MagicChest/RaidenChest1).
 - 상자 = Creator Name0 "chest" (unk5 = CSM 템플릿, unk6 = 과제 id [추정]).
 
 ### 3.2 PushPull — 밀기 상자, 크랭크, 레버
 - 붙잡기/놓기 = 이벤트 **1048 / 1049, 인자 0 = BHV id** (PAND05B `pBoxPand05B-EventAttach`: EventArg(0) == 503) [확실: 데이터].
-- 템플릿 TWK `/TweakTemplates/Push/<n>/` (Instance Name, Radius, Acc/Dec, Push Sound). Instance Name 에 Crank/Lever/Puller → LEVER (애니 한 번 = 붙잡기+놓기) [근사], 그 밖 → PUSH.
+- 템플릿 TWK `/TweakTemplates/Push/<n>/` (Instance Name, Type, Radius, Acc/Dec, Push Sound). Instance Name 에 Crank/Lever/Puller → LEVER, 그 밖 → PUSH. LEVER 중 Type 5/6 = 레버 (leverpull 한 번), 그 밖 = 크랭크 (누른 채 스틱, Acc/Dec) — §3.4 [확실].
 - PUSH [근사]: 영웅→상자 방향의 주축(x 또는 z)으로만, 상자 반지름(CDV 경계구) 구가 벽에 밀리면 막힘, 상자 밑 바닥 필요. 움직인 만큼 소유 GO 의 Marker 이동.
 
 ### 3.3 Marker = 오브젝트 [확실: 데이터]
 엔티티 타입 14 Marker 는 소유 GO 관절에 붙은 오브젝트로, **그룹 = Id 슬롯**. 진입 센서 Filter 가 그 그룹을 기다린다:
 PAND05B `pBoxPand05B-Marker511` → `semoMovieHaveBox-…-semo08marker511` (Filter 511) → Semo08 → Warp(HDES01A); ATHN05D 엘리베이터 `Marker599` (관절 2) → `MarkerVolume1` (Filter 599).
 `ScriptWorld` 가 시작 시 Marker 액터를 만들고 (`markers`, `moveOwnerBy`, `poseOwner`), 36 문서의 "강제 오브젝트 그룹" 이 필요 없어졌다. 생성 통지(CreationSensor)는 보내지 않는다 [추정].
+
+### 3.4 붙음 유지 규칙 — R1 오브젝트를 언제 잡고, 붙들고, 놓는가 [확실: 디스어셈블]
+"연타로 문을 찬다"는 것은 원작 동작이 아니다. 문·책·레버는 **한 번 누르면 영웅 애니가 끝날 때까지** 붙어 있고, 상자·크랭크는 **누르고 있기**, 연타는 **IO_TandF 들어 올리는 문**에만 쓴다.
+영웅 쪽 기술(전투 기술 분기 표)과는 관계가 없다. 판정은 영웅 갱신 0x1EBD78 의 붙잡기 경로와 오브젝트별 갱신 함수에 있다.
+
+**입력** — 플레이어 컨트롤러 0x1D7FD0 이 매 프레임 영웅 +0x310 (입력 구조체 +0x2E0 의 +0x30) 비트를 만든다:
+- 버튼 표 0x29E0F8: 패드 비트 → 논리 비트. 원작 "사용" 버튼 = 패드 비트 1 (표준 배치 R2. 버튼 안내 아이콘도 `R2ButtonStatic`, 42 문서 §1). 엔진은 R1 에 둔다 [근사, 42 문서와 같음].
+- 논리 비트 0x100000 → 누르고 있음 **+0x310 0x100**, 새로 누름 **0x80** (2 프레임 버퍼 0x29DC60). 0x80000 새로 누름 → **0x1000**. 붙어 있을 때 × 누르고 있음 → 0x400.
+
+**잡기** — 0x1C4008 (0x1EBD78 가 영웅 +0x2DC 0x10000 일 때 부름): 붙어 있지 않음(+0x174 0x4000), 사용 버튼 새로 누름(+0x310 0x80), 전투 기술 중 아님.
+0x1C3F18 이 반경 32 안의 오브젝트를 찾고 0x1C3498 이 오브젝트 클래스 비트(+0xF4)로 붙잡기 모드를 고른다 → 0x1E17F0(영웅, 오브젝트, 관절 슬롯, 모드):
+
+| 클래스 비트 | 모드 (+0x194) | 종류 | 영웅 애니 슬롯 (표 0x29E2B8, 0x24 B, +0x20 = 끝나면 다음 슬롯) |
+|---|---|---|---|
+| 0x800 | 1 | 밀기 상자 (Push Type 0) | 0x4E ANIPushI, 0x4F–0x52 방향, × → 0x53 ANIStartKickBox → 0x54 |
+| 0x1000 | 2 (영웅 쪽이면 0x80000002) | 크랭크류 (Type 1–4) | 0x56 ANICrankIdle, 스틱 앞/뒤 → 0x57–0x5C Push/Pull (크랭크 +0x10C 종류별 L/R) |
+| 0x10000 | 4 | 레버 (Type 5) | 0x5D ANILever `leverPull` |
+| 0x20000 | 8 | 물속 레버 (Type 6) | 0x5E ANIUWLever `leverPullUW` |
+| 0x200000 | 0x10 | IO_TandF | 0x5F ANITandF1 (#ff5f5921) → 0x60 ANITandF2 (#dc77f412) → 끝나면 0x61 ANITandF3 (#4e2b8035) |
+| 0x400000 | 0x40 (+0x174 0x200 이 없으면 0x20) | IO_CSM·상자 | 0x62 ANICSM1 (#b50a547c) → **끝나면 0x63** ANICSM2 (#b50a547d) |
+
+- 0x1E17F0 은 플레이어면 **1048 (인자 0 = 모드 1/2/4/8 → PushPull +0x284, 0x10 → TAndF +0x1D0, 0x20/0x40 → CSM 과제 id +0x1CC)**, 0x1E18F8 (놓기) 은 **1049** 를 보낸다. CSM 도 붙잡기/놓기 이벤트를 보낸다.
+- Push "Type" 은 TWK 값의 하위 바이트 (상위는 쓰레기): 0 상자, 1 크랭크(Crank 30F/20B·Core Ext Crank·PBox Lever·CoffinLid…), 2 대포, 3 기중기, 4 링 크랭크, 5 레버(newLeever·R2Lever·BMI Log Puller), 6 물속 레버, 7 얼음, 8 테트리스 블록. 갱신 0x212398 이 Type 으로 0x212998 / 0x2127B0 을 고른다.
+
+**붙들기 / 놓기** — 붙어 있는 동안 0x1C4258:
+
+| 모드 | 붙어 있는 조건 | 놓는 때 |
+|---|---|---|
+| CSM 0x20/0x40 | 애니가 0x62 인 동안: CSM 템플릿 +0xB8 비트 0 (**TWK #fb908478**) 이 켜져 있으면 사용 버튼을 누르고 있어야 함 (+0x310 0x100), 꺼져 있으면 무조건 | 비트가 켜졌는데 뗌 → 바로. 0x62 가 끝나 0x63 (또는 다른 애니) 이 되면 그 애니가 끝날 때 → 오브젝트 클래스 0x400000 을 끄고 (다시 못 잡음) 놓음 |
+| 레버 4 / 물속 8 | 애니 0x5D / 0x5E 가 끝날 때까지 (입력 무관) | 애니 t/len ≥ 1 (0x1C4C6C, 0x1ECB24) |
+| 크랭크 2 | 사용 버튼을 누르고 있음 + 크랭크 클래스 비트 0x1000 이 켜져 있음 | 뗌, 또는 크랭크가 끝에 닿아 0x1000 이 꺼짐 |
+| 밀기 1 | 사용 버튼을 누르고 있음 (+ 상자와 32 이내) | 뗌 [엔진 PUSH 는 아직 R1 토글 — 범위 밖] |
+| TAndF 0x10 | 0x60 에서 누를 때마다 마지막 누름 시간 0x29DBF0 = 0, 누르고 있거나 스틱·관절축 내적 ≤ 0.5 | 0x61 이 끝날 때 (클래스 0x200000 끔), 또는 버튼을 뗀 채 스틱을 축 방향으로 (내적 > 0.5) |
+
+- 공통: 전투 기술이 붙잡기 상태 비트(0x1C) 없는 것으로 바뀌면 (피격 등) 0x1ECD70, 사망 0x1EBE48, 오브젝트가 꺼짐(+0x174 1/2 없음) 이면 놓는다.
+- CSM 템플릿 비트 (0x215248–0x21528C, +0xB8): 4 = #ca686863 (버튼 안내 "Show R2" [추정]), **1 = #fb908478 (누르고 있기)**, 2 = #e88fda39. 데이터: 상자류 (chest 002–004·008, Shard 010/011, SirenChest 022, Hydra* 040–043·047, Pinata/BigRed 060–065) = 1, 문 (SkullDoor 001, KickBridge 015/162, HydraKickDoor 044, HydraUnlockCap 045, WheelUnlock 023), 책 007, 샤워 018, 뿔피리 021, 선장 051, 왕좌 090, 손잡이 017 = 0.
+
+**오브젝트 진행** (1023 = 오브젝트 애니 위치, §10.1):
+- CSM 0x215DF0: 붙어 있으면 속도 1, 떨어지면 t > 0 일 때 −4 와 함께 클래스 0x400000 을 끄고 (**되감는 동안 못 잡음**), t = 0 에서 0x80400000 을 다시 켠다. 끝 → 오브젝트 애니 상태 1 (#fea292e7, chestOpen), 오브.
+- **데이터: 영웅 ANICSM1 길이 = 오브젝트 애니 길이** — doorKick 0.9 = 문 "Default" 0.9, captainsDoorOpen 4.833, captainHangPullup 6.0, readBook 2.367, skullKey01 1.9, skullKeyUW 3.467, timePiece 3.833, bmiDoorOpen 3.167 (왕좌 3.333 + ThroneStand 3.333 ≥ 3.967). 그래서 한 번 잡아 끝까지 붙어 있으면 정확히 100 % 가 된다.
+- 레버 0x2127B0: 붙어 있으면 속도 1, 끝에 닿으면 **속도 0 으로 멈추고** 클래스 0x30000 을 끔 → 1023 (100, id, 0). 떨어지면 −4 (클래스 끔, 0 에서 0x8001/0x8002 켬). leverPull 3.8 초 > 레버 3.667 초.
+- 크랭크 0x212998 (Type 1): 붙어 있고 t < len: 입력 = 영웅 이동 방향 · 크랭크 관절 축 (0x2117E0, 붙잡은 쪽 비트 31 로 부호) > 0 이면 속도 += **Acc**·dt (최대 #fe467fe6), 아니면 −**Dec**·dt (0 까지). 떨어지면 속도 −= #b6ba95a3·dt (최대 −#b503fbe4). 끝 → 클래스 0x1000 끔. Push 템플릿: +0x2C Acc, +0x30 Dec, +0x34 #b6ba95a3, +0x38 #fe467fe6, +0x3C #b503fbe4 (0x2163E0–). 링 크랭크 (Type 4, 0x212D08) 는 양방향 [미분석].
+- TAndF 0x214400: 위치 +0x1E4 (0..1), 속도 +0x1C4. 붙어 있으면 위치 += 속도·dt/4, **누를 때마다 속도 += Acc** (최대 #fe467fe6, dt 곱 없음), 마지막 누름 뒤 **TF Time** 이 지나면 속도 −= Dec·dt (최대 −#b503fbe4). 떨어지면 속도 ≤ 0 으로 내려옴. 위치 ≥ 1 → 완료 (2.0). TAndF 템플릿 +0x18 Acc, +0x1C Dec, +0x20 #fe467fe6, +0x24 #b503fbe4, +0x28 TF Time (0x213640–).
+
+**엔진** (`HeroNavigator.interact`, `Interactables`, `TaskProgress.advance/lift`):
+- CSM/상자: R1 → 1048 (과제 id), ANICSM1 길이 (`NavBody.clipLength`, 없으면 오브젝트 애니 길이) 동안 붙음, `hold` (#fb908478) 면 R1 을 누르고 있어야 함 → ANICSM2 (상자 chestOpen, 선장 captainHangExit, 왕좌 ThroneStand) → 1049. 상자 (Creator) 길이 = 영웅 chestGrab 1.967 초 [추정: 상자 ANM 미확인].
+- 레버: leverpull 끝까지 (물속 레버 leverPullUW). 크랭크: R1 누른 채 스틱 > 0.3 이면 가속 [근사: 관절 축 대신 스틱 크기], 떼면 놓고 #b6ba95a3 로 되감기. TAndF: 위 식 그대로, 잡기 ANITandF1 → ANITandF2, R1 을 뗀 채 스틱을 문 반대로 (> 0.5) 밀면 놓음 [근사: 관절 축 대신 영웅→문 반대 방향].
+- 되감는 중인 오브젝트는 0 으로 돌아갈 때까지 잡히지 않는다. ○/스틱으로 CSM·레버를 놓는 엔진 전용 동작은 없앴다 (원작에 없음).
+- 검증 하네스(`TraversalVerifier.runTask`)는 그대로: 붙잡은 채 `update(true)` 로 끝까지 돌린다 (플레이어 성공 가정).
 
 ## 4. 움직이는 발판 (`Platforms`)
 - 후보: Animator 엔티티(타입 5/6)가 가리키는 GO 중 CDV(BallHull 0) 가 있는 것. 밟는 hull = 평면 재질 이름에 ground/floor (전 레벨 253 개 조사 — 칼날·불·화살 함정 DamageMat 제외).
@@ -122,14 +171,15 @@ PAND05B `pBoxPand05B-Marker511` → `semoMovieHaveBox-…-semo08marker511` (Filt
 ## 8. 테스트
 | 테스트 | 내용 |
 |---|---|
-| `nav/HeroNavigatorTest` (12, 데이터 불필요) | 벽 오르기→올라서기, 일반 벽은 안 오름, 턱 매달리기·좌우·올라서기, 사다리, 짚라인 끝 착지, 매단 줄 오르기·흔들기·뛰어내리기, 균형/Death, 수영→물가, 상자 밀기(1048/1049·이동량), 벽에 막힘, CSM 연타 1023 (≥30 % 과제 206, 100 은 한 번), 되감기 |
-| `nav/NavDataTest` (8) | ATHN01D 표면 레코드, 전 시트 스키마·Ground, 줄 해석(gorope3 짚라인 끝 아래 ATHN01E 바닥), BHV(CSM 44/206, Pandora's Box 503, 크랭크 LEVER), Marker 511 → Semo08, 엘리베이터 운반 871 → 677, 도착 자세, **ATHN01D 실제 충돌로 그물·돛대 오르기 → 꼭대기 1120 → 점프로 짚라인 → ATHN01E 바닥 착지** |
+| `nav/HeroNavigatorTest` (15, 데이터 불필요) | 벽 오르기→올라서기, 일반 벽은 안 오름, 턱 매달리기·좌우·올라서기, 사다리, 짚라인 끝 착지, 매단 줄 오르기·흔들기·뛰어내리기, 균형/Death, 수영→물가, 상자 밀기(1048/1049·이동량), 벽에 막힘, **§3.4**: 문 R1 한 번 = doorKick 0.9 초 붙음 → 1023 (≥30 % 과제 206, 100 한 번) + 1048/1049 과제 id, 상자 누르고 있기·떼면 −4 되감기·되감는 중 못 잡음·chestGrab+chestOpen 뒤 놓음, 크랭크 Acc/Dec·떼면 되감기, TAndF 누를 때마다 +Acc·TF Time 뒤 −Dec, 레버 leverpull 끝까지·1023 (100, 111, 0) |
+| `nav/TaskProgressTest` (+2) | 레버 끝 속도 0, TAndF 식 (0x214400) |
+| `nav/NavDataTest` (9) | `attachRulesFromTemplates`: 문 hold 0 / 상자 42 hold 1, ANICSM2 (captainHangExit), 영웅 doorKick·captainsDoorOpen 길이 = 문 애니 길이, PAND02C 크랭크 (Type 1, Acc 3·Dec 1·최대 1.5·되감기 20/15), 레버 Type 5, 물속 레버 leverPullUW, ATHN01C TAndF 키. 그 밖 | ATHN01D 표면 레코드, 전 시트 스키마·Ground, 줄 해석(gorope3 짚라인 끝 아래 ATHN01E 바닥), BHV(CSM 44/206, Pandora's Box 503, 크랭크 LEVER), Marker 511 → Semo08, 엘리베이터 운반 871 → 677, 도착 자세, **ATHN01D 실제 충돌로 그물·돛대 오르기 → 꼭대기 1120 → 점프로 짚라인 → ATHN01E 바닥 착지** |
 | `TraversalTest` +1 | 3 막힘이 강제 없이 연결, ATHN05D 도착 |
 | `ScriptWorldTest` +1 | 이웃 호스트 GlobalData 공유 |
 
 ## 9. 남은 것
 - 원작 판정 함수(벽 잡기 거리·턱 높이·줄 잡기 반경, 0x18Cxxx Navigation 코드)는 미분석 — 수치는 애니 크기 기준 [근사]. 줄 공격(10 문서 rope attack), 벽 점프 연속, 다이빙(NoDiving), 미끄럼(Slide) 경사 미구현.
-- ~~CSM 진행률은 R1 연타 근사~~ (§10.1 원작 재생 속도 모델). 영웅 쪽 CSM 기술의 연타 판정(붙음 유지 조건), 크랭크 회전 입력(Acc/Dec)은 미분석. IO_TandF(들어 올리는 문, 같은 1023 송신 0x213F90) 미구현.
+- ~~CSM 진행률은 R1 연타 근사~~ (§10.1 원작 재생 속도 모델). ~~영웅 쪽 CSM 기술의 연타 판정(붙음 유지 조건), 크랭크 회전 입력(Acc/Dec)~~ → §3.4 [확실]. 남은 것: 크랭크 입력 축 (관절 축 대신 스틱 크기 [근사]), 링 크랭크 Type 4·기중기 Type 3 의 양방향 식, 밀기 상자의 누르고 있기·× 걷어차기 (엔진 PUSH 는 R1 토글), 버튼 안내 아이콘 (0x21DA50 슬롯 2: 크랭크 0xD, TAndF 0xB).
 - 발판 렌더 자세, CDV 벽 충돌, 운반 회전 (yaw), 이웃 레벨의 적 생성.
 - ~~순회 검증: 남은 강제 전환 6, PAND02F → PAND02H 도착~~ → §10 해결. PAND00C 링 퍼즐 자체(크랭크 → 링 회전 → Marker 101 정렬 → 204/205 로 엘리베이터 레버 보이기)는 하네스가 Vis 로 상호작용을 막지 않으므로 검증하지 않음 [근사].
 
@@ -151,8 +201,8 @@ PAND05B `pBoxPand05B-Marker511` → `semoMovieHaveBox-…-semo08marker511` (Filt
 - 인자: `PostEvent(1023, pct, id, (int)(속도 × 100), 오브젝트)`. pct = clamp(round(100·t/len)), 100 인데 t < len 이면 99. **pct 또는 속도가 바뀔 때마다** 보낸다.
 - 속도 (CSM 0x215DF0): 영웅이 붙어 있으면(+0x190 ≥ 0) **1.0**, 떨어졌고 t > 0 이면 **−4.0**, t = 0 에서 정지. t ≥ len 이고 속도 > 0 이면 완료 → 0x215928(1.01, 1, 1) = 100. PushPull 0x2127B0 도 같은 속도 상수(1.0 / −4.0, +0x268).
 - 길이 = 오브젝트 애니: CSM TWK `#fea292e6` act (쌍발차기 문 "Default" 0.9 초), 없으면 가장 긴 act (레버 3.667, 링 크랭크 12, PAND04C 크랭크 24). 길이 0 (DEST03 뿔피리 "main") = 붙자마자 완료.
-- 게임: `HeroNavigator` CSM/상자 = 마지막 R1 뒤 0.6 초 안이면 붙음 [근사: 영웅 CSM 기술의 유지 조건 미분석], 레버 = 잡고 있는 동안. 놓은 뒤에도 오브젝트는 −4 로 되감기며 1023 을 보낸다. `SceneNav` 가 인자 3 개로 보냄.
-- 상자(Creator "chest") 의 오브젝트 애니는 아직 없음 → 길이 1 초 [근사].
+- 게임: `HeroNavigator` 붙음 유지 = §3.4 (~~마지막 R1 뒤 0.6 초 [근사]~~). 놓은 뒤에도 오브젝트는 −4 로 되감기며 1023 을 보낸다. `SceneNav` 가 인자 3 개로 보냄.
+- 상자(Creator "chest") 의 오브젝트 애니는 아직 없음 → 길이 = 영웅 chestGrab (1.967 초) [추정]. PushPull 레버는 끝에서 속도 0 (1023 인자 2 = 0), CSM 만 0x215928(1.01, 1, 1).
 
 ### 10.2 SpawnEnemy MaximumCount [확실: 0x1AC580]
 - SpawnEnemy 슬롯 0 = **MaximumCount** (`"MaximumCount %d exceeded (%d)"`): 0 이 아니면 만든 수(+0x100) 가 이 값에 닿은 뒤 발동은 생성하지 않는다. 메시지 6(제거) 은 사망 수(+0x104)++ 후 Respawn(슬롯 3) 이면 자기 Trigger (조건 슬롯 평가 포함, 0x29D93C = 최소 지연) [확실: 0x1AC630].

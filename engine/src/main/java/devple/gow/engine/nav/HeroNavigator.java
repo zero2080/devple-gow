@@ -16,7 +16,7 @@ import org.joml.Vector3f;
  *   공중(하강) + 정면 벽 위 턱 (손 높이, NoWallHang 아님) → LEDGE_HANG
  *   가슴 가까이 줄 (공중, 또는 지상 + ×)  → ROPE / ROPE_TRAVERSE / ZIPLINE (줄 종류 = SCR_RopeSkinned)
  *   발밑 바닥 Water → SWIM,  Narrow → 균형 걷기 (지상 유지, 애니·속도만),  Death → 사망 통지
- *   지상 + R1 + 가까운 오브젝트 → PUSH (PushPull) / INTERACT (CSM·상자·레버)
+ *   지상 + R1 + 가까운 오브젝트 → PUSH (PushPull) / INTERACT (CSM·상자·레버·크랭크·TAndF — 붙음 유지 규칙은 {@link #interact})
  * </pre>
  * 수치 (속도·손 높이) 는 원작 상수 미복원 → 영웅 애니 크기(서 있는 키 32.6, 매달린 손 35.9 유닛)에 맞춘 값 [근사].
  */
@@ -77,7 +77,7 @@ public final class HeroNavigator {
 	};
 	private NavState state = NavState.GROUND;
 	private boolean balancing;
-	private float stateTime, cooldown, idleTime;
+	private float stateTime, cooldown;
 	private final Vector3f wallN = new Vector3f();
 	private float ledgeY;
 	private NavRope rope;
@@ -88,7 +88,10 @@ public final class HeroNavigator {
 	/** 영웅이 놓은 뒤 되감기는 중인 CSM/레버 (원작: 오브젝트가 스스로 −4 로 되감음). */
 	private final java.util.List<Interactables.Item> released = new java.util.ArrayList<>();
 	private final Vector3f pushAxis = new Vector3f();
-	private boolean finishing;
+	/** 상황 동작 영웅 애니 단계 ({@link #PH_GRAB} → {@link #PH_MAIN} → {@link #PH_FINISH}) 와 그 단계 시간, TAndF 마지막 누름 뒤 시간. */
+	private int phase;
+	private float phaseTime, sincePress;
+	private boolean doneNotified;
 
 	public HeroNavigator(NavBody body, NavWorld world, NavAnims anims) {
 		this.body = body;
@@ -136,8 +139,11 @@ public final class HeroNavigator {
 
 	/** 강제로 지상 상태로 (리스폰·Goto). */
 	public void reset() {
-		if (item != null && state == NavState.PUSH) {
+		if (item != null && (state == NavState.PUSH || state == NavState.INTERACT)) {
 			listener.pushDetach(item);
+			if (state == NavState.INTERACT && !item.done) {
+				released.add(item);
+			}
 		}
 		state = body.grounded() ? NavState.GROUND : NavState.AIR;
 		rope = null;
@@ -182,7 +188,7 @@ public final class HeroNavigator {
 				return true;
 			}
 			case INTERACT -> {
-				interact(in, dt);
+				interact(in, camYaw, dt);
 				return true;
 			}
 			default -> {
@@ -210,7 +216,9 @@ public final class HeroNavigator {
 			}
 			if (in.pressed(PadButton.R1)) {
 				Interactables.Item it = items.nearest(p, BODY + 14);
-				if (it != null) {
+				// 놓은 뒤 되감기는 중인 오브젝트는 0 으로 돌아갈 때까지 잡히지 않는다 (원작: 잡기 클래스 비트 0x400000 / 0x30000 을 끄고 0 에서 다시 켬,
+				// CSM 0x2160B4 → 0x216254, 레버 0x21287C → 0x21290C) [확실]
+				if (it != null && !released.contains(it)) {
 					startItem(it);
 					return true;
 				}
@@ -590,12 +598,18 @@ public final class HeroNavigator {
 
 	// ---- 밀기 / 상황 동작 ----
 
+	/** 상황 동작 영웅 애니 단계: TAndF 잡기 (ANITandF1) / 본 동작 (ANICSM1·leverpull·ANITandF2) / 끝 (ANICSM2·ANITandF3). */
+	static final int PH_GRAB = 0, PH_MAIN = 1, PH_FINISH = 2;
+	/** 단계 끝 판정 여유 (영웅 애니와 오브젝트 애니 길이가 같으므로 같은 틱에 끝나게). */
+	private static final float EPS = 1e-4f;
+
 	private void startItem(Interactables.Item it) {
 		item = it;
 		released.remove(it);
 		stateTime = 0;
-		idleTime = 0;
-		finishing = false;
+		phaseTime = 0;
+		sincePress = 0;
+		doneNotified = it.done;
 		Vector3f p = body.position();
 		Vector3f to = new Vector3f(it.pos.x - p.x, 0, it.pos.z - p.z);
 		if (to.lengthSquared() < 1e-4f) {
@@ -620,19 +634,34 @@ public final class HeroNavigator {
 			default -> {
 				state = NavState.INTERACT;
 				body.setYaw(yawOf(to.normalize()));
-				if (it.kind == Interactables.Kind.LEVER) {
-					listener.pushAttach(it);
+				if ((it.kind == Interactables.Kind.CSM || it.kind == Interactables.Kind.CHEST) && !it.lengthKnown && it.task().time == 0) {
+					// 상자 (Creator) 는 오브젝트 ANM 길이를 모른다 → 영웅 ANICSM1 길이 [추정: IO_CSM 은 모두 영웅 ANICSM1 = 오브젝트 애니 길이]
+					float l = body.clipLength(it.heroAnim);
+					if (l > 0) {
+						it.relength(l);
+					}
 				}
-				body.play(it.heroAnim, true);
+				// 붙잡기 = 원작 0x1E17F0: 모든 종류가 1048 (인자 0 = CSM/상자 과제 id +0x1CC, TAndF +0x1D0, PushPull +0x284) [확실]
+				listener.pushAttach(it);
+				phase = PH_MAIN;
+				if (it.kind == Interactables.Kind.LIFT && clip(it.startAnim, 0) > 0) {
+					phase = PH_GRAB;
+					body.play(it.startAnim, true);
+				} else {
+					body.play(it.heroAnim, true);
+				}
 			}
 		}
 	}
 
-	/**
-	 * CSM 연타 유지 시간: 마지막 R1 뒤 이 시간 안이면 영웅이 붙어 있는 것으로 본다 [근사: 원작은 영웅 CSM 기술이 붙음(+0x190)을 유지,
-	 * 기술 쪽 연타 판정 미분석]. 붙어 있는 동안 오브젝트 애니가 속도 1 로, 떨어지면 −4 로 되감긴다 ({@link TaskProgress}, 원작 0x215DF0).
-	 */
-	static final float MASH_WINDOW = 0.6f;
+	/** 영웅 클립 길이 (초), 모르면 def. */
+	private float clip(String anim, float def) {
+		if (anim == null) {
+			return def;
+		}
+		float l = body.clipLength(anim);
+		return l >= 0 ? l : def;
+	}
 
 	private void rewindReleased(float dt) {
 		for (java.util.Iterator<Interactables.Item> i = released.iterator(); i.hasNext(); ) {
@@ -641,70 +670,144 @@ public final class HeroNavigator {
 				i.remove();
 				continue;
 			}
-			progress(it, false, dt);
+			idle(it, dt);
 			if (it.task().time <= 0 || it.task().done) {
 				i.remove();
 			}
 		}
 	}
 
-	/** 오브젝트 애니 한 프레임 → 진행률 이벤트 (원작 0x215928). */
-	private void progress(Interactables.Item it, boolean engaged, float dt) {
-		TaskProgress.Event e = it.task().update(engaged, dt);
+	/** 영웅이 떨어진 오브젝트 한 프레임: CSM/레버 −4 로 되감기, 크랭크 #b6ba95a3 가속으로 되감기, TAndF 내려옴. */
+	private void idle(Interactables.Item it, float dt) {
+		TaskProgress t = it.task();
+		if (it.kind == Interactables.Kind.LIFT) {
+			send(it, t.lift(false, false, 0, it.liftParams(), dt));
+		} else if (it.crank) {
+			// 원작 0x212B08: t > 0 이면 속도 −= 되감기 가속 · dt, 최대 −최대 되감기
+			send(it, t.advance(t.time > 0 ? Math.max(t.speed - it.rewindAcc * dt, -it.maxBack) : 0, dt));
+		} else {
+			send(it, t.update(false, dt));
+		}
+	}
+
+	/** 1023 송신 (원작 0x215928 / 0x2118E8 / 0x213F90) + 완료 통지. */
+	private void send(Interactables.Item it, TaskProgress.Event e) {
 		it.progress = it.task().fraction();
 		if (e != null) {
 			it.lastPercent = e.percent();
 			listener.taskProgress(it, e);
 		}
+		if (it.task().done && !it.done) {
+			it.done = true;
+		}
+		if (it.done && it == item && !doneNotified) {
+			doneNotified = true;
+			listener.interactDone(it);
+		}
 	}
 
-	private void interact(Input in, float dt) {
+	/**
+	 * 붙어 있는 동안 (원작 영웅 0x1C4258, 오브젝트 0x215DF0 / 0x2127B0 / 0x212998 / 0x214400) [확실: 디스어셈블, 38 문서 §3.4].
+	 * <pre>
+	 * CSM/상자 (붙잡기 모드 0x20/0x40): 영웅 애니 ANICSM1 (템플릿 #b50a547c) 한 번 → 다음 슬롯 ANICSM2 (#b50a547d) → 끝나면 놓음.
+	 *   ANICSM1 동안 템플릿 비트 #fb908478 (상자) 이면 R1 을 누르고 있어야 하고, 떼면 바로 놓는다. 문·책은 한 번 누르면 끝까지.
+	 *   오브젝트 애니는 붙어 있는 동안 속도 1 → 데이터상 ANICSM1 길이 = 오브젝트 애니 길이라 끝까지 붙어 있으면 100 %.
+	 * 레버 (모드 4/8): leverpull 한 번 (3.8 초, 물속 7.67 초) → 끝나면 놓음. 레버 오브젝트 (3.67 초) 는 속도 1, 끝에서 멈춤.
+	 * 크랭크 (모드 2): R1 을 떼면 놓음. 누른 채 스틱을 밀면 속도 += Acc·dt (최대 #fe467fe6), 안 밀면 −Dec·dt (0 까지). 끝에 닿으면 놓음.
+	 * TAndF (모드 0x10): ANITandF1 (잡기) → ANITandF2 동안 R1 을 누를 때마다 속도 +Acc, TF Time 동안 안 누르면 −Dec·dt.
+	 *   R1 을 떼고 스틱을 문 반대로 밀면 놓음. 다 들면 ANITandF3 → 끝나면 놓음.
+	 * </pre>
+	 */
+	private void interact(Input in, float camYaw, float dt) {
 		Interactables.Item it = item;
-		if (finishing) {
-			if (body.animFinished() || stateTime > 2f) {
-				end();
+		phaseTime += dt;
+		boolean held = in.held(PadButton.R1);
+		TaskProgress t = it.task();
+		switch (it.kind) {
+			case LEVER -> {
+				if (it.crank) {
+					if (!held || it.done) {
+						release(it);
+						return;
+					}
+					// 크랭크 입력 = 영웅 이동 방향 · 크랭크 관절 축 (0x2117E0) [근사: 축 대신 스틱 크기]
+					boolean turning = stickMag(in) > 0.3f;
+					float spd = turning ? Math.min(t.speed + it.acc * dt, it.maxSpeed)
+							: t.time > 0 ? Math.min(Math.max(t.speed - it.dec * dt, 0), it.maxSpeed) : 0;
+					body.play(turning ? anims.get("ANICrankPush") : it.heroAnim, false);
+					send(it, t.advance(spd, dt));
+					if (it.done) {
+						release(it);
+					}
+					return;
+				}
+				send(it, t.update(true, dt));
+				if (phaseTime >= clip(it.heroAnim, it.length) - EPS) {
+					release(it);
+				}
 			}
-			return;
+			case LIFT -> {
+				boolean press = in.pressed(PadButton.R1);
+				if (phase == PH_GRAB && phaseTime >= clip(it.startAnim, 0) - EPS) {
+					phase = PH_MAIN;
+					phaseTime = 0;
+					body.play(it.heroAnim, true);
+				}
+				// 붙잡을 때 마지막 누름 시간 0 (0x1C3590) → 첫 틱에 한 번 가속. 누름 시간은 ANITandF2 동안만 0 으로 (0x1C4A9C)
+				boolean impulse = stateTime <= dt + EPS || phase == PH_MAIN && press;
+				sincePress = impulse ? 0 : sincePress + dt;
+				send(it, t.lift(true, impulse, sincePress, it.liftParams(), dt));
+				if (phase != PH_FINISH && it.done) {
+					phase = PH_FINISH;
+					phaseTime = 0;
+					if (it.finishAnim != null) {
+						body.play(it.finishAnim, true);
+					}
+				}
+				if (phase == PH_FINISH) {
+					if (phaseTime >= clip(it.finishAnim, 0) - EPS) {
+						release(it);
+					}
+					return;
+				}
+				// R1 을 뗀 채 스틱을 문 반대쪽으로 (관절 축과의 내적 > 0.5, 0x1C4B48) [근사: 영웅→문 방향의 반대]
+				if (!held && stickMag(in) > 0.5f) {
+					Vector3f away = new Vector3f(body.position().x - it.pos.x, 0, body.position().z - it.pos.z);
+					if (away.lengthSquared() > 1e-4f && stickDir(in, camYaw).dot(away.normalize()) > 0.5f) {
+						release(it);
+					}
+				}
+			}
+			default -> {
+				// CSM / 상자
+				send(it, t.update(true, dt));
+				if (phase == PH_MAIN) {
+					if (it.hold && !held) {
+						release(it);
+						return;
+					}
+					if (phaseTime >= clip(it.heroAnim, it.length) - EPS) {
+						phase = PH_FINISH;
+						phaseTime = 0;
+						if (it.finishAnim != null) {
+							body.play(it.finishAnim, true);
+						}
+					}
+				}
+				if (phase == PH_FINISH && phaseTime >= clip(it.finishAnim, 0) - EPS) {
+					release(it);
+				}
+			}
 		}
-		if (in.pressed(PadButton.CIRCLE) || stickMag(in) > 0.7f) {
-			// 놓음: 오브젝트는 −4 로 되감긴다 (원작 0x2160C0) — 남은 되감기는 {@link #rewindReleased}
-			if (it.kind == Interactables.Kind.LEVER) {
-				listener.pushDetach(it);
-			}
-			progress(it, false, dt);
+	}
+
+	/** 놓기 = 원작 0x1E18F8 (1049). 끝나지 않은 오브젝트는 스스로 되감긴다 ({@link #rewindReleased}). */
+	private void release(Interactables.Item it) {
+		listener.pushDetach(it);
+		if (!it.done) {
 			released.add(it);
-			end();
-			return;
 		}
-		boolean engaged;
-		if (it.kind == Interactables.Kind.LEVER) {
-			engaged = true; // 레버/크랭크: 잡고 있는 동안 (PushPull 0x2127B0 속도 1)
-		} else {
-			if (in.pressed(PadButton.R1)) {
-				idleTime = 0;
-				body.play(it.heroAnim, true);
-			} else {
-				idleTime += dt;
-			}
-			engaged = idleTime < (it.kind == Interactables.Kind.LIFT ? it.mashWindow : MASH_WINDOW);
-		}
-		progress(it, engaged, dt);
-		if (it.task().done) {
-			if (it.kind == Interactables.Kind.LEVER) {
-				listener.pushDetach(it);
-				listener.interactDone(it);
-				it.done = true;
-				end();
-				return;
-			}
-			it.done = true;
-			listener.interactDone(it);
-			if (it.finishAnim != null) {
-				body.play(it.finishAnim, true);
-			}
-			finishing = true;
-			stateTime = 0;
-		}
+		end();
 	}
 
 	private void push(Input in, float camYaw, float dt) {
@@ -738,7 +841,6 @@ public final class HeroNavigator {
 
 	private void end() {
 		item = null;
-		finishing = false;
 		state = NavState.GROUND;
 		body.setGrounded(true);
 		cooldown = 0.25f;

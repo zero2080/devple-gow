@@ -30,6 +30,11 @@ public interface NavBody {
 
 	boolean animFinished();
 
+	/** 클립 길이 (초). 없으면 음수 — 호출자가 대신 값을 쓴다 (헤드리스 테스트). */
+	default float clipLength(String anim) {
+		return -1f;
+	}
+
 	/** 지상 이동 모양 바꾸기 (균형 걷기 등): walk/idle null = 기본, speedScale 1 = 기본 속도. */
 	void locomotion(String walk, String idle, float speedScale);
 }

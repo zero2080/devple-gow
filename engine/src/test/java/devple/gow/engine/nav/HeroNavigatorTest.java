@@ -103,6 +103,14 @@ class HeroNavigatorTest {
 			return true;
 		}
 
+		/** 영웅 클립 길이 (초) — 시험이 정한다. */
+		final java.util.Map<String, Float> clips = new java.util.HashMap<>();
+
+		@Override
+		public float clipLength(String a) {
+			return clips.getOrDefault(a, -1f);
+		}
+
 		public void locomotion(String w, String idle, float s) {
 			walk = w;
 		}
@@ -432,19 +440,22 @@ class HeroNavigatorTest {
 		assertTrue(box.pos.z > -70 + 16 * 0.8f - 1, "벽에서 멈춤 " + box.pos);
 	}
 
+	/** 원작 0x1C4258 / 0x215DF0: 쌍발차기 문 (CSM 44, 비트 #fb908478 = 0) 은 R1 한 번 — 영웅 doorKick 0.9 초 동안 붙어 있고 문 애니 0.9 초가 100 %. */
 	@Test
-	void csmRepeatedPressPostsTaskProgressUntilDone() {
+	void csmDoorOnePressRunsWholeKick() {
 		List<LevelCollision.Tri> t = new ArrayList<>();
 		floor(t, -400, -400, 400, 400, 0, SurfaceAttr.GROUND);
 		NavWorld w = new NavWorld(LevelCollision.of(t));
 		Body b = new Body();
+		b.clips.put("doorKick", 0.9f);
 		HeroNavigator nav = new HeroNavigator(b, w, null);
 		Interactables items = new Interactables();
 		Interactables.Item door = items.add(new Interactables.Item(Interactables.Kind.CSM, "gotwinkickdoor", v(0, 0, -30), 44, 206, "doorKick", null,
 				"HydraKickDoor", 20));
+		door.length = 0.9f;
 		nav.setItems(items);
+		List<String> log = new ArrayList<>();
 		List<int[]> progress = new ArrayList<>();
-		boolean[] done = {false};
 		nav.setListener(new HeroNavigator.Listener() {
 			@Override
 			public void taskProgress(Interactables.Item it, int pct) {
@@ -452,24 +463,38 @@ class HeroNavigatorTest {
 			}
 
 			@Override
+			public void pushAttach(Interactables.Item it) {
+				log.add("1048 " + it.id);
+			}
+
+			@Override
+			public void pushDetach(Interactables.Item it) {
+				log.add("1049 " + it.id);
+			}
+
+			@Override
 			public void interactDone(Interactables.Item it) {
-				done[0] = true;
+				log.add("done");
 			}
 		});
 		Pad in = new Pad();
-		for (int i = 0; i < 400 && !done[0]; i++) {
-			if (i % 10 == 0) {
-				in.down.add(PadButton.R1);
-			}
-			tick(nav, b, w, in);
+		in.down.add(PadButton.R1);
+		tick(nav, b, w, in);
+		assertEquals(NavState.INTERACT, nav.state());
+		int ticks = 1;
+		while (nav.state() == NavState.INTERACT && ticks < 200) {
+			tick(nav, b, w, in); // 더 누르지 않는다
+			ticks++;
 		}
-		assertTrue(done[0]);
+		assertTrue(door.done, "한 번 누름으로 끝까지");
+		assertEquals(54, ticks, 1, "doorKick 0.9 초 = 54 틱 붙어 있음");
+		assertEquals(List.of("1048 206", "done", "1049 206"), log, "붙잡기·놓기도 과제 id 로 (0x1E17F0 모드 0x40 → +0x1CC)");
 		assertEquals("doorKick", b.played.getFirst());
 		assertTrue(progress.stream().anyMatch(p -> p[0] >= 30 && p[1] == 206), "TwinKickDoor 조건 (≥ 30 %, 과제 206)");
 		assertEquals(100, progress.getLast()[0]);
-		assertTrue(progress.stream().noneMatch(p -> p[0] == 100 && p != progress.getLast()));
+		assertEquals(1, progress.stream().filter(p -> p[0] == 100).count());
 		// 끝난 오브젝트는 다시 잡히지 않는다
-		for (int i = 0; i < 200; i++) {
+		for (int i = 0; i < 30; i++) {
 			tick(nav, b, w, in);
 		}
 		in.down.add(PadButton.R1);
@@ -477,35 +502,178 @@ class HeroNavigatorTest {
 		assertEquals(NavState.GROUND, nav.state());
 	}
 
+	/** 상자 (비트 #fb908478 = 1): chestGrab 동안 R1 을 누르고 있어야 붙어 있다. 떼면 놓고 −4 로 되감기며, 0 에 닿을 때까지 다시 잡을 수 없다. */
 	@Test
-	void csmProgressRewindsWhenIdle() {
+	void chestNeedsHoldAndRewindsWhenReleased() {
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -400, -400, 400, 400, 0, SurfaceAttr.GROUND);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		Body b = new Body();
+		b.clips.put("chestGrab", 1.967f);
+		b.clips.put("chestOpen", 0.633f);
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		Interactables items = new Interactables();
+		Interactables.Item chest = items.addChest("chest1", v(0, 0, -30), 0, 1, null);
+		assertTrue(chest.hold);
+		nav.setItems(items);
+		List<String> log = new ArrayList<>();
+		nav.setListener(new HeroNavigator.Listener() {
+			@Override
+			public void pushDetach(Interactables.Item it) {
+				log.add("1049");
+			}
+
+			@Override
+			public void interactDone(Interactables.Item it) {
+				log.add("done");
+			}
+		});
+		Pad in = new Pad();
+		for (int i = 0; i < 60; i++) { // 1 초 누르고 있음
+			in.down.add(PadButton.R1);
+			tick(nav, b, w, in);
+		}
+		assertEquals(NavState.INTERACT, nav.state());
+		assertEquals(1.967f, chest.length, 1e-4f, "상자 길이 = 영웅 chestGrab");
+		float half = chest.progress;
+		assertTrue(half > 0.45f && half < 0.55f, "1 / 1.967 초: " + half);
+		tick(nav, b, w, in); // 뗌
+		assertEquals(NavState.GROUND, nav.state());
+		assertEquals(List.of("1049"), log);
+		for (int i = 0; i < 6; i++) {
+			tick(nav, b, w, in);
+		}
+		assertTrue(chest.progress < half - 0.1f, "−4 로 되감김");
+		in.down.add(PadButton.R1);
+		tick(nav, b, w, in);
+		assertEquals(NavState.GROUND, nav.state(), "되감는 동안은 못 잡음");
+		for (int i = 0; i < 60; i++) {
+			tick(nav, b, w, in);
+		}
+		assertEquals(0, chest.progress);
+		// 이번엔 끝까지 누르고 있음 → chestGrab 끝에 100 % → chestOpen 0.633 초 뒤 놓음
+		int ticks = 0;
+		do {
+			in.down.add(PadButton.R1);
+			tick(nav, b, w, in);
+			ticks++;
+		} while (nav.state() == NavState.INTERACT && ticks < 400);
+		assertTrue(chest.done);
+		assertEquals(List.of("1049", "done", "1049"), log);
+		assertEquals((1.967f + 0.633f) * 60, ticks, 2);
+		assertEquals("chestOpen", b.anim);
+	}
+
+	/** 크랭크 (Push Type 1): R1 을 누른 채 스틱으로 돌림 — 속도 += Acc·dt (최대), 스틱을 놓으면 −Dec·dt, R1 을 떼면 놓고 되감기. */
+	@Test
+	void crankTurnsWhileHeldWithStick() {
 		List<LevelCollision.Tri> t = new ArrayList<>();
 		floor(t, -400, -400, 400, 400, 0, SurfaceAttr.GROUND);
 		NavWorld w = new NavWorld(LevelCollision.of(t));
 		Body b = new Body();
 		HeroNavigator nav = new HeroNavigator(b, w, null);
 		Interactables items = new Interactables();
-		Interactables.Item it = items.add(new Interactables.Item(Interactables.Kind.CSM, "door", v(0, 0, -30), 1, 7, "doorKick", null, "d", 20));
+		Interactables.Item crank = items.add(new Interactables.Item(Interactables.Kind.LEVER, "gocagetriggerhandle", v(0, 0, -30), 13, 230, "crankIdle",
+				null, "Crank (30F/20B)", 20));
+		crank.crank = true;
+		crank.length = 12;
+		crank.acc = 3;
+		crank.dec = 1;
+		crank.maxSpeed = 1.5f;
+		crank.rewindAcc = 20;
+		crank.maxBack = 15;
 		nav.setItems(items);
 		Pad in = new Pad();
 		in.down.add(PadButton.R1);
 		tick(nav, b, w, in);
-		in.down.add(PadButton.R1);
-		tick(nav, b, w, in);
-		float p0 = it.progress;
-		for (int i = 0; i < 120; i++) {
+		for (int i = 0; i < 30; i++) { // 스틱 없이 누르고만 있음 → 안 돎
+			in.down.add(PadButton.R1);
 			tick(nav, b, w, in);
 		}
-		assertTrue(it.progress < p0, "누르지 않으면 되감김");
+		assertEquals(0, crank.task().time);
+		for (int i = 0; i < 60; i++) {
+			in.down.add(PadButton.R1);
+			in.ly = 1;
+			tick(nav, b, w, in);
+		}
+		assertEquals(1.5f, crank.task().speed, 1e-4f, "0.5 초 만에 최대 속도 1.5");
+		float at = crank.task().time;
+		in.ly = 0;
+		for (int i = 0; i < 30; i++) {
+			in.down.add(PadButton.R1);
+			tick(nav, b, w, in);
+		}
+		assertEquals(1.0f, crank.task().speed, 0.02f, "스틱을 놓으면 −Dec · dt");
+		assertTrue(crank.task().time > at);
+		tick(nav, b, w, in); // R1 뗌
+		assertEquals(NavState.GROUND, nav.state());
+		float r = crank.task().time;
+		for (int i = 0; i < 10; i++) {
+			tick(nav, b, w, in);
+		}
+		assertTrue(crank.task().time < r && crank.task().speed < 0, "되감기 (가속 20, 최대 −15)");
 	}
 
-	/** 레버 (PushPull): 붙잡기 1048 → 레버 애니가 끝날 때까지 1023 (인자 1 = PushPull id, 원작 0x2118E8) → 놓기 1049. PAND00C 엘리베이터 레버 id 111. */
+	/** TAndF 들어 올리는 문: R1 을 누를 때마다 속도 +Acc (최대), TF Time 동안 안 누르면 −Dec. 다 들면 놓음. */
+	@Test
+	void liftDoorRisesPerPress() {
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -400, -400, 400, 400, 0, SurfaceAttr.GROUND);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		Body b = new Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		Interactables items = new Interactables();
+		Interactables.Item door = items.add(new Interactables.Item(Interactables.Kind.LIFT, "goliftdoor1", v(0, 0, -30), 50, 200, "liftdoor2",
+				null, "HydraLiftDoor", 20));
+		door.acc = 1;
+		door.dec = 20;
+		door.maxSpeed = 1.5f;
+		door.maxBack = 20;
+		door.tfTime = 0.25f;
+		nav.setItems(items);
+		List<String> log = new ArrayList<>();
+		nav.setListener(new HeroNavigator.Listener() {
+			@Override
+			public void pushAttach(Interactables.Item it) {
+				log.add("1048 " + it.id);
+			}
+
+			@Override
+			public void pushDetach(Interactables.Item it) {
+				log.add("1049 " + it.id);
+			}
+		});
+		Pad in = new Pad();
+		in.down.add(PadButton.R1);
+		tick(nav, b, w, in);
+		tick(nav, b, w, in);
+		assertEquals(1f, door.task().speed, 1e-4f, "붙잡을 때 한 번 +Acc");
+		for (int i = 0; i < 30; i++) { // 0.5 초 누르지 않음 → TF Time 뒤 −Dec
+			tick(nav, b, w, in);
+		}
+		assertEquals(0, door.task().time, "내려와 0 에서 멈춤");
+		assertEquals(NavState.INTERACT, nav.state(), "R1 을 떼도 붙어 있음");
+		int ticks = 0;
+		while (!door.done && ticks < 600) {
+			if (ticks % 6 == 0) { // 초당 10 번
+				in.down.add(PadButton.R1);
+			}
+			tick(nav, b, w, in);
+			ticks++;
+		}
+		assertTrue(door.done, "연타로 다 들어 올림");
+		assertEquals(NavState.GROUND, nav.state(), "ANITandF3 없음 → 바로 놓음");
+		assertEquals(List.of("1048 200", "1049 200"), log);
+	}
+
+	/** 레버 (PushPull Type 5): 붙잡기 1048 → leverpull 이 끝날 때까지 붙어 있음 (원작 0x1ECB24) → 레버 애니 끝에서 1023 100 (속도 0, 0x2127B0) → 1049. PAND00C 엘리베이터 레버 id 111. */
 	@Test
 	void leverPostsTaskProgressWithItsId() {
 		List<LevelCollision.Tri> t = new ArrayList<>();
 		floor(t, -400, -400, 400, 400, 0, SurfaceAttr.GROUND);
 		NavWorld w = new NavWorld(LevelCollision.of(t));
 		Body b = new Body();
+		b.clips.put("leverpull", 0.6f);
 		HeroNavigator nav = new HeroNavigator(b, w, null);
 		Interactables items = new Interactables();
 		Interactables.Item lever = items.add(new Interactables.Item(Interactables.Kind.LEVER, "goelevatorlever", v(0, 0, -30), 12, 111, "leverpull",
@@ -532,13 +700,16 @@ class HeroNavigatorTest {
 		Pad in = new Pad();
 		in.down.add(PadButton.R1);
 		tick(nav, b, w, in);
-		for (int i = 0; i < 120 && !lever.done; i++) {
+		int ticks = 1;
+		while (nav.state() == NavState.INTERACT && ticks < 120) {
 			tick(nav, b, w, in);
+			ticks++;
 		}
 		assertTrue(lever.done, log.toString());
+		assertEquals(36, ticks, 1, "leverpull 0.6 초 동안 붙어 있음 (레버 0.5 초에 끝나도)");
 		assertEquals("1048 111", log.getFirst());
 		assertEquals("1049 111", log.getLast());
-		assertTrue(log.contains("1023 100 111 100"), "완료 100 % (ElevatorLever-LeverProgress 조건): " + log);
+		assertTrue(log.contains("1023 100 111 0"), "완료 100 % (ElevatorLever-LeverProgress 조건): " + log);
 		assertEquals(NavState.GROUND, nav.state());
 	}
 }
