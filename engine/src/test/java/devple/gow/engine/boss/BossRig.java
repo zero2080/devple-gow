@@ -170,7 +170,7 @@ final class BossRig {
 			public void damageHero(float a) { heroHp = Math.max(0, heroHp - a); }
 			public ScriptWorld world() { return world; }
 			public CombatScriptBridge bridge() { return bridge; }
-			public void requestCamera(String name, Vector3f second) { cam.request(name, second); }
+			public void requestCamera(String name, Vector3f... targets) { cam.request(name, targets); }
 		};
 		grab = new devple.gow.engine.combat.GrabSync(ctl, hero);
 		for (EnemyFactory.Kind k : fight.kinds().values()) {
@@ -214,6 +214,11 @@ final class BossRig {
 			}
 
 			@Override
+			public void message(int msgId, float seconds) {
+				log.add("message " + msgId);
+			}
+
+			@Override
 			public void movie(String name, int op, int arg) {
 				if (op == 0) {
 					movie = name;
@@ -241,6 +246,9 @@ final class BossRig {
 
 			@Override
 			public void internal(int func, List<Object> args) {
+				if (func != 0x9) {
+					log.add(String.format("internal 0x%x %s @%.2f", func, args, time));
+				}
 				if (func == 0x9 && !args.isEmpty()) {
 					Object a = args.get(0);
 					log.add(String.format("cam query %s @%.2f", a, time));

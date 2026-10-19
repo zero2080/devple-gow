@@ -31,7 +31,11 @@
 | `0x1F3A38` | 상태 초기화: CAM GO 에 애니가 있고(+0x104→+0x88) 플래그 **0x1000** 이면 0x1004B8/0x131038 로 애니 처음부터 | 확실 (분기), 의미 추정 |
 | `0x1F38C8` | 카메라 이름이 `"AresCamera1"`(0x29F194) 이면 전용 함수 `0x1F67C0` | 확실 |
 | `0x1C3370` | 아레스 클래스(Enemy1 하위 클래스 2, vtable 0x2BB2D0, 생성 0x1CEBA0 의 class 2) 갱신: 매 프레임 `SwitchCamera("AresCamera1", 0)` | 확실 |
-| `0x1F67C0` / `0x1F5C58` | AresCamera1: 대상 목록 0x304790 (최대 10, 활성 2개) + 레일 t 비용 콜백 (두 대상 화면 각, "f line angle" 60, 가중 50/10/40) | 호출 구조만 확실, 비용 세부 미해석 |
+| `0x1F67C0` / `0x1F5C58` / `0x1F6430` | AresCamera1 본체 / 레일 t 비용 / 붐(눈 거리) 비용 — §6.3 에 전부 해독 | 확실 (VU0 매크로 해독) |
+| `0x1F5400` | CameraAI_Tweaks: "f line angle" … "boom speed out" 을 전역 0x29F198.. 에 등록 (TWK /GlobGame/BAR 이 덮어씀) | 확실 |
+| `0x1F59A0` / `0x1F5850` / `0x1F5AB8` | 아레스 생성 0x1C2CF8 이 부름: 카메라 대상 슬롯 4개 등록 + 영웅 기본 슬롯(0x29DC24) 끔 / 슬롯 반지름·가중·오프셋 / 해제 | 확실 |
+| `0x1F3F78` / `0x1F4130` / `0x1F4138` | 카메라 대상 슬롯 (0x304790, 0x50 × 10): 등록 (모드 = 관절 번호 또는 −1..−4) / 위치 | 확실 |
+| `0x1F26E8` | 카메라 대상 T: 플래그 0x10000 이면 슬롯(+0x4C bit0) 가중 평균 (+0x48), 아니면 영웅 | 확실 |
 
 ## 2. 동작 (재구현 규칙)
 **선택** — 매 틱 대상점이 든 모든 CMV hull 의 카메라 + 스크립트 요청 = 후보. 활성 목록에서 후보가 아닌 것을 지우고 새 후보를 뒤에 붙인다.
@@ -82,7 +86,7 @@ rig.current(); rig.pose();                      // 현재 카메라 이름 / 상
 
 ## 5. 남은 것
 - IdleCam 류: 관절 애니 카메라 자체는 §6 으로 지원하지만, **CMV 볼륨으로 뽑히는** IdleCam(ATHN01A 시작 9.5초 인트로)은 기존 시작 동작을 바꾸지 않으려고 아직 볼륨 후보에서 뺀다 (스크립트 요청은 허용).
-- 원작 Follow / AresCamera1 비용 함수 정밀화(0x1F5C58), 다중 대상 0x10000 일반화(BMI "Camera Target Weight"), 화면 데드존 0x98..0xA4, 0x400 접선 분기, 카메라 흔들림/필터/DOF 템플릿.
+- 원작 Follow, 다중 대상 0x10000 일반화(BMI "Camera Target Weight" — 슬롯 구조는 §6.3 으로 해독), 화면 데드존 0x98..0xA4, 0x400 접선 분기, 카메라 흔들림/필터/DOF 템플릿.
 - 영웅 상태 마스크(플래그 하위 바이트)로 후보 거르기 — 상태 비트 매핑이 추정이라 아직 적용 안 함.
 - Hermite 속도항, 컷 시 입력 방향 1초 유지(0x1DCE80).
 
@@ -113,12 +117,29 @@ ATHN01E 히드라 (이벤트 1035 = 기술 시작, Filter 250 = 히드라):
 - 이 카메라들은 0x100 이 없고 0x40000 → 위치 고정 + 주시점 = 행렬 × (0,0,−1.6) — 즉 관절 −Z 를 그대로 본다.
 - 전환마다 `CameraRig.onSwitch` → `ScriptWorld.postEvent(1037, 이름)` (원작 0x1EEE88).
 
-### 6.3 AresCamera1 [근사]
+### 6.3 AresCamera1 [확실: 0x1F67C0 해독, 수치는 TWK]
 - 원작: Enemy1 생성 0x1CEBA0 이 템플릿(+0x18 → 0x243700 결과) +0x80 값으로 클래스를 고른다: 0 일반(0x360 바이트), 1 (0x400), **2 아레스(0x370, vtable 0x2BB2D0)** [분기 확실, 필드가 어느 TWK 값인지 추정 — goBAR/goBA2]. 그 갱신이 **매 프레임** `SwitchCamera("AresCamera1", 0)` — CMV 없이도 아레스가 살아 있는 동안 후보.
-  카메라 갱신 0x1F3768 이 이름을 비교해 0x1F67C0 으로 간다. CAM_AresCamera1 (ATHN08A/08C, 플래그 0x57DFE, 피치 모드 1, 요 모드 2, 거리 [120,160], 레일 NCV_AresCamRail = 아레나 +z 쪽 반지름 ≈210 반원).
-- 엔진: `AresFight.tick` → `BossArena.requestCamera(ARES_CAMERA, 아레스 위치)` → `CameraRig.request(name, second)`.
-  주시점 = 영웅 대상 + 0.35·(아레스 대상 − 영웅 대상) (/GlobGame/BAR "Camera Target Weight" 0.35), 레일 t = 시선(영웅 − P)과 영웅→아레스 선의 수평 각이 "f line angle" 60° 에 가장 가까운 점,
-  눈 = 주시점 − 방향·clamp(|주시점 − P|, 120, 160). 원작 비용 0x1F5C58(두 대상 화면 각·가중)은 미해석.
+  카메라 갱신 0x1F3768 이 이름을 비교해 0x1F67C0 으로 간다 (플래그 0x100 여부와 무관). CAM_AresCamera1 (ATHN08A/08C, 플래그 0x57DFE, 레일 NCV_AresCamRail = 아레나 +z 쪽 반원).
+- **대상 슬롯** (아레스 생성 0x1C2CF8 → 0x1F59A0): 영웅 기본 슬롯(0x29DC24, 오프셋 (0,24,0))을 끄고 4개 등록 — 영웅 관절 `vertebrae4`·아레스 관절 `BAR01JOCVEC1`
+  (+0x4C = 2, 가중 0.35 "Camera Target Weight"), 영웅·아레스 몸 (모드 −4, +0x4C = 1, 가중 1, 오프셋 (0, ("bowl base" − "bay floor")·16 = 14.92, 0)). 반지름 +0x44 = "Camera Target Radius"·16 = 22.4.
+  카메라 대상 T (0x1F26E8, CAM 0x10000) = bit0 슬롯 가중 평균 = **두 몸의 중점**.
+- **수치 출처**: CameraAI_Tweaks 0x1F5400 이 아래 이름을 전역에 등록하고 R_PERMK TWK `/GlobGame/BAR` 가 덮어쓴다 (bool 은 하위 바이트: "f line symetrical" 0x3FB30000 → 거짓, "obscured symetrical" 0x41200001 → 참).
+  "bowl h delta"(4), soft_clamp_width(0.1), 레일 감쇠 0.9 는 TWK 에 없어 실행 파일 값. `AresCameraTest.constantsMatchBarTweaks` 가 TWK 와 대조.
+- **프레임마다 (0x1F67C0)**:
+  1. aim = 이전 눈 + 이전 정면 · 이전 대상 깊이 (상태 +0x30 − +0x20·cos(+0x88)·cos(+0x8C)·+0x90).
+  2. 레일 t: 처음(t &lt; 0)엔 매듭 수 ×4 등분 표본 최소 (0x1F20F0), 이후 이전 t 에서 지역 탐색 (0x1F1AA0: 보폭 0.05, 더 나쁘면 ×−½, 점 이동² ≤ 0.0015 에서 멈춤),
+     t += 0.1 · softclamp(t* − t, ±"max rail speed"(0.36)/60) (0x1F5398). 레일 점 P 는 눈이 아니라 **방향**만 정한다.
+  3. 레일 비용 0x1F5C58(aim, P): 이전 화면 회전(전역 카메라 0x29F16C 의 시야 행렬)으로 본 두 몸의 수평 화면각 a_i 와 폭 w_i = 22.4·100/수평거리 —
+     가림 = 두 폭 구간 겹침 × "obscured weight" 80.6, 분리 = ["seperating min" 0, "max" 40] 밖 × 10, 최소 거리 = (8·16 − 가까운 몸 거리) × 100,
+     테두리 = aim 에서 P 쪽 수평 반직선이 그릇 원(중심 (0, −3.12·16), 반지름 9·16)을 나가는 거리 &lt; 25 m 이면 × 10, f line (P − aim 과 몸 연결선 각 &lt; 60°) 가중 0, dolly rot 가중 0.
+  4. 붐 f (눈 거리): E(f) = T − f·normalize(aim − P) (수평), **높이 = 그릇 면** (0x1F62E8: "bowl base"·16, 반지름 ±4 m 사이 Hermite(0,0,5,1.25), 밖은 기울기 1.25).
+     f ∈ [0, |aim − P|수평] 를 이전 수평 거리에서 보폭 −1 (나쁘면 ×−½, 눈 이동² ≤ 0.001 에서 멈춤) 탐색. 비용 0x1F6430 = 먼 몸 &gt; "maximum dist"(8 m) ×10,
+     가까운 몸 &lt; "minimum dist"(6.9 m) ×100, 두 관절 화면 수평 각차 &gt; "horizontal max" 35° ×500, 수직 &gt; 25° ×1000, f·10/16.
+     변화량은 softclamp("boom speed in" −4·16/60, "boom speed out" 27·16/60).
+  5. 방향: 요 = (aim − P) 의 요, 피치 0 인 회전에서 두 관절 화면각의 평균만큼 돌린다 (0x184A98) — 영웅 가슴과 아레스 몸통의 각 중점을 본다.
+- softclamp(0x1F5258): 반범위 × 0.1 폭에서 Hermite 로 이어 붙인다 (원작 그대로 경계 밖 값과 정확히 이어지지 않음).
+- 엔진: `level/AresCamera` (상태: 필터된 t, 이전 눈·정면·깊이), `CameraRig.request(name, 아레스 몸, 영웅 vertebrae4, 아레스 BAR01JOCVEC1)`,
+  `AresFight.tick` 이 `BossFight.jointWorld` 로 관절 월드 위치를 넘긴다. 이전 근사(주시점 = 영웅 + 0.35·(아레스 − 영웅), "f line angle" 최소화)는 제거.
 
 ### 6.4 보스 쪽 보정 (37 문서)
 - 히드라 방향을 스폰 엔티티 방향으로 **고정** (위치만 고정하던 것을 방향까지). GameScene 이 보스 스폰 방향을 엔티티 행렬에서 읽도록 고침 (BossRig 와 같은 규칙).
@@ -126,7 +147,11 @@ ATHN01E 히드라 (이벤트 1035 = 기술 시작, Filter 250 = 히드라):
 
 ### 6.5 검증
 - `BossCameraTest` (헤드리스, 실데이터): 히드라 잡기 1035(806/802) → grabLeftCam/grabRightCam, 질의 끔 유지, ANM 0x1000 재시작(0.5초 뒤 애니 시간 0.4–0.6), 연타 → *StrugCam, 성공 → *WinCam → 3.33초 뒤 볼륨 카메라 복귀,
-  처형 810 → bossKillCam (bossKillStrugCam 은 안 켜짐) → 812 BossKillWinCam, 아레스 1·3단계 AresCamera1 활성 + 주시점 0.35, 잡기 동기 중 유지. 모든 장면에서 크레토스가 화면(4:3 절두체) 안.
+  처형 810 → bossKillCam (bossKillStrugCam 은 안 켜짐) → 812 BossKillWinCam, 아레스 1·3단계 AresCamera1 활성, 눈 높이 = 그릇 면, 레일 t ≥ 0,
+  영웅 가슴과 아레스 관절 BAR01JOCVEC1 이 함께 화면 안 (잡기 동기 중 포함). 모든 장면에서 크레토스가 화면(4:3 절두체) 안.
+- `AresCameraTest`: TWK /GlobGame/BAR 대조, 0x1F0D00 범위 밖 정도·softclamp·그릇 높이.
 - 스크린샷 (`work/shots/`, 커밋 안 함): `cam_hydra_grab0.png` (잡기 직후 망대 위 크레토스 + 내려찍은 머리), `cam_hydra.png` (grabLeftCam 1.7초: 머리 쪽으로 패닝),
   `cam_hydra_strug.png` (leftStrugCam: 망대 위에서 두 팔로 턱을 받치는 크레토스), `cam_hydra_kill.png` / `cam_hydra_kill2.png` (bossKillCam 처형 연출), `cam_ares1.png`, `cam_ares3.png`.
+- 원작 AresCamera1 (`work/shots/37b/`): `ares1_b.png` (1단계: 낮은 그릇 면 눈에서 물을 헤치는 크레토스와 공중의 아레스를 함께), `ares1_grab.png` (잡기 동기),
+  `ares3_a.png` (3단계: 크레토스 왼쪽, 아레스 오른쪽, 전경 기둥).
 

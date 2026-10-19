@@ -32,7 +32,7 @@ import java.util.function.Consumer;
  * 관절 카메라: 소유 오브젝트에 ANM 이 있으면 카메라(이름이 같은 관절, 없으면 관절 0)는 그 애니를 따라 움직인다. 플래그 0x1000 이면 활성화될 때
  * 애니를 처음부터 튼다 (0x1F3A38 → 0x1004B8/0x131038). 보스 잡기·처형 카메라(grabLeftCam, bossKillCam …)가 이 방식이다 (30 문서 §6).
  * 전환마다 {@link #onSwitch} 로 새 카메라 이름을 알린다 (원작 0x1EEE88 → 전역 이벤트 1037, 인자0 = 카메라 이름).
- * AresCamera1 은 원작 전용 함수 0x1F67C0 (영웅 + 아레스 두 대상, 레일 NCV_AresCamRail) — 여기서는 근사 ({@link #request(String, Vector3f)}).
+ * AresCamera1 은 원작 전용 함수 0x1F67C0 (영웅 + 아레스 두 대상, 레일 NCV_AresCamRail) — {@link AresCamera} ({@link #request(String, Vector3f...)}).
  */
 public final class CameraRig {
 
@@ -43,8 +43,6 @@ public final class CameraRig {
 	private static final float FRAME = 1 / 60f;
 	/** 원작 전용 처리 카메라 이름 (0x1F38C8 문자열 비교 → 0x1F67C0). */
 	public static final String ARES_CAMERA = "AresCamera1";
-	/** /GlobGame/BAR "Camera Target Weight" (R_PERMK) — 두 번째 대상 쪽으로 주시점을 옮기는 비율. */
-	public static final float ARES_TARGET_WEIGHT = 0.35f;
 
 	/** 카메라 매개 상태 (원작 상태 블록 +0x70..0x94 해당). */
 	public static final class Pose {
@@ -104,6 +102,9 @@ public final class CameraRig {
 		float t = -1;
 		boolean init;
 		float elapsed, blend;
+		/** AresCamera1 상태 (0x1F67C0) 와 그 카메라의 이전 화면. */
+		AresCamera ares;
+		AresCamera.View aresView;
 
 		Shot(LevelData.PlacedCamera cam) {
 			this.cam = cam;
@@ -112,8 +113,10 @@ public final class CameraRig {
 
 	private final LevelData data;
 	private final Map<LevelData.PlacedCamera, CamAnim> anims = new HashMap<>();
-	/** 요청과 함께 온 두 번째 대상 (AresCamera1: 아레스 위치). */
-	private Vector3f focus;
+	/** 요청과 함께 온 추가 대상 (AresCamera1: 아레스 몸, 영웅 관절 vertebrae4, 아레스 관절 BAR01JOCVEC1). */
+	private Vector3f[] focus;
+	/** 이번 틱 영웅 발 위치. */
+	private final Vector3f heroFeet = new Vector3f();
 	private Consumer<String> switchListener;
 	private final List<LevelData.PlacedCamera> active = new ArrayList<>();
 	private final List<LevelData.PlacedCamera> requests = new ArrayList<>();
@@ -179,21 +182,31 @@ public final class CameraRig {
 
 	/** Internal 0x8 SwitchCamera: 이름(RCM_ 접두사 선택)을 이번 갱신의 후보로 넣는다. */
 	public void request(String name) {
-		request(name, null);
+		request(name, (Vector3f[]) null);
 	}
 
 	/**
-	 * 두 번째 대상이 있는 요청. 원작 아레스 클래스(Enemy1 하위 클래스 2, vtable 0x2BB2D0)의 갱신 0x1C3370 이 매 프레임
-	 * SwitchCamera("AresCamera1", 0) 을 부른다 — 그 카메라는 영웅과 아레스를 함께 잡는다.
+	 * 추가 대상이 있는 요청. 원작 아레스 클래스(Enemy1 하위 클래스 2, vtable 0x2BB2D0)의 갱신 0x1C3370 이 매 프레임
+	 * SwitchCamera("AresCamera1", 0) 을 부른다 — 그 카메라는 영웅과 아레스를 함께 잡는다 (대상 슬롯은 0x1F59A0 이 등록).
+	 * targets = [아레스 몸(발) 위치, 영웅 관절 "vertebrae4" 월드, 아레스 관절 "BAR01JOCVEC1" 월드] (뒤 둘은 생략 가능).
 	 */
-	public void request(String name, Vector3f second) {
+	public void request(String name, Vector3f... targets) {
 		LevelData.PlacedCamera c = data.camera(name);
 		if (c != null) {
 			requests.add(c);
-			if (second != null) {
-				focus = new Vector3f(second);
+			if (targets != null && targets.length > 0 && targets[0] != null) {
+				focus = new Vector3f[targets.length];
+				for (int i = 0; i < targets.length; i++) {
+					focus[i] = targets[i] == null ? null : new Vector3f(targets[i]);
+				}
 			}
 		}
+	}
+
+	/** AresCamera1 의 마지막 결과 (검증용, 활성이 아니면 null). */
+	public AresCamera aresState() {
+		Shot s = shots.isEmpty() ? null : shots.getLast();
+		return s == null ? null : s.ares;
 	}
 
 	/** 카메라가 바뀔 때마다 새 카메라 짧은 이름 (원작 전역 이벤트 1037 → EventSensor, 예 ATHN02C AlcWall "SparkCam13"). */
@@ -246,6 +259,7 @@ public final class CameraRig {
 	/** 고정 틱 갱신. hero = 발 위치, heroYaw = 진행 방향(라디안), airborne = 공중. */
 	public void update(float dt, Vector3f hero, float heroYaw, boolean airborne) {
 		prev.set(cur);
+		heroFeet.set(hero);
 		Vector3f t = target(hero, airborne);
 		select(t);
 		// 상태 링: 오래된 것부터 진행, 전환이 끝나면 앞쪽을 버린다 (0x1EF3F0)
@@ -450,21 +464,10 @@ public final class CameraRig {
 		boolean limited = cp.yawRange() < 180 || cp.pitchRange() < 90;
 		Vector3f pivot = new Vector3f(camPos);
 		if (ARES_CAMERA.equalsIgnoreCase(s.cam.def().shortName()) && s.cam.rail() != null) {
-			// AresCamera1 (0x1F67C0) [근사]: 주시점 = 영웅 대상에서 아레스 쪽으로 Camera Target Weight(0.35) 만큼.
-			// 기준점 = 레일(NCV_AresCamRail, 아레나 +z 쪽 반원) 위에서 시선(영웅 − P)과 영웅→아레스 선이 이루는 수평 각이
-			// /GlobGame/BAR "f line angle" 60° 에 가장 가까운 t ("f line symetrical" → 양쪽 허용). 원작 비용 0x1F5C58 은 두 대상의
-			// 화면 각도·가중(50/10/40)까지 보지만 세부 미해석 [근사]
-			Vector3f hero = new Vector3f(t);
-			Vector3f boss = focus != null ? new Vector3f(focus.x, focus.y + TARGET_HEIGHT, focus.z) : null;
-			if (boss != null) {
-				t = new Vector3f(t).lerp(boss, ARES_TARGET_WEIGHT);
-			}
-			s.t = aresRail(s.cam.rail(), hero, boss, s.t);
-			float[] r = new float[3];
-			s.cam.rail().eval(s.t, r);
-			pivot.set(r[0], r[1], r[2]);
-			posMode = true;
-		} else if (railMode && s.cam.rail() != null) {
+			aresSolve(s, p);
+			return;
+		}
+		if (railMode && s.cam.rail() != null) {
 			s.t = railParam(s, t, dYaw, dPitch, limited, dt);
 			float[] r = new float[3];
 			s.cam.rail().eval(s.t, r);
@@ -506,55 +509,35 @@ public final class CameraRig {
 		s.init = true;
 	}
 
-	/** /GlobGame/BAR "f line angle" (R_PERMK). */
-	static final float ARES_LINE_ANGLE = 60f;
-
-	/** AresCamera1 레일 비용: 아레스가 없으면 영웅과의 수평 거리, 있으면 |∠(영웅 − P, 아레스 − 영웅) − f line angle| (수평, 도). */
-	private static float aresCost(NcvCurve rail, float u, Vector3f hero, Vector3f boss) {
-		float[] r = new float[3];
-		rail.eval(u, r);
-		float hx = hero.x - r[0], hz = hero.z - r[2];
-		if (boss == null) {
-			return (float) Math.sqrt(hx * hx + hz * hz);
+	/** AresCamera1 (0x1F67C0): 원작 비용 함수로 레일 t·붐·방향을 풀어 상태에 넣는다 ({@link AresCamera}). */
+	private void aresSolve(Shot s, Pose p) {
+		if (s.ares == null) {
+			s.ares = new AresCamera(s.cam.rail());
+			// 새 상태는 직전 화면에서 시작 (0x1F3A38 상태 초기화)
+			s.aresView = view(cur);
 		}
-		float bx = boss.x - hero.x, bz = boss.z - hero.z;
-		float lh = (float) Math.sqrt(hx * hx + hz * hz), lb = (float) Math.sqrt(bx * bx + bz * bz);
-		if (lh < 1e-3f || lb < 1e-3f) {
-			return 1;
-		}
-		double a = Math.toDegrees(Math.acos(Math.max(-1, Math.min(1, (hx * bx + hz * bz) / (lh * lb)))));
-		return (float) Math.abs(a - ARES_LINE_ANGLE);
+		AresCamera.Targets tg = new AresCamera.Targets();
+		tg.heroBody.set(heroFeet);
+		Vector3f boss = focus != null && focus.length > 0 ? focus[0] : heroFeet;
+		tg.bossBody.set(boss);
+		tg.heroJoint.set(focus != null && focus.length > 1 && focus[1] != null ? focus[1] : new Vector3f(heroFeet).add(0, TARGET_HEIGHT, 0));
+		tg.bossJoint.set(focus != null && focus.length > 2 && focus[2] != null ? focus[2] : new Vector3f(boss).add(0, TARGET_HEIGHT, 0));
+		s.ares.update(tg, s.aresView, view(prev));
+		AresCamera a = s.ares;
+		float d = Math.max(1, a.target.distance(a.eye));
+		p.yaw = a.yaw;
+		p.pitch = a.pitch;
+		p.dist = d;
+		dir(a.yaw, a.pitch, p.target).mul(d).add(a.eye);
+		s.init = true;
 	}
 
-	/** AresCamera1 레일 t: 처음엔 전 구간 표본, 이후 이전 t 에서 지역 탐색 (레일 감쇠 0xA8 = 0 → 바로 따라감). */
-	private static float aresRail(NcvCurve rail, Vector3f hero, Vector3f boss, float prev) {
-		float best = Math.max(0, prev);
-		float bc;
-		if (prev < 0) {
-			bc = Float.MAX_VALUE;
-			for (int i = 0; i <= 128; i++) {
-				float u = rail.tMax() * i / 128;
-				float c = aresCost(rail, u, hero, boss);
-				if (c < bc) {
-					bc = c;
-					best = u;
-				}
-			}
-		}
-		bc = aresCost(rail, best, hero, boss);
-		float step = 0.05f;
-		for (int guard = 0; Math.abs(step) > 0.0005f && guard < 400; guard++) {
-			float n = Math.max(0, Math.min(rail.tMax(), best + step));
-			float c = aresCost(rail, n, hero, boss);
-			if (c < bc) {
-				bc = c;
-				best = n;
-				step *= 1.5f;
-			} else {
-				step *= -0.5f;
-			}
-		}
-		return best;
+	private static AresCamera.View view(Pose p) {
+		AresCamera.View v = new AresCamera.View();
+		p.eye(v.eye);
+		dir(p.yaw, p.pitch, v.fwd);
+		v.depth = p.dist;
+		return v;
 	}
 
 	/** 레일 t: 비용 최소점을 이전 t 에서 지역 탐색 (0x1F1AA0, 0x1F20F0), 감쇠 0xA8 로 따라간다. */

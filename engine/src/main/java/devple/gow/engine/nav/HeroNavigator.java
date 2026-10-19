@@ -204,7 +204,7 @@ public final class HeroNavigator {
 			if ((a & SurfaceAttr.DEATH.bit()) != 0) {
 				listener.deathSurface();
 			}
-			if ((a & SurfaceAttr.WATER.bit()) != 0) {
+			if ((a & SurfaceAttr.WATER.bit()) != 0 && deepWater(p, f.y())) {
 				enterSwim(f.y());
 				return true;
 			}
@@ -542,6 +542,17 @@ public final class HeroNavigator {
 	}
 
 	// ---- 수영 ----
+
+	/**
+	 * 수면 아래에 헤엄 깊이(16) + 4 안쪽으로 단단한 바닥이 있으면 얕은 물 — 헤엄치지 않고 수면 면 위를 걷는다 [추정].
+	 * 헤엄 중 물가 판정(수면 − 20 이상 마른 바닥이면 올라섬)과 같은 기준. 예: ATHN08A/08C 아레스 만은 Water 면(y 1) 아래
+	 * 7.7 에 바다 바닥(y −6.7, TWK /GlobGame/BAR "bay floor" −0.4125·16)이 있어 거인 크레토스가 물을 헤치고 싸운다 —
+	 * 전엔 헤엄 상태로 바닥 아래(y −15)에 갇혔다.
+	 */
+	private boolean deepWater(Vector3f p, float surface) {
+		NavWorld.Floor bed = world.floor(p.x, surface - 0.5f, p.z, SWIM_DEPTH + 4);
+		return bed == null || bed.has(SurfaceAttr.WATER);
+	}
 
 	private void enterSwim(float surface) {
 		state = NavState.SWIM;

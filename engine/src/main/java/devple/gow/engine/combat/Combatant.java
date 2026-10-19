@@ -56,6 +56,8 @@ public final class Combatant {
 	private boolean hitThisMove;
 	private float hitPause;
 	private Hittable target;
+	/** 대상 외에 같은 공격 판정을 받는 개체 (ATHN08B 가족 660: 분신 공격에 휘말림 — CombatFile 661 의 피격 분기 tgt=666). */
+	private Supplier<java.util.List<? extends Hittable>> bystanders = java.util.List::of;
 	private Supplier<Float> damageScale = () -> 1f;
 	private Consumer<String> log = s -> { };
 	/** 애니 이벤트 SOUND(3/40): (이름 해시, 위치). 해시 = TWK 해시 (14 문서). */
@@ -157,6 +159,11 @@ public final class Combatant {
 
 	public Hittable target() {
 		return target;
+	}
+
+	/** 공격 판정을 대상과 함께 받는 개체 목록 (피격자 receive 만, 공격자 HIT_CONFIRM 분기는 대상 적중에서만). */
+	public void setBystanders(Supplier<java.util.List<? extends Hittable>> s) {
+		bystanders = s != null ? s : java.util.List::of;
 	}
 
 	/** 현재 기술에 SCRIPT(8) 이벤트가 있는지 (잡기 미니게임 등 스크립트 템플릿 구동). */
@@ -749,6 +756,11 @@ public final class Combatant {
 	}
 
 	private void attacks(float t) {
+		for (Hittable b : bystanders.get()) {
+			if (b != target && b != null && !b.invulnerable()) {
+				bystanderHits(b, t);
+			}
+		}
 		if (target == null || target.invulnerable()) {
 			return;
 		}
@@ -775,6 +787,32 @@ public final class Combatant {
 			long key = ((long) System.identityHashCode(target) << 16) | a.index();
 			if (hitLog.add(key)) {
 				contact(a);
+			}
+		}
+	}
+
+	/** 대상 아닌 개체 판정: 대상과 같은 부위 히트박스 스윕 (없으면 정면 구). 적중 시 피격자 처리만. */
+	private void bystanderHits(Hittable b, float t) {
+		HitVolumes victim = b.hitVolumes();
+		Vector3f p = owner.position();
+		float yaw = owner.yaw();
+		Vector3f hit = new Vector3f((float) -Math.sin(yaw), 0, (float) -Math.cos(yaw)).mul(reach).add(p);
+		Vector3f bp = b.position();
+		float dx = bp.x - hit.x, dz = bp.z - hit.z;
+		boolean inRange = dx * dx + dz * dz <= hitRadius * hitRadius;
+		for (Attack a : move.attacks()) {
+			if (t < a.start() || t > a.end()) {
+				continue;
+			}
+			boolean real = volumes != null && victim != null && !victim.isEmpty() && volumes.hasPart(a.part());
+			if (!(real ? volumes.sweptHit(a.part(), victim) : inRange)) {
+				continue;
+			}
+			if (hitLog.add(((long) System.identityHashCode(b) << 16) | a.index())) {
+				float dmg = a.damage() * damageScale.get();
+				Vector3f knock = new Vector3f(a.impulse()[0], a.impulse()[1], -a.impulse()[2]).rotateY(owner.yaw());
+				Hittable.Result r = b.receive(a, this, dmg, knock);
+				log.accept(String.format("  휘말림 공격#%d → 피해 %.1f (%s)", a.index(), dmg, r));
 			}
 		}
 	}

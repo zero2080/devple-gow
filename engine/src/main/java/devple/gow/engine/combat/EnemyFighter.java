@@ -53,6 +53,8 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 	public float hp;
 	/** 피격으로 내려갈 수 있는 최저 HP (보스: 1 = 스크립트/자기 피해로만 사망, 원작은 EV_DEATH 분기로 기절 등에 들어감). */
 	public float hpFloor;
+	/** 이 공격자에게서만 피해를 받는다 (null = 모두). ATHN08B 가족: 영웅 공격은 CombatFile 661 의 모든 반응 태그가 (block). */
+	public java.util.function.Predicate<Combatant> damageFrom;
 	private float think = 1f;
 	private Hittable foe;
 	private float deadTime;
@@ -399,6 +401,9 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 
 	@Override
 	public Result receive(Attack attack, Combatant attacker, float damage, Vector3f knock) {
+		if (damageFrom != null && !damageFrom.test(attacker)) {
+			return Result.IGNORED;
+		}
 		if (stone) {
 			// 석상(Brkb, Hit Points 1)은 한 번 맞으면 부서짐 → 소유자 사망 0x405 + Stone Kill 0x416
 			stone = false;

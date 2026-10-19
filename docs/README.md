@@ -33,14 +33,14 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 | 27 | [구현: 통합 게임 씬](27-impl-game-scene.md) | 레벨+크레토스+HUD 동작 |
 | 28 | [구현: ESC 엔티티 런타임 (ScriptWorld)](28-impl-script-world.md) | 센서·발동·이벤트·스폰 완료 (테스트 8) |
 | 29 | [구현: 오디오 런타임 (SoundManager: 그레인 실행기, 3D, 음악 스트림)](29-impl-audio.md) | 완료·게임 연결 (테스트 9) |
-| 30 | [구현: 레벨 카메라 시스템 (CameraRig)](30-impl-camera.md) | 선택·레일·전환 완료 (테스트 5) |
+| 30 | [구현: 레벨 카메라 시스템 (CameraRig)](30-impl-camera.md) | 선택·레일·전환·스크립트/관절 카메라·AresCamera1(0x1F67C0) 완료 |
 | 31 | [구현: 환경 / 이펙트 (안개, 하늘, 비, 물, 파티클, 머티리얼 애니메이션)](31-impl-environment-fx.md) | 1차 완료 (테스트 5, 스크린샷 4레벨) |
 | 33 | [구현: 컷신 재생 (MoviePlayer / MovieScene, JCodec MPEG-2)](33-impl-video.md) | 재생기 완료 (테스트 3, 스크린샷 3) |
 | 34 | [구현: 무기 궤적 / 원작 히트박스 (블레이드 부착, CDV 구, PartType, 스윕 판정)](34-impl-hitboxes.md) | 완료 (테스트 3, 디버그 시트) |
 | 32 | [구현: 원작 적 AI (AiBrain, 결정 트리, 공격 토큰)](32-impl-enemy-ai.md) | 완료 (테스트 8, 적 32종 스모크) |
 | 35 | [구현: 마법 3종(메두사 석화·제우스 투사체·하데스 영혼) / 방향키 선택 / TimedPress·스틱 미니게임](35-impl-magic-minigames.md) | 완료 (테스트 12, 스크린샷 2) |
 | 36 | [검증: 전 레벨 순회 (TraversalVerifier, 레벨 슬롯·Warp·LoadCheck, 볼륨 영역)](36-verify-traversal.md) | 완료 (ATHN01A → OLYMP02 도달, 버그 10 수정, 테스트 18) |
-| 37 | [구현: 보스전 (히드라·메두사 여왕·아레스: 레벨 WAD 보스 리소스, 전투↔스크립트 이벤트 1035/1047/1039/1019/1054, 동기 처형)](37-impl-bosses.md) | 히드라·메두사 완료, 아레스 결말까지 (테스트 11, 스크린샷 8) |
+| 37 | [구현: 보스전 (히드라·메두사 여왕·아레스: 레벨 WAD 보스 리소스, 전투↔스크립트 이벤트 1035/1047/1039/1019/1054, 동기 처형)](37-impl-bosses.md) | 히드라·메두사 완료, 아레스 결말까지 (AresCamera1 원작 비용), ATHN08B 가족 보호. BMI 분석만 |
 | 38 | [구현: 이동 기술 (표면 속성, 벽 오르기·매달리기·사다리·줄·짚라인·수영·균형, R1 오브젝트·밀기, 발판, 이웃 레벨 스크립트)](38-impl-traversal-mechanics.md) | 1차 (주 경로 강제 전환 8 → 6 → 0 (§10: 과제 진행률·MaximumCount·헤드리스 보스전), 테스트 22 + 12) |
 | 39 | [구현: 귀중품(보너스) 메뉴 (FLP_ShellK Treasure 화면, 메시지 900–916 항목·잠금 문자·BonusScroll, 보너스 영상/신들의 시험)](39-impl-bonus-menu.md) | 완료 (테스트 3, 스크린샷 1) |
 | 40 | [구현: 원작 이펙트 GO (이펙트 이름 → GO 인스턴스 → MDL/ANM/FXC/PTC, ANM 타입 10 채널 = FXC 곡선, 부착·수명, PlayFX/Concussion/MFX 템플릿)](40-impl-effects.md) | 마법 4종·적중 피·발소리 먼지 연결 (테스트 5, 스크린샷 7) |

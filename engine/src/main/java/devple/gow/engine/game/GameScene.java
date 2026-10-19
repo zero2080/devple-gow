@@ -351,8 +351,8 @@ public final class GameScene implements Scene {
 					session.sound.play(name);
 				}
 
-				public void requestCamera(String name, Vector3f second) {
-					cameraRig.request(name, second); // 아레스 AresCamera1 (0x1C3370)
+				public void requestCamera(String name, Vector3f... targets) {
+					cameraRig.request(name, targets); // 아레스 AresCamera1 (0x1C3370)
 				}
 			};
 		}
