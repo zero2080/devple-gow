@@ -110,11 +110,19 @@ final class BossRig {
 	private int autoStep, frame;
 	String movie;
 	String warp;
+	/** 헤드리스 이펙트 (레벨 WAD GO), 레벨 충돌, 보스가 등록한 카메라 대상 슬롯, 보스가 낸 소리. */
+	final devple.gow.engine.fx.EffectSystem fx = devple.gow.engine.fx.EffectSystem.headless();
+	devple.gow.engine.level.LevelCollision col;
+	Vector3f cameraSlot;
+	final List<String> sounds = new ArrayList<>();
+	/** 레벨 HUD 변수 (BossFight.hud). */
+	final devple.gow.engine.ui.UiVariables hud = new devple.gow.engine.ui.UiVariables();
 	float time;
 
 	BossRig(String level) throws Exception {
 		Assumptions.assumeTrue(Files.exists(ROM.resolve(level + ".WAD")), "gow-rom 없음");
 		devple.gow.engine.combat.AiTargets.clear(); // 정적 슬롯이 이전 테스트의 영웅/적을 붙잡지 않게
+		EnemyFighter.resetSpawnCount(); // 적 난수 씨앗 = 생성 순번 — 테스트 순서와 무관하게
 		perm = WadFile.load(ROM.resolve("R_PERMK.WAD"));
 		WadFile heroWad = WadFile.load(ROM.resolve("R_HERO0.WAD"));
 		levelWad = WadFile.load(ROM.resolve(level + ".WAD"));
@@ -156,6 +164,7 @@ final class BossRig {
 		};
 		fight = BossDirector.create(level, ROM, perm);
 		LevelData data = new LevelData(levelWad);
+		col = new devple.gow.engine.level.LevelCollision(data.sheets);
 		cam = new devple.gow.engine.level.CameraRig(data);
 		world = new ScriptWorld(data, host, listener());
 		cam.onSwitch(n -> {
@@ -171,7 +180,15 @@ final class BossRig {
 			public ScriptWorld world() { return world; }
 			public CombatScriptBridge bridge() { return bridge; }
 			public void requestCamera(String name, Vector3f... targets) { cam.request(name, targets); }
+			public devple.gow.engine.fx.EffectSystem effects() { return fx; }
+			public devple.gow.engine.level.LevelCollision collision() { return col; }
+			public void cameraTarget(Vector3f p, float w) {
+				cameraSlot = p == null ? null : new Vector3f(p);
+				cam.setTargetSlot(p, w);
+			}
+			public void sound(String name) { sounds.add(name); }
 		};
+		fx.add(levelWad); // 레벨 이펙트 GO (헤드리스: 해석·수명만)
 		grab = new devple.gow.engine.combat.GrabSync(ctl, hero);
 		for (EnemyFactory.Kind k : fight.kinds().values()) {
 			set.attachAll(k.assets().wad());
@@ -332,6 +349,8 @@ final class BossRig {
 			}
 		}
 		fight.update(pad, DT);
+		fight.hud(hud);
+		fx.update(DT, ctl.position);
 		cam.update(DT, ctl.position, ctl.yaw, false);
 		world.tick(DT, ctl.position.x, ctl.position.y, ctl.position.z);
 		pad.next();

@@ -203,6 +203,31 @@ public final class CameraRig {
 		}
 	}
 
+	/**
+	 * 추가 카메라 대상 슬롯 (원작 0x1F3F78: 표 0x304790 10칸, +0x4C 기본 7, +0x48 가중). 판도라 수호자 BMI 생성자 0x1C0378 이 머리 관절
+	 * BMI01JOCHEA1 을 가중 "Camera Target Weight"(0.35)·반지름 "Camera Target Radius"·16 으로 등록한다. CAM 0x10000 카메라의 대상 T
+	 * (0x1F26E8) = bit0 슬롯 가중 평균 — 영웅 기본 슬롯(가중 1, 발 + 24)과 이 슬롯. p == null 이면 지움 (소멸 0x1C06F0 → 0x1F4040).
+	 */
+	public void setTargetSlot(Vector3f p, float weight) {
+		if (p == null || weight <= 0) {
+			slotWeight = 0;
+			return;
+		}
+		slot.set(p);
+		slotWeight = weight;
+	}
+
+	private final Vector3f slot = new Vector3f();
+	private float slotWeight;
+
+	/** CAM 0x10000 이면 영웅 대상과 추가 슬롯의 가중 평균. */
+	private Vector3f multiTarget(Shot s, Vector3f t) {
+		if (slotWeight <= 0 || s.cam == null || (s.cam.def().p().flags() & CameraDef.F_MULTI_TARGET) == 0) {
+			return t;
+		}
+		return new Vector3f(t).add(new Vector3f(slot).mul(slotWeight)).div(1 + slotWeight);
+	}
+
 	/** AresCamera1 의 마지막 결과 (검증용, 활성이 아니면 null). */
 	public AresCamera aresState() {
 		Shot s = shots.isEmpty() ? null : shots.getLast();
@@ -434,6 +459,7 @@ public final class CameraRig {
 	// ---- 카메라 하나 풀기 (0x1F3768 / 0x1F29A0) ----
 
 	private void solve(Shot s, Vector3f t, float heroYaw, float dt) {
+		t = multiTarget(s, t);
 		Pose p = s.pose;
 		if (s.cam == null) {
 			followSolve(s, t, heroYaw, dt);

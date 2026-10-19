@@ -32,4 +32,18 @@ public interface BossArena {
 	 */
 	default void requestCamera(String name, org.joml.Vector3f... targets) {
 	}
+
+	/** 원작 이펙트 GO 재생기 (레벨 WAD 등록됨, 없으면 null — 헤드리스 테스트는 EffectSystem.headless()). */
+	default devple.gow.engine.fx.EffectSystem effects() {
+		return null;
+	}
+
+	/** 레벨 충돌 (투사체·통나무, 없으면 null). */
+	default devple.gow.engine.level.LevelCollision collision() {
+		return null;
+	}
+
+	/** 추가 카메라 대상 슬롯 (CameraRig.setTargetSlot, p == null 이면 지움). BMI 머리 관절 0.35. */
+	default void cameraTarget(org.joml.Vector3f p, float weight) {
+	}
 }

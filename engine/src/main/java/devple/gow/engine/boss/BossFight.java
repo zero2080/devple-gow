@@ -205,6 +205,10 @@ public abstract class BossFight {
 
 	protected abstract void tick(Input in, float dt);
 
+	/** 레벨 HUD 변수 (GameScene, 매 프레임). 클래스 코드가 HUD 를 직접 쓰는 보스만 (BMI EnemyState). */
+	public void hud(devple.gow.engine.ui.UiVariables v) {
+	}
+
 	/** 게임 쪽 연결 (스폰 전에도 데모·이벤트 다리를 쓰도록). */
 	public void attach(BossArena a) {
 		this.arena = a;

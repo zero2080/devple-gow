@@ -31,8 +31,14 @@ public final class AnimatedModel implements AutoCloseable {
 	}
 
 	private final Skeleton skeleton;
-	private final List<Part> parts = new ArrayList<>();
+	private List<Part> parts = new ArrayList<>();
+	private final List<Part> base;
 	private final Shader shader;
+	private final WadAssets assets;
+	private final GowModel model;
+	/** 모델 변형 (원작 모델 컴포넌트 +0x120 강제 LOD) 별 파트, 처음 필요할 때 만든다. −1 = 기본 (거리 LOD 0). */
+	private final java.util.Map<Integer, List<Part>> variants = new java.util.HashMap<>();
+	private int variant = -1;
 
 	public AnimatedModel(WadAssets assets, GowModel model, Skeleton skeleton, Shader skinnedShader) {
 		if (skeleton.size() > MAX_JOINTS) {
@@ -40,7 +46,33 @@ public final class AnimatedModel implements AutoCloseable {
 		}
 		this.skeleton = skeleton;
 		this.shader = skinnedShader;
-		SkinnedModel sm = new SkinnedModel(model, 0, 0);
+		this.assets = assets;
+		this.model = model;
+		build(new SkinnedModel(model, 0, 0), parts);
+		base = parts;
+	}
+
+	/**
+	 * 모델 변형 고르기 (GL 스레드): v ≥ 0 이면 파트마다 그룹 v (비면 그룹 0) — 원작이 클래스 코드로 모델 컴포넌트 +0x120 을 정하는 경우
+	 * (BMI 0x1C1AA8: 단계 0 → 2, 1 → 1, 2+ → 0). −1 = 기본.
+	 */
+	public void setVariant(int v) {
+		if (v == variant) {
+			return;
+		}
+		variant = v;
+		if (v < 0) {
+			parts = base;
+			return;
+		}
+		parts = variants.computeIfAbsent(v, k -> {
+			List<Part> out = new ArrayList<>();
+			build(new SkinnedModel(model, k, 0, true), out);
+			return out;
+		});
+	}
+
+	private void build(SkinnedModel sm, List<Part> parts) {
 		for (SkinnedModel.Part p : sm.parts) {
 			int n = p.pos.size();
 			float[] v = new float[n * SkinnedMesh.STRIDE];
@@ -177,6 +209,7 @@ public final class AnimatedModel implements AutoCloseable {
 
 	@Override
 	public void close() {
-		parts.forEach(p -> p.mesh().close());
+		base.forEach(p -> p.mesh().close());
+		variants.values().forEach(l -> l.forEach(p -> p.mesh().close()));
 	}
 }

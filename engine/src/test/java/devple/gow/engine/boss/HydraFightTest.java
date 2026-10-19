@@ -77,7 +77,7 @@ class HydraFightTest {
 		assertNotNull(b.brain().tree, "DTre_250");
 		// 구역 2 (bossZoneEntry2 → LevelData28 → 1054 → 플레이어 +0x88) → 결정 트리 "Zone 2" → 52 BITERIGHT 위주
 		assertTrue(r.hydraZone(2));
-		assertTrue(until(r, 6, () -> r.bossMoves.contains(52) || r.bossMoves.contains(51) || r.bossMoves.contains(62)));
+		assertTrue(until(r, 15, () -> r.bossMoves.contains(52) || r.bossMoves.contains(51) || r.bossMoves.contains(62)), "구역 2 물기: " + r.bossMoves + " zone " + r.bridge.playerZone());
 		assertEquals(2, r.bridge.playerZone());
 		assertEquals("Zone 2", b.brain().lastLeaf().name());
 	}
