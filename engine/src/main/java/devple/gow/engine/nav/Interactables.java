@@ -36,10 +36,21 @@ public final class Interactables {
 		public final int id;
 		public final String heroAnim, finishAnim, label;
 		public final float radius;
-		/** 진행률 0..1 (CSM/CHEST). */
+		/** 진행률 0..1 (CSM/CHEST/LEVER) = {@link #task} 의 애니 위치 / 길이. */
 		public float progress;
 		public int lastPercent = -1;
 		public boolean done;
+		/** 오브젝트 애니 길이 (초): 과제 진행률의 분모 (원작 0x215928 f13). 애니를 못 찾으면 1 초 [근사]. */
+		public float length = 1f;
+		private TaskProgress task;
+
+		/** 과제 진행 상태 (CSM/CHEST = 과제 id, LEVER = PushPull id 로 1023 을 보낸다). */
+		public TaskProgress task() {
+			if (task == null) {
+				task = new TaskProgress(id, length);
+			}
+			return task;
+		}
 
 		public Item(Kind kind, String owner, Vector3f pos, int template, int id, String heroAnim, String finishAnim, String label, float radius) {
 			this.kind = kind;
@@ -81,10 +92,14 @@ public final class Interactables {
 			float[] w = p.jointWorld()[0];
 			Vector3f pos = new Vector3f(w[12], w[13], w[14]);
 			float r = 24;
+			String anm = null;
 			for (String ref : p.object().refs()) {
 				BallHull h = lv.hulls.get(ref);
 				if (h != null && h.kind == 0) {
 					r = Math.max(12, Math.min(64, h.sphere[3] * p.instance().scale()));
+				}
+				if (ref.startsWith("ANM_")) {
+					anm = ref;
 				}
 			}
 			switch (b.type()) {
@@ -92,15 +107,21 @@ public final class Interactables {
 					String node = String.format("/TweakTemplates/CSM/%03d/", b.template());
 					String anim = tw != null ? tw.sHash(node, CSM_HERO_ANIM, "doorKick") : "doorKick";
 					String label = tw != null ? tw.s(node, "Instance Name", "CSM") : "CSM";
-					out.items.add(new Item(Kind.CSM, p.instance().name(), pos, b.template(), b.id(), anim, null, label, r));
+					Item it = new Item(Kind.CSM, p.instance().name(), pos, b.template(), b.id(), anim, null, label, r);
+					it.length = animLength(lv, anm, tw != null ? tw.sHash(node, CSM_OBJECT_ANIM, null) : null, it.length);
+					out.items.add(it);
 				}
 				case "PushPull" -> {
 					String node = String.format("/TweakTemplates/Push/%03d/", b.template());
 					String label = tw != null ? tw.s(node, "Instance Name", "Push") : "Push";
 					String l = label.toLowerCase(Locale.ROOT);
 					boolean lever = l.contains("crank") || l.contains("lever") || l.contains("leever") || l.contains("puller");
-					out.items.add(new Item(lever ? Kind.LEVER : Kind.PUSH, p.instance().name(), pos, b.template(), b.id(),
-							lever ? (l.contains("crank") ? "crankIdle" : "leverpull") : "pushIdle", null, label, r));
+					Item it = new Item(lever ? Kind.LEVER : Kind.PUSH, p.instance().name(), pos, b.template(), b.id(),
+							lever ? (l.contains("crank") ? "crankIdle" : "leverpull") : "pushIdle", null, label, r);
+					if (lever) {
+						it.length = animLength(lv, anm, null, it.length);
+					}
+					out.items.add(it);
 				}
 				default -> {
 					// IO_TandF / Breakable: 아직 없음
@@ -108,6 +129,29 @@ public final class Interactables {
 			}
 		}
 		return out;
+	}
+
+	/**
+	 * 오브젝트 애니 길이: 이름이 맞는 act (CSM TWK #fea292e6, 예 쌍발차기 문 "Default" 0.9 초), 없으면 가장 긴 act.
+	 * 길이 0 인 act 만 있으면 0 (DEST03 뿔피리 — 붙자마자 완료). ANM 이 없으면 def.
+	 */
+	static float animLength(LevelData lv, String anm, String act, float def) {
+		if (anm == null) {
+			return def;
+		}
+		try {
+			devple.gow.tools.anim.AnimationSet set = devple.gow.tools.anim.AnimationSet.load(lv.wad, anm);
+			float best = -1;
+			for (devple.gow.tools.anim.Animation a : set.all()) {
+				if (act != null && a.name.equalsIgnoreCase(act)) {
+					return a.duration;
+				}
+				best = Math.max(best, a.duration);
+			}
+			return best >= 0 ? best : def;
+		} catch (RuntimeException ex) {
+			return def;
+		}
 	}
 
 	/** Creator "chest" (unk5 = CSM 템플릿, unk6 = 과제 id [추정: ATHN01D Chest4 unk6 = 1, ChestMessage 가 1023 인자 1 == 1 을 기다림]). */

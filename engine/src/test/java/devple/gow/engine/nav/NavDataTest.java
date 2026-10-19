@@ -138,6 +138,28 @@ class NavDataTest {
 		assertEquals(Interactables.Kind.LEVER, pi.byOwner("godoorcrank").kind);
 	}
 
+	/** 과제 진행률의 분모 = 오브젝트 애니 길이 (CSM TWK #fea292e6 act, 없으면 가장 긴 act). 레버도 1023 을 보낸다 (PushPull id). */
+	@Test
+	void taskLengthsFromObjectAnimations() throws Exception {
+		LevelData d = level("ATHN01D");
+		Tweaks tw = new Tweaks();
+		tw.load(d.wad);
+		assertEquals(0.9f, Interactables.of(d, tw).byOwner("gotwinkickdoor").length, 0.01f, "ANM_twinkickdoor \"Default\"");
+		LevelData c = level("PAND00C");
+		Tweaks ct = new Tweaks();
+		ct.load(c.wad);
+		Interactables.Item lever = Interactables.of(c, ct).byOwner("goelevatorlever");
+		assertEquals(Interactables.Kind.LEVER, lever.kind);
+		assertEquals(111, lever.id, "ElevatorLever-LeverProgress: 1023 인자 1 == 111 ∧ 인자 0 == 100");
+		assertEquals(3.667f, lever.length, 0.01f);
+		LevelData h = level("DEST03");
+		Tweaks ht = new Tweaks();
+		ht.load(h.wad);
+		Interactables.Item horn = Interactables.of(h, ht).byOwner("gohorncsm1");
+		assertEquals(1030, horn.id);
+		assertEquals(0f, horn.length, "길이 0 → 붙자마자 100 %");
+	}
+
 	@Test
 	void boxMarkerIsObjectGroup511AndTriggersHadesWarp() throws Exception {
 		LevelData p = level("PAND05B");

@@ -362,4 +362,93 @@ class ScriptWorldTest {
 		n.globalData().put(4, 7);
 		assertEquals(7, main.globalData().get(4));
 	}
+
+	/**
+	 * SpawnEnemy 슬롯 0 = MaximumCount (원작 0x1AC580): ATHN08B 분신 파도는 SpawnEnemy 마다 최대 수(7/8 → 4/5)가 있고, 그 수만큼 죽어야
+	 * "카운터 == 최대" 조건으로 다음 파도가 열린다. 4 파 합 25 = LevelData31 → A07MP05 → Warp(ATHN08C).
+	 */
+	@Test
+	void spawnMaximumCountDrivesWaves() throws Exception {
+		LevelData lv = level("ATHN08B.WAD");
+		Rec r = new Rec();
+		List<String> movies = new ArrayList<>();
+		ScriptListener l = new ScriptListener() {
+			@Override
+			public void spawnEnemy(SpawnRequest q) {
+				r.spawnEnemy(q);
+			}
+
+			@Override
+			public void level(LevelRequest q) {
+				r.level(q);
+			}
+
+			@Override
+			public void movie(String name, int op, int arg) {
+				if (op == 0) {
+					movies.add(name);
+				}
+			}
+		};
+		ScriptWorld w = new ScriptWorld(lv, new ScriptHost(), l);
+		w.start();
+		float[] p = inside(volume(lv, "ENV_beginEvil"));
+		int killed = 0;
+		for (int i = 0; i < 60 * 120 && !movies.contains("A07MP05"); i++) {
+			w.tick(1 / 60f, p[0], p[1], p[2]);
+			if (i % 20 == 0) {
+				for (ScriptActor a : List.copyOf(w.actors())) {
+					if (a.spawner != null && a.group != 60 && a.group != 2 && !a.destroyed()) { // 가족(60)·소리 로더(2) 는 그대로
+						w.destroy(a);
+						killed++;
+					}
+				}
+			}
+		}
+		long wave4 = r.spawns.stream().filter(q -> q.templateId() == 668).count();
+		assertEquals(25, wave4, "4 파 MaximumCount 합 (4×5 + 5)");
+		assertEquals(4 + 46 + 25 + 25, r.spawns.stream().filter(q -> q.templateId() >= 666 && q.templateId() <= 668).count(),
+				"1 파 4 + 2 파 7·7·8·8·8·8 + 3 파 25 + 4 파 25");
+		assertTrue(movies.contains("A07MP05"), "LevelData30 == 31 → winEnt: " + killed + " " + movies);
+		w.postEvent(ScriptWorld.EVENT_MOVIE_DONE, "A07MP05", 0, 0, w.player());
+		w.tick(1 / 60f, p[0], p[1], p[2]);
+		w.tick(1 / 60f, p[0], p[1], p[2]);
+		assertTrue(r.log.contains("level WARP null"), r.log.toString());
+	}
+
+	/**
+	 * 두 레벨 슬롯의 전역 이벤트 공유 (원작 PostEvent 큐 0x303DB8 하나): PAND00D FakeEyeDoor 의 205 (모드 5 송신기) 를
+	 * PAND00C ElevatorHousing-EventSwitchStatue 가 받아 LevelData22 (엘리베이터 동상) 를 켠다.
+	 */
+	@Test
+	void linkedWorldsShareEvents() throws Exception {
+		LevelData c = level("PAND00C.WAD"), d = level("PAND00D.WAD");
+		ScriptHost hc = new ScriptHost();
+		ScriptWorld wc = new ScriptWorld(c, hc, new Rec());
+		ScriptWorld wd = new ScriptWorld(d, ScriptHost.neighbour(hc), new Rec());
+		wc.start();
+		wd.start();
+		wc.linkEvents(wd);
+		assertNotEquals(true, hc.levelData().get(22));
+		wd.postEvent(205, 0, 0, 0, wd.player());
+		wd.tick(1 / 60f, FAR[0], FAR[1], FAR[2]);
+		wc.tick(1 / 60f, FAR[0], FAR[1], FAR[2]);
+		assertEquals(true, hc.levelData().get(22), "PAND00D → PAND00C 이벤트 205");
+	}
+
+	@Test
+	void unlinkedWorldsDoNotShareEvents() throws Exception {
+		LevelData c = level("PAND00C.WAD"), d = level("PAND00D.WAD");
+		ScriptHost hc = new ScriptHost();
+		ScriptWorld wc = new ScriptWorld(c, hc, new Rec());
+		ScriptWorld wd = new ScriptWorld(d, ScriptHost.neighbour(hc), new Rec());
+		wc.start();
+		wd.start();
+		wc.linkEvents(wd);
+		wc.linkEvents(null);
+		wd.postEvent(205, 0, 0, 0, wd.player());
+		wd.tick(1 / 60f, FAR[0], FAR[1], FAR[2]);
+		wc.tick(1 / 60f, FAR[0], FAR[1], FAR[2]);
+		assertNotEquals(true, hc.levelData().get(22));
+	}
 }

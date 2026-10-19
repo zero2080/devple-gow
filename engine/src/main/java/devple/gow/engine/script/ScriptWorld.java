@@ -494,9 +494,34 @@ public final class ScriptWorld {
 		}
 	}
 
-	/** 게임 → 스크립트 이벤트 (예: 501 동영상 끝 (인자 0 = 이름), 1048 붙잡기). 다음 틱에 처리. */
+	/** 게임 → 스크립트 이벤트 (예: 501 동영상 끝 (인자 0 = 이름), 1048 붙잡기). 다음 틱에 처리. 이벤트 짝 월드가 있으면 거기에도. */
 	public void postEvent(int id, Object a0, Object a1, Object a2, ScriptActor sender) {
-		events.add(new Event(id, a0 == null ? 0 : a0, a1 == null ? 0 : a1, a2 == null ? 0 : a2, sender));
+		Event e = new Event(id, a0 == null ? 0 : a0, a1 == null ? 0 : a1, a2 == null ? 0 : a2, sender);
+		events.add(e);
+		if (eventPeer != null) {
+			eventPeer.events.add(e);
+		}
+	}
+
+	/** 같은 전역 이벤트 큐를 쓰는 다른 슬롯 레벨 (null = 혼자). */
+	private ScriptWorld eventPeer;
+
+	/**
+	 * 두 레벨 슬롯의 이벤트를 잇는다: 원작 PostEvent(0x1A8C78) 는 큐 하나(0x303DB8)에 넣고 전달(0x1AAB00)은 모든 엔티티를 돈다 —
+	 * 두 슬롯 엔티티가 같은 목록에 있으므로 한 레벨의 EventTransmitter(모드 5)·게임 이벤트를 다른 레벨 센서도 받는다 [확실: 큐 하나 / 추정: 목록 공유].
+	 * 예 PAND00C EyeDoor 204 → PAND00D FakeEyeDoor 동영상, PAND00D 205 → PAND00C 엘리베이터 동상. other = null 이면 끊음.
+	 */
+	public void linkEvents(ScriptWorld other) {
+		if (eventPeer != null && eventPeer.eventPeer == this) {
+			eventPeer.eventPeer = null;
+		}
+		eventPeer = other;
+		if (other != null) {
+			if (other.eventPeer != null && other.eventPeer != this) {
+				other.eventPeer.eventPeer = null;
+			}
+			other.eventPeer = this;
+		}
 	}
 
 	private static boolean inVolume(ScriptEntity e, ScriptActor a) {
@@ -627,12 +652,22 @@ public final class ScriptWorld {
 		}
 	}
 
-	/** SpawnEnemy (원작 0x1AC850): TemplateId &gt; 0 일 때 엔티티 월드 행렬 위치에 그룹 = Filter 인 액터. */
+	/**
+	 * SpawnEnemy (원작 0x1AC850): TemplateId &gt; 0 일 때 엔티티 월드 행렬 위치에 그룹 = Filter 인 액터.
+	 * 슬롯 0 = <b>MaximumCount</b> (원작 0x1AC580 "MaximumCount %d exceeded (%d)"): 0 이 아니면 이 엔티티가 만든 수(+0x100)가 그 값에 닿은 뒤로는
+	 * 만들지 않는다 [확실: 코드]. 데이터: ATHN08B 분신 4 파도 (2 파 7/8 회 → 3 파 4/5 → 4 파 합 25 = LevelData31), DEST03 세이렌 3×3 = LevelData1 9.
+	 * Respawn 이 이 값으로 끝나지 않으면 카운터 조건(LevelData == 최대)이 지나쳐 다음 파도가 영영 안 나온다.
+	 */
 	private void spawn(ScriptEntity e) {
 		int tpl = intSlot(e, "TemplateId");
 		if (tpl <= 0) {
 			return;
 		}
+		int max = intSlot(e, "MaximumCount");
+		if (max > 0 && e.spawnCount >= max) {
+			return;
+		}
+		e.spawnCount++;
 		ScriptActor a = new ScriptActor(e.group() + "#" + e.id(), intSlot(e, EntitySlots.FILTER), e.position(), e);
 		actors.add(a);
 		listener.spawnEnemy(new ScriptListener.SpawnRequest(e, a, tpl, String.valueOf(slot(e, "Patrol")), e.world.clone()));

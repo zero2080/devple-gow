@@ -8,6 +8,7 @@ import devple.gow.engine.level.LevelCollision;
 import devple.gow.engine.nav.Interactables;
 import devple.gow.engine.nav.NavRope;
 import devple.gow.engine.nav.Platforms;
+import devple.gow.engine.nav.TaskProgress;
 import devple.gow.engine.script.ScriptActor;
 import devple.gow.engine.script.ScriptEntity;
 import devple.gow.engine.script.ScriptHost;
@@ -115,6 +116,8 @@ public final class TraversalVerifier {
 		public final Map<String, Req> loads = new LinkedHashMap<>();
 		public final Set<String> warpLoads = new LinkedHashSet<>();
 		public final Map<String, Req> loadChecks = new LinkedHashMap<>();
+		/** LoadCheck 볼륨(영역) 안의 점들 (월드) — 도착 검사: 대상 레벨 바닥이 볼륨 안에 있는지. */
+		final Map<String, List<float[]>> loadCheckSamples = new LinkedHashMap<>();
 		public Req warp;
 		/** 강제한 게임 이벤트 (EventId → 시도한 인자 수). */
 		public final Map<Integer, Integer> forcedEvents = new TreeMap<>();
@@ -128,6 +131,9 @@ public final class TraversalVerifier {
 		public final List<NavRope> ropes = new ArrayList<>();
 		/** R1 오브젝트 상호작용 (CSM 과제 진행 · 밀기 상자 Marker) — 강제 아님, 실제 게임 동작. */
 		public final List<String> interactions = new ArrayList<>();
+		/** 헤드리스 보스전 단계 기록 / 격파 여부 (보스 레벨만). */
+		public final List<String> bossPhases = new ArrayList<>();
+		public boolean bossDefeated;
 
 		LevelResult(String level) {
 			this.level = level;
@@ -140,6 +146,8 @@ public final class TraversalVerifier {
 	}
 
 	public final Path rom;
+	/** 디버그: 이 레벨을 돌릴 때 요청·동영상·스폰·상호작용을 시간순으로 출력 (시스템 속성 gow.trace = 레벨 이름). */
+	public String trace = System.getProperty("gow.trace");
 	public final Map<String, LevelResult> results = new TreeMap<>();
 	private final WadFile permk;
 	private final MessageTable messages;
@@ -211,6 +219,14 @@ public final class TraversalVerifier {
 		Map<ScriptActor, Float> spawnTime = new HashMap<>();
 		List<String> movieDone = new ArrayList<>();
 		ScriptWorld[] wref = new ScriptWorld[1];
+		Map<String, Target> targetsByName = new HashMap<>();
+		devple.gow.engine.boss.HeadlessBoss[] bossRef = new devple.gow.engine.boss.HeadlessBoss[1];
+		boolean tr = levelName.equalsIgnoreCase(trace);
+		java.util.function.Consumer<String> log = m -> {
+			if (tr) {
+				System.out.printf(Locale.ROOT, "[%s %.1f] %s @ %s%n", levelName, wref[0] == null ? 0 : wref[0].time(), m, currentSource[0]);
+			}
+		};
 
 		ScriptListener listener = new ScriptListener() {
 			@Override
@@ -225,12 +241,16 @@ public final class TraversalVerifier {
 
 			@Override
 			public void level(LevelRequest q) {
+				log.accept("level " + q.op() + " " + q.wad() + " " + q.entry());
 				r.requests.add(q.op() + (q.wad() != null ? " " + q.wad() : "") + (q.entry() != null ? " " + q.entry() : ""));
 				if (q.op() == LevelOp.GOTO) {
 					r.gotos.put(q.entry(), q.pos() != null);
 					r.gotoFrom.putIfAbsent(q.entry(), new Req(player.clone(), currentSource[0], forced[0]));
 					if (q.pos() != null) {
 						System.arraycopy(q.pos(), 0, player, 0, 3);
+						if (bossRef[0] != null) {
+							bossRef[0].moveHero(q.pos()[0], q.pos()[1], q.pos()[2]);
+						}
 					}
 					return;
 				}
@@ -252,6 +272,10 @@ public final class TraversalVerifier {
 					case LOAD_CHECK -> {
 						if (!wad.equals(levelName)) {
 							r.loadChecks.putIfAbsent(wad, req);
+							Target t = targetsByName.get(currentSource[0]);
+							if (t != null) {
+								r.loadCheckSamples.putIfAbsent(wad, volumeSamples(t.volume(), t.region()));
+							}
 						}
 					}
 					case WARP -> {
@@ -279,14 +303,32 @@ public final class TraversalVerifier {
 
 			@Override
 			public void spawnEnemy(SpawnRequest q) {
-				spawned.add(q.actor());
-				spawnTime.put(q.actor(), wref[0].time());
+				log.accept("spawn " + q.templateId() + " " + q.source().name());
 				String key = q.source().name() + "/" + q.templateId();
+				if (bossRef[0] != null && bossRef[0].spawn(q)) {
+					// 보스 리소스 템플릿 (레벨 WAD 안, 37 문서) — 보스전이 맡는다 (죽이지 않음)
+					var k = bossRef[0].fight.kindFor(q.templateId());
+					r.spawns.computeIfAbsent(key, x -> new Spawn(q.source().name(), q.templateId(), "boss",
+							k != null ? bossRef[0].fight.getClass().getSimpleName() + ":" + k.model() : null));
+					return;
+				}
+				if (killMatters(wref[0], q.actor())) {
+					spawned.add(q.actor());
+					spawnTime.put(q.actor(), wref[0].time());
+				}
 				r.spawns.computeIfAbsent(key, k -> resolveSpawn(q, levelKinds, levelTweaks, lv));
 			}
 
 			@Override
+			public void objectEvent(ObjectEvent e) {
+				if (bossRef[0] != null) {
+					bossRef[0].objectEvent(e);
+				}
+			}
+
+			@Override
 			public void movie(String name, int op, int arg) {
+				log.accept("movie " + name + " op " + op);
 				r.movies.put(name, movieExists(name));
 				if (op == 0) {
 					movieDone.add(name);
@@ -303,6 +345,9 @@ public final class TraversalVerifier {
 		};
 		ScriptWorld w = new ScriptWorld(lv, new ScriptHost(), listener);
 		wref[0] = w;
+		if (devple.gow.engine.boss.BossDirector.hostsBoss(levelName)) {
+			bossRef[0] = devple.gow.engine.boss.HeadlessBoss.create(levelName, rom, permk, lv.wad, w);
+		}
 		w.onUnbalanced(r.unbalanced::add);
 		r.entities = w.entities().size();
 		r.savePointCreators = (int) w.entities().stream().filter(e -> e.type() == 11 && "savepoint".equals(w.slot(e, "Name0"))).count();
@@ -328,6 +373,9 @@ public final class TraversalVerifier {
 		List<Target> todo = new ArrayList<>(new LinkedHashSet<>(
 				w.entities().stream().filter(e -> e.volume != null).map(e -> new Target(e.volume, ScriptWorld.regionOf(e))).toList()));
 		r.volumes = todo.size();
+		for (Target t : todo) {
+			targetsByName.putIfAbsent(t.volume().hull().name + (t.region() >= 0 ? "#" + t.region() : ""), t);
+		}
 		Map<Target, float[]> points = new HashMap<>();
 		for (Target v : todo) {
 			float[] p = interior(v.volume(), col, v.region());
@@ -344,7 +392,8 @@ public final class TraversalVerifier {
 		Runnable step = () -> {
 			try {
 				for (String m : movieDone) {
-					w.postEvent(ScriptWorld.EVENT_MOVIE_DONE, m, 0, 0, null);
+					// GameScene 과 같이 보낸 쪽 = 플레이어 (Filter 1 인 …MpegDone 센서, 37 문서 §3.1). 전엔 null 이라 DEST03 d01Mp01 끝이 안 들렸다
+					w.postEvent(ScriptWorld.EVENT_MOVIE_DONE, m, 0, 0, w.player());
 				}
 				movieDone.clear();
 				w.tick(DT, player[0], player[1], player[2]);
@@ -362,8 +411,20 @@ public final class TraversalVerifier {
 		};
 		walk(todo, points, player, currentSource, step, r);
 		r.ropes.addAll(NavRope.of(lv));
-		interact(lv, w, levelTweaks, col, points, player, currentSource, step, r);
-		walk(new ArrayList<>(points.keySet()), points, player, currentSource, step, null);
+		// R1 상호작용 ↔ 보행 2회: 과제가 앞 단계 진행(적 처치·동영상 끝)을 조건으로 하는 레벨이 있다 (DEST03 두 번째 뿔피리 = LevelData3)
+		for (int round = 0; round < 2; round++) {
+			interact(lv, w, levelTweaks, col, points, player, currentSource, step, r);
+			walk(new ArrayList<>(points.keySet()), points, player, currentSource, step, null);
+		}
+		// 전투 마무리: 남은 적(죽이면 스크립트가 반응하는 것)이 다 죽고 재생성(MaximumCount)이 끝날 때까지 — 파도 전투 (ATHN08B 분신 25)
+		currentSource[0] = "(전투)";
+		for (float t = 0, quiet = 0; !spawnTime.isEmpty() && t < COMBAT_MAX && quiet < COMBAT_QUIET; t += DT) {
+			step.run();
+			quiet = spawned.isEmpty() ? quiet + DT : 0; // 다음 파도는 지연(Delay·재생성 0.25 초) 뒤에 나오므로 잠깐 비어도 계속
+		}
+		if (bossRef[0] != null) {
+			bossPhase(bossRef[0], w, player, movieDone, currentSource, step, r);
+		}
 		// 게임 이벤트 강제 2회: 스크립트가 보내지 않는 이벤트(동영상 끝·보스 사망·과제 완료 …)를 조건 상수 조합으로 → 다시 보행
 		Set<Integer> scriptEvents = new HashSet<>();
 		for (ScriptEntity e : w.entities()) {
@@ -452,17 +513,16 @@ public final class TraversalVerifier {
 			currentSource[0] = "R1 " + it.owner;
 			switch (it.kind) {
 				case CSM, CHEST -> {
-					for (int pct = 10; pct <= 100; pct += 10) {
-						w.postEvent(devple.gow.engine.game.SceneNav.EVENT_TASK, pct, it.id, 0, w.player());
-						step.run();
-					}
-					r.interactions.add(it.kind + " " + it.owner + " 과제 " + it.id);
+					runTask(w, it, step);
+					addOnce(r.interactions, it.kind + " " + it.owner + " 과제 " + it.id);
 				}
 				case LEVER -> {
+					// 레버·크랭크 (PushPull): 붙잡기 1048 → 애니 재생 동안 1023 (원작 0x2118E8, 인자 1 = PushPull id) → 놓기 1049
 					w.postEvent(devple.gow.engine.game.SceneNav.EVENT_ATTACH, it.id, 0, 0, w.player());
 					step.run();
+					runTask(w, it, step);
 					w.postEvent(devple.gow.engine.game.SceneNav.EVENT_DETACH, it.id, 0, 0, w.player());
-					r.interactions.add("LEVER " + it.owner + " id " + it.id);
+					addOnce(r.interactions, "LEVER " + it.owner + " id " + it.id);
 				}
 				case PUSH -> {
 					w.postEvent(devple.gow.engine.game.SceneNav.EVENT_ATTACH, it.id, 0, 0, w.player());
@@ -482,7 +542,7 @@ public final class TraversalVerifier {
 							}
 							m.moveTo(was[0], was[1], was[2]);
 							step.run();
-							r.interactions.add("PUSH " + it.owner + " Marker " + m.group + " → " + e.volume.hull().name);
+							addOnce(r.interactions, "PUSH " + it.owner + " Marker " + m.group + " → " + e.volume.hull().name);
 						}
 					}
 					w.postEvent(devple.gow.engine.game.SceneNav.EVENT_DETACH, it.id, 0, 0, w.player());
@@ -493,6 +553,87 @@ public final class TraversalVerifier {
 			for (float t = 0; t < DWELL / 2; t += DT) {
 				step.run();
 			}
+		}
+	}
+
+	/** 전투 마무리 최대 시간 / 적이 없는 채로 기다리는 시간 (마지막 처치 뒤 Delay 6 초 동영상 — ATHN08B winEnt) (초). */
+	static final float COMBAT_MAX = 180, COMBAT_QUIET = 8, BOSS_MAX = 240, BOSS_AFTER = 20;
+
+	/**
+	 * 죽였을 때 스크립트가 반응하는 적인지: DestructionSensor (모드 2 만든 SpawnEnemy 의 GO / 3 Filter 그룹 / 4 볼륨) 또는 만든 SpawnEnemy 의
+	 * Respawn. 반응이 없는 것은 죽이지 않는다 — ATHN08B 가족(660, Filter 60)은 지켜야 하는 대상이라 죽으면 실패 (1035 150 → FailedScreen).
+	 */
+	static boolean killMatters(ScriptWorld w, ScriptActor a) {
+		if (a.spawner != null && Boolean.TRUE.equals(w.slot(a.spawner, "Respawn"))) {
+			return true;
+		}
+		for (ScriptEntity e : w.entities()) {
+			if (e.type() != 3) {
+				continue;
+			}
+			boolean ok = switch (e.mode()) {
+				case 2 -> a.spawner != null && a.spawner.owner == e.owner;
+				case 3 -> intSlot(w, e, "Filter") == 0 || intSlot(w, e, "Filter") == a.group;
+				case 4 -> true;
+				default -> false;
+			};
+			if (ok) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * 보스전 (38 문서 §10.4, 강제 아님): {@link devple.gow.engine.boss.HeadlessBoss} 로 크레토스·보스 전투, 동기 잡기·QTE·마무리 기술을 원본 데이터대로
+	 * 60 Hz 로 돌리고 같은 틱에 스크립트를 영웅 위치로 tick 한다. 보스가 쓰러진 뒤 BOSS_AFTER 초 (컷신 → Warp) 까지.
+	 */
+	private void bossPhase(devple.gow.engine.boss.HeadlessBoss b, ScriptWorld w, float[] player, List<String> movieDone, String[] currentSource,
+			Runnable step, LevelResult r) {
+		float dt = 1 / 60f, after = 0;
+		currentSource[0] = "보스 " + b.fight.getClass().getSimpleName();
+		b.moveHero(player[0], player[1], player[2]);
+		for (float t = 0; t < BOSS_MAX && after < BOSS_AFTER; t += dt) {
+			try {
+				for (String m : movieDone) {
+					w.postEvent(ScriptWorld.EVENT_MOVIE_DONE, m, 0, 0, w.player());
+				}
+				movieDone.clear();
+				b.tick(dt);
+				var p = b.ctl.position;
+				player[0] = p.x;
+				player[1] = p.y;
+				player[2] = p.z;
+				w.tick(dt, p.x, p.y, p.z);
+			} catch (RuntimeException ex) {
+				if (r.exceptions.size() < 20) {
+					r.exceptions.add(String.format(Locale.ROOT, "보스 t=%.1f: %s", w.time(), ex));
+				}
+				break;
+			}
+			if (b.fight.defeated()) {
+				after += dt;
+			}
+		}
+		r.bossPhases.addAll(b.fight.phases);
+		r.bossDefeated = b.fight.defeated();
+	}
+
+	/** 붙어 있는 동안 오브젝트 애니를 끝까지 재생하며 진행률 1023 을 원작 규칙대로 보낸다 ({@link TaskProgress}). */
+	private static void runTask(ScriptWorld w, Interactables.Item it, Runnable step) {
+		TaskProgress tp = new TaskProgress(it.id, it.length);
+		for (int guard = 0; guard < 3000 && !tp.done; guard++) {
+			TaskProgress.Event e = tp.update(true, DT);
+			if (e != null) {
+				w.postEvent(devple.gow.engine.game.SceneNav.EVENT_TASK, e.percent(), e.taskId(), e.speed100(), w.player());
+			}
+			step.run();
+		}
+	}
+
+	private static void addOnce(List<String> l, String s) {
+		if (!l.contains(s)) {
+			l.add(s);
 		}
 	}
 
@@ -965,8 +1106,13 @@ public final class TraversalVerifier {
 					case SEAMLESS -> {
 						float[] p = e.pos();
 						float d = floorDistance(col, p);
+						float[] inVol = d <= WALK_REACH ? null : fallInto(col, new LevelCollision(new LevelData(WadFile.load(rom.resolve(from + ".WAD"))).sheets),
+								results.get(from).loadCheckSamples.get(dst.level));
 						dst.arrivals.add(new Arrival(from, e.kind(), String.format(Locale.ROOT, "(%.0f, %.0f, %.0f) %s", p[0], p[1], p[2],
-								d == 0 ? "바닥 있음" : d < Float.MAX_VALUE ? "대상 바닥까지 " + (int) d : "대상 바닥 없음"), d <= WALK_REACH));
+								d == 0 ? "바닥 있음" : d < Float.MAX_VALUE ? "대상 바닥까지 " + (int) d
+										: inVol != null ? String.format(Locale.ROOT, "LoadCheck 볼륨 (%.0f, %.0f, %.0f) 에서 떠나온 레벨 바닥 구멍으로 %.0f 낙하 → 대상 바닥 %.0f",
+										inVol[0], inVol[1], inVol[2], inVol[3], inVol[1] - inVol[3])
+										: "대상 바닥 없음"), d <= WALK_REACH || inVol != null));
 					}
 					case WARP -> {
 						LevelEntry.Spot t = LevelEntry.resolve(lv, w, null, from);
@@ -993,6 +1139,47 @@ public final class TraversalVerifier {
 				}
 			}
 		}
+	}
+
+	/**
+	 * LoadCheck 볼륨 안의 점 중 떠나온 레벨 바닥에 막히지 않고 대상 레벨 바닥으로 떨어지는 곳 (없으면 null). 반환 {x, y, z, 낙하 거리}.
+	 * 볼륨은 보행 점(떠나온 레벨 바닥) 하나가 아니라 경계 전체를 감싼다: PAND02F ENV_LoadCheckH (y −1610..−1413) 는 PAND02F 바닥(−1528)의
+	 * 구멍 (x 700–720, z 5117–5199) 을 덮고, 그 아래 PAND02H 구덩이 바닥 −1904 로 떨어진다 — 발판이 아니라 낙하가 도착이다.
+	 * GameScene 의 SEAMLESS 판정(다른 슬롯 바닥 600 아래까지)도 같은 낙하를 받는다.
+	 */
+	static float[] fallInto(LevelCollision dst, LevelCollision src, List<float[]> samples) {
+		if (samples == null) {
+			return null;
+		}
+		for (float[] s : samples) {
+			float g = dst.groundHeight(s[0], s[1], s[2], DROP);
+			if (Float.isNaN(g)) {
+				continue;
+			}
+			float f = src.groundHeight(s[0], s[1], s[2], s[1] - g);
+			if (Float.isNaN(f) || f <= g) {
+				return new float[]{s[0], s[1], s[2], s[1] - g};
+			}
+		}
+		return null;
+	}
+
+	/** 볼륨(영역) 안의 격자 점 (월드, 최대 600). */
+	static List<float[]> volumeSamples(LevelData.PlacedVolume v, int region) {
+		List<float[]> out = new ArrayList<>();
+		float[] s = v.hull().sphere, w = new float[3];
+		int n = 14;
+		for (int i = 0; i <= n && out.size() < 600; i++) {
+			for (int j = 0; j <= n; j++) {
+				for (int k = 0; k <= n; k++) {
+					Mat4.transformPoint(v.world(), s[0] + s[3] * (2f * i / n - 1), s[1] + s[3] * (2f * j / n - 1), s[2] + s[3] * (2f * k / n - 1), w);
+					if (in(v, region, w[0], w[1], w[2])) {
+						out.add(w.clone());
+					}
+				}
+			}
+		}
+		return out;
 	}
 
 	/** 이음 전환 지점에서 대상 레벨 바닥까지의 수평 거리 (0 = 바로 아래, MAX = 반경 512 안에 없음). 떠나온 레벨 충돌은 남아 있으므로 가까우면 걸어서 닿는다. */
