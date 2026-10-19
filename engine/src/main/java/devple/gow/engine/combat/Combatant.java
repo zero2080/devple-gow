@@ -88,6 +88,25 @@ public final class Combatant {
 		eventSink = s != null ? s : e -> { };
 	}
 
+	/** 추가 이벤트 구독 (이펙트 등, {@link #onEvent} 와 별개로 여럿). 발동한 애니 이벤트마다 호출. */
+	private final List<Consumer<Event>> eventListeners = new ArrayList<>();
+
+	public void addEventListener(Consumer<Event> l) {
+		eventListeners.add(l);
+	}
+
+	/** 적중 통보 (공격자 쪽 OnContact): 공격, 맞은 대상, 결과. MFX 타격 이펙트용 (40 문서 §6). */
+	@FunctionalInterface
+	public interface ContactListener {
+		void contact(Attack a, Hittable victim, Hittable.Result r);
+	}
+
+	private final List<ContactListener> contactListeners = new ArrayList<>();
+
+	public void addContactListener(ContactListener l) {
+		contactListeners.add(l);
+	}
+
 	public Combatant(CombatData data, Animator anim, CombatOwner owner) {
 		this.data = data;
 		this.anim = anim;
@@ -673,6 +692,9 @@ public final class Combatant {
 				continue;
 			}
 			eventSink.accept(e);
+			for (Consumer<Event> l : eventListeners) {
+				l.accept(e);
+			}
 			switch (e.type()) {
 				case 20 -> stanceTag = e.index(); // SET_1B0: 공격 자세 태그 → 피격자 반응 분기 선택
 				case 3, 40 -> soundSink.accept(e.hash(), owner.position()); // SOUND
@@ -727,7 +749,11 @@ public final class Combatant {
 		float dmg = a.damage() * damageScale.get();
 		// 충격 벡터 (x 좌우, y 상하, z 전후 — 추정) 를 공격자 방향으로 회전
 		Vector3f knock = new Vector3f(a.impulse()[0], a.impulse()[1], -a.impulse()[2]).rotateY(owner.yaw());
+		Hittable victim = target;
 		Hittable.Result r = target.receive(a, this, dmg, knock);
+		for (ContactListener l : contactListeners) {
+			l.contact(a, victim, r);
+		}
 		if (r == Hittable.Result.HIT) {
 			hitThisFrame = hitThisMove = true;
 			if (dmg > 0) {

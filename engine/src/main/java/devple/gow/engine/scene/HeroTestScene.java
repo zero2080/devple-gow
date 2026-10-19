@@ -127,11 +127,16 @@ public final class HeroTestScene implements Scene {
 		}
 		magic = new devple.gow.engine.combat.Magic(tw, player);
 		hudBinding.castable = magic::has;
-		magicFx = new devple.gow.engine.fx.MagicFx();
+		magicFx = new devple.gow.engine.fx.MagicFx(rom);
 		magic.setSink(new devple.gow.engine.combat.Magic.Sink() {
 			@Override
 			public void effect(String name, Vector3f at) {
 				magicFx.effect(name, at);
+			}
+
+			@Override
+			public void concussion(int template, Vector3f at) {
+				magicFx.concussion(template, null, at);
 			}
 
 			@Override
@@ -140,6 +145,15 @@ public final class HeroTestScene implements Scene {
 			}
 		});
 		combat = new Combatant(data, animator, owner());
+		magicFx.bindHero(combat, (j, out) -> {
+			ctl.world(out, 1f);
+			int i = devple.gow.engine.fx.MagicFx.joint(sk, j);
+			if (i < 0) {
+				return false;
+			}
+			out.mul(new org.joml.Matrix4f().set(ctl.animator().pose().world(sk)[i]));
+			return true;
+		});
 		DamageRules rules = new DamageRules(tw);
 		combat.setDamageScale(() -> rules.playerScale(1, 0, bladeLevel, godMode.active()));
 		try {
@@ -223,7 +237,24 @@ public final class HeroTestScene implements Scene {
 		}
 		grid = g.build(GL_LINES);
 		box = new MeshBuilder().box(0, 20, 0, 8, 20, 8, 1, 1, 1).build(GL_TRIANGLES);
-		if (auto == Auto.COMBO) {
+		// 검증용 (40 문서): -Dgow.magicStage=n 마법 단계, -Dgow.script="버튼:시작초:누름초,..." 패드 입력 재생
+		String ms = System.getProperty("gow.magicStage");
+		if (ms != null) {
+			for (int id = 3; id <= 6; id++) {
+				player.level.put(devple.gow.engine.game.Weapon.ofItem(id), Integer.parseInt(ms));
+			}
+			player.mpLevel = 3; // Nuke Points 100 이상
+			player.mp = player.maxMp();
+		}
+		String sc = System.getProperty("gow.script");
+		if (sc != null && !sc.isBlank()) {
+			List<ScriptedInput.Step> st = new ArrayList<>();
+			for (String part : sc.split(",")) {
+				String[] f = part.trim().split(":");
+				st.add(new ScriptedInput.Step(Float.parseFloat(f[1]), Float.parseFloat(f[2]), PadButton.valueOf(f[0].toUpperCase())));
+			}
+			scripted = new ScriptedInput(e.window().handle(), st);
+		} else if (auto == Auto.COMBO) {
 			// □ 다섯 번 (COMBO3A→3E 기대), 이후 △ (COMBO6A)
 			List<ScriptedInput.Step> st = new ArrayList<>();
 			for (int i = 0; i < 5; i++) {
@@ -382,7 +413,7 @@ public final class HeroTestScene implements Scene {
 		if (blades != null) {
 			blades.draw(cam, e.window().aspect(), world, ctl.animator().skeleton(), pose.world(ctl.animator().skeleton()), e.renderer().white());
 		}
-		magicFx.render(cam, e.window().aspect());
+		magicFx.render(cam, e.window().aspect(), e.renderer().white());
 		if (hud != null) {
 			hud.render(e);
 		}

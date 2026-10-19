@@ -66,6 +66,11 @@ public final class Animation {
 	/** 타입 10 f32 채널 트랙 (슬롯 순서). 로케이터 관절 위치로 쓰일 수 있는 것은 bake 때 고른다 ({@link #locatorTrack}). */
 	public final List<AnimTrack> channelTracks = new ArrayList<>();
 	/**
+	 * 타입 10 f32 채널을 상태 디스크립터별로 묶은 것. 이펙트 GO 에서는 디스크립터 순서 = FXC 노드 헤더 +0x0A 링크 번호이고
+	 * 스트림 k = 그 FXC 의 P 블록 k 번째 float (3 퍼짐, 4 속력, 8 초당 생성 수) 를 덮어쓴다 (40 문서 §3).
+	 */
+	public final List<List<AnimTrack>> channelGroups = new ArrayList<>();
+	/**
 	 * 타입 11 (unk10 = 4) 트랙. 이동 트랙(타입 5)이 없는 오브젝트 세트에서는 <b>관절 이동</b>으로 쓴다 [추정, 38 문서 §5]:
 	 * ATHN05D 엘리베이터는 데이터 타입이 [0, 11, 11] 이고 스트림 5/9 (관절 1/2 의 Y) 절대값 138.47 = 바인드 로컬 Y, 이후 가산으로 -52.2 까지
 	 * 내려간다 (발판이 190 내려가 Warp 도착점 WarpFrom4A 높이와 일치).
@@ -114,7 +119,9 @@ public final class Animation {
 			} else if (typeIds[k] == 10) {
 				try {
 					if (sd.unk10 == 4) {
-						channelTracks.addAll(AnimTrack.parse(b, at + sd.offset, sd.trackCount, true));
+						List<AnimTrack> g = AnimTrack.parse(b, at + sd.offset, sd.trackCount, true);
+						channelTracks.addAll(g);
+						channelGroups.add(g);
 					} else if (sd.unk10 == 1) {
 						byteTracks.addAll(parseBytes(b, at + sd.offset, sd.trackCount, sd.frameTime));
 					}
@@ -195,6 +202,37 @@ public final class Animation {
 		byte[] s = new byte[len];
 		b.get(at, s);
 		return new String(s, StandardCharsets.ISO_8859_1);
+	}
+
+	/**
+	 * 채널 묶음 group 의 스트림 stream 값 (시간 t 초, 프레임 사이 선형). 절대 트랙의 [start, start+count−1+hold] 구간만
+	 * 정의되고, 어느 트랙도 덮지 않으면 def. 가산 트랙은 이펙트 채널에 없어 무시한다.
+	 */
+	public float channel(int group, int stream, float t, float def) {
+		if (group < 0 || group >= channelGroups.size()) {
+			return def;
+		}
+		float f = t / frameTime;
+		for (AnimTrack tr : channelGroups.get(group)) {
+			if (tr.additive()) {
+				continue;
+			}
+			int k = -1;
+			for (int i = 0; i < tr.streams().length; i++) {
+				if (tr.streams()[i] == stream) {
+					k = i;
+				}
+			}
+			if (k < 0 || f < tr.start() || f > tr.start() + tr.count() - 1 + tr.hold()) {
+				continue;
+			}
+			float[] v = tr.values()[k];
+			float x = Math.min(f - tr.start(), tr.count() - 1);
+			int i0 = (int) Math.floor(x);
+			int i1 = Math.min(i0 + 1, tr.count() - 1);
+			return v[i0] + (v[i1] - v[i0]) * (x - i0);
+		}
+		return def;
 	}
 
 	/** 프레임 수 (0 프레임 포함). duration/frameTime + 1 과 트랙 끝 프레임 중 큰 값. */

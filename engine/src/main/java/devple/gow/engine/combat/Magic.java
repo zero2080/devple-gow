@@ -30,6 +30,13 @@ public final class Magic {
 		default void hit(Hittable h, float damage) {
 		}
 
+		/**
+		 * Concussion 템플릿 발동 (sub_00191720: 템플릿의 Effect Name 을 Joint Name 위치에, 반경 Start→End 를 Duration 동안,
+		 * Scale X/Y/Z 플래그면 이펙트를 반경으로 늘림). 40 문서 §4.3.
+		 */
+		default void concussion(int template, Vector3f at) {
+		}
+
 		default void petrified(Hittable h) {
 		}
 	}
@@ -165,8 +172,16 @@ public final class Magic {
 		lightning(c, dt);
 	}
 
+	private boolean lightningOn;
+
+	/** 포세이돈의 분노 루프 기술(*lightningloop) 재생 중 — 이펙트 goLightningAttackMain 유지 (40 문서 §5.4). */
+	public boolean lightningOn() {
+		return lightningOn;
+	}
+
 	private void lightning(Combatant c, float dt) {
 		String clip = c.clipName();
+		lightningOn = clip != null && clip.toLowerCase().contains("lightningloop");
 		Hittable t = c.target();
 		if (clip == null || !clip.toLowerCase().contains("lightningloop") || t == null || t.invulnerable()) {
 			acc = 0;
@@ -188,6 +203,7 @@ public final class Magic {
 		Vector3f away = new Vector3f(t.position()).sub(p).normalize()
 				.mul(-tw.f(node, "Ground Impulse Away", -500f));
 		t.receive(LIGHTNING_HIT, c, dmg, away);
+		sink.effect("goLightningSingleBolt", t.position()); // 대상에 내리꽂는 가지 (sub_00195B00 근처 [추정])
 	}
 
 	/** 번개 피격 판정 (반응 종류 0). */

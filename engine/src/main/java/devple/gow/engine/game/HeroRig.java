@@ -285,6 +285,18 @@ public final class HeroRig implements AutoCloseable {
 		magic.update(combat, in, dt);
 	}
 
+	/** 관절 월드 행렬 (영웅 월드 × 관절, 이펙트 부착용). 없는 관절이면 영웅 원점 + false. */
+	public boolean jointWorld(String joint, Matrix4f out) {
+		ctl.world(out, 1f);
+		var sk = ctl.animator().skeleton();
+		int i = devple.gow.engine.fx.MagicFx.joint(sk, joint);
+		if (i < 0) {
+			return false;
+		}
+		out.mul(new Matrix4f().set(ctl.animator().pose().world(sk)[i]));
+		return true;
+	}
+
 	public void draw(Camera cam, float aspect, float alpha, Texture white) {
 		Matrix4f w = ctl.world(new Matrix4f(), alpha);
 		var pose = ctl.animator().pose();

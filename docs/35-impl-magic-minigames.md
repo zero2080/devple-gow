@@ -223,20 +223,19 @@ TWK `/Player/MedusaHead` 의 일부 값은 덤프가 float 로 잘못 보여준�
   검증 `MinigameIconTest` (15개 전부 FLP_HUDK 에 있음, 붙이기/떼기/유지), 화면 `--ui gow-rom/R_PERMK.WAD FLP_HUDK icon:CircleButtonGreek`
   (`work/uirt/icon_circle.png` 화면 위 가운데 ○, `icon_press.png` 왼쪽 아래 연타 버튼).
 
-## 7. 시각 효과 (`fx/MagicFx`, 근사)
-원작 GO 이펙트는 마법 WAD(R_THBLT/R_MEDHD/R_RDEAD)에 FXC/PTC 로 들어 있다 (goBolt/goStdBolt/goBoltHit, goEyeBeam/goMedHeadFlash, goDedRed/goDeadHit/goDeadDie).
-GO 부착과 애니 구동이 미구현이라 같은 색·수명의 파티클로 대신한다.
+## 7. 시각 효과 (`fx/MagicFx` → 원작 이펙트 GO, [40 문서](40-impl-effects.md))
+이전에는 같은 색·수명의 파티클로 근사했다. 이제 원작 GO 이펙트를 마법 WAD(R_MEDHD/R_THBLT/R_RDEAD/R_LGHTN + 단계)와 R_PERMK 에서 읽어
+`EffectSystem` 이 메시(MDL + 오브젝트 애니 + 머티리얼 ANM)와 FXC/PTC 이미터(ANM 타입 10 채널 생성률)로 그린다.
 
-| 효과 | 근사 |
-|---|---|
-| 번개 꼬리 | 노랑→파랑 가산 파티클 |
-| 명중 | 폭발 |
-| 영혼 | 주황 꼬리 |
-| 메두사 광선 | 녹색 원뿔 모드 (반각 ≈ 10°, 15m/초) |
-| 석상 | 회색 먼지 |
-| 파괴 | 회색 파편 (중력) |
+| 효과 | 원작 이펙트 (40 문서 §4.1) | 근사로 남은 것 |
+|---|---|---|
+| 메두사 광선 / 섬광 / Nuke | goEyeBeam (반복, 손), goMedHeadFlash (1회 0.333초), Concussion 템플릿 goMedHeadNuke (반경 확대) | 머리 GO 대신 영웅 rWeapIH |
+| 제우스 | goBolt + goStdBolt 꼬리 (Arrow 템플릿), 명중 goBoltHit | 차지 goBoltChargeUp 미연결 |
+| 하데스 | goDedRed 영혼, goDeadHit, goDeadDie | |
+| 포세이돈 | goLightningAttackMain (루프), 피해 틱 goLightningSingleBolt | goLightningRadius 미연결 |
+| 석상 먼지 / 파괴 | – (원작 *stonedbrk 파편 모델 미구현) | 회색 파티클 그대로 |
 
-스크린샷 (커밋 안 함): `work/shots/35/medusa_beam.png` (광선, 미노타우로스 석화), `stone_shatter.png` (□ 로 파괴).
+데이터가 없으면 (WAD 없음·이름 미해석) 예전 파티클로 대신한다. 근사였던 스크린샷 `work/shots/35/*.png` 는 40 문서 §8 로 대체.
 
 ## 8. 테스트 (헤드리스, 원본 데이터)
 | 테스트 | 검증 |
@@ -252,7 +251,7 @@ GO 부착과 애니 구동이 미구현이라 같은 색·수명의 파티클로
 ## 9. 남은 것
 - 석상 흔들림, `*stonedbrk` 파편 모델, 영웅 석화(적 메두사 EyeAttack).
 - 제우스 차지 연출(boltCharge* 애니 혼합, goBoltChargeUp), 연속 입력 큐 2개, rWeapIH 관절 기준 발사 위치.
-- 원작 FXC/PTC 이펙트를 GO 단위로 붙이기, Wiggle Meter (아이콘 12/13 은 있으나 사용처 미확인).
+- ~~원작 FXC/PTC 이펙트를 GO 단위로 붙이기~~ (40 문서), Wiggle Meter (아이콘 12/13 은 있으나 사용처 미확인).
 - 마법 선택·섬광·차지 버튼 비트(0x10/0x80)의 실제 패드 대응 확인.
 
 ## 9. 아르테미스의 검 (리드, 2026-10-19)

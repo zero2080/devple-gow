@@ -92,6 +92,22 @@ public final class FxResources {
 			return null;
 		}
 
+		/**
+		 * VU 프로그램 3 (연기·불·피 스프라이트) 상수 블록 해석 (40 문서 §3.3): q0 = (1,1,1,0) 표지, q1..q4.w = 회전 범위 (±π, 2π),
+		 * q5 = 색 RGBA 상수항, q6 = 색 RGBA 1차항 (u = 나이/수명, 0x80 = 1.0), q9.xyz = 가속 (월드/초², 필드 합과 같음:
+		 * SKLpart (0,−112,0) = SKLgrav −7×16), q10.w / q11.w = 크기 상수·1차항 [색·가속 확실(데이터 일치), 크기 단위 추정].
+		 *
+		 * @return {r0,g0,b0,a0, dr,dg,db,da, size0, dSize, ax,ay,az} 또는 VU 3 형식이 아니면 null
+		 */
+		public float[] vu3() {
+			if (vuType != 3 || constants.length < 12 || constants[0][0] != 1 || constants[0][1] != 1 || constants[0][2] != 1) {
+				return null;
+			}
+			float[] q5 = constants[5], q6 = constants[6], q9 = constants[9];
+			return new float[]{q5[0], q5[1], q5[2], q5[3], q6[0], q6[1], q6[2], q6[3], constants[10][3], constants[11][3],
+					q9[0], q9[1], q9[2]};
+		}
+
 		private static boolean in(float v) {
 			return v >= 4 && v <= 256;
 		}

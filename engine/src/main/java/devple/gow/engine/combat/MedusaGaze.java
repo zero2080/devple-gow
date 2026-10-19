@@ -155,7 +155,7 @@ public final class MedusaGaze {
 			}
 			String cn = String.format("/TweakTemplates/Concussion/%03d/", e.index());
 			Vector3f at = c.owner().position();
-			sink.effect(tw.s(cn, "Effect Name", "goMedHeadNuke"), at);
+			sink.concussion(e.index(), at); // 이펙트 goMedHeadNuke 는 Concussion 템플릿이 붙인다 (sub_00191720)
 			if ((tw.raw(cn, "Freeze").orElse(0) & 0xFF) == 0) {
 				continue;
 			}
