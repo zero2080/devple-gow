@@ -1,0 +1,12 @@
+plugins {
+	id 'application'
+}
+
+application {
+	mainClass = 'devple.gow.tools.ToolsMain'
+}
+
+run {
+	workingDir = rootProject.projectDir
+	standardInput = System.in
+}

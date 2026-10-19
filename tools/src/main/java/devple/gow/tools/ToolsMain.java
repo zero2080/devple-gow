@@ -1,0 +1,129 @@
+package devple.gow.tools;
+
+import devple.gow.tools.iso.IsoEntry;
+import devple.gow.tools.iso.IsoImage;
+import devple.gow.tools.pak.GowDisc;
+import devple.gow.tools.pak.TocEntry;
+import devple.gow.tools.wad.ResourceType;
+import devple.gow.tools.wad.WadFile;
+import devple.gow.tools.wad.WadTag;
+import devple.gow.tools.wad.WadTagType;
+
+import java.io.BufferedOutputStream;
+import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Arrays;
+
+/**
+ * 분석 도구 진입점.
+ * <pre>
+ *   ./gradlew :tools:run --args="iso-info  P2_gow_kor.iso"
+ *   ./gradlew :tools:run --args="iso-ls    P2_gow_kor.iso"
+ *   ./gradlew :tools:run --args="iso-extract P2_gow_kor.iso work/iso"
+ *   ./gradlew :tools:run --args="pak-ls      P2_gow_kor.iso"
+ *   ./gradlew :tools:run --args="pak-extract P2_gow_kor.iso gow-rom [--all]"   (--all: 동영상 PSS/PSW 포함)
+ *   ./gradlew :tools:run --args="wad-ls gow-rom/ATHN01A.WAD"
+ * </pre>
+ */
+public final class ToolsMain {
+
+	public static void main(String[] args) throws Exception {
+		if (args.length < 2) {
+			System.err.println("usage: <iso-info|iso-ls|iso-extract|pak-ls|pak-extract|wad-ls> <file> [outDir] [--all]");
+			System.exit(1);
+		}
+		String[] rest = Arrays.copyOfRange(args, 1, args.length);
+		switch (args[0]) {
+			case "iso-info" -> isoInfo(rest);
+			case "iso-ls" -> isoLs(rest);
+			case "iso-extract" -> isoExtract(rest);
+			case "pak-ls" -> pakLs(rest);
+			case "pak-extract" -> pakExtract(rest);
+			case "wad-ls" -> wadLs(rest);
+			default -> throw new IllegalArgumentException("unknown command: " + args[0]);
+		}
+	}
+
+	private static void isoInfo(String[] a) throws Exception {
+		try (IsoImage iso = new IsoImage(Path.of(a[0]))) {
+			for (IsoImage.Volume v : iso.volumes()) {
+				System.out.printf("layer %d: base=%d sectors=%d (%.2f GB) system=%s volume=%s%n",
+						v.layer(), v.baseSector(), v.sizeSectors(),
+						v.sizeSectors() * (double) IsoImage.SECTOR / 1e9, v.systemId(), v.volumeId());
+			}
+		}
+	}
+
+	private static void isoLs(String[] a) throws Exception {
+		try (IsoImage iso = new IsoImage(Path.of(a[0]))) {
+			for (IsoEntry e : iso.listAll()) {
+				System.out.printf("L%d %10d %12d %s%s%n", e.layer(), e.lba(), e.size(), e.path(), e.dir() ? "/" : "");
+			}
+		}
+	}
+
+	private static void isoExtract(String[] a) throws Exception {
+		Path out = Path.of(a.length > 1 ? a[1] : "gow-rom");
+		try (IsoImage iso = new IsoImage(Path.of(a[0]))) {
+			for (IsoEntry e : iso.listAll()) {
+				Path dst = out.resolve("L" + e.layer() + e.path());
+				if (e.dir()) {
+					Files.createDirectories(dst);
+					continue;
+				}
+				Files.createDirectories(dst.getParent());
+				if (Files.exists(dst) && Files.size(dst) == e.size()) {
+					continue;
+				}
+				System.out.printf("extract %s (%d bytes)%n", dst, e.size());
+				try (OutputStream os = new BufferedOutputStream(Files.newOutputStream(dst))) {
+					iso.copyTo(e, os);
+				}
+			}
+		}
+	}
+
+	private static void pakLs(String[] a) throws Exception {
+		try (GowDisc disc = new GowDisc(Path.of(a[0]))) {
+			for (TocEntry e : disc.entries()) {
+				System.out.printf("P%d %8d %11d %s%n", e.part() + 1, e.sector(), e.size(), e.name());
+			}
+		}
+	}
+
+	private static void pakExtract(String[] a) throws Exception {
+		Path out = Path.of(a.length > 1 ? a[1] : "gow-rom");
+		boolean all = Arrays.asList(a).contains("--all");
+		Files.createDirectories(out);
+		try (GowDisc disc = new GowDisc(Path.of(a[0]))) {
+			for (TocEntry e : disc.toc().unique().values()) {
+				if (!all && (e.name().endsWith(".PSS") || e.name().endsWith(".PSW"))) {
+					continue;
+				}
+				Path dst = out.resolve(e.name());
+				if (Files.exists(dst) && Files.size(dst) == e.size()) {
+					continue;
+				}
+				System.out.printf("extract %-12s %10d%n", e.name(), e.size());
+				try (OutputStream os = new BufferedOutputStream(Files.newOutputStream(dst))) {
+					disc.copyTo(e, os);
+				}
+			}
+		}
+	}
+
+	private static void wadLs(String[] a) throws Exception {
+		WadFile wad = WadFile.load(Path.of(a[0]));
+		for (WadTag t : wad.tags()) {
+			String extra = "";
+			if (t.tag() == WadTagType.RESOURCE && t.hasData()) {
+				extra = ResourceType.describe(t.magic());
+			} else if (t.tag() == WadTagType.PARAM) {
+				extra = "= " + t.size();
+			}
+			System.out.printf("%08x %s%-10s fl=%-2d size=%-8x %-24s %s%n", t.offset(), "  ".repeat(Math.max(0, t.depth())),
+					WadTagType.name(t.tag()), t.flags(), t.size(), t.name(), extra);
+		}
+	}
+}

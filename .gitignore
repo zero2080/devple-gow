@@ -1,0 +1,11 @@
+# 원본 디스크/추출물 - 저작권 자산이므로 절대 커밋하지 않음
+*.iso
+gow-rom/
+extracted/
+work/
+
+.gradle/
+build/
+.idea/
+*.iml
+.DS_Store
