@@ -81,3 +81,8 @@
 - 스크립트 `PlayMovie`(Entity 함수 13) → `ScriptListener.movie(op 0)` → `MovieScene.play` (씬 스택 위에 올라가 게임 정지, START/× 건너뛰기)
 - 재생 중 음악 정지 → 끝나면 이전 음악 재개 + 스크립트에 이벤트 7 (mpegDone 핸들러, 추정)
 - 새 게임으로 ATHN01A 첫 진입 시 오프닝 `Semo01` (원작 sub_0021efd8)
+
+## 다른 슬롯 레벨 렌더
+원작은 두 레벨 슬롯이 함께 상주하고 둘 다 그린다. `GameScene.loadOther`(LevelLink 이웃 / 숙주 레벨)가 정한 레벨을 렌더 시점에 `LevelScene` 으로 한 번 적재하고
+(`otherScenePending`), 주 레벨 다음에 같은 카메라로 지오메트리만 그린다 (`LevelScene.renderNeighbour` — 하늘·충돌선·이펙트 제외, 그 레벨 자신의 안개 유니폼).
+효과: ATHN02D 메두사 방(= ATHN02C 지오메트리)이 보이고, 이음 전환 경계 너머 다음 레벨(ATHN01A 에서 ATHN01B 배)이 보인다.

@@ -368,6 +368,22 @@ public final class LevelScene implements Scene {
 		}
 	}
 
+	/**
+	 * 다른 슬롯(이웃) 레벨로 그리기: 하늘·충돌선 없이 지오메트리만, 주 레벨이 정한 카메라로. 원작은 두 슬롯 레벨이 함께 상주하며 둘 다 그린다
+	 * (36/37 문서: ATHN02D 메두사 방 = ATHN02C 지오메트리, 이음 전환 경계 너머).
+	 */
+	public void renderNeighbour(Engine e, Camera c) {
+		e.renderer().begin3d(c);
+		fx.beginWorld(e, c, false);
+		tmp.identity();
+		for (Instance i : instances) {
+			if (!i.sky() && !fx.hidden(i)) {
+				e.renderer().draw(i.model(), tmp);
+			}
+		}
+		FxEnvironment.disableFog(e.renderer().basic());
+	}
+
 	@Override
 	public void exit(Engine e) {
 		fx.close();

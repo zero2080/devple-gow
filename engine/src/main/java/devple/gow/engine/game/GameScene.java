@@ -84,6 +84,9 @@ public final class GameScene implements Scene {
 	private final devple.gow.engine.ui.MinigameIcon minigameIcon = new devple.gow.engine.ui.MinigameIcon();
 	private float time;
 	private float messageTimer;
+	/** 다른 슬롯 레벨 렌더 (원작은 두 슬롯 모두 그림). */
+	private LevelScene otherScene;
+	private boolean otherScenePending;
 	/** 표시 중인 메시지 번호 (-1 없음): 닫힐 때 이벤트 1040(번호) 를 플레이어가 보낸다 (원작 0x1B8ECC/0x1B8F98/0x1B9170). */
 	private int messageId = -1;
 	private float stepTimer;
@@ -422,6 +425,7 @@ public final class GameScene implements Scene {
 			return;
 		}
 		otherName = wad;
+		otherScenePending = true; // 렌더 스레드에서 지오메트리 적재 (render)
 		otherCol = null;
 		otherData = null;
 		try {
@@ -1193,6 +1197,7 @@ public final class GameScene implements Scene {
 	public void render(Engine e, float alpha) {
 		updateCamera(alpha);
 		level.render(e, alpha);
+		renderOtherSlot(e);
 		// 캐릭터에도 레벨 안개 (같은 basic.frag 유니폼)
 		var env = level.fx().env();
 		env.applyFog(hero.shader(), cam, e.window().height());
@@ -1218,8 +1223,35 @@ public final class GameScene implements Scene {
 		hud.render(e);
 	}
 
+	/** 다른 슬롯 레벨 지오메트리 (처음 필요할 때 적재, 바뀌면 교체). */
+	private void renderOtherSlot(Engine e) {
+		if (otherScenePending) {
+			otherScenePending = false;
+			if (otherScene != null) {
+				otherScene.exit(e);
+				otherScene = null;
+			}
+			if (otherName != null && Files.exists(session.rom.resolve(otherName + ".WAD"))) {
+				try {
+					LevelScene s = new LevelScene(session.rom.resolve(otherName + ".WAD"), -2, false);
+					s.enter(e);
+					otherScene = s;
+				} catch (RuntimeException ex) {
+					System.out.println("이웃 레벨 렌더 실패 " + otherName + ": " + ex.getMessage());
+				}
+			}
+		}
+		if (otherScene != null) {
+			otherScene.renderNeighbour(e, cam);
+		}
+	}
+
 	@Override
 	public void exit(Engine e) {
+		if (otherScene != null) {
+			otherScene.exit(e);
+			otherScene = null;
+		}
 		session.sound.stopAll();
 		session.sound.unload(level.data().wad.name());
 		kinds.values().stream().filter(k -> k != null).forEach(k -> session.sound.unload(k.assets().wad().name()));
