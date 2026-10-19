@@ -66,6 +66,9 @@ public final class AiBrain {
 	public final Vector3f move = new Vector3f();
 	/** 이번 프레임 바라볼 yaw (NaN = 유지). */
 	public float face = Float.NaN;
+	/** 이번 프레임 이동 목표 점 (3D, 원작 0x1CF9D0 의 목표 — 벽·줄 위에서는 이 점을 벽 평면/줄 방향에 투영). {@link #hasGoal} 이 거짓이면 없음. */
+	public final Vector3f goal = new Vector3f();
+	public boolean hasGoal;
 
 	/** 통계·디버그. */
 	public int attacksStarted, blocksStarted;
@@ -163,7 +166,7 @@ public final class AiBrain {
 		return pauseMs;
 	}
 
-	/** 멀리 있어 달려야 하는지 (대기 반경 × 1.5 바깥). [근사: 원작 걷기/달리기 선택 0x1CF9D0 미분석] */
+	/** 멀리 있어 달려야 하는지 (대기 반경 × 1.5 바깥). 예전 근사 — 이동은 이제 Sold 속도 × 스틱 ({@link EnemyNav}, 32 문서) 이라 쓰지 않는다. */
 	public boolean wantsRun() {
 		return target != null && state == State.COMBAT && target.position().distance(self.pos) > tmpl.waitRadius * 16f * 1.5f;
 	}
@@ -184,6 +187,7 @@ public final class AiBrain {
 	public void update(float dt) {
 		move.zero();
 		face = Float.NaN;
+		hasGoal = false;
 		float ms = dt * 1000f;
 		clockMs += ms;
 		pauseMs = Math.max(0, pauseMs - ms); // 0x1D0F18
@@ -385,7 +389,7 @@ public final class AiBrain {
 	private Vector3f cellPos(int c) {
 		Vector3f tp = target.position();
 		int i = c / GRID - HALF, j = c % GRID - HALF;
-		return new Vector3f(tp.x + i * CELL, self.pos.y, tp.z + j * CELL);
+		return new Vector3f(tp.x + i * CELL, tp.y, tp.z + j * CELL); // 대상 중심 격자 (높이 = 대상, 0x20BFB0)
 	}
 
 	private boolean cellFree(int c) {
@@ -461,7 +465,7 @@ public final class AiBrain {
 				float best = Float.MAX_VALUE;
 				for (int k = 0; k < n; k++) {
 					if (!excluded[k]) {
-						float d = cellPos(k).distance(self.pos);
+						float d = flat(cellPos(k), self.pos);
 						if (d < best) {
 							best = d;
 							chosen = k;
@@ -627,7 +631,7 @@ public final class AiBrain {
 				yield dRow0 < 0 ? -a : a;
 			}
 			case DecisionTree.C_DIST -> len / 16f;
-			case DecisionTree.C_SELF_STATE -> self.onGround() ? 0 : 2; // 적은 벽/로프 이동 없음 → 지상/공중
+			case DecisionTree.C_SELF_STATE -> self.nav().conditionState(); // 자신 owner+0x174: 0 지상 1 벽 2 공중 3 로프 (EnemyNav)
 			case DecisionTree.C_TARGET_STATE -> target.locomotionState(); // 0 지상 1 벽 2 공중 3 로프
 			case DecisionTree.C_IN_FRONT -> dFwd > 0 ? 1 : 0;
 			case DecisionTree.C_ON_SIDE -> dRow0 < 0 ? 1 : 0;
@@ -681,6 +685,8 @@ public final class AiBrain {
 	}
 
 	private void steer(Vector3f p, float speed) {
+		goal.set(p);
+		hasGoal = true;
 		float dx = p.x - self.pos.x, dz = p.z - self.pos.z;
 		float l = (float) Math.hypot(dx, dz);
 		if (l > 4f) {

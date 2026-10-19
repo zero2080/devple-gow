@@ -17,8 +17,21 @@ public final class AiTemplate {
 	/** 0x84 &amp; 0x800 (ff0daf8f): 인지 시 시선 가림 검사 생략 (0x1D2564). */
 	public static final int FLAG_IGNORE_LOS = 0x800;
 
+	/**
+	 * +0x38 이동 능력 비트 (0x18BC30.. 등록, 0x1D08B0 이 owner+0x2DC 로 복사 — 영웅·적 공용 내비게이션이 본다) [확실].
+	 * 이름은 TWK 해시 대조: Climb 1c2da9b5, Balance fad969dc, Fly 00117053, Swim 0a3fba28, Dive 08677814, DiveDash abfacea6,
+	 * Rope 0a1e8412, Pole 09dfff18, Zipline 087bc8d5, LadderSlide 974039af / RopeSlide 82c42e3f, WallPullup 7aa8082a, Jump 0925f0ae.
+	 */
+	public static final int CAP_CLIMB = 0x1, CAP_BALANCE = 0x2, CAP_FLY = 0x8, CAP_SWIM = 0x10, CAP_DIVE = 0x20, CAP_40 = 0x40,
+			CAP_ROPE = 0x100, CAP_POLE = 0x200, CAP_ZIPLINE = 0x400, CAP_800 = 0x800, CAP_SLIDE = 0x4000, CAP_USE = 0x10000,
+			CAP_WALL_PULLUP = 0x20000, CAP_JUMP = 0x100000;
+	/** 줄 잡기 시도 조건 (0x1EC54C: 0x100|0x200|0x400|0x800 중 하나 → 0x1C5C20). */
+	public static final int CAP_ANY_ROPE = CAP_ROPE | CAP_POLE | CAP_ZIPLINE | CAP_800;
+
 	public final int id;
 	public final String node;
+	/** +0x38 이동 능력 ({@link #CAP_CLIMB} 등). 해골 -C (021/023/026/028/030) = Climb·Rope·Pole·Zipline·0x800·0x40·RopeSlide·Jump (021 은 WallPullup 도). */
+	public final int moveCaps;
 	/** +0x28 SoldierTemplate (TWK_Sold_NNN). */
 	public final int soldier;
 	/** +0x3C 결정 트리 번호 (TWK_DTre_NNN, -1 없음). */
@@ -51,6 +64,8 @@ public final class AiTemplate {
 	public final float leashRange;
 	/** +0x60 ScaleCenter / +0x5C ScaleRange (%): 모델 크기 = C/100 + R/100 × (0.5 − rand) (0x1CEE00). */
 	public final float scaleCenter, scaleRange;
+	/** +0x8A (a2c359e9) ms: 벽에서 더 갈 수 없을 때 점프 버튼을 누르기까지의 시간 (0x1CF894 → sub_001CF1C8) [확실: 값 1000 / 추정: 조건]. */
+	public final int pauseMoveMs;
 	/** Circle Health Threshold (65535 = 없음). */
 	public final int circleHp;
 
@@ -70,6 +85,13 @@ public final class AiTemplate {
 				| bit(tw, 0xFC037268, 0x40) | bit(tw, 0xCB247958, 0x100) | bit(tw, 0x55637E92, 0x80)
 				| bit(tw, 0xF17492AE, 0x200) | bit(tw, 0x500A656C, 0x400) | bit(tw, 0x8EB6AF1B, 0x10)
 				| bit(tw, 0xFF0DAF8F, 0x800) | bit(tw, 0x918DE416, 0x1000);
+		moveCaps = bit(tw, 0x1C2DA9B5, CAP_CLIMB) | bit(tw, 0xFAD969DC, CAP_BALANCE) | bit(tw, 0x00117053, CAP_FLY)
+				| bit(tw, 0x0A3FBA28, CAP_SWIM) | bit(tw, 0x08677814, CAP_DIVE) | bit(tw, 0xABFACEA6, CAP_DIVE)
+				| bit(tw, 0x0925F0AE, CAP_JUMP) | bit(tw, 0x112AF47F, CAP_40) | bit(tw, 0x0A1E8412, CAP_ROPE)
+				| bit(tw, 0x09DFFF18, CAP_POLE) | bit(tw, 0x087BC8D5, CAP_ZIPLINE) | bit(tw, 0x27F351D1, CAP_800)
+				| bit(tw, 0x974039AF, CAP_SLIDE) | bit(tw, 0x82C42E3F, CAP_SLIDE) | bit(tw, 0xFF971F92, CAP_USE)
+				| bit(tw, 0x7AA8082A, CAP_WALL_PULLUP) | bit(tw, 0x4ED25AC3, 0x40000) | bit(tw, 0x8CA8E85C, 0x400000);
+		pauseMoveMs = u16(tw, 0xA2C359E9, 1000);
 		block = f(tw, 0x0CADA0CD, 0f);
 		block2 = f(tw, 0xA7082DB6, 0f);
 		dwellMs = u16(tw, 0xA3C5272C, 2000);
