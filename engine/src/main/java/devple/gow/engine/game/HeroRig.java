@@ -101,6 +101,11 @@ public final class HeroRig implements AutoCloseable {
 				return player.hp <= 0 || combat.invulnerable();
 			}
 
+			/** 적 AI 결정 트리가 영웅의 방어 자세·현재 기술을 본다 (17 문서 §3.2). */
+			public Combatant combatant() {
+				return combat;
+			}
+
 			public HitVolumes hitVolumes() {
 				return combat.hitVolumes();
 			}

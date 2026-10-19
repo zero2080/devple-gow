@@ -385,6 +385,7 @@ public final class GameScene implements Scene {
 		float[] w = r.world();
 		f.pos.set(w[12], w[13], w[14]);
 		f.prevPos.set(f.pos);
+		f.setDifficulty(session.difficulty);
 		f.setFoe(hero.hittable());
 		f.combat().onSound((h, p) -> session.sound.play(h, p));
 		f.setIncomingScale(hero::incomingScale);
