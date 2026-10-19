@@ -21,6 +21,8 @@ import java.nio.file.Path;
  *   <li>icon:&lt;이름&gt;: hud + 미니게임 아이콘 심볼 ({@link MinigameIcon#CLIPS}, 예 icon:CircleButtonGreek)</li>
  *   <li>memcard: 메인 메뉴 + 불러오기 메모리카드 화면 ({@link devple.gow.engine.game.MemoryCardFlow}) — 견본 세이브 2개가 든
  *       임시 카드로 파일 선택 화면(23)까지 진행</li>
+ *   <li>bonus: 메인 메뉴 → 귀중품 화면 ({@link devple.gow.engine.game.BonusMenu}, 전부 해금) 에서 커서를 3칸 내린 상태 (--ui-warm 400 이상)
+ *       (영상 선택은 로그만)</li>
  * </ul>
  * 스크린샷이 결정적이도록 enter 에서 warm 틱만큼 미리 진행한다.
  */
@@ -34,6 +36,7 @@ public final class UiScene implements Scene {
 	private PlayerState ps;
 	private final HudBinding hud = new HudBinding();
 	private devple.gow.engine.game.MemoryCardFlow card;
+	private devple.gow.engine.game.BonusMenu bonus;
 
 	public UiScene(Path wad, String flpName, String mode, int warm) {
 		this.wad = wad;
@@ -49,6 +52,23 @@ public final class UiScene implements Scene {
 			if (mode.equals("memcard")) {
 				devple.gow.engine.game.ShellBinding.init(ui.variables(), 0);
 				card = demoCard();
+			} else if (mode.equals("bonus")) {
+				int bits = devple.gow.engine.game.BonusMenu.ALL_UNLOCKED;
+				devple.gow.engine.game.ShellBinding.init(ui.variables(), bits);
+				bonus = new devple.gow.engine.game.BonusMenu(ui.variables(), ui.player().messages(), bits,
+						new devple.gow.engine.game.BonusMenu.Host() {
+							@Override
+							public void playMovie(String name, java.util.function.Consumer<Boolean> done) {
+								System.out.println("[UI] 보너스 영상 " + name);
+								done.accept(false);
+							}
+
+							@Override
+							public void startLevel(String wad) {
+								System.out.println("[UI] 보너스 레벨 " + wad);
+							}
+						});
+				ui.player().addCommandListener(bonus::command);
 			} else if (!mode.equals("menu")) {
 				Path perm = Files.exists(wad.resolveSibling("R_PERMK.WAD")) ? wad.resolveSibling("R_PERMK.WAD") : wad;
 				ps = new PlayerState(GameRules.load(WadFile.load(perm)));
@@ -77,8 +97,15 @@ public final class UiScene implements Scene {
 				HudBinding.write(ps, ui.variables());
 				ui.variables().event("PS2_PSMMenu_Event", 1);
 			}
-			ui.player().pad(0);
+			// bonus: ↓×3 → ○ (귀중품 열기) → ↓×3
+			int[] bonusKeys = {UiPad.DOWN, UiPad.DOWN, UiPad.DOWN, UiPad.CIRCLE, 0, UiPad.DOWN, UiPad.DOWN, UiPad.DOWN};
+			int k = (i - 20) / 45;
+			boolean key = bonus != null && i >= 20 && (i - 20) % 45 == 0 && k < bonusKeys.length;
+			ui.player().pad(key ? bonusKeys[k] : 0);
 			ui.player().tick();
+			if (bonus != null) {
+				bonus.update(1 / 60f);
+			}
 		}
 		if (System.getProperty("gow.ui.dump") != null || System.getenv("GOW_UI_DUMP") != null) {
 			ui.player().dump(System.out::println);
@@ -124,6 +151,9 @@ public final class UiScene implements Scene {
 		ui.update(e);
 		if (card != null) {
 			card.update(dt);
+		}
+		if (bonus != null) {
+			bonus.update(dt);
 		}
 	}
 
