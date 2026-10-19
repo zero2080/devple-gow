@@ -93,3 +93,25 @@ MovieScene.play(engine, "Semo01", () -> {});
 - 옵션 메뉴의 와이드스크린 설정 → `widescreen` 인자 연결.
 - 원작의 건너뛰기 조건 (`0x29D528` 표 3번째 값 0/1/2 가 건너뛰기 모드일 가능성), 페이드 인/아웃.
 - 보너스 메뉴(FLP)에서 Bonus 영상 재생 연결.
+
+## 6. 영상 추출 / 내보내기 (리드, 2026-10-19)
+### 6.1 원본 추출
+`./gradlew :tools:run --args="pak-extract P2_gow_kor.iso gow-rom --all"` → `gow-rom/` 에 PSS 67 + PSW 53 = **120개, 6.1GB** 추출 완료.
+엔진(`MoviePlayer`)은 `gow-rom/NAME.PSS` 를 ISO 보다 먼저 사용한다. 추출본 디코딩 확인: SEMO01 1430 프레임 852 fps, 오류 0.
+
+### 6.2 QuickTime 재생용 .mov 내보내기
+```bash
+./gradlew :tools:run --args="video:export gow-rom SEMO01.PSS work/movies/SEMO01.mov"   # 1개
+./gradlew :tools:run --args="video:export-all gow-rom work/movies"                    # PSS 전부 (--wide 면 PSW)
+```
+| 단계 | 기술 | 이유 |
+|------|------|------|
+| 디코딩 | Java (JCodec MPEG-2, 기존 경로) | 사용자 주 언어, 실시간 28배 |
+| 인코딩 | **Swift 도우미 `tools/native/gowenc.swift` (AVFoundation / VideoToolbox 하드웨어 H.264 High)** | JCodec H.264 인코더는 baseline/CAVLC + 단순 비트레이트 제어라 결과가 크고 느림. 맥 하드웨어 인코더가 효율·호환성(QuickTime 기본 재생) 모두 적합 |
+| 오디오 | PCM 16bit 48kHz 그대로 (AVMutableComposition 패스스루) | 무손실, 재인코딩 불필요 |
+| 화면비 | PSW 는 픽셀 비율 4:3 → 16:9 로 표시 | 애너모픽 (18 문서) |
+
+- 전달 방식: Java 가 I420 프레임을 도우미 stdin 으로, 오디오는 임시 WAV. 도우미가 NV12 픽셀 버퍼로 바꿔 4Mbps H.264 로 쓰고 WAV 와 결합.
+- 도우미가 없거나 소스가 더 새로우면 `swiftc` 로 자동 빌드 (`work/bin/gowenc`). Xcode Command Line Tools 필요.
+- 측정: SEMO01 47.7초 → 2.9초 변환(약 16배속), 29.7MB, 트랙 avc1 640×480 + lpcm. macOS QuickLook 썸네일로 영상 확인.
+- 결과물은 `work/` (git 제외, 저작권 자산).

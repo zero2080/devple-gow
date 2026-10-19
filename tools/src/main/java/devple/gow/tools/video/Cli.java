@@ -25,6 +25,8 @@ import java.util.Map;
  *   video:frames  &lt;iso|file&gt; NAME.PSS &lt;outDir&gt; t1 t2 ...   해당 시각(초) 프레임 PNG
  *   video:bench   &lt;iso|file&gt; NAME.PSS [초]           디코딩 속도 (fps)
  *   video:wav     &lt;iso|file&gt; NAME.PSS &lt;out.wav&gt;      오디오 트랙 WAV
+ *   video:export  &lt;iso|dir&gt; NAME.PSS &lt;out.mov&gt;       QuickTime 재생용 .mov (H.264 하드웨어 + PCM)
+ *   video:export-all &lt;dir&gt; &lt;outDir&gt; [--wide]          전부 변환 (기본 PSS, --wide 면 PSW). 이미 있으면 건너뜀
  * </pre>
  */
 public final class Cli {
@@ -62,6 +64,39 @@ public final class Cli {
 			case "bench" -> {
 				try (MovieSource s = open(a[1], a[2])) {
 					bench(s, a.length > 3 ? Double.parseDouble(a[3]) : 1e9);
+				}
+			}
+			case "export" -> {
+				Path helper = MovieExporter.helper(Path.of("").toAbsolutePath());
+				try (MovieSource s = open(a[1], a[2])) {
+					long t0 = System.nanoTime();
+					int n = MovieExporter.export(s, Path.of(a[3]), helper, a[2].toUpperCase().endsWith(".PSW"));
+					System.out.printf("%s → %s: %d 프레임, %.1f초%n", a[2], a[3], n, (System.nanoTime() - t0) / 1e9);
+				}
+			}
+			case "export-all" -> {
+				Path helper = MovieExporter.helper(Path.of("").toAbsolutePath());
+				boolean wide = List.of(a).contains("--wide");
+				Path outDir = Path.of(a[2]);
+				Files.createDirectories(outDir);
+				List<Path> files;
+				try (var st = Files.list(Path.of(a[1]))) {
+					files = st.filter(f -> f.getFileName().toString().toUpperCase().endsWith(wide ? ".PSW" : ".PSS")).sorted().toList();
+				}
+				int i = 0;
+				for (Path f : files) {
+					i++;
+					String base = f.getFileName().toString().replaceFirst("\\.[^.]+$", "");
+					Path out = outDir.resolve(base + (wide ? "_wide" : "") + ".mov");
+					if (Files.exists(out)) {
+						continue;
+					}
+					long t0 = System.nanoTime();
+					try (MovieSource s = MovieSource.ofFile(f)) {
+						int n = MovieExporter.export(s, out, helper, wide);
+						System.out.printf("[%d/%d] %s: %d 프레임, %.1f초, %.1f MB%n", i, files.size(), out.getFileName(), n,
+								(System.nanoTime() - t0) / 1e9, Files.size(out) / 1e6);
+					}
 				}
 			}
 			case "wav" -> {
