@@ -40,6 +40,7 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 | 32 | [구현: 원작 적 AI (AiBrain, 결정 트리, 공격 토큰)](32-impl-enemy-ai.md) | 완료 (테스트 8, 적 32종 스모크) |
 | 35 | [구현: 마법 3종(메두사 석화·제우스 투사체·하데스 영혼) / 방향키 선택 / TimedPress·스틱 미니게임](35-impl-magic-minigames.md) | 완료 (테스트 12, 스크린샷 2) |
 | 36 | [검증: 전 레벨 순회 (TraversalVerifier, 레벨 슬롯·Warp·LoadCheck, 볼륨 영역)](36-verify-traversal.md) | 완료 (ATHN01A → OLYMP02 도달, 버그 10 수정, 테스트 18) |
+| 38 | [구현: 이동 기술 (표면 속성, 벽 오르기·매달리기·사다리·줄·짚라인·수영·균형, R1 오브젝트·밀기, 발판, 이웃 레벨 스크립트)](38-impl-traversal-mechanics.md) | 1차 (주 경로 강제 전환 8 → 6, 테스트 22) |
 | 90 | [현황 / 로드맵](90-status-roadmap.md) | 수시 갱신 |
 
 ## 게임 실행

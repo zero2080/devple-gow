@@ -15,7 +15,7 @@ import java.util.List;
  *                         +0x30 u32 PartType (exe 프로퍼티 "PartType" 0x1BED34 — 공격 판정 부위 번호, 10 문서 §5.4)
  *                     [1] u8 ball별 관절 번호 (0x13AAA8: 소유 오브젝트 관절 행렬로 포즈)  [2] u8 ball별 ?(접촉 +0x38)
  *                     [3] u8 ball별 재질 엔트리 번호  [4] vec4 ball (x, y, z, r)
- *                     [5] u8 hull별 평면 수  [6][7] 미상  [8] vec4 hull 중심
+ *                     [5] u8 hull별 평면 수  [6] u8 hull별 관절  [7] u8 hull별 영역  [8] vec4 hull 중심
  *                     [9] u8 평면별 이름 번호(CMV: 활성화할 카메라 RCM_x)  [10] vec4 평면 (n, d)
  * 내부 판정: ball 안 (|p - c| &lt;= r) 이거나, hull 의 모든 평면에 대해 n·p + d &lt;= 0
  *   (n 은 관절 스케일이 반영된 비정규 벡터일 수 있음 — 부호 판정이므로 로컬 좌표에서 그대로 쓴다)
@@ -39,6 +39,8 @@ public final class BallHull {
 	public final int[] ballMaterial;
 	/** ball / hull 별 영역 번호 (off[2] / off[7] u8). ENV 에서는 진입·이탈 센서 엔티티의 영역 ID(원본 0x4A)와 짝 (13 문서 §1, 36 문서 §2). */
 	public final int[] ballRegion, hullRegion;
+	/** hull 별 관절 번호 (off[6] u8) — hull 평면·중심은 이 관절 로컬 좌표 (예 ATHN05D 엘리베이터 CDV: hull 0 = 관절 2, hull 1 = 관절 1). */
+	public final int[] hullJoint;
 	/** 재질 엔트리별 PartType (+0x30, 엔트리 크기 0x34 미만이면 0). 히어로 몸 1, 오른발 7, extra1 9 / 블레이드 2, 쌍 11. */
 	public final int[] materialPart;
 
@@ -75,11 +77,13 @@ public final class BallHull {
 		ballMaterial = new int[ballCount];
 		ballRegion = new int[ballCount];
 		hullRegion = new int[hullCount];
+		hullJoint = new int[hullCount];
 		for (int b = 0; b < ballCount; b++) {
 			ballRegion[b] = off[2] + b < d.limit() ? d.get(off[2] + b) & 0xFF : 0;
 		}
 		for (int h = 0; h < hullCount; h++) {
 			hullRegion[h] = off[7] + h < d.limit() ? d.get(off[7] + h) & 0xFF : 0;
+			hullJoint[h] = off[6] + h < d.limit() ? d.get(off[6] + h) & 0xFF : 0;
 		}
 		for (int b = 0; b < ballCount; b++) {
 			if (off[1] + b < d.limit()) {

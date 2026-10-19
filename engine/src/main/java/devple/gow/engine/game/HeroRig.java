@@ -42,6 +42,8 @@ public final class HeroRig implements AutoCloseable {
 	public final DamageRules rules;
 	public final devple.gow.engine.combat.Magic magic;
 	public int difficulty = 1;
+	/** 기어오르기·줄·밀기 등 (38 문서). null 이면 기존 지상/공중 이동만. */
+	public devple.gow.engine.nav.HeroNavigator nav;
 	private final AnimatedModel model;
 	/** 혼돈의 블레이드 (lWeapOH/rWeapOH 부착, 34 문서). 없으면 null. */
 	private final devple.gow.engine.asset.BladeModels blades;
@@ -206,16 +208,30 @@ public final class HeroRig implements AutoCloseable {
 		};
 	}
 
-	/** 한 틱: 전투 → (기술 중이면 루트 모션, 아니면 이동) → 신 모드 → 히트 카운터. */
+	/** 한 틱: 전투 → (내비게이션 상태면 내비게이터, 기술 중이면 루트 모션, 아니면 이동) → 신 모드 → 히트 카운터. */
 	public void update(Input in, float camYaw, float dt, Vector3f aimTarget) {
-		combat.update(in, dt);
-		if (!combat.active() && in.pressed(PadButton.CROSS)) {
-			ctl.jump(Math.hypot(in.leftX(), in.leftY()) > 0.3);
+		boolean navActive = nav != null && nav.active();
+		if (!navActive) {
+			combat.update(in, dt);
 		}
-		if (combat.active()) {
-			ctl.updateCombat(combat, in, camYaw, dt, aimTarget);
+		if (nav != null && !combat.active()) {
+			ctl.beginTick();
+			if (nav.update(in, camYaw, dt)) {
+				ctl.navTick(dt);
+				navActive = true;
+			}
+		}
+		if (navActive) {
+			// 매달림·줄·밀기 중에는 전투·점프 입력 없음 [근사: 원작 줄 공격 기술은 미구현]
 		} else {
-			ctl.update(in, camYaw, dt);
+			if (!combat.active() && in.pressed(PadButton.CROSS)) {
+				ctl.jump(Math.hypot(in.leftX(), in.leftY()) > 0.3);
+			}
+			if (combat.active()) {
+				ctl.updateCombat(combat, in, camYaw, dt, aimTarget);
+			} else {
+				ctl.update(in, camYaw, dt);
+			}
 		}
 		boolean godPress = (in.pressed(PadButton.L3) && in.held(PadButton.R3)) || (in.pressed(PadButton.R3) && in.held(PadButton.L3));
 		godMode.update(combat, godPress, bladeLevel(), player.hp, dt);

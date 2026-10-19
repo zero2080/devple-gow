@@ -42,7 +42,7 @@ public class ScriptHost extends GameScriptHost {
 	private final PlayerState player;
 	private final Random random = new Random(1);
 	/** 이미 초기화한 GlobalData 엔티티 이름 (게임 전체에서 한 번). */
-	final Set<String> initedGlobals = new HashSet<>();
+	final Set<String> initedGlobals;
 	ScriptListener listener = new ScriptListener() {
 	};
 	ScriptWorld world;
@@ -53,6 +53,21 @@ public class ScriptHost extends GameScriptHost {
 		super(flow, player);
 		this.flow = flow;
 		this.player = player;
+		this.initedGlobals = new HashSet<>();
+	}
+
+	private ScriptHost(ScriptHost main) {
+		super(main.flow, main.player, main.globalData());
+		this.flow = main.flow;
+		this.player = main.player;
+		this.initedGlobals = main.initedGlobals;
+	}
+
+	/**
+	 * 이웃 레벨 스크립트용 호스트: GlobalData·초기화 기록은 공유, LevelData 는 따로 (원작은 레벨 슬롯마다 LevelData 엔티티).
+	 */
+	public static ScriptHost neighbour(ScriptHost main) {
+		return new ScriptHost(main);
 	}
 
 	public ScriptHost() {

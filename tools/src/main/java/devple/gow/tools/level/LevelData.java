@@ -66,10 +66,15 @@ public final class LevelData {
 	public final Map<String, NcvCurve> curves = new LinkedHashMap<>();
 	public final List<PlacedVolume> volumes = new ArrayList<>();
 	public final List<PlacedCamera> placedCameras = new ArrayList<>();
+	/** GO 인스턴스 이름 → 줄 설정 (SCR_RopeSkinned). */
+	public final Map<String, RopeDef> ropes = new LinkedHashMap<>();
+	/** GO 인스턴스 이름 → 비헤이비어 (IO_CSM / PushPull / IO_TandF / Breakable). */
+	public final Map<String, GoBehavior> behaviors = new LinkedHashMap<>();
 
 	public LevelData(WadFile wad) {
 		this.wad = wad;
 		this.layout = new LevelLayout(wad);
+		String lastGo = null;
 		for (WadTag t : wad.tags()) {
 			if (t.tag() == WadTagType.MESH_EXTRA && t.hasData() && NcvCurve.is(t.name())) {
 				curves.putIfAbsent(t.name(), NcvCurve.parse(t.name(), t.data()));
@@ -79,6 +84,19 @@ public final class LevelData {
 				continue;
 			}
 			ByteBuffer d = t.data();
+			// GO CXT 바로 뒤 (같은 그룹) 의 SCR/BHV 는 그 GO 의 설정
+			if (t.magic() == GoInstance.MAGIC && d.limit() == 0x5C) {
+				lastGo = t.name().trim();
+				continue;
+			}
+			if (lastGo != null && RopeDef.is(t.name(), d)) {
+				ropes.putIfAbsent(lastGo, RopeDef.parse(lastGo, d));
+				continue;
+			}
+			if (lastGo != null && t.magic() == 0x17 && GoBehavior.is(d)) {
+				behaviors.putIfAbsent(lastGo, GoBehavior.parse(lastGo, d));
+				continue;
+			}
 			if (t.magic() == 0x11) {
 				if (CollisionSheet.is(d)) {
 					sheets.add(new CollisionSheet(t.name(), d));

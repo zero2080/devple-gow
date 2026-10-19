@@ -1,6 +1,8 @@
 package devple.gow.engine.level;
 
 import devple.gow.tools.level.CollisionSheet;
+import devple.gow.tools.level.SheetSurface;
+import devple.gow.tools.level.SurfaceAttr;
 import org.joml.Vector3f;
 
 import java.util.ArrayList;
@@ -17,6 +19,8 @@ import java.util.Map;
  *   col.collideSphere(center, radius);                         // 벽 밀어내기 (center 수정, 밀린 경우 true)
  * </pre>
  * 바닥/벽 구분은 면 법선 Y: {@link #FLOOR_NY} 이상이면 바닥, 그 밖은 벽/천장.
+ * 면마다 시트 표면 속성 ({@link SurfaceAttr}: Ground/Water/Climbable/Ladder/Narrow/Death …, 38 문서 §1) 이 붙는다.
+ * <b>NoPlayerCollision</b> 면 (AI 전용 길, 투명 벽 등) 은 영웅 질의(바닥·벽)에서 뺀다.
  */
 public final class LevelCollision {
 
@@ -24,15 +28,42 @@ public final class LevelCollision {
 	public static final float FLOOR_NY = 0.7f;
 	private static final float CELL = 32f;
 
-	/** 월드 삼각형. n = 단위 법선, surface = 시트 표면(머티리얼) 번호. */
-	public record Tri(Vector3f a, Vector3f b, Vector3f c, Vector3f n, int surface) {
+	/** 월드 삼각형. n = 단위 법선, surface = 시트 표면(머티리얼) 번호, attrs = 표면 속성 마스크, info = 표면 레코드 (없으면 null). */
+	public record Tri(Vector3f a, Vector3f b, Vector3f c, Vector3f n, int surface, long attrs, SheetSurface info) {
+
+		/** 속성만 주는 삼각형 (테스트·합성 충돌용). 법선 = (b-a)×(c-a). */
+		public static Tri of(Vector3f a, Vector3f b, Vector3f c, SurfaceAttr... attrs) {
+			long m = 0;
+			for (SurfaceAttr x : attrs) {
+				m |= x.bit();
+			}
+			Vector3f n = new Vector3f(b).sub(a).cross(new Vector3f(c).sub(a)).normalize();
+			return new Tri(a, b, c, n, 0, m, null);
+		}
 
 		public boolean floor() {
 			return Math.abs(n.y) >= FLOOR_NY;
 		}
+
+		public boolean has(SurfaceAttr x) {
+			return (attrs & x.bit()) != 0;
+		}
+
+		/** 영웅이 부딪히는 면인지 (NoPlayerCollision 아님). */
+		public boolean solidForPlayer() {
+			return (attrs & SurfaceAttr.NO_PLAYER_COLLISION.bit()) == 0;
+		}
 	}
 
 	public record Hit(float distance, Vector3f point, Tri tri) {
+	}
+
+	/** 바닥 질의 결과: 높이 + 그 면 (표면 속성). */
+	public record Floor(float y, Tri tri) {
+
+		public boolean has(SurfaceAttr a) {
+			return tri != null && tri.has(a);
+		}
 	}
 
 	private final List<Tri> tris = new ArrayList<>();
@@ -47,9 +78,17 @@ public final class LevelCollision {
 					continue;
 				}
 				n.normalize();
-				add(new Tri(a, b, c, n, t[3]));
+				SheetSurface info = s.surface(t[3]);
+				add(new Tri(a, b, c, n, t[3], info != null ? info.attrs() : SurfaceAttr.GROUND.bit(), info));
 			}
 		}
+	}
+
+	/** 삼각형 목록으로 (테스트·합성 충돌). */
+	public static LevelCollision of(List<Tri> tris) {
+		LevelCollision c = new LevelCollision(List.of());
+		tris.forEach(c::add);
+		return c;
 	}
 
 	private static Vector3f v(float[] p) {
@@ -75,6 +114,11 @@ public final class LevelCollision {
 
 	public List<Tri> triangles() {
 		return tris;
+	}
+
+	/** XZ 사각 영역에 걸친 삼각형 (중복 가능) — 기어오르기 면 탐색 등. */
+	public List<Tri> near(float minX, float minZ, float maxX, float maxZ) {
+		return candidates(minX, minZ, maxX, maxZ);
 	}
 
 	/** XZ 사각 영역에 걸친 후보 삼각형 (중복 가능). */
@@ -104,17 +148,36 @@ public final class LevelCollision {
 	 * @return 바닥 y, 없으면 NaN
 	 */
 	public float groundHeight(float x, float y, float z, float maxDrop) {
+		Floor f = floorAt(x, y, z, maxDrop);
+		return f == null ? Float.NaN : f.y;
+	}
+
+	/** {@link #groundHeight} 와 같은 규칙으로 바닥 면까지 (표면 속성 질의). 없으면 null. */
+	public Floor floorAt(float x, float y, float z, float maxDrop) {
 		float best = Float.NaN;
+		Tri bt = null;
 		for (Tri t : candidates(x, z, x, z)) {
-			if (t.n.y < FLOOR_NY && t.n.y > -FLOOR_NY) {
+			if (t.n.y < FLOOR_NY && t.n.y > -FLOOR_NY || !t.solidForPlayer()) {
 				continue;
 			}
 			float h = heightAt(t, x, z);
 			if (!Float.isNaN(h) && h <= y + 1e-3f && h >= y - maxDrop && (Float.isNaN(best) || h > best)) {
 				best = h;
+				bt = t;
 			}
 		}
-		return best;
+		return bt == null ? null : new Floor(best, bt);
+	}
+
+	/** 점 (x, y, z) 아래 바닥의 표면 속성 마스크 (없으면 0). */
+	public long surfaceAt(float x, float y, float z, float maxDrop) {
+		Floor f = floorAt(x, y, z, maxDrop);
+		return f == null ? 0 : f.tri.attrs;
+	}
+
+	/** 반직선이 처음 만나는 벽(바닥이 아닌 면, 영웅 충돌 면). 기어오르기·매달리기 판정용. */
+	public Hit wallcast(Vector3f o, Vector3f dir, float maxDist) {
+		return raycast(o, dir, maxDist, t -> !t.floor() && t.solidForPlayer());
 	}
 
 	/** 삼각형 평면의 (x, z) 높이, 삼각형 XZ 투영 밖이면 NaN. */
@@ -136,10 +199,18 @@ public final class LevelCollision {
 
 	/** 반직선 캐스트 (Möller–Trumbore, 양면). dir 은 정규화하지 않아도 된다. */
 	public Hit raycast(Vector3f o, Vector3f dir, float maxDist) {
+		return raycast(o, dir, maxDist, t -> true);
+	}
+
+	/** 조건에 맞는 면만 보는 반직선 캐스트. */
+	public Hit raycast(Vector3f o, Vector3f dir, float maxDist, java.util.function.Predicate<Tri> filter) {
 		Vector3f d = new Vector3f(dir).normalize();
 		Vector3f e = new Vector3f(o).fma(maxDist, d);
 		Hit best = null;
 		for (Tri t : candidates(Math.min(o.x, e.x), Math.min(o.z, e.z), Math.max(o.x, e.x), Math.max(o.z, e.z))) {
+			if (!filter.test(t)) {
+				continue;
+			}
 			float dist = intersect(o, d, t);
 			if (dist >= 0 && dist <= maxDist && (best == null || dist < best.distance)) {
 				best = new Hit(dist, new Vector3f(o).fma(dist, d), t);
@@ -181,7 +252,7 @@ public final class LevelCollision {
 		for (int iter = 0; iter < 3; iter++) {
 			boolean any = false;
 			for (Tri t : candidates(center.x - radius, center.z - radius, center.x + radius, center.z + radius)) {
-				if (t.floor()) {
+				if (t.floor() || !t.solidForPlayer()) {
 					continue;
 				}
 				closestPoint(center, t, cp);

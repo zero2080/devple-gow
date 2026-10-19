@@ -132,6 +132,12 @@ public final class TraversalReport {
 			if (!r.unreachableVolumes.isEmpty()) {
 				lines.add("내부 점 없는 볼륨: " + String.join(", ", r.unreachableVolumes));
 			}
+			if (!r.interactions.isEmpty()) {
+				lines.add("R1 상호작용: " + String.join("; ", r.interactions));
+			}
+			if (!r.ropes.isEmpty()) {
+				lines.add("줄: " + r.ropes.stream().map(x -> x.owner() + " " + x.type()).toList());
+			}
 			if (!r.forcedEvents.isEmpty()) {
 				lines.add("강제 이벤트: " + r.forcedEvents.keySet() + (r.forcedGroups.isEmpty() ? "" : ", 강제 오브젝트 그룹: " + r.forcedGroups));
 			}

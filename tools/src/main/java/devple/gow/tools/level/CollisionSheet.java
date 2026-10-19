@@ -21,6 +21,7 @@ import java.util.List;
  * 삼각형 10B: u16 0, u16 surface(&amp;0xFFF), u16 v[3]
  * 사각형 12B: u16 0, u16 surface, u16 v[4]   — 로드 시 면마다 평면(n, -n·v0) 을 계산 (사각형은 대각선 외적)
  * 게임의 질의: 선분 캐스트(kd 트리 순회, 0x16BF98), 구 질의(추정 0x16C580 / 0x16DFD0)
+ * 표면 레코드 [3]: 64B × surfaceCount(0x50) = char[24] 이름 + 데이터 40B(0x52) — 배치는 스키마 [4] (엔트리 0x4C B) 로 해석 ({@link SheetSurface})
  * </pre>
  */
 public final class CollisionSheet {
@@ -40,6 +41,8 @@ public final class CollisionSheet {
 	public final int treeCount;
 	public final int leafCount;
 	public final int[] offsets = new int[11];
+	/** 표면(머티리얼) 레코드 — 면의 surface 번호로 찾는다. */
+	public final List<SheetSurface> surfaces = new ArrayList<>();
 
 	public CollisionSheet(String name, ByteBuffer d) {
 		this.name = name;
@@ -78,6 +81,59 @@ public final class CollisionSheet {
 			}
 			polys.add(new Poly(d.getShort(o + 2) & 0xFFF, v));
 		}
+		parseSurfaces(d);
+	}
+
+	/** 스키마 엔트리 하나: 비트 속성이면 (바이트 오프셋, 레코드 기준 비트 번호, 폭). */
+	private record Field(String name, int type, int byteOffset, int bit, int width) {
+	}
+
+	private void parseSurfaces(ByteBuffer d) {
+		int count = d.getShort(0x50) & 0xFFFF;
+		int dataSize = d.getShort(0x52) & 0xFFFF;
+		int recSize = 24 + dataSize;
+		List<Field> schema = new ArrayList<>();
+		for (int o = offsets[4]; o + 0x4C <= offsets[5] && o + 0x4C <= d.limit(); o += 0x4C) {
+			schema.add(new Field(cstr(d, o, 32), d.getInt(o + 0x20), d.getInt(o + 0x3C), d.getInt(o + 0x44), d.getInt(o + 0x48)));
+		}
+		for (int i = 0; i < count; i++) {
+			int o = offsets[3] + i * recSize;
+			if (dataSize < 40 || o + recSize > d.limit()) {
+				break;
+			}
+			int data = o + 24;
+			long attrs = 0;
+			for (Field f : schema) {
+				SurfaceAttr a = SurfaceAttr.bySchemaName(f.name);
+				if (a == null || f.type != 2 || f.byteOffset + 4 > dataSize) {
+					continue;
+				}
+				int word = d.getInt(data + f.byteOffset);
+				boolean on = f.width == 0 ? word != 0 : (word >>> (f.bit - f.byteOffset * 8) & 1) != 0;
+				if (on) {
+					attrs |= a.bit();
+				}
+			}
+			surfaces.add(new SheetSurface(cstr(d, o, 24), attrs, d.getInt(data + 0x14), d.getInt(data + 0x18), d.getFloat(data + 0x1C),
+					d.getInt(data + 0x20), d.getInt(data + 0x24)));
+		}
+	}
+
+	private static String cstr(ByteBuffer d, int at, int max) {
+		StringBuilder sb = new StringBuilder();
+		for (int i = 0; i < max && at + i < d.limit(); i++) {
+			int c = d.get(at + i) & 0xFF;
+			if (c == 0) {
+				break;
+			}
+			sb.append((char) c);
+		}
+		return sb.toString();
+	}
+
+	/** surface 번호의 표면 (범위 밖이면 null). */
+	public SheetSurface surface(int index) {
+		return index >= 0 && index < surfaces.size() ? surfaces.get(index) : null;
 	}
 
 	public static boolean is(ByteBuffer d) {

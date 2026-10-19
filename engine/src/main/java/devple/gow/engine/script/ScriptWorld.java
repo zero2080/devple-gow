@@ -62,6 +62,8 @@ public final class ScriptWorld {
 	private boolean started;
 	private boolean zeroDelay, minDelay;
 	private ScriptActor player;
+	/** Marker 엔티티 → 오브젝트 (그룹 = Marker Id, 소유 GO 관절에 붙어 움직임). */
+	private final Map<ScriptEntity, ScriptActor> markers = new LinkedHashMap<>();
 
 	public ScriptWorld(LevelData level, ScriptHost host, ScriptListener listener) {
 		this.level = level;
@@ -299,7 +301,56 @@ public final class ScriptWorld {
 		for (ScriptEntity e : queue) {
 			startMessage(e);
 		}
+		createMarkers();
 		runPending();
+	}
+
+	/**
+	 * Marker (타입 14): 소유 GO 관절에 붙은 표지 오브젝트, 그룹 = Id 슬롯. 진입 센서 Filter 로 "그 오브젝트가 볼륨에 들어옴" 을 잡는다
+	 * (PAND05B 판도라 상자 pBoxPand05B-Marker511 → semoMovieHaveBox Filter 511, ATHN05D 엘리베이터 Marker599 → MarkerVolume Filter 599) [확실: 데이터].
+	 * 생성 통지(CreationSensor)는 보내지 않는다 (레벨 배치물) [추정].
+	 */
+	private void createMarkers() {
+		for (ScriptEntity e : entities) {
+			if (e.type() != 14 || markers.containsKey(e)) {
+				continue;
+			}
+			int id = intSlot(e, "Id");
+			if (id <= 0) {
+				continue;
+			}
+			ScriptActor a = new ScriptActor(e.name(), id, e.position(), null);
+			actors.add(a);
+			markers.put(e, a);
+		}
+	}
+
+	/** 소유 GO 의 Marker 오브젝트들. */
+	public List<ScriptActor> markers(String owner) {
+		List<ScriptActor> out = new ArrayList<>();
+		markers.forEach((e, a) -> {
+			if (owner.equalsIgnoreCase(e.ownerName())) {
+				out.add(a);
+			}
+		});
+		return out;
+	}
+
+	/** 소유 GO 가 (dx, dy, dz) 만큼 움직임 (밀린 상자) → 그 Marker 들도. */
+	public void moveOwnerBy(String owner, float dx, float dy, float dz) {
+		for (ScriptActor a : markers(owner)) {
+			a.moveTo(a.pos[0] + dx, a.pos[1] + dy, a.pos[2] + dz);
+		}
+	}
+
+	/** 소유 GO 관절 월드 행렬이 바뀜 (애니 재생 중인 발판) → Marker 위치 = 엔티티 로컬 × 관절. */
+	public void poseOwner(String owner, float[][] jointWorld) {
+		markers.forEach((e, a) -> {
+			if (owner.equalsIgnoreCase(e.ownerName()) && jointWorld.length > 0) {
+				float[] w = Mat4.mul(e.data.matrix(), jointWorld[Math.min(e.data.unk40(), jointWorld.length - 1)]);
+				a.moveTo(w[12], w[13], w[14]);
+			}
+		});
 	}
 
 	private void startMessage(ScriptEntity e) {

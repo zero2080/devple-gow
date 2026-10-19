@@ -84,6 +84,25 @@ class TraversalTest {
 		assertTrue(walk.keySet().containsAll(List.of("ATHN01B", "ATHN01C", "ATHN01D")), walk.keySet().toString());
 	}
 
+	/**
+	 * 38 문서: 원작 상호작용·줄로 풀린 막힘 (게임 이벤트 강제 없이) — 쌍발차기 문 CSM 과제 206 (1023), 판도라 상자 Marker 511,
+	 * 돛대 짚라인 ATHN01D → ATHN01E, 엘리베이터 위 Warp 도착 (ATHN04A → ATHN05D).
+	 */
+	@Test
+	void traversalMechanicsUnblockMainPath() {
+		assertTrue(unforced("ATHN01D", "ATHN01F"), "쌍발차기 문 (R1 연타 → 1023 과제 206)");
+		assertTrue(unforced("PAND05B", "HDES01A"), "판도라 상자 밀기 (Marker 511)");
+		assertTrue(v.results.get("ATHN01D").edges.stream().anyMatch(e -> e.target().equals("ATHN01E") && !e.forced()
+				&& e.source().startsWith("줄 gorope3")), "짚라인");
+		assertTrue(v.results.get("ATHN05D").arrivals.stream().filter(a -> a.from().equals("ATHN04A")).allMatch(TraversalVerifier.Arrival::ok),
+				v.results.get("ATHN05D").arrivals.toString());
+		assertTrue(v.results.get("ATHN01D").interactions.stream().anyMatch(s -> s.contains("gotwinkickdoor 과제 206")));
+	}
+
+	private static boolean unforced(String from, String to) {
+		return v.results.get(from).edges.stream().anyMatch(e -> e.target().equals(to) && !e.forced());
+	}
+
 	@Test
 	void report() {
 		String md = TraversalReport.markdown(v);
