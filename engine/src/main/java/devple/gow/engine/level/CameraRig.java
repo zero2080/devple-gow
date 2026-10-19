@@ -467,6 +467,19 @@ public final class CameraRig {
 					Mat4.transformPoint(v.inverse(), t.x, t.y, t.z, l);
 					BallHull h = v.hull();
 					for (int i = 0; i < h.hulls.size(); i++) {
+						if (System.getProperty("gow.debug.cmv") != null && shots.isEmpty()) {
+							float worst = -1e9f;
+							float[] wp = null;
+							for (float[] pl : h.hulls.get(i).planes()) {
+								float dd = h.hulls.get(i).planes().size() == 1 ? 0 : pl[0] * l[0] + pl[1] * l[1] + pl[2] * l[2] + pl[3];
+								if (dd > worst) {
+									worst = dd;
+									wp = pl;
+								}
+							}
+							System.out.printf(java.util.Locale.ROOT, "[CMV] %s hull %d %s 밖 %.1f 평면 %s 로컬 %s%n", v.owner(), i, h.nameOf(i), worst,
+									java.util.Arrays.toString(wp), java.util.Arrays.toString(l));
+						}
 						if (inside(h.hulls.get(i), l)) {
 							String n = h.nameOf(i);
 							LevelData.PlacedCamera c = n == null ? null : lv.camera(n) != null ? lv.camera(n) : camera(n);
@@ -508,6 +521,15 @@ public final class CameraRig {
 		}
 		if (curShot != null && curShot.cam == best) {
 			return;
+		}
+		if (System.getProperty("gow.debug") != null) {
+			StringBuilder sb = new StringBuilder();
+			for (LevelData.PlacedCamera c : active) {
+				CameraDef.Params cp = c.def().p();
+				sb.append(String.format(java.util.Locale.ROOT, " %s(pri %d fl 0x%x p%d y%d rail %s)", c.def().shortName(), cp.priority(), cp.flags(),
+						cp.pitchMode(), cp.yawMode(), c.rail() != null));
+			}
+			System.out.printf("[카메라 후보] T=%s:%s%n", t, sb);
 		}
 		Shot s = new Shot(best);
 		CamAnim a = anims.get(best);
@@ -598,6 +620,11 @@ public final class CameraRig {
 			float[] r = new float[3];
 			s.cam.rail().eval(s.t, r);
 			pivot.set(r[0], r[1], r[2]);
+		}
+		if (System.getProperty("gow.debug.cam") != null && !s.init) {
+			System.out.printf(java.util.Locale.ROOT, "[카메라 풀기] %s pos %s fwd %s distScale %.3f rail [%.1f, %.1f] dist [%.1f, %.1f] yaw %.1f±%.1f pitch %.1f±%.1f%n",
+					s.cam.def().shortName(), camPos, fwd, cp.distScale(), cp.railMin(), cp.railMax(), cp.distMin(), cp.distMax(), dYaw, cp.yawRange(),
+					dPitch, cp.pitchRange());
 		}
 		Vector3f v = new Vector3f(t).sub(pivot);
 		if (cp.distScale() < 0) {
@@ -713,6 +740,13 @@ public final class CameraRig {
 			for (int i = 0; i <= n; i++) {
 				float u = rail.tMax() * i / n;
 				float c = railCost(rail, u, aim, cp, dYaw, dPitch, kind);
+				if (System.getProperty("gow.debug.cam") != null) {
+					rail.eval(u, r);
+					float[] tg = new float[3];
+					rail.tangent(u, tg);
+					System.out.printf(java.util.Locale.ROOT, "[레일] %s u=%.3f P=(%.1f,%.1f,%.1f) tan=(%.2f,%.2f,%.2f) cost=%.2f%n", s.cam.def().shortName(), u,
+							r[0], r[1], r[2], tg[0], tg[1], tg[2], c);
+				}
 				if (s.fwdBonus) {
 					rail.eval(u, r);
 					Vector3f nv = new Vector3f(aim.x - r[0], aim.y - r[1], aim.z - r[2]);

@@ -31,6 +31,8 @@ public final class MeshObject {
 	public final int chainCount;
 	public final int dmaTagCount;
 	public final int flags;
+	/** 0x10: VU 프로그램 OR 값 (0x165998: 프로그램 = ((머티리얼 VU 플래그 | 0x20?) &amp; flags) | vuOr). 전 WAD 0x10. */
+	public final int vuOr;
 	public final int[] jointMap;
 	/** 체인(인스턴스)별 jointMap. 체인 c 의 맵은 jointMap 영역에서 c*jointCount 번째부터 (05 문서). */
 	public final int[][] jointMaps;
@@ -47,6 +49,7 @@ public final class MeshObject {
 		int jc = Short.toUnsignedInt(b.getShort(off + 10));
 		chainCount = b.getInt(off + 12);
 		flags = b.getInt(off + 0x14);
+		vuOr = b.getInt(off + 0x10);
 		int tagsEnd = off + 0x20 + chainCount * dmaTagCount * 16;
 		jointMaps = new int[Math.max(1, chainCount)][jc];
 		for (int c = 0; c < jointMaps.length; c++) {
