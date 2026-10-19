@@ -92,3 +92,17 @@ snd.has(name); snd.find(name); snd.nameOf(hash);
 | `…soundControllerGroupUsesEmitterSlots` | SNDGrpAmbDeckofShip Op1/Op2 → 다른 소리, Op0 → 전부 종료 |
 
 OpenAL 경로는 로컬에서 수동 확인 (재생 60 프레임, `alGetError` 0).
+
+## 6. 연결 완료 (리드, 2026-10-19)
+| 소스 | 연결 위치 |
+|------|----------|
+| 공유 SoundManager | `GameSession.sharedSound(rom)` — 앱 전체 하나, R_PERMK 상주 |
+| 메뉴 효과음 | `ShellScene`: R_SHELLK 뱅크 로드, `PS2_Sound*` → play |
+| 레벨/적 뱅크 | `GameScene.enter`: 레벨 WAD + 적 종류 WAD 로드, `exit` 에서 stopAll + unload |
+| 전투 SOUND 이벤트 | `Combatant.onSound` (이벤트 종류 3/40) → `play(hash, 위치)` — 영웅·적 모두 |
+| HUD 효과음 | `PS2_Sound*` 변수 리스너 |
+| 스크립트 | `ScriptListener.music` (MusicGroupStart/Stop/Param, PlaySound), `sound` (SoundController → soundGroup) |
+| 오브 획득 | 적 처치 드롭 시 `SND_PICKUPS_ORBS_E` |
+| 리스너 | 매 틱 카메라 위치/방향, `update(dt)` |
+
+실행 확인: `--game ATHN01A` 에서 OpenAL 백엔드, 활성 소리 2–3 (시작 지점 앰비언트). 발소리·패드 진동은 미연결.

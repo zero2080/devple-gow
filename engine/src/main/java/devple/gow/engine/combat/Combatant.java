@@ -57,6 +57,8 @@ public final class Combatant {
 	private Hittable target;
 	private Supplier<Float> damageScale = () -> 1f;
 	private Consumer<String> log = s -> { };
+	/** 애니 이벤트 SOUND(3/40): (이름 해시, 위치). 해시 = TWK 해시 (14 문서). */
+	private java.util.function.BiConsumer<Integer, Vector3f> soundSink = (h, p) -> { };
 	public boolean debug;
 	public float reach = REACH, hitRadius = HIT_RADIUS;
 	public int hitCounter;
@@ -71,6 +73,10 @@ public final class Combatant {
 	/** 공격자 측 피해 배율 (영웅 = Player_DamageScale, 적 = AI1 Damage Multiplier × 난이도 AI 배율). */
 	public void setDamageScale(Supplier<Float> s) {
 		damageScale = s;
+	}
+
+	public void onSound(java.util.function.BiConsumer<Integer, Vector3f> s) {
+		soundSink = s;
 	}
 
 	public void onLog(Consumer<String> l) {
@@ -475,6 +481,7 @@ public final class Combatant {
 			}
 			switch (e.type()) {
 				case 20 -> stanceTag = e.index(); // SET_1B0: 공격 자세 태그 → 피격자 반응 분기 선택
+				case 3, 40 -> soundSink.accept(e.hash(), owner.position()); // SOUND
 				case 21 -> {
 					if ((e.cond() != 1 && e.cond() != 2) || hitThisFrame) {
 						godMeter = Math.min(100f, godMeter + e.b()); // GOD_METER_ADD

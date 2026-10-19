@@ -1,5 +1,6 @@
 package devple.gow.engine.game;
 
+import devple.gow.engine.audio.SoundManager;
 import devple.gow.engine.script.ScriptHost;
 import devple.gow.tools.ui.MessageTable;
 import devple.gow.tools.wad.WadFile;
@@ -13,16 +14,32 @@ import java.nio.file.Path;
  */
 public final class GameSession {
 
+	private static SoundManager shared;
+
+	/** 앱 전체에서 하나 (OpenAL 장치가 없으면 무음 백엔드). */
+	public static synchronized SoundManager sharedSound(Path rom) {
+		if (shared == null) {
+			shared = SoundManager.open(rom);
+		}
+		return shared;
+	}
+
 	public final Path rom;
 	public final WadFile permk;
 	public final MessageTable messages;
 	public final ScriptHost scriptHost = new ScriptHost();
 	public PlayerState player;
+	/** 오디오 (R_PERMK 의 GENERAL/GENERAL2/Hero 뱅크 상주). 메뉴와 게임 씬이 같은 인스턴스를 쓴다. */
+	public final SoundManager sound;
 	public int difficulty = 1;
 
 	public GameSession(Path rom) throws IOException {
 		this.rom = rom;
 		this.permk = WadFile.load(rom.resolve("R_PERMK.WAD"));
 		this.messages = MessageTable.fromWad(permk).orElse(null);
+		this.sound = sharedSound(rom);
+		if (!sound.loaded().containsKey(permk.name())) {
+			sound.load(permk);
+		}
 	}
 }

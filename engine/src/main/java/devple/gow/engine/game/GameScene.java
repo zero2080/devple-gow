@@ -116,7 +116,12 @@ public final class GameScene implements Scene {
 			session.player = hero.player;
 			UiVariables vars = new UiVariables();
 			hud = new UiLayer(new WadAssets(session.rom.resolve("R_PERMK.WAD")), true, "FLP_HUDK", session.messages, vars);
+			session.sound.load(level.data().wad);
+			hero.combat.onSound((h, p) -> session.sound.play(h, p));
 			vars.addListener((name, value) -> {
+				if (name.regionMatches(true, 0, "PS2_Sound", 0, 9) && value != null && value.startsWith("SND_")) {
+					session.sound.play(value);
+				}
 				if (powerUp && name.equals("PS2_PSMDone") && "1".equals(String.valueOf(value).replace(".0", ""))) {
 					onPowerUpClosed();
 				} else if (paused && !powerUp && (name.equals("PS2_PauseDone") || name.endsWith("Menu_Choice"))) {
@@ -169,6 +174,7 @@ public final class GameScene implements Scene {
 						EnemyFactory.Kind k = EnemyFactory.load(path, session.permk, -1);
 						kinds.put(name, k);
 						orbTweaks.load(k.assets().wad());
+						session.sound.load(k.assets().wad());
 						hero.attachExternalAnims(k.assets().wad());
 					} catch (RuntimeException ex) {
 						System.out.println("적 리소스 로드 실패 " + name + ": " + ex.getMessage());
@@ -259,6 +265,33 @@ public final class GameScene implements Scene {
 			}
 
 			@Override
+			public void music(String func, List<Object> args) {
+				var snd = session.sound;
+				switch (func) {
+					case "MusicGroupStart" -> snd.music(String.valueOf(args.get(0)), args.size() > 1 ? num(args.get(1)) : 0);
+					case "MusicGroupStop" -> snd.stopMusic(args.isEmpty() ? 0 : num(args.get(0)));
+					case "MusicGroupParam" -> {
+						if (args.size() >= 3) {
+							snd.musicParam((int) num(args.get(0)), (int) num(args.get(1)), num(args.get(2)));
+						}
+					}
+					case "PlaySound" -> {
+						if (!args.isEmpty() && args.get(0) instanceof String n) {
+							snd.play(n);
+						}
+					}
+					default -> {
+					}
+				}
+			}
+
+			@Override
+			public void sound(ScriptEntity source, String group, int op) {
+				float[] sp = source.position();
+				session.sound.soundGroup(group, op, new Vector3f(sp[0], sp[1], sp[2]));
+			}
+
+			@Override
 			public void create(ScriptEntity source) {
 				// Creator 엔티티: 이름 슬롯 "savepoint" → R_SAVEPT 세이브 포인트를 소유 GO 위치에 생성
 				Object name = world.slot(source, "Name0");
@@ -269,6 +302,10 @@ public final class GameScene implements Scene {
 				}
 			}
 		};
+	}
+
+	private static float num(Object o) {
+		return o instanceof Number n ? n.floatValue() : 0f;
 	}
 
 	private void goToLevel(String wad, String entryName) {
@@ -301,6 +338,7 @@ public final class GameScene implements Scene {
 		f.pos.set(w[12], w[13], w[14]);
 		f.prevPos.set(f.pos);
 		f.setFoe(hero.hittable());
+		f.combat().onSound((h, p) -> session.sound.play(h, p));
 		f.setIncomingScale(hero::incomingScale);
 		enemies.add(new Enemy(f, kind.buildModel(enemyShader), r.actor(), kind));
 		System.out.printf("적 스폰: %s (템플릿 %d, 순찰 %s) at (%.0f, %.0f, %.0f)%n", kind.assets().wad().name(), r.templateId(),
@@ -386,8 +424,9 @@ public final class GameScene implements Scene {
 		time += dt;
 		if (System.getProperty("gow.debug") != null && ((int) (time * 60)) % 60 == 0) {
 			Vector3f hp = hero.ctl.position;
-			System.out.printf("[디버그] t=%.0f 영웅 (%.0f, %.0f, %.0f) 지면=%s 바닥높이=%.1f%n", time, hp.x, hp.y, hp.z,
-					hero.ctl.grounded, col.groundHeight(hp.x, hp.y + STEP, hp.z, 4000));
+			System.out.printf("[디버그] t=%.0f 영웅 (%.0f, %.0f, %.0f) 지면=%s 바닥높이=%.1f 소리=%d 음악=%s 백엔드=%s%n", time, hp.x, hp.y,
+					hp.z, hero.ctl.grounded, col.groundHeight(hp.x, hp.y + STEP, hp.z, 4000), session.sound.active(),
+					session.sound.currentMusic(), session.sound.backend().getClass().getSimpleName());
 		}
 		if (!powerUp) {
 			hudBinding.update(hero.player, hud.variables());
@@ -442,6 +481,9 @@ public final class GameScene implements Scene {
 		if (hero.player.hp <= 0) {
 			heroDied();
 		}
+		Vector3f fwd = new Vector3f(cam.target).sub(cam.eye).normalize();
+		session.sound.listener(cam.eye, fwd, new Vector3f(0, 1, 0));
+		session.sound.update(dt);
 	}
 
 	private EnemyFighter nearestEnemy() {
@@ -479,6 +521,7 @@ public final class GameScene implements Scene {
 					for (OrbDrops.Orb o : OrbDrops.roll(orbTweaks, emitter, rnd, hero.player.hp, hero.player.mp)) {
 						hero.player.pickupOrb(o.type(), o.points());
 					}
+					session.sound.play("SND_PICKUPS_ORBS_E");
 				}
 			}
 		}
@@ -549,6 +592,9 @@ public final class GameScene implements Scene {
 
 	@Override
 	public void exit(Engine e) {
+		session.sound.stopAll();
+		session.sound.unload(level.data().wad.name());
+		kinds.values().forEach(k -> session.sound.unload(k.assets().wad().name()));
 		enemies.forEach(en -> en.model().close());
 		enemyShader.close();
 		hero.close();

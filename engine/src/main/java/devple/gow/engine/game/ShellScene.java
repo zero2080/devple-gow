@@ -32,6 +32,20 @@ public final class ShellScene implements Scene {
 			throw new UncheckedIOException(ex);
 		}
 		UiVariables v = ui.variables();
+		var snd = GameSession.sharedSound(rom);
+		try {
+			if (!snd.loaded().containsKey("R_PERMK.WAD")) {
+				snd.load(devple.gow.tools.wad.WadFile.load(rom.resolve("R_PERMK.WAD")));
+			}
+			snd.load(devple.gow.tools.wad.WadFile.load(rom.resolve("R_SHELLK.WAD")));
+		} catch (IOException ex) {
+			throw new UncheckedIOException(ex);
+		}
+		v.addListener((name, value) -> {
+			if (name.regionMatches(true, 0, "PS2_Sound", 0, 9) && value != null && value.startsWith("SND_")) {
+				snd.play(value);
+			}
+		});
 		v.addListener((name, value) -> {
 			if (name.equals("PS2_Done") && "1".equals(num(value)) && !started) {
 				String choice = num(v.get("PS2_Menu_Choice"));
@@ -85,6 +99,7 @@ public final class ShellScene implements Scene {
 	@Override
 	public void update(Engine e, float dt) {
 		ui.update(e);
+		GameSession.sharedSound(rom).update(dt);
 	}
 
 	@Override
