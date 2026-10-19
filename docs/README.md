@@ -8,7 +8,7 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 | 00 | [프로젝트 개요 / 접근 방식 / 기술 선택](00-project-overview.md) | 완료 |
 | 01 | [디스크 구조 (ISO9660 DVD9, TOC, PAK)](01-disc-structure.md) | 완료 |
 | 02 | [WAD 컨테이너 포맷](02-wad-format.md) | 완료 (태그 레벨) |
-| 03 | 텍스처 / 팔레트 / 머티리얼 (GFX, PAL, TXR, MAT) | 진행 예정 |
+| 03 | [텍스처 / 팔레트 / 머티리얼 (GFX, PAL, TXR, MAT)](03-texture-format.md) | 완료 |
 | 04 | 모델 / 메시 (MDL, MSH, VIF) | 진행 예정 |
 | 05 | 애니메이션 / 스켈레톤 (ANM) | 진행 예정 |
 | 06 | 실행 파일(SCKA_300.02) 분석 – 서브시스템 지도 | 진행 예정 |
@@ -22,4 +22,5 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 ./gradlew :tools:run --args="iso-info P2_gow_kor.iso"
 ./gradlew :tools:run --args="pak-extract P2_gow_kor.iso gow-rom"   # 동영상 제외 추출 (~1.4GB)
 ./gradlew :tools:run --args="wad-ls gow-rom/ATHN01A.WAD"
+./gradlew :tools:run --args="texture:export gow-rom/R_HERO0.WAD work/textures/R_HERO0"   # TXR → PNG
 ```
