@@ -40,6 +40,8 @@ public final class Interactables {
 	public static final int SPEED_MAX = 0xfe467fe6, SPEED_MAX_BACK = 0xb503fbe4, PUSH_REWIND_ACC = 0xb6ba95a3;
 	/** Push 템플릿 +0x108 비트 4 (양방향 크랭크), +0x40 멈춤 자리 허용 (생성자 0x216370 / 기본값 0x216788) [확실]. */
 	static final int PUSH_TWO_WAY = 0x228882E3, PUSH_DETENT_TOL = 0xA4C814E9;
+	/** Push 템플릿 +0x28 상자 최대 속도 (#95b8bfb6, 0x216470) [확실]. */
+	public static final int PUSH_SLIDE_MAX = 0x95B8BFB6;
 
 	public static final class Item {
 		public final Kind kind;
@@ -78,6 +80,14 @@ public final class Interactables {
 		 * 가장 가까운 멈춤 자리로 간다. twoWay = 템플릿 +0x108 비트 4 (#228882e3, 스틱을 반대로 밀면 역회전), detentTol = +0x40 (#a4c814e9, 기본 0.03).
 		 */
 		public int pushType = -1;
+		/**
+		 * 밀기 상자 (Push Type 0): 무게 등급 = 템플릿 +0x1A "Weight" (s16 = TWK 값 하위 16 비트, 0x216450 — 데이터가 float 0.5 의 비트에
+		 * 0/1/2 를 얹어 둠: Pandora's Box 0x3F000002 → 2) → 영웅 밀기 속도·차기 속도 표 번호 (0x244FB0) [확실: 코드 / 추정: 하위 16 비트 읽기 = Type 과 같음].
+		 * slideMax = #95b8bfb6 (+0x28, m/s) 상자 최대 속도 (0x211BC0), vel = 상자 속도 (월드 유닛/초).
+		 */
+		public int weight;
+		public float slideMax = 5f;
+		public final Vector3f vel = new Vector3f();
 		public boolean twoWay;
 		public float detentTol = 0.03f;
 
@@ -183,6 +193,10 @@ public final class Interactables {
 					boolean crank = lever && (type >= 0 ? type != 5 && type != 6 : l.contains("crank"));
 					Item it = new Item(lever ? Kind.LEVER : Kind.PUSH, p.instance().name(), pos, b.template(), b.id(),
 							lever ? (crank ? "crankIdle" : type == 6 ? "leverPullUW" : "leverpull") : "pushIdle", null, label, r);
+					if (!lever && tw != null) {
+						it.weight = tw.raw(node, "Weight").isPresent() ? tw.raw(node, "Weight").getAsInt() & 0xffff : 0;
+						it.slideMax = Float.intBitsToFloat(tw.rawHash(node, PUSH_SLIDE_MAX).orElse(Float.floatToIntBits(5f)));
+					}
 					if (lever) {
 						float len = animLength(lv, anm, null, -1);
 						it.lengthKnown = len >= 0;

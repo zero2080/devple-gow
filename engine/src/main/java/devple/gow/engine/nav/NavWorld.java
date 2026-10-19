@@ -92,6 +92,26 @@ public final class NavWorld {
 		return best;
 	}
 
+	/**
+	 * 선분 질의 (원작 sub_0011E190 = 레벨 충돌 선분 캐스트): from → to 가 처음 만나는 영웅 충돌 면 (바닥·벽 모두). 없으면 null.
+	 * 결과 면의 표면 속성은 호출한 쪽이 본다 (0x1E46B0 의 마스크 검사).
+	 */
+	public LevelCollision.Hit segment(Vector3f from, Vector3f to) {
+		Vector3f d = new Vector3f(to).sub(from);
+		float len = d.length();
+		if (len < 1e-5f) {
+			return null;
+		}
+		LevelCollision.Hit best = null;
+		for (LevelCollision c : statics) {
+			LevelCollision.Hit h = c.raycast(from, d, len, LevelCollision.Tri::solidForPlayer);
+			if (h != null && (best == null || h.distance() < best.distance())) {
+				best = h;
+			}
+		}
+		return best;
+	}
+
 	/** 구 벽 밀어내기 (모든 정적 충돌). */
 	public boolean collideSphere(Vector3f c, float r) {
 		boolean any = false;

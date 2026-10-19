@@ -117,6 +117,43 @@ class NavDataTest {
 		assertTrue(bad < polys / 1000, "범위 밖 표면 번호 " + bad + " / " + polys);
 	}
 
+	/**
+	 * 밀기 상자 무게 등급 = Push 템플릿 "Weight" 하위 16 비트 (float 0.5 의 비트에 얹힘), 상자 최대 속도 #95b8bfb6 (38 문서 §3.2).
+	 * WallHangTimer (표면 +0x1C) 분포 — 매달리기 제한 시간 (0 = 무제한).
+	 */
+	@Test
+	void pushWeightsAndWallHangTimers() throws Exception {
+		LevelData p = level("PAND05B");
+		Tweaks pt = new Tweaks();
+		pt.load(p.wad);
+		Interactables.Item box = Interactables.of(p, pt).byOwner("gopboxpand05b");
+		assertEquals(2, box.weight, "Pandora's Box Weight 0x3F000002 → 2 (1.2 m/s)");
+		assertEquals(5f, box.slideMax, 1e-4f);
+		LevelData h = level("ATHN01D");
+		Tweaks ht = new Tweaks();
+		ht.load(h.wad);
+		assertEquals("HydraPushBox", ht.s("/TweakTemplates/Push/030/", "Instance Name", null));
+		assertEquals(0x3F000001, ht.raw("/TweakTemplates/Push/030/", "Weight").getAsInt(), "HydraPushBox 무게 1 (1.5 m/s)");
+		java.util.Map<Float, Integer> timers = new java.util.TreeMap<>();
+		try (var ds = Files.newDirectoryStream(rom(), "*.WAD")) {
+			for (Path wp : ds) {
+				if (wp.getFileName().toString().startsWith("R_")) {
+					continue;
+				}
+				for (CollisionSheet s : new LevelData(WadFile.load(wp)).sheets) {
+					for (var x : s.surfaces) {
+						if (x != null) {
+							timers.merge(x.wallHangTimer(), 1, Integer::sum);
+						}
+					}
+				}
+			}
+		}
+		// 전 레벨 표면 레코드의 WallHangTimer 는 모두 0 (스키마 기본 60 은 쓰이지 않음) → 0x1C772C 에서 FLT_MAX = 시간 제한 없음
+		assertEquals(java.util.Set.of(0f), timers.keySet(), "WallHangTimer 분포 " + timers);
+		assertTrue(timers.get(0f) > 1000);
+	}
+
 	@Test
 	void ropesDecode() throws Exception {
 		LevelData d = level("ATHN01D");
@@ -340,7 +377,7 @@ class NavDataTest {
 		// 1) 뒤쪽 그물 (z = -1896, 법선 -z, y 180..620): 바깥 공중에서 +z 쪽을 보고 붙어 오른다
 		b.grounded = false;
 		b.yaw = (float) Math.PI;
-		b.pos.set(-970, 300, -1915);
+		b.pos.set(-970, 300, -1908); // 벽 질의 = 정면 14.4 (게임 몸 구 12 만큼 앞)
 		HeroNavigatorTest.tick(nav, b, w, in);
 		assertEquals(NavState.WALL_CLIMB, nav.state(), "그물에 붙음 " + b.pos);
 		for (int i = 0; i < 1200 && nav.state() == NavState.WALL_CLIMB; i++) {
@@ -352,7 +389,7 @@ class NavDataTest {
 		nav = new HeroNavigator(b, w, null);
 		b.grounded = false;
 		b.yaw = 0;
-		b.pos.set(-995, 950, -1822);
+		b.pos.set(-995, 950, -1828);
 		in.ly = 0;
 		HeroNavigatorTest.tick(nav, b, w, in);
 		assertEquals(NavState.WALL_CLIMB, nav.state(), "돛대 띠에 붙음 " + b.pos);
