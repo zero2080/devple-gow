@@ -109,6 +109,10 @@ public final class GameScene implements Scene {
 	private devple.gow.engine.combat.GrabSync grab;
 	private devple.gow.engine.fx.MagicFx magicFx;
 	private final Random rnd = new Random();
+	/** 보스전 (37 문서, 없으면 null) / 전투 ↔ 스크립트 이벤트 다리 (1035/1047/1039/1019/1054). */
+	private devple.gow.engine.boss.BossFight boss;
+	private devple.gow.engine.boss.CombatScriptBridge bridge;
+	private devple.gow.engine.boss.BossArena arena;
 
 	/** 불러오기 시 시작 위치 (null 이면 진입점/시작 인스턴스). */
 	private float[] loadPos;
@@ -174,6 +178,7 @@ public final class GameScene implements Scene {
 			orbTweaks.load(level.data().wad);
 			hero.attachExternalAnims(level.data().wad); // 레벨별 영웅 애니 (ANM_hero_Athn01A 등)
 			loadEnemyKinds();
+			loadBoss();
 		} catch (IOException ex) {
 			throw new UncheckedIOException(ex);
 		}
@@ -222,6 +227,10 @@ public final class GameScene implements Scene {
 			cameraRig.request(arrivalCam); // Warp 도착 Start 의 CameraName
 		}
 		cameraRig.update(0, hero.ctl.position, hero.ctl.yaw, false);
+		bridge = new devple.gow.engine.boss.CombatScriptBridge(world);
+		if (boss != null) {
+			boss.attach(arena());
+		}
 		world.start();
 		world.placePlayer(spawn.x, spawn.y, spawn.z, seamless);
 		if (Float.isNaN(col.groundHeight(spawn.x, spawn.y + STEP, spawn.z, 64))) {
@@ -260,6 +269,57 @@ public final class GameScene implements Scene {
 				}
 			}
 		}
+	}
+
+	/** 레벨 WAD 안의 보스 리소스 (BossDirector). 영웅 쪽 동기 애니·소리 뱅크도 붙인다. */
+	private void loadBoss() throws IOException {
+		boss = devple.gow.engine.boss.BossDirector.create(levelName, session.rom, session.permk);
+		if (boss == null) {
+			return;
+		}
+		boss.autoPlay = System.getProperty("gow.boss.demo") != null; // GowMain --boss-demo
+		for (EnemyFactory.Kind k : boss.kinds().values()) {
+			orbTweaks.load(k.assets().wad());
+		}
+		for (java.nio.file.Path p : boss.heroAnimWads()) {
+			hero.attachExternalAnims(devple.gow.tools.wad.WadFile.load(p));
+		}
+		System.out.println("보스전: " + boss.getClass().getSimpleName() + " 템플릿 " + boss.kinds().keySet());
+	}
+
+	private devple.gow.engine.boss.BossArena arena() {
+		if (arena == null) {
+			arena = new devple.gow.engine.boss.BossArena() {
+				public devple.gow.engine.anim.HeroController heroCtl() {
+					return hero.ctl;
+				}
+
+				public devple.gow.engine.combat.Combatant heroCombat() {
+					return hero.combat;
+				}
+
+				public devple.gow.engine.combat.Hittable hero() {
+					return hero.hittable();
+				}
+
+				public void damageHero(float a) {
+					hero.player.hp = Math.max(0, Math.min(hero.player.maxHp(), hero.player.hp - a));
+				}
+
+				public ScriptWorld world() {
+					return world;
+				}
+
+				public devple.gow.engine.boss.CombatScriptBridge bridge() {
+					return bridge;
+				}
+
+				public void sound(String name) {
+					session.sound.play(name);
+				}
+			};
+		}
+		return arena;
 	}
 
 	/** 시작 위치·방향 결정 ({@link LevelEntry}). 반환 = 도착 카메라 이름 (없으면 ""). */
@@ -457,6 +517,15 @@ public final class GameScene implements Scene {
 			}
 
 			@Override
+			public void objectEvent(ObjectEvent e) {
+				if (boss != null) {
+					boss.objectEvent(e);
+				} else if (bridge != null) {
+					bridge.objectEvent(e);
+				}
+			}
+
+			@Override
 			public void spawnEnemy(SpawnRequest r) {
 				spawn(r);
 			}
@@ -513,13 +582,20 @@ public final class GameScene implements Scene {
 	 * 스크립트에 종료 이벤트 501(인자 0 = 동영상 이름)을 보낸다 (36 문서: ATHN01D TwinKickDoor-main-movieDone 이 EventArg(0) == "Semo02" 를 검사).
 	 */
 	private void playMovie(Engine e, String name) {
+		if (System.getProperty("gow.skipmovies") != null) {
+			// --skip-movies: 재생 없이 바로 끝 이벤트 (자동 연출·검증용)
+			world.postEvent(7, 0, 0, 0, null);
+			world.postEvent(501, name, 0, 0, world.player());
+			return;
+		}
 		String music = session.sound.currentMusic();
 		session.sound.stopMusic(0);
 		devple.gow.engine.video.MovieScene.play(e, name, () -> {
 			if (music != null) {
 				session.sound.music(music, 0.5f);
 			}
-			world.postEvent(ScriptWorld.EVENT_MOVIE_DONE, name, 0, 0, null);
+			world.postEvent(7, 0, 0, 0, null);
+			world.postEvent(ScriptWorld.EVENT_MOVIE_DONE, name, 0, 0, world.player()); // MpegController-EvtMpegDone: Filter 1 센서 → 보낸 이 = 플레이어 (37 문서)
 		});
 	}
 
@@ -580,8 +656,13 @@ public final class GameScene implements Scene {
 	 */
 	private void spawn(ScriptListener.SpawnRequest r) {
 		int tpl = r.templateId();
+		// 보스 리소스 (레벨 WAD 안) 가 먼저 (37 문서)
+		if (boss != null && boss.silent(tpl)) {
+			return; // 소리 전용 가짜 적 (FakeBHAsnd 등)
+		}
+		EnemyFactory.Kind bossKind = boss != null ? boss.kindFor(tpl) : null;
 		// 레벨 템플릿 종류(키 "레벨:오브젝트")는 레벨 WAD 의 모든 AI1 을 가지므로 1단계에서 뺀다
-		EnemyFactory.Kind kind = kinds.entrySet().stream().filter(e -> !e.getKey().contains(":") && e.getValue() != null
+		EnemyFactory.Kind kind = bossKind != null ? bossKind : kinds.entrySet().stream().filter(e -> !e.getKey().contains(":") && e.getValue() != null
 				&& e.getValue().hasTemplate(tpl)).map(Map.Entry::getValue).findFirst().orElse(null);
 		if (kind == null) {
 			kind = levelTemplateKind(tpl);
@@ -619,6 +700,11 @@ public final class GameScene implements Scene {
 		EnemyFactory.Kind fk = kind;
 		f.onShatter(() -> stoneKill(f, fk));
 		enemies.add(new Enemy(f, kind.buildModel(enemyShader), r.actor(), kind));
+		if (boss != null) {
+			boss.onSpawn(f, r.actor(), r.templateId(), arena());
+		} else {
+			bridge.attach(f, r.actor());
+		}
 		System.out.printf("적 스폰: %s (템플릿 %d, 순찰 %s) at (%.0f, %.0f, %.0f)%n", kind.assets().wad().name(), r.templateId(),
 				r.patrol(), f.pos.x, f.pos.y, f.pos.z);
 	}
@@ -825,13 +911,21 @@ public final class GameScene implements Scene {
 		if (!grab.active()) {
 			hero.combat.setTarget(target);
 			hero.update(in, camYaw, dt, target != null ? target.pos : null);
-			physics(dt);
+			if (boss == null || !boss.heroLocked()) {
+				physics(dt);
+			}
 		}
 		updateEnemies(dt);
-		if (target != null) {
+		if (boss != null) {
+			boss.update(in, dt);
+		} else {
+			bridge.tick();
+		}
+		if (target != null && (boss == null || !boss.claimsGrab(target))) {
 			Enemy te = enemies.stream().filter(x -> x.fighter() == target).findFirst().orElse(null);
 			boolean was = grab.active();
-			grab.update(in, target, te != null ? te.kind().tweaks() : null, dt);
+			grab.update(boss != null ? boss.minigameInput(in, grab.timed(), grab.qte()) : in, target,
+					te != null ? te.kind().tweaks() : null, dt);
 			if (was && !grab.active() && grab.executionSucceeded()) {
 				target.hp = 0; // 처형 성공 → 사망 처리 (원작은 처형 기술의 피해/스크립트) [근사]
 			}
@@ -1015,7 +1109,9 @@ public final class GameScene implements Scene {
 		hero.draw(cam, e.window().aspect(), alpha, e.renderer().white());
 		devple.gow.engine.fx.FxEnvironment.disableFog(hero.shader());
 		devple.gow.engine.fx.FxEnvironment.disableFog(enemyShader);
-		level.renderEffects(e, cam); // 비·파티클·물은 캐릭터 뒤에
+		if (System.getProperty("gow.nofx") == null) {
+			level.renderEffects(e, cam); // 비·파티클·물은 캐릭터 뒤에 (--no-fx 로 끔: 스크린샷용)
+		}
 		magicFx.render(cam, e.window().aspect());
 		hud.render(e);
 	}

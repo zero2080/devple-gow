@@ -51,11 +51,20 @@ public final class Engine implements AutoCloseable {
 			renderer.beginFrame();
 			scenes.render(this, (float) (acc / TICK));
 			renderer.endFrame(scenes.fade());
-			if (++frames == captureFrame) {
+			if (++frames == captureFrame || (captureTick > 0 && ticks >= captureTick && captureFile != null)) {
+				captureTick = -1;
 				capture();
 			}
 			window.swap();
 		}
+	}
+
+	private long captureTick = -1;
+
+	/** 자동 검증용: 로직 틱 n 번(60Hz, 렌더 속도와 무관) 후 스크린샷을 저장하고 종료. */
+	public void captureAfterTicks(long n, Path file) {
+		captureTick = n;
+		captureFile = file;
 	}
 
 	/** 자동 검증용: n 프레임 렌더 후 스크린샷을 저장하고 종료. */

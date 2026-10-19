@@ -72,6 +72,21 @@ public final class Combatant {
 	private java.util.function.IntFunction<Animation> clipFallback = h -> null;
 	private Animation vclip;
 	private float vtime;
+	/** 기술 시작(1035)/완료(1047) 통보: (이벤트 번호, 기술 ID). 원작 Combat_StartBranch 0x209610 / Combat_EndMove 0x209994. */
+	private java.util.function.BiConsumer<Integer, Integer> moveSink = (c, id) -> { };
+	/** 애니 이벤트 발동 통보 (SELF_HP·SCRIPT 등 보스 연출용). */
+	private Consumer<Event> eventSink = e -> { };
+
+	/** 원작 게임 → 스크립트 이벤트: 기술 시작 = 1035 (0x40B), 기술이 끝까지 재생 = 1047 (0x417). 인자 = 기술 ID. */
+	public static final int EVENT_MOVE_START = 1035, EVENT_MOVE_DONE = 1047;
+
+	public void onMove(java.util.function.BiConsumer<Integer, Integer> s) {
+		moveSink = s != null ? s : (c, id) -> { };
+	}
+
+	public void onEvent(Consumer<Event> s) {
+		eventSink = s != null ? s : e -> { };
+	}
 
 	public Combatant(CombatData data, Animator anim, CombatOwner owner) {
 		this.data = data;
@@ -201,6 +216,7 @@ public final class Combatant {
 			return false;
 		}
 		end();
+		queued = null; // 이전 기술의 대기 분기(예 루프 AUTO)가 새 기술 위에서 실행되지 않게
 		move = m;
 		moveSerial++;
 		clip = data.animation(m);
@@ -215,6 +231,7 @@ public final class Combatant {
 			anim.playClip(clip, 0, m.speed() > 0 ? m.speed() : 1f);
 		}
 		log.accept(String.format("기술 %d %s (직접)", m.id(), clip != null ? clip.name : "?"));
+		moveSink.accept(EVENT_MOVE_START, m.id());
 		return true;
 	}
 
@@ -361,9 +378,11 @@ public final class Combatant {
 			}
 			Branch c = cands.get(rnd.nextInt(cands.size()));
 			float execAt = c.immediate() ? 0 : c.winEnd();
-			if (execAt > t && (c.input() == CombatInput.AUTO || c.mode() == 3)) {
+			if (execAt > t && c.mode() == 3) {
 				return; // 나중에 다시 평가
 			}
+			// AUTO 는 창 끝 시점으로 큐 (Combat_QueueBranch 0x209400 실행 시점 f12). 프레임 간격이 창 끝(예 0.98)을
+			// 건너뛰어도 실행된다 (이전엔 "나중에 재평가" 라 1초 기술의 [0–0.98] AUTO 를 60fps 에서 놓침)
 			queued = c;
 			queuedAt = execAt;
 			queuedPrio = best;
@@ -528,10 +547,10 @@ public final class Combatant {
 		if ((b.flags() & 0x8) != 0) {
 			stateBits &= ~STATE_TRIGGER; // 실행 시 소비
 		}
-		end();
 		if (b.target() == -2) {
-			return;
+			return; // "(block)" 분기: 이벤트를 소비만 하고 현재 기술 유지 (예 KILLWIN 의 EV_DEATH, 슈퍼아머 EV_HIT_REACT)
 		}
+		end();
 		if (b.target() == -1) {
 			// 기술만 끝내는 분기(IDLECOMBAT 의 ANY_INPUT 등): 같은 입력으로 루트 액션 재평가
 			if (in != null) {
@@ -565,13 +584,19 @@ public final class Combatant {
 		}
 		log.accept(String.format("기술 %d %s (분기 입력 %s)", m.id(), clip != null ? clip.name : "?",
 				CombatFile.inputName(b.input())));
+		moveSink.accept(EVENT_MOVE_START, m.id());
 	}
 
 	private void end() {
+		// Combat_EndMove (0x209918): 진행률 ≥ 1 로 끝난 기술이면 1047 (AUTO 분기로 다음 기술에 넘어가도)
+		Move done = move != null && progress() >= 0.999f ? move : null;
 		move = null;
 		clip = null;
 		vclip = null;
 		anim.setRate(1f);
+		if (done != null) {
+			moveSink.accept(EVENT_MOVE_DONE, done.id());
+		}
 	}
 
 	/**
@@ -627,6 +652,7 @@ public final class Combatant {
 			if (once && !firedEvents.add(e.bit())) {
 				continue;
 			}
+			eventSink.accept(e);
 			switch (e.type()) {
 				case 20 -> stanceTag = e.index(); // SET_1B0: 공격 자세 태그 → 피격자 반응 분기 선택
 				case 3, 40 -> soundSink.accept(e.hash(), owner.position()); // SOUND

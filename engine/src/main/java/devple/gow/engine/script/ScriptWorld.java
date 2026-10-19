@@ -211,8 +211,15 @@ public final class ScriptWorld {
 	 */
 	public static int regionOf(ScriptEntity e) {
 		int r = e.data.baseId();
-		return e.volume != null && e.volume.hull().hasRegion(r) ? r : -1;
+		if (e.volume == null || e.volume.hull().hasRegion(r)) {
+			return e.volume != null ? r : -1;
+		}
+		// 영역 ID 가 있는데 볼륨에 그 영역이 없고, 볼륨이 여러 영역으로 나뉘어 있으면 밖 (ATHN01E ENV_bossEnt 51–54 의 "boss zone 5/6" 55/56, 37 문서)
+		return r != 0 && e.volume.hull().regionCount() >= 2 ? NO_REGION : -1;
 	}
+
+	/** 어떤 위치에서도 안이 아닌 영역. */
+	static final int NO_REGION = Integer.MIN_VALUE;
 
 	// ---- 슬롯 평가 ----
 
@@ -438,7 +445,7 @@ public final class ScriptWorld {
 				if (changed.containsKey(r)) {
 					continue;
 				}
-				boolean in = r < 0 ? !now.isEmpty() : now.contains(r);
+				boolean in = r == NO_REGION ? false : r < 0 ? !now.isEmpty() : now.contains(r);
 				VolumeRegion key = new VolumeRegion(v, r);
 				boolean was = a.inside.contains(key);
 				if (in != was) {
@@ -452,10 +459,14 @@ public final class ScriptWorld {
 					changed.put(r, null);
 				}
 			}
-			for (ScriptEntity e : m.getValue()) {
-				Boolean in = changed.get(regionOf(e));
-				if (in != null && (in ? e.type() == 0 : e.type() == 1) && passes(e, a)) {
-					trigger(e, a);
+			// 이탈(1) 먼저, 진입(0) 나중: 영역 사이를 옮길 때 "옛 영역 이탈 → 새 영역 진입" 순서여야 스크립트 상태가 새 영역으로 남는다
+			// (히드라 구역 1→2: Exit1 이 Entry2 뒤에 오면 구역이 0 으로 지워짐, 37 문서)
+			for (int pass = 1; pass >= 0; pass--) {
+				for (ScriptEntity e : m.getValue()) {
+					Boolean in = changed.get(regionOf(e));
+					if (in != null && e.type() == pass && (in ? pass == 0 : pass == 1) && passes(e, a)) {
+						trigger(e, a);
+					}
 				}
 			}
 		}
@@ -494,7 +505,7 @@ public final class ScriptWorld {
 		}
 		int r = regionOf(e);
 		Set<Integer> now = e.volume.regions(a.pos[0], a.pos[1], a.pos[2]);
-		return r < 0 ? !now.isEmpty() : now.contains(r);
+		return r == NO_REGION ? false : r < 0 ? !now.isEmpty() : now.contains(r);
 	}
 
 	// ---- 발동 ----

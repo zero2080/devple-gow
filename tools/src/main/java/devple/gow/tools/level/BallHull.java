@@ -151,6 +151,18 @@ public final class BallHull {
 		return out;
 	}
 
+	/** 서로 다른 영역 ID 개수. */
+	public int regionCount() {
+		java.util.Set<Integer> s = new java.util.HashSet<>();
+		for (int r : ballRegion) {
+			s.add(r);
+		}
+		for (int r : hullRegion) {
+			s.add(r);
+		}
+		return s.size();
+	}
+
 	/** 영역 번호가 이 볼륨에 있는지. */
 	public boolean hasRegion(int region) {
 		for (int r : ballRegion) {
@@ -160,6 +172,33 @@ public final class BallHull {
 		}
 		for (int r : hullRegion) {
 			if (r == region) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** 로컬 좌표 p 가 영역 region 의 ball/hull 안인지. */
+	public boolean contains(float x, float y, float z, int region) {
+		for (int i = 0; i < balls.size(); i++) {
+			float[] b = balls.get(i);
+			float dx = x - b[0], dy = y - b[1], dz = z - b[2];
+			if (ballRegion[i] == region && dx * dx + dy * dy + dz * dz <= b[3] * b[3]) {
+				return true;
+			}
+		}
+		for (int h = 0; h < hulls.size(); h++) {
+			if (hullRegion[h] != region || hulls.get(h).planes.isEmpty()) {
+				continue;
+			}
+			boolean in = true;
+			for (float[] p : hulls.get(h).planes) {
+				if (p[0] * x + p[1] * y + p[2] * z + p[3] > 0) {
+					in = false;
+					break;
+				}
+			}
+			if (in) {
 				return true;
 			}
 		}
