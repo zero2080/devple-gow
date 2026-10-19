@@ -62,7 +62,13 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 ./gradlew :engine:run --args="--movie SEMO01"          # 컷신 재생 (ISO 직접 읽기, --wide = PSW, START/× 건너뛰기)
 ```
 조작: WASD 이동, J □(약공) / I △(강공) / L ○(잡기) / K ×(점프) / Q L1(방어) / E R1(대시) / Z L2(마법) / C R2(사용: 상자·문·레버·밀기·세이브, 원작과 같음), 방향키 = 오른쪽 스틱(회피),
-Shift L3 + 오른쪽 Shift R3 = 신들의 분노, Enter = START(일시정지). 게임패드 자동 인식.
+Shift L3 + 오른쪽 Shift R3 = 신들의 분노, Enter = START(일시정지).
+
+게임패드: 연결하면 자동 인식한다 (슬롯 1–16 중 첫 게임패드, 실행 중 꽂고 빼도 1 초 안에 다시 찾음). GLFW 내장 매핑(Xbox·DualShock 4·DualSense 등)을 쓰고,
+버튼은 위치 기준 — 아래 ×, 오른쪽 ○, 왼쪽 □, 위 △, LB/RB = L1/R1, LT/RT = L2/R2 (절반 이상 당김), 스틱 누름 = L3/R3, 방향 패드, Start/Back = START/SELECT.
+원작 1편 배치: **L2 마법**, **R2 사용**(상자·문·레버·세이브), R1 대시, ○ 잡기·포세이돈 연타, 오른쪽 스틱 회피.
+인식이 안 되면 `./gradlew :engine:run --args="--pad-test"` 로 연결·매핑 상태를 확인한다. "매핑 없음" 이면 SDL 형식
+[gamecontrollerdb.txt](https://github.com/mdqinc/SDL_GameControllerDB) 를 작업 폴더에 두거나 `GOW_PAD_DB=경로` 로 지정하면 시작할 때 읽는다.
 
 ## 빌드 / 도구 실행
 

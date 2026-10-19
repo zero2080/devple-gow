@@ -24,6 +24,7 @@ import java.nio.file.Path;
  *   ./gradlew :engine:run --args="--game [ATHN01A] [--auto-run s] [--entry 인스턴스]"   (통합 게임: 레벨 + 크레토스 + 전투 + HUD)
  *   ./gradlew :engine:run --args="--game ATHN01E --entry gospawndaddyhydra --boss-demo"   (보스전 자동 연출, 37 문서)
  *   ./gradlew :engine:run --args="--movie SEMO01 [--wide] [--movie-start 초] [--mute]"   (컷신 재생, 33 문서)
+ *   ./gradlew :engine:run --args="--pad-test"   (게임패드 진단: 연결·매핑·버튼 이름)
  * </pre>
  */
 public final class GowMain {
@@ -41,6 +42,12 @@ public final class GowMain {
 		}
 		if (java.util.Arrays.asList(args).contains("--skip-movies")) {
 			System.setProperty("gow.skipmovies", "1"); // 컷신 건너뜀 (끝 이벤트 501 만)
+		}
+		if (java.util.Arrays.asList(args).contains("--pad-test")) { // 게임패드 진단 (연결·매핑·버튼)
+			try (Engine engine = new Engine("패드 진단", 640, 360)) {
+				engine.run(new devple.gow.engine.scene.PadTestScene());
+			}
+			return;
 		}
 		if (java.util.Arrays.asList(args).contains("--no-fx")) {
 			System.setProperty("gow.nofx", "1"); // 비·파티클 끔 (스크린샷 확인용)
