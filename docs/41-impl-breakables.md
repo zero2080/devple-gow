@@ -39,16 +39,45 @@
 - 0x1DDDF0: hp ≤ 0 → 이벤트 1009 (0x3F1), OrbEmitter (+0x28) 가 ≥ 0 이면 OrbEmitter 템플릿(루트 0x2A2670) → sub_002258D8 (GO 위치에서 오브 방출), Bonus (+0x2C).
 - 0x1DDF70 (파괴 상태 진입): GO 애니 컴포넌트를 0초부터 재생 (sub_00100578), 이벤트 1018 (0x3FA), +0x30 bit 0x1 이면 파편 물리 객체.
 - 0x1DE370 (애니 끝): Type ≤ 0 이면 GO 플래그 |= 3 (숨김/비활성 추정), Type 3 은 재부착 경로.
+- 0x1DE278 (파괴 뒤 매 프레임): 경과 +0x24 += 1/60. 파편 객체가 있으면 0x1DEBA8. 경과가 [#c3441d8c (+0x20, 3초), +0x20 + Fade Time] 이면
+  0x1DE6B8(1 − (t − 지연)/Fade) (0.01 미만이면 다른 렌더 모드 — 페이드), 지연을 처음 넘을 때 0x1D9700(플레이어, #cb865a1c, 0) 1번, 지연 + Fade 를 넘으면 1 (제거) [확실: 시점].
+
+### 1.3 byte 트랙 = 관절 가시성 [확실: 데이터 / 추정: 의미·계층]
+ANM 타입 10 원소 크기 1 (05 문서 §2.8) 의 12B 엔트리 `{u16 관절, u8 flags, u8 offHi, u16 count, u16 start, u16 hold, u16 offLo}` + u8 값 (1/60 초 프레임):
+
+| 물체 | 트랙 | 메시 |
+|---|---|---|
+| breakableWoodDoor1..7 | doorVis (1) = [1,1,0] hold 124 (2.1초) | 파트 하나가 관절 1 에만 스킨 (온전한 문) → 2 프레임 뒤 사라지고 먼지 FXC 만 |
+| breakBarrel2 | barrelVisDisapear (1) = [1,1,0] hold 0 | 관절 1 = 온전한 통 몸 (파트 p1), 자식 barrelWood19–26 + 몸 혼합 파트 p0, barrelBisShards (10) 아래 11–18 = 날아가는 조각 (p2) |
+| breakbucket017 / BreakBucketFull02 | breakgroup1 (1) = [1,1,0], breakgroup2 (2) = [0,0,1], group3 (11) = [1,1,0] | 관절 1 = 온전한 양동이, 2 의 자식 3–10 = 조각 |
+| 항아리 (ARENA06), breakPallete1, SwingMetalGate | 없음 | 조각 관절만 애니 |
+
+값 0 = 그 관절과 자손 숨김, 트랙이 끝난 뒤 (hold 0) 에도 마지막 값 유지, 시작 전은 보임 [추정: 원작 소비 코드 미발견 — 객체 +0x64 관절 비트는 행렬 캐시 유효 비트 (0x136B18 초기화)라 아님].
+양동이의 [0,0,1] (조각은 처음 2 프레임 숨김) 와 통의 조각 묶음이 몸과 다른 가지에 있는 것이 계층 해석과 맞는다.
+
+### 1.4 파편 물리 객체 (bit 0x1, 0x1DE218 → 0x1DD638(0xC10) → 0x1DEA28, 갱신 0x1DEBA8) [확실: 식]
+- 0xC10 바이트 = 0x30 바이트 슬롯 64 개 + 개수 (+0xC00). 루트의 첫 자식부터 **자식 없는 관절**마다 슬롯 {+0x0 위치 = 현재 관절 월드 위치, +0x10 속도 0, +0x20 관절 행렬, +0x24 관절, +0x28 9.82 (미사용), +0x2C 플래그 1 = 애니 따름}.
+- 애니 따름: A = 애니 관절 월드 위치, V = (A − P)·60. 선분 P + (0,1.6,0) → A − (0,16,0) (0x11E190) 이 부딪히면 그 y 가 루트 관절 y 와 1.6 넘게 다를 때,
+  안 부딪히면 A.y &lt; 루트 y − 1.6 일 때 플래그를 끈다. 아니면 P = A.
+- 물리: V.y −= 640/60, P' = P + V/60. 선분 P + (0,1.6,0) → P' − (0,1.6,0) 충돌 시 V ×= 0.25, V −= 2(V·N)N (N = 충돌 법선 0x2C8F20), P' = P + V/60.
+  관절 행렬 = 부모 역행렬 × (애니 회전 행 + 위치 P') — 조각은 애니대로 돌면서 위치만 시뮬레이션.
+- 경계 반지름 = 루트에서 가장 먼 조각 + 32 (0x1DE928).
+- 즉 받침 바닥 위에 그대로 떨어지는 조각은 애니를 따르고, 계단·비탈·턱 (조각 아래 16 안의 바닥 높이가 루트와 다름) 에서만 물리로 굴러 떨어진다.
+- Brkb 000 (항아리) 만 bit 0x1 = 1 (#93191d85 하위 바이트), 910/956/002 는 0.
 
 ## 2. 엔진 (`game/Breakables`)
 - 레벨 적재 시 Breakable GO 마다 중심 = 인스턴스 경계 중심, 반지름 = `CDV_<오브젝트>` 공(없으면 24), 타수 = Brkb Hit Points.
 - 매 프레임 `Combatant.strikes(중심, 반지름)`: 진행 중 공격(피해 > 0 창)의 부위 히트박스 구(34 문서) 와 겹치면 hp −= 공격 피해 바이트 (최소 1) (같은 기술·공격 번호는 한 번) [확실: 0x1DE5A0].
 - hp ≤ 0 → 렌더에서 숨김(`LevelScene.hideInstance`) + 그 GO 의 Marker 오브젝트 파괴 → DestructionSensor 발동.
-- 파괴 연출 (`GameScene.onBreak` → `MagicFx.breakObject`): 레벨 WAD 를 이펙트 라이브러리에 등록해 두고 (`MagicFx.addWad(level.assets())`), 물체 GO 이름
+- 파괴 연출 (`GameScene.onBreak` → `MagicFx.breakObject(이름, 행렬, 지연, Fade, 물리)`): 레벨 WAD 를 이펙트 라이브러리에 등록해 두고 (`MagicFx.addWad(level.assets())`), 물체 GO 이름
   그대로 이펙트로 재생 — 인스턴스 행렬(`GoInstance.matrix()` 전치) 에 오브젝트 ANM 파괴 act + 메시(조각 관절) + FXC 먼지 + SEM 소리 (§4.4 of 40).
-  act 가 끝나면 Fade Time 동안 마지막 포즈를 흐리게 하고 지운다 [추정: Fade Time 사용처 미확인, 원작은 0x1DE370 에서 숨김].
+  ~~act 가 끝나면 Fade Time 동안 흐리게~~ → 파괴 뒤 #c3441d8c (`Item.fadeDelay`, 3초) 부터 Fade Time 동안 불투명도 1→0, 그 뒤 제거 (§1.2) [확실: 시점, 추정: 페이드 = 불투명도].
+- u8 가시성 (§1.3): `Animation.hiddenJoints(sk, t)` → `AnimatedModel.hiddenJoints` (파트가 쓰는 관절이 모두 숨김이면 그 파트를 그리지 않음), `EffectSystem.Effect.jointVisibility` (부서지는 물체만 켬). `AnimViewerScene` 도 적용.
+- 파편 물리 (§1.4): `fx/BreakDebris` — `Item.debrisPhysics` 면 `Effect.debris` 가 tick 마다 애니 관절 월드를 받아 조각 관절 행렬을 바꾼다. 충돌 = `MagicFx.Surface.cast` (레벨 충돌), dt = 프레임 (원작 1/60).
 - 오브: Brkb +0x28 OrbEmitter 번호 → `OrbDrops.rollNode("/TweakTemplates/OrbEmitter/900/")` → 즉시 획득 (다른 오브 드롭과 같은 근사). 900: Normal Weapon Prob 1, Weapon Template 50.
-- [미구현] byte 트랙 가시성 (doorVis, barrelVisDisapear: 조각 숨김), 파편 물리 (bit 0x1), Bonus 템플릿, 마법·발차기·물체 충돌 판정, Type 2/3.
+- [미구현] Bonus 템플릿, 마법·발차기·물체 충돌 판정, Type 2/3, 지연 시점의 0x1D9700(#cb865a1c), 0x1DE6B8 의 정확한 렌더 모드.
+- 검증 `BreakDebrisTest`: 통·양동이·나무문 가시성 표 (몸 숨김·조각 보임·트랙 뒤 유지), 항아리 조각 9+ 개 — 루트 높이 바닥에서는 애니 그대로, 10 아래 바닥에서는 물리로 떨어져 바닥 위에 멈춤.
+  스크린샷: `--anim gow-rom/ATHN03A.WAD MDL_breakBarrel2 breakbarrel2 ANM_breakbarrel2` 50 프레임 = 몸 사라지고 널빤지만, ARENA06 항아리 □ 2회 = 바닥 조각.
 - 검증 `BreakablesTest`: ARENA06 36 개 로드, 영웅 □ 로 항아리 파괴 → Marker 101 → LevelData0 ≥ 1.
   `EffectTest.breakableObjects`: 항아리 GO = 1회성 1.667초 + SND_POTTERYSMASH, Brkb 000 OrbEmitter −1·Fade 3, ATHN03A 통 900 → 붉은 오브, 나무문 HP 8.
 - 스크린샷 `fx2_pots.png` (`--game ARENA06 --entry gopotlgdirtyabrk20`, □ 3회): 깨진 항아리 밑동과 흩어진 조각.

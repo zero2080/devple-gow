@@ -168,6 +168,46 @@ public final class Animation {
 	}
 
 	/**
+	 * u8 채널을 <b>관절 가시성</b>으로 읽은 숨김 표 (41 문서 §2): 값 0 인 관절과 그 자손을 숨긴다 [추정: 의미·계층].
+	 * 부서지는 물체 act 에서 온전한 몸 관절 (doorVis, barrelVisDisapear, breakgroup1) 이 [1,1,0], 조각 묶음 (breakgroup2) 이 [0,0,1].
+	 * 트랙이 끝난 뒤에도 마지막 값을 유지한다 (hold 0 인 통·양동이도 조각만 남아야 한다) [추정], 트랙 시작 전에는 보임.
+	 *
+	 * @return 관절별 숨김 (u8 트랙이 없으면 null)
+	 */
+	public boolean[] hiddenJoints(Skeleton sk, float t) {
+		if (byteTracks.isEmpty()) {
+			return null;
+		}
+		int n = sk.size();
+		int[] v = new int[n];
+		java.util.Arrays.fill(v, -1);
+		for (ByteTrack bt : byteTracks) {
+			if (bt.id() >= n || bt.count() == 0) {
+				continue;
+			}
+			int f = Math.round(t / bt.frameTime());
+			if (f < bt.start()) {
+				continue;
+			}
+			v[bt.id()] = bt.values()[Math.min(f - bt.start(), bt.count() - 1)];
+		}
+		boolean[] h = new boolean[n];
+		boolean any = false;
+		for (int j = 0; j < n; j++) {
+			h[j] = hiddenOf(sk, v, j, 0);
+			any |= h[j];
+		}
+		return any ? h : null;
+	}
+
+	private static boolean hiddenOf(Skeleton sk, int[] v, int j, int depth) {
+		if (j < 0 || depth > 64) {
+			return false;
+		}
+		return v[j] == 0 || hiddenOf(sk, v, sk.joints.get(j).parent(), depth + 1);
+	}
+
+	/**
 	 * 타입 10 f32 트랙이 이 스켈레톤의 <b>무기 로케이터</b>({@code *WeapOH}) 위치인지: 모든 스트림이 성분 x/y/z 이고, 관절이
 	 * 루트의 자식, inverse bind 없음(메시가 붙지 않음), 쿼터니언, 같은 act 의 타입 5 이동이 건드리지 않는 관절.
 	 * 슬롯 의미는 오브젝트 클래스가 정하므로 이름으로 히어로 바인딩만 적용한다 — 이름 조건 없이 고르면 통나무 조각/zeroJoint 등

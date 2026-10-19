@@ -1314,7 +1314,7 @@ public final class GameScene implements Scene {
 			return;
 		}
 		if (it.matrix != null) {
-			magicFx.breakObject(owner, new org.joml.Matrix4f().set(it.matrix), it.fadeTime);
+			magicFx.breakObject(owner, new org.joml.Matrix4f().set(it.matrix), it.fadeDelay, it.fadeTime, it.debrisPhysics);
 		}
 		List<OrbDrops.Orb> orbs = OrbDrops.rollNode(orbTweaks, it.orbNode(), rnd, hero.player.hp, hero.player.mp);
 		for (OrbDrops.Orb o : orbs) {

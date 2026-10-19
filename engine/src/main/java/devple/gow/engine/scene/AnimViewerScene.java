@@ -88,13 +88,16 @@ public final class AnimViewerScene implements Scene {
 	@Override
 	public void render(Engine e, float alpha) {
 		Animation a = anims.get(index);
-		Pose pose = a.sample(model.skeleton(), time, true);
+		float t = a.duration > 0 ? time % a.duration : time;
+		Pose pose = a.sample(model.skeleton(), t, true);
+		model.hiddenJoints = a.hiddenJoints(model.skeleton(), t); // u8 가시성 트랙 (41 문서 §2)
 		float h = 40f;
 		cam.near = 0.5f;
 		cam.far = 5000;
 		cam.target.set(0, h * 0.5f, 0);
 		cam.eye.set((float) Math.sin(yaw) * h * 2 * dist, h * 0.7f, (float) Math.cos(yaw) * h * 2 * dist);
 		model.draw(cam, e.window().aspect(), world.identity(), pose, e.renderer().white());
+		model.hiddenJoints = null;
 	}
 
 	@Override

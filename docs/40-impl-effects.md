@@ -117,7 +117,7 @@ Z 라는 것의 확인이다 (`EffectLibrary.fieldAccel`: (x,y,z) ↦ (x, z, −
 | 제우스 차지 | SCR_ShowThunderbolt (0x19FF60, 0x8D7EAE7F): 이벤트 인자 1 이면 LWEAPIH, 아니면 RWEAPIH 에 goBolt + goBoltChargeUp (0x19FE10) 부착 [확실] | 같은 관절에 부착, SCR_ThrowThunderbolt (0x96EDE590) 또는 기술 변경에서 뗀다 [추정] |
 | 제우스 | Arrow GO Name goBolt + Trail goStdBolt 를 화살에, 명중 Hit Effect goBoltHit | 화살 위치·속도 방향(+Z) 부착, 화살 소멸 시 정지, 명중 1회 0.8초 |
 | 하데스 | goDedRed 영혼, goDeadHit, goDeadDie | 영혼 위치·속도 방향 부착 (꼬리 −Z) |
-| 포세이돈 | SCR_Lightning (0x1948F0): 시작 때 goLightningAttackMain + goLightningRadius 를 만들어 매 프레임 영웅 행렬에. 타이머 0x3368A8 이 (1/60)·연타율·"Stage n Flash Freq" 씩 줄어 0 이면 goStrikeGrp 를 반경 (1 − rnd²)·Reach·(1 + 연타율·(Mash Reach Scale − 1))·16, 임의 각에 (슬롯 4 순환) [확실: 식] | 두 GO 영웅 부착, goStrikeGrp 바닥 높이에 1회. 연타율 = 매시 미터/최대 — 미터 미구현이라 0.5 [근사]. 피해 틱마다 goLightningSingleBolt (기존) |
+| 포세이돈 | SCR_Lightning (0x1948F0): 시작 때 goLightningAttackMain + goLightningRadius. 매 프레임 AttackMain 행렬 = 단위 회전 + 영웅 위치 (0x194C08, 회전 없음), Radius = 같은 행렬 축 × s (0x195500), s (0x3368B8, 시작 1) += (f23 − s)·0.05. 타이머 0x3368A8 (시작 1) 이 (1/60)·연타율·**From Above Bolt Freq** (전역 short 0x29D780 = 20) 씩 줄어 ≤ 0 이면 1 로 되돌리고 goStrikeGrp 를 반경 (1 − rnd²)·f23·16, 각 rnd·2π 에 (슬롯 4 순환, 재사용 슬롯의 이전 GO 제거, 회전 없음). f23 = Reach·(1 + 연타율·(Mash Reach Scale − 1)), 연타율 = 매시 미터 / Mashometer Max (35 문서 §4.5) [확실: 식] — 예전 문서의 "Stage n Flash Freq" 는 틀림 (Flash Freq +0x34 는 0x195BA8 화면 효과 인자) | 같은 식 (`Magic.mashRate()/lightningReach()`), 배율 감쇠는 dt 로 환산 (1 − 0.95^(60dt)). 연타 없으면 낙뢰 없음. 피해 틱마다 goLightningSingleBolt (기존) |
 
 마법 WAD 는 처음 필요할 때 현재 단계(`Magic.stage`)의 `R_MEDHD<n>` 등을 등록하고, 단계가 바뀌면 다시 등록해 같은 이름을 덮는다.
 
@@ -251,6 +251,6 @@ MFX 템플릿 0x48 바이트 (`/TweakTemplates/MFX/nnn/`):
 - 표면/커브 이미터 (FXC 3/4), FXC 필드 소용돌이·뉴턴.
 - 바닥 피 자국의 원작 낙하·부착 (Cone/Impulse/Gravity/Fall Time), Particle System 1 Dark / 2.
 - MFX #33317a59/#da729778 (진동·소리 추정), Slice Hit 의 원작 접촉 조건.
-- 포세이돈 매시 미터 (연타 → 반경·빈도), goFlashGrp (0x1DAB08 사용처) 미연결.
+- ~~포세이돈 매시 미터~~ (§4.1, 35 §4.5). goFlashGrp: **포세이돈이 아니라 신들의 분노(God Mode)** — 0x1DAB08 (0x1DAD18 ← 0x1DB1C0 등: 게이지 0x3044A0 ≥ 0x304364 일 때 — God Mode 진입 [강한 추정]) 이 영웅 관절 8 곳에 GO 를 붙이고 goStrikeGrp 를 플레이어 컨트롤러 +0x44, goFlashGrp 를 +0x48 에 만들기만 하고, 해제 0x1DABF8 이 지운다. 그 사이 +0x44/+0x48 을 읽는 코드는 찾지 못함 [확실: 생성·제거, 미확인: 위치 갱신] → 엔진 God Mode 연출과 함께 미연결.
 - Concussion No Orient/Link Duration, PlayFX #a4e61bc3 / #71bfa948 / #a6de59b7, Left/Right Weapon 의 정확한 부착 대상.
 - 적 템플릿 번호 충돌 (여러 적 WAD 의 같은 PlayFX 번호) — 마지막 WAD 가 덮음.

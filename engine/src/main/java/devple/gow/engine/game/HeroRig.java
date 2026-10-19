@@ -283,6 +283,8 @@ public final class HeroRig implements AutoCloseable {
 		}
 		magic.select(in, ctl.position); // 방향키 마법 선택 (원작 sub_001D7E10)
 		magic.update(combat, in, dt);
+		// 포세이돈 연타 회전 (SCR_Lightning 0x195160: 영웅 행렬에 Y 회전 Mash Max Spin · 연타율)
+		ctl.yaw += magic.lightningSpin() * dt;
 	}
 
 	/** 관절 월드 행렬 (영웅 월드 × 관절, 이펙트 부착용). 없는 관절이면 영웅 원점 + false. */

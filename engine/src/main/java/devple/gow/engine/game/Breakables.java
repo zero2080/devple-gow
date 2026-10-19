@@ -50,6 +50,10 @@ public final class Breakables {
 		public String template;
 		public int orbEmitter = -1;
 		public float fadeTime;
+		/** Brkb +0x20 #c3441d8c: 파괴 뒤 페이드 시작까지 (초, 0x1DE278). */
+		public float fadeDelay = 3;
+		/** Brkb +0x30 bit 0x1 #93191d85: 파편 물리 객체 (0x1DE218). */
+		public boolean debrisPhysics;
 		public float[] matrix;
 
 		Item(String owner, Vector3f center, float radius, float hp) {
@@ -105,6 +109,8 @@ public final class Breakables {
 			it.fadeTime = tweaks != null ? tweaks.f(node, "Fade Time", 1f) : 1f;
 			if (tweaks != null) {
 				it.orbEmitter = (short) tweaks.rawHash(node, 0xB9A0D2AD).orElse(-1); // s16 (상위 2바이트는 덤프 잡음)
+				it.fadeDelay = Float.intBitsToFloat(tweaks.rawHash(node, 0xC3441D8C).orElse(Float.floatToIntBits(3f)));
+				it.debrisPhysics = (tweaks.rawHash(node, 0x93191D85).orElse(0) & 1) != 0; // 비트 필드 (하위 바이트)
 			}
 			it.matrix = g.matrix();
 			items.add(it);
