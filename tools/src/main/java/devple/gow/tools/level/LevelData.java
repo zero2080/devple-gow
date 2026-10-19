@@ -34,8 +34,8 @@ public final class LevelData {
 		}
 	}
 
-	/** 배치된 카메라: 월드 행렬(행 0..2 = 오른쪽/위/뒤, 행 3 = 위치). */
-	public record PlacedCamera(CameraDef def, String owner, float[] world) {
+	/** 배치된 카메라: 월드 행렬(행 0..2 = 오른쪽/위/뒤, 행 3 = 위치), 레일(NCV_, 월드 좌표, 없으면 null). */
+	public record PlacedCamera(CameraDef def, String owner, float[] world, NcvCurve rail) {
 
 		public float[] eye() {
 			return new float[]{world[12], world[13], world[14]};
@@ -55,6 +55,8 @@ public final class LevelData {
 	public final Map<String, BallHull> hulls = new LinkedHashMap<>();
 	public final Map<String, DebugWire> wires = new LinkedHashMap<>();
 	public final Map<String, CameraDef> cameras = new LinkedHashMap<>();
+	/** 레일 커브 NCV_ (월드 좌표, MESH_EXTRA 0x70). */
+	public final Map<String, NcvCurve> curves = new LinkedHashMap<>();
 	public final List<PlacedVolume> volumes = new ArrayList<>();
 	public final List<PlacedCamera> placedCameras = new ArrayList<>();
 
@@ -62,6 +64,10 @@ public final class LevelData {
 		this.wad = wad;
 		this.layout = new LevelLayout(wad);
 		for (WadTag t : wad.tags()) {
+			if (t.tag() == WadTagType.MESH_EXTRA && t.hasData() && NcvCurve.is(t.name())) {
+				curves.putIfAbsent(t.name(), NcvCurve.parse(t.name(), t.data()));
+				continue;
+			}
 			if (t.tag() != WadTagType.RESOURCE || !t.hasData()) {
 				continue;
 			}
@@ -96,7 +102,9 @@ public final class LevelData {
 						}
 					}
 					float[] jw = j > 0 ? p.jointWorld()[j] : w;
-					placedCameras.add(new PlacedCamera(c, p.instance().name(), Mat4.mul(c.local(), jw)));
+					// 레일은 월드 좌표 그대로 (ATHN01A Boat1Cam1 의 월드 위치가 NCV_Boat1Rail1 위에 정확히 놓인다)
+					placedCameras.add(new PlacedCamera(c, p.instance().name(), Mat4.mul(c.local(), jw),
+							c.rail() != null ? curves.get(c.rail()) : null));
 				}
 			}
 		}

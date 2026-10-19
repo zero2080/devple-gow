@@ -67,6 +67,7 @@ public final class GameScene implements Scene {
 	private ScriptWorld world;
 	private final HudBinding hudBinding = new HudBinding();
 	private final Camera cam = new Camera();
+	private devple.gow.engine.level.CameraRig cameraRig;
 	private final Vector3f spawn = new Vector3f();
 	private final Vector3f checkpoint = new Vector3f();
 	private float spawnYaw;
@@ -146,6 +147,8 @@ public final class GameScene implements Scene {
 		cam.fovDeg = 60;
 		cam.near = 2;
 		cam.far = 30000;
+		cameraRig = new devple.gow.engine.level.CameraRig(level.data());
+		cameraRig.update(0, hero.ctl.position, hero.ctl.yaw, false);
 		world = new ScriptWorld(level.data(), session.scriptHost, listener());
 		world.start();
 		System.out.printf("레벨 %s (진입점 %s): 시작 (%.0f, %.0f, %.0f), 적 종류 %s%n", levelName, entry, spawn.x, spawn.y,
@@ -219,6 +222,26 @@ public final class GameScene implements Scene {
 			@Override
 			public void message(int id, float seconds) {
 				showMessage(id, seconds);
+			}
+
+			@Override
+			public void camera(String name) {
+				cameraRig.request(name); // Internal 0x8 SwitchCamera
+			}
+
+			@Override
+			public void vis(ScriptEntity source, List<String> objects, int[] values) {
+				if (values.length > 4 && values[4] != 0) {
+					objects.forEach(o -> cameraRig.setOwnerVolumes(o, values[4] == 1)); // Attr11_1: CMV 볼륨 on/off
+				}
+			}
+
+			@Override
+			public void internal(int func, List<Object> args) {
+				if (func == 0x9 && !args.isEmpty()) {
+					Object a = args.get(0);
+					cameraRig.setVolumeQuery(a instanceof Number n ? n.floatValue() != 0 : !(a instanceof Boolean b) || b); // Internal 0x9 CMV 질의 on/off
+				}
 			}
 
 			@Override
@@ -479,6 +502,7 @@ public final class GameScene implements Scene {
 			}
 		}
 		Vector3f p = hero.ctl.position;
+		cameraRig.update(dt, p, hero.ctl.yaw, !hero.ctl.grounded);
 		world.tick(dt, p.x, p.y, p.z);
 		if (hero.player.hp <= 0) {
 			heroDied();
@@ -595,16 +619,8 @@ public final class GameScene implements Scene {
 	}
 
 	private void updateCamera(float alpha) {
-		Vector3f p = new Vector3f(hero.ctl.prevPosition).lerp(hero.ctl.position, alpha);
-		LevelData.PlacedCamera lc = level.data().activeCamera(p.x, p.y + 10, p.z);
-		if (lc != null) {
-			float[] eye = lc.eye();
-			cam.eye.set(eye[0], eye[1], eye[2]);
-		} else {
-			float d = 140;
-			cam.eye.set(p.x + (float) Math.sin(hero.ctl.yaw) * d, p.y + 70, p.z + (float) Math.cos(hero.ctl.yaw) * d);
-		}
-		cam.target.set(p.x, p.y + 22, p.z);
+		// 원작 카메라 시스템 (CMV 선택 + 레일/궤도 + 전환 보간): CameraRig, 30 문서. 갱신은 update() 틱에서
+		cameraRig.apply(cam, alpha);
 		camYaw = (float) Math.atan2(-(cam.target.x - cam.eye.x), -(cam.target.z - cam.eye.z));
 	}
 

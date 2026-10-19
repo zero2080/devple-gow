@@ -65,9 +65,18 @@ public final class Cli {
 					v(h.sphere, 4), h.names);
 		}
 		for (LevelData.PlacedCamera c : lv.placedCameras) {
-			System.out.printf("카메라 %-20s owner=%-20s eye=%s fwd=%s rail=%s mode=%d/%d fov?=%s p=%s%n", c.def().name(), c.owner(),
-					v(c.eye(), 3), v(c.forward(), 3), c.def().rail(), c.def().mode(), c.def().railKind(), v(c.def().fov(), 2),
-					v(c.def().params(), 4));
+			CameraDef.Params cp = c.def().p();
+			String rail = "-";
+			if (c.rail() != null) {
+				float[] a = new float[3], b = new float[3];
+				c.rail().eval(0, a);
+				c.rail().eval(c.rail().tMax(), b);
+				rail = c.def().rail() + " " + v(a, 3) + ".." + v(b, 3) + (c.rail().closed ? " 닫힘" : "");
+			}
+			System.out.printf("카메라 %-20s owner=%-20s eye=%s fwd=%s fov=%.1f° fl=%05x 모드 p%d/y%d 거리[%.0f,%.0f] 레일거리[%.0f,%.0f] 범위 p±%.0f y±%.0f 감쇠=%.2f 전환=%.2f 순위=%d rail=%s 전환표=%s%n",
+					c.def().name(), c.owner(), v(c.eye(), 3), v(c.forward(), 3), Math.toDegrees(cp.fovRad()), cp.flags(),
+					cp.pitchMode(), cp.yawMode(), cp.distMin(), cp.distMax(), cp.railMin(), cp.railMax(), cp.pitchRange(),
+					cp.yawRange(), cp.damping(), cp.blend(), cp.priority(), rail, c.def().transitions());
 		}
 	}
 
