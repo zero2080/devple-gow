@@ -33,6 +33,8 @@ public final class ShellScene implements Scene {
 		}
 		UiVariables v = ui.variables();
 		var snd = GameSession.sharedSound(rom);
+		ShellBinding.init(v, 0);
+		ShellBinding.bindAudio(v, snd);
 		try {
 			if (!snd.loaded().containsKey("R_PERMK.WAD")) {
 				snd.load(devple.gow.tools.wad.WadFile.load(rom.resolve("R_PERMK.WAD")));
