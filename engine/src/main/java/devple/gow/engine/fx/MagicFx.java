@@ -890,6 +890,7 @@ public final class MagicFx implements AutoCloseable {
 		lightning(m, heroPos, heroYaw, dt);
 		screen.update(m.lightningScript(), m.stage(3), dt);
 		godMode(heroCombat != null && heroCombat.owner() != null && heroCombat.owner().godMode());
+		normalBlades();
 		recentSounds.replaceAll((k, v) -> v - dt);
 		recentSounds.values().removeIf(v -> v <= 0);
 		for (Hittable h : enemies) {
@@ -1038,7 +1039,8 @@ public final class MagicFx implements AutoCloseable {
 	 * god 판 = "goMAIgodblade" / MAT_godswordtrail / MAT_godchainlink / MAT_godchainglow, 보통 = goMAIblade / MAT_swordtrail /
 	 * MAT_chainlink / MAT_chainglow (모두 WAD_R_Wpn = R_WPN&lt;코스튬&gt;_&lt;단계&gt;). 블레이드마다 이전 GO 를 지우고 (0x132768) 새 GO 를
 	 * 만들어 (0x132508/0x1327B8/0x132648) 영웅에 붙이고 (0x131460) 이전 행렬을 복사, "LeftBladeLight"/"RightBladeLight" 라이트 연결.
-	 * 엔진: 블레이드 루트 = 무기 로케이터 (BladeModels 와 같은 lWeapOH/rWeapOH), 보통 블레이드는 숨긴다. 궤적·사슬은 엔진에 없다.
+	 * 엔진: 블레이드 루트 = 사슬이 정한 블레이드 행렬 ({@link #bindBlades}, 45 문서 §3; 없으면 무기 로케이터 lWeapOH/rWeapOH),
+	 * 보통 블레이드 메시는 숨긴다. 궤적·사슬 머티리얼 교체는 BladeChainRenderer.
 	 */
 	public static final String GOD_BLADE = "goMAIgodblade";
 	static final String[] BLADE_JOINTS = {"lWeapOH", "rWeapOH"};
@@ -1051,6 +1053,72 @@ public final class MagicFx implements AutoCloseable {
 			fx.add(wpnWad);
 		}
 		godBladeCheck = active != null ? active : () -> false;
+	}
+
+	/** 사슬이 정한 블레이드 행렬과 궤적 켜짐 (HeroRig, 45 문서 §3). */
+	public interface Blades {
+		boolean world(int side, Matrix4f out);
+
+		boolean trail(int side);
+	}
+
+	private Blades blades;
+	/** 보통 블레이드 GO (goMAIblade, 메시는 BladeModels 가 그림 → 이미터만). */
+	private final EffectSystem.Effect[] normalBlades = new EffectSystem.Effect[2];
+	public static final String NORMAL_BLADE = "goMAIblade";
+
+	public void bindBlades(Blades b) {
+		blades = b;
+	}
+
+	private EffectSystem.Anchor bladeAnchor(int side) {
+		String jn = BLADE_JOINTS[side];
+		return out -> {
+			if (blades != null && blades.world(side, out)) {
+				return true;
+			}
+			if (!heroJoints.world(jn, out)) {
+				out.translation(heroPos).rotateY(heroYaw);
+			}
+			return true;
+		};
+	}
+
+	/**
+	 * 부착물 종류 3 (0x201A08: 파티클 이름이 "flame" 으로 시작) 은 궤적 (+0x1AC 0x8/0x10) 동안만 켠다 (0x204B38 → 0x201C78 / 0x201DD8).
+	 * 불티 (sparkemit)·EG 이미터는 어느 목록에도 없어 늘 켜져 있다.
+	 */
+	private java.util.function.Predicate<devple.gow.tools.fx.EffectLibrary.EmitterDef> flameGate(int side) {
+		return ed -> flame(ed) && (blades == null || !blades.trail(side));
+	}
+
+	/** 0x201A08 의 strncmp(파티클 이름, "flame", 5) — PTC 안 이름 (예 PTC_flame6 의 "flame6Shape"). */
+	public static boolean flame(devple.gow.tools.fx.EffectLibrary.EmitterDef ed) {
+		return ed.ptc() != null && ed.ptc().shape() != null && ed.ptc().shape().startsWith("flame");
+	}
+
+	/** 보통 블레이드 GO 유지 (신 모드·아르테미스면 끔). */
+	private void normalBlades() {
+		boolean want = blades != null && godBladeCheck.getAsBoolean() && !godBladesOn();
+		for (int i = 0; i < 2; i++) {
+			EffectSystem.Effect e = normalBlades[i];
+			if (want && (e == null || e.done())) {
+				e = fx.play(NORMAL_BLADE, bladeAnchor(i), Float.MAX_VALUE);
+				if (e != null) {
+					e.hideMesh = true;
+					e.emitterOff = flameGate(i);
+				}
+				normalBlades[i] = e;
+			} else if (!want && e != null) {
+				e.stop();
+				normalBlades[i] = null;
+			}
+		}
+	}
+
+	/** 보통 블레이드 GO (테스트). */
+	public EffectSystem.Effect normalBlade(int side) {
+		return normalBlades[side];
 	}
 
 	/** god 판 블레이드 GO 가 떠 있는지 (HeroRig 가 보통 블레이드를 숨긴다). */
@@ -1080,14 +1148,10 @@ public final class MagicFx implements AutoCloseable {
 		// 블레이드 god 판 (0x1FA9A0 → 0x1FAA10): 양손 블레이드 GO 를 goMAIgodblade 로 바꿔 무기 관절에 붙인다 (45 문서 §2)
 		godBladesOn = false;
 		if (godBladeCheck.getAsBoolean()) {
-			for (String jn : BLADE_JOINTS) {
-				EffectSystem.Effect b = fx.play(GOD_BLADE, out -> {
-					if (!heroJoints.world(jn, out)) {
-						out.translation(heroPos).rotateY(heroYaw);
-					}
-					return true;
-				}, Float.MAX_VALUE);
+			for (int side = 0; side < 2; side++) {
+				EffectSystem.Effect b = fx.play(GOD_BLADE, bladeAnchor(side), Float.MAX_VALUE);
 				if (b != null) {
+					b.emitterOff = flameGate(side);
 					godFx.add(b);
 					godBladesOn = true;
 				}

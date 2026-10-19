@@ -60,6 +60,16 @@ public final class BladeModels implements AutoCloseable {
 		}
 	}
 
+	/** 블레이드 하나를 주어진 월드 행렬에 (사슬이 정한 블레이드 행렬, 45 문서 §3). */
+	public void drawAt(Camera cam, float aspect, Matrix4f world, Texture white) {
+		model.draw(cam, aspect, world, idle, white);
+	}
+
+	/** 무기 WAD (사슬·궤적 머티리얼). */
+	public WadAssets assets() {
+		return assets;
+	}
+
 	public Skeleton skeleton() {
 		return skeleton;
 	}

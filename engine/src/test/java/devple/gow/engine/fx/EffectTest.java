@@ -264,4 +264,18 @@ class EffectTest {
 			}
 		}
 	}
+
+	/** 블레이드 GO 의 부착물 종류 3 (0x201A08: 파티클 이름 "flame*") = 궤적 중에만 켜는 불꽃 (45 문서 §3). */
+	@Test
+	void bladeFlameEmittersAreGated() throws Exception {
+		EffectSystem fx = EffectSystem.headless();
+		fx.add(wad("R_WPN0_2"));
+		for (String go : new String[]{MagicFx.NORMAL_BLADE, MagicFx.GOD_BLADE}) {
+			EffectSystem.Effect e = fx.play(go, EffectSystem.Anchor.at(new Vector3f(), 0), Float.MAX_VALUE);
+			assertNotNull(e, go);
+			long flames = e.def.emitters().stream().filter(MagicFx::flame).count();
+			assertTrue(flames >= 2, go + " flame6/flame3: " + flames);
+			assertTrue(e.def.emitters().size() > flames, go + " 불티·EG 이미터는 늘 켜짐");
+		}
+	}
 }

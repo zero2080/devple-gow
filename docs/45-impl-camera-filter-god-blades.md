@@ -112,13 +112,80 @@ PAND03A WaterCam1/3/4/5·PoolLvrCam·PoolCam12/14/16 (4 bloodGel, 피 웅덩이)
 ### 2.2 엔진
 - `GameScene` 이 영웅을 만든 뒤 `magicFx.setGodBlades(R_WPN<c>_<n>, 아르테미스가 아니면 참)` → 무기 WAD 를 이펙트 라이브러리에 등록.
 - `MagicFx.godMode(true)`: 갑옷 8개와 함께 `goMAIgodblade` 를 **lWeapOH / rWeapOH** 에 부착 (수명 무한, 반복 act = ANM_maigodblade 재질 애니, 이미터 포함).
-  위치는 BladeModels 와 같은 무기 로케이터 [근사: 원작은 사슬 물리가 둔 이전 블레이드 GO 행렬을 복사; 엔진에 사슬 물리 없음].
+  위치는 §3 의 블레이드 행렬 (`MagicFx.bindBlades` ← `HeroRig.bladeWorld`, 원작처럼 이전 블레이드 GO 행렬 = 사슬 객체가 둔 행렬).
 - `HeroRig.hideBlades = magicFx::godBladesOn` → 신 모드 동안 보통 블레이드 (BladeModels) 를 그리지 않는다. 해제 (godMode(false)) 에서 GO 를 멈추면 보통 판이 다시 보인다.
 - 아르테미스의 검을 들었으면 바꾸지 않는다 [추정].
 - 테스트 `EffectTest.godBladeGoInEveryWeaponWad`: 36 개 무기 WAD 모두 goMAIgodblade·goMAIblade 해석, 무한 수명.
 - 스크린샷: `camf/god_t200.png` / `god_crop.png` (ATHN01A, `-Dgow.giveAll -Dgow.script=L3:1:0.2,R3:1:0.2`, 틱 200: 등의 블레이드가 금빛 불꽃 판), 비교 `nogod_t200.png` / `nogod_crop.png`.
 
 ### 2.3 남은 것
-- 궤적 (MAT_swordtrail/godswordtrail) · 사슬 (chainlink/chainglow) 은 엔진에 렌더가 아예 없다 → god 머티리얼 교체도 적용할 곳이 없다. "God Mode Trail Tint" 도 같은 이유로 미적용.
-- LeftBladeLight / RightBladeLight (LGT) 라이트 연결 미구현.
-- 보통 블레이드의 FX (gomaiblade 불꽃·불티 이미터) 는 엔진이 BladeModels 로 메시만 그려 나오지 않는다 (god 판만 이미터가 나온다).
+- ~~궤적·사슬 렌더, god 머티리얼·God Mode Trail Tint, 보통 블레이드 불꽃 이미터~~ → §3.
+- LeftBladeLight / RightBladeLight (LGT) 라이트: 켜고 끄는 규칙은 §3.5 에서 해독, 엔진에 동적 라이트가 없어 미구현.
+
+## 3. 블레이드 사슬 · 궤적 (`game/BladeChain`, `render/BladeChainRenderer`, `HeroRig.tickBlades/drawChains`)
+
+### 3.1 객체와 생성 [확실: 코드]
+- 무기 부착 (0x201170, 무기 = `/TweakTemplates/Attachment/000`): 블레이드 GO 2 개를 0x2015B8 (GO 생성·영웅에 부착 0x131460, 슬롯 0x34 바이트) 로 만들고,
+  **Blades_Init 0x1F9C38** (0xF0 바이트 객체, 왼쪽 → 슬롯 +0x8, 오른쪽 → +0x3C) 을 부른다. (0x2015B8 은 GO 부착 함수이고 Blades_Init 은 0x1F9C38.)
+- Attachment/000 문자열 (오프셋 = 덤프 순서): +0x18/+0x30 goMAIblade, +0x48/+0x60 l/rWeapIH, +0x78/+0x90 l/rWeapOH, +0xA8/+0xC0 **l/rChain**,
+  +0xD8/+0xF0 **l/rChainW**, +0x108/+0x120 left/rightBladeBack. Blades_Init 이 관절 번호로 저장: +0x84 lChain (손목, lWrist 자식), +0x86 lChainW (lWeapOH 자식),
+  +0x88 lWeapIH, +0x8A lWeapOH, +0x8C leftBladeBack, +0x8E Pelvis, +0x90 = 0 왼쪽 / 1 오른쪽.
+- 렌더 객체: +0xB0 (형 0xB, 구 3 개 = 베지어 t 0.2/0.7 + 칼끝, 블레이드 로컬 — 충돌용 [추정]), +0xBC/+0xB8 **MAT_swordtrail** 띠 1 개 × 16 정점 (PRIM 0x54 삼각형 띠, ABE),
+  +0xC4/+0xC0 **MAT_chainlink**, +0xCC/+0xC8 **MAT_chainglow** (띠 2 개 × 68 정점), +0xDC/+0xD8 MAT_stencil (그림자, 띠 수 = (0x88·4+0x90)/0xF4+1).
+  끝에 0x1FA5B0 (초기화) 과 0x1FA9D8 (보통 머티리얼 = §2.1 표) 을 부른다.
+- 튜닝 `/Player/` (Player_RegisterTweaks 0x1D5B8C…): **Blade Damping 0.4** (0x29F294), Blade Scale On Back/In Hand/Out Hand 1 (0x29F298/9C/A0),
+  Blade Collision Tolerance 0.5, **Segment Length 0.25**, **Link Diameter 0.13**, **Glow Diameter 0.18**, Shadow Diameter 0.13 (0x29F2A8…B4, 미터 = ×16 단위).
+  `Weapon Level n/Trail Tint RGBA` (0x3040C0 + 단계·0x50 +0x00) = (1,1,1,0.8) 전부, `God Mode Trail Tint` (+0x10) = 단계 0: 0, 1–3: (1,1,1,1), 4–5: (1,0,0,1).
+  `Costume n/Weapon Length` / `God Mode Weapon Length` (0x3042A0 + 코스튬·0x20 +0x18/+0x1C) = 0.7 등.
+
+### 3.2 블레이드 행렬 (0x1FB460, 매 프레임 ← 0x1FDB18) [확실: 코드]
+"사슬 물리" 는 없다. **블레이드 행렬이 애니의 관절 행렬을 늦게 따라가고**, 사슬은 그 행렬과 손목 사이 곡선일 뿐이다.
+1. 상태 +0x92 (0 등 / 1 손 / 2 손 밖): 현재 기술 flags (+0x0E) & 0x80 이면 유지. 아니면 dIH = |lWeapOH − lWeapIH|, dBack = |lWeapOH − leftBladeBack| (월드),
+   기술 중이면 dIH < **5.6** → 1, dBack < 5.6 → 0, 아니면 2. 기술이 없으면 1 → 0 (dBack < 5.6), 2 → 1 (둘 중 하나 < 5.6), 0 은 그대로.
+2. 목표 = 0: 등 관절, 비율 +0x98 = 1, 배율 Blade Scale On Back / 1: lWeapIH, 1, In Hand / 2: **lWeapOH, Blade Damping 0.4**, Out Hand. 0 이면 사슬 숨김 (0x1FDAE8), 1·2 면 보임 (0x1FD9F8).
+3. 이전 블레이드 행렬 (정규직교 0x1853E8) → 쿼터니언 (0x1840D8), 목표도 같이 → **slerp(이전, 목표, clamp(비율·dt·60))** (0x184388), 위치 = 이전 + (목표 − 이전)·같은 t.
+   배율 +0x9C += (+0xA0 − +0x9C)·0.1. 결과 행렬 (+0x00) 에 배율을 곱해 **블레이드 GO 행렬** (GO +0x20…) 로 쓴다 — 0x1FAA10 이 GO 를 바꿀 때 복사하는 그 행렬.
+4. 0x1FAFC8: 골반 높이에서 블레이드까지 레이 → 벽에 막히면 블레이드를 당긴다 (Blade Collision Tolerance) — 엔진 미구현 [근사].
+
+### 3.3 사슬 곡선 · 사슬 고리 (0x1FBD04…, 0x1FC870) [확실: 코드]
+- P0 = lChain 위치, d0 = −(lChain Z 축) 정규화. P3 = lChainW 를 lWeapOH 기준으로 옮겨 블레이드 행렬에 붙인 위치 (inv(lWeapOH)·lChainW 를 블레이드에 곱함), d3 = 그 Z 축.
+  L = **0.33·|P3 − P0|**, P1 = P0 + d0·L, P2 = P3 + d3·L → **3차 베지어**. (블레이드가 늦게 따라가면 d3 가 돌아 사슬이 휜다.)
+- 마디 수 n = (현 + 제어 다각형)/2 ÷ (Segment Length·16). **n ≤ 1 이면 사슬·빛·그림자 숨김** (0x1FDA08).
+- t = 1 (블레이드) → 0 (손목), 1/n 씩 (마지막 0). 옆 벡터 = 정규화(cross(P − 카메라 위치, 접선)), 첫 표본 접선 d3, 다음부터 P − 이전 P.
+  사슬 고리 정점 P ± 옆·(Link Diameter·16/2), UV (n/16·(1−t), 0/1) — TXR_chainlink 512×32 에 고리 16 개, 알파 블렌드.
+  사슬 빛 (P + 카메라 뒤쪽 축·1 단위) ± 옆·(Glow Diameter·16/2), UV (1−t, 0/1), 가산, **색 = clamp(n/16, 0, 1)** (긴 사슬일수록 밝다).
+  정점 버퍼 상한 = 띠 2 × 68 (넘치면 잘림). 그림자 (MAT_stencil, +0xA8 bit 1) 는 엔진 미구현.
+
+### 3.4 궤적 (0x1FC070) [확실: 코드, 표본 위치·UV]
+- 시간 이력 리본이 아니다. **같은 베지어의 t = 0.2…1 부분을 부채꼴로 채운** 16 정점 (0x141818 = 동적 메시 정점 포인터, 이력 없음):
+  띠 1 = [A,B,C,A,D,A,E] (t = .2,.325,.45,.575,.7), 띠 2 = [E,F,G,E,H,E,I,E,T] (t = .775,.85,.925,1, T = 칼끝 = P3 − 블레이드 Z·Weapon Length·16).
+  첫 두 정점 ADC → GS 삼각형 띠 = A 중심 부채꼴 + E 중심 부채꼴 + (I,E,T). (A,B,C)/(B,C,A) 처럼 겹친 삼각형도 그대로 (가산 2 배).
+  U = 0, .125, .25, .375, .5 / .5 + f·{0, .125, .25, .375, .5}, 칼끝 1 (f = |I−E| / (|I−E| + 블레이드 길이)), **V = 1** (텍스처 아래 줄).
+  → 사슬이 휜 만큼 (현과 호 사이) 불꽃 면이 생긴다. 색 = Trail Tint (god 이면 God Mode Trail Tint, 0x12E4D0 ← 0x3040C0[+0x10 if god]), MAT_swordtrail 가산.
+- 켜짐: 렌더 객체 +0xB4 의 +0x158 (0x12E4C8) — 0x204B38 이 combatant **+0x1AC 0x8 (왼쪽) / 0x10 (오른쪽)** (기술 이벤트 **17 TRAIL_LEFT / 18 TRAIL_RIGHT**,
+  10 문서 이벤트 표) 에 따라 부착물 종류 0·3·4 를 켜고 끈다 (0x201C78 / 0x201DD8). □ 콤보 기술들은 이벤트가 [0, 1] 전체라 기술 내내 켜져 있다.
+
+### 3.5 블레이드 GO 부착물 종류 (0x201A08) · 라이트 [확실: 코드]
+| 종류 | 대상 | 켜짐 |
+|---|---|---|
+| 0 | 형 0xB 컴포넌트 (+0x158 = 1/0) | 궤적 중 |
+| 1 / 2 | 파티클 이름 "blooddrip" / "bloodspray" | 다른 코드 |
+| 3 | 파티클 이름이 **"flame"** 으로 시작 (PTC_flame6/3 의 "flame6Shape") | **궤적 중만** (초기 끔) |
+| 4 | LeftBladeLight / RightBladeLight (0x201F28, GO +0xF4 |= 0x100/0x200) | 궤적 중: 세기 +0xE0 += 4/60 (0.25 초에 1), 끄면 −2/60 (0.5 초에 0) |
+불티 (BDEsparkemit)·EG 이미터는 어느 목록에도 없어 늘 켜져 있다.
+
+### 3.6 엔진
+- `BladeChain`: 위 상태·slerp·배율 (`step` = 프레임 비율을 dt 로: 1 − (1−r)^(dt·60)), 베지어·마디·표본 (`samples`, 상한 68), 궤적 정점 (`trail`, `stripTriangles`).
+  `HeroRig.tickBlades(dt)` 를 GameScene 이 매 틱 (전투·잡기·내비게이션 뒤, MagicFx 앞) 부른다. 관절 = `HeroRig.jointWorld` (영웅 월드 × 관절).
+- 블레이드 메시 (`BladeModels.drawAt`) 와 god GO 앵커 모두 블레이드 행렬. 렌더 보간은 (이번 프레임 영웅 행렬 × 틱 영웅 행렬⁻¹) 로 보정.
+- `BladeChainRenderer`: 무기 WAD 의 MAT_chainlink/chainglow/swordtrail (god 이면 MAT_god*), 파티클 셰이더, 깊이 검사만 (쓰기 없음), 컬링 끔. 영웅 다음에 그린다 (거울 패스에는 없음).
+- `MagicFx`: 보통 블레이드도 goMAIblade GO 를 붙여 이미터만 (`hideMesh`, 메시는 BladeModels), god 판과 같이 `emitterOff` = flame 이미터는 `Combatant.trail(side)` 일 때만.
+- `-Dgow.nochain` 사슬·궤적 끔 (비교용).
+- [근사] 0x1FAFC8 블레이드 벽 충돌, 그림자 띠, BladeLight 라이트 (엔진에 동적 라이트 없음), CombatFileSet "Trail Left/Right" 세트 플래그, GS CLAMP 미확인이라 궤적 V 는 아래 줄 텍셀 중심.
+
+### 3.7 검증 (스크래치 `blade/`)
+- `combo_115/125/142.png` (ATHN01A, `-Dgow.script=SQUARE:1.0:0.05,SQUARE:1.35:0.05,SQUARE:1.7:0.05`): 손목에서 던진 블레이드까지 휘는 사슬 고리·빛, 블레이드 불꽃 (궤적 중).
+  `crop_ga_125.png` / `z_ga125b.png` (`-Dgow.giveAll`, 단계 5): 아래로 처졌다 올라가는 사슬. `combo_105` vs `nochain_105`: 기술 시작 직후 (블레이드가 아직 등) 손목–등 사이 궤적 부채꼴.
+- `god5_200.png` / `crop_god5_200.png` (`-Dgow.giveAll -Dgow.script=L3:1:0.2,R3:1:0.2,SQUARE:1.6:0.05,…`): god 판 파란 사슬 (MAT_godchainlink) 과 goMAIgodblade 가 블레이드 행렬을 따름.
+- 테스트 `BladeChainTest` (5): 제어점·번스타인 계수·길이, 마디/표본/옆 벡터·숨김·상한, 궤적 정점 (U·칼끝·f), 상태 전환·Damping, 실제 □ 콤보에서 왼쪽 블레이드 손 밖·로케이터보다 늦음·사슬 여러 마디·이벤트 17.
+  `EffectTest.bladeFlameEmittersAreGated`: goMAIblade/goMAIgodblade 에 flame 이미터 ≥ 2, 그 밖 이미터 존재.
