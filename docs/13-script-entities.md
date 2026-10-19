@@ -59,7 +59,7 @@
 |------|----------------------------|---|------|
 | 0 EntrySensor / 1 ExitSensor / 2 CreationSensor / 3 DestructionSensor | – | 0 | `0x1A24B8` / `0x1A2640` / `0x1A27C8` / `0x1A2950` |
 | 4 EventSensor | 0 EventId int, 1 ? int, 2 PromptOnEnter int | 3 | `0x1A2AD8` |
-| 5 Animator | 0 AnimName str, 1 ? int, 2 ? float, 3 ? float | 4 | `0x1A2CE0` |
+| 5 Animator | 0 AnimName str (`!n` act 번호, `$` 재질 애니), 1 모드 비트 int, 2 속도 float (기본 1.0), 3 시작 시간 float — 42 문서 §3 | 4 | `0x1A2CE0` |
 | 6 (Animator 변형, 4개뿐) | 0 str, 1 int, 2..5 float, 6 int | 7 | `0x1A2F20` |
 | 7 Vis | 0 Visible, 1..7 속성(int, 0 그대로 / 1 켬 / 2 끔), 8 FadeTime float | 9 | +16 Attr17, +17 JointVisibility (`0x1A3200`, 효과 `0x1ABAA8`) |
 | 8 EventTransmitter | 0 EventId, 1 Arg1, 2 Arg2 (int) | 3 | `0x1A3578` |
@@ -164,7 +164,7 @@ case 별 스택 감소량으로 읽고, **전 레벨 모든 핸들러를 실행�
 | 인자 | N |
 |------|---|
 | 0 | 0 CheckPoint, 1 GetPlayTime, 5 Warp, 0xD, 0xE, 0x13 FailedScreen, 0x20, 0x21..0x2D(미구현 case) |
-| 1 | 3 LoadWad, 4 LoadForWarp, 6 LoadCheck, 7 Goto, 8 SwitchCamera(카메라 관리자 `0x1EE658`), 9 CameraCtl?(bool, `0x1EE730`), 0xB, 0xC Idle, 0xF, 0x10 ZoneTitle, 0x11, 0x12, 0x14..0x1A (타이머 계열), 0x1C MusicGroupStop(sec), 0x1E, 0x2E, 0x2F CompleteGame, 0x3A SetEndGame |
+| 1 | 3 LoadWad, 4 LoadForWarp, 6 LoadCheck, 7 Goto, 8 SwitchCamera(카메라 관리자 `0x1EE658`), 9 CameraCtl?(bool, `0x1EE730`), 0xB 질문(msgId → 답 1021, 42 문서 §2), 0xC Idle, 0xF, 0x10 ZoneTitle, 0x11, 0x12, 0x14..0x1A (타이머 계열), 0x1C MusicGroupStop(sec), 0x1E, 0x2E, 0x2F CompleteGame, 0x3A SetEndGame |
 | 2 | 2 Load(wad, entry), 0xA ShowMessage(msg, sec), 0x1B MusicGroupStart(name, sec), 0x31, 0x33, 0x36, 0x38 PlaySound? |
 | 3 | 0x1D MusicGroupParam?(4, 0, 5.0), 0x1F ShowItemCard(msg, sec, kind) |
 | 4 / 5 | 0x34, 0x35 / 0x37 |
@@ -181,6 +181,6 @@ LoadCheck 는 bool 을 반환하지만 데이터에서는 EntrySensor 의 Action
 - Vis 속성 번호(0x1C/0x1E/0x27/0x11/0x1A/0x17 → 오브젝트 속성 `0x1B1398`)의 의미 (보임/충돌/AI …).
 - 이벤트 1008/1015/1025 의 의미, EventSensor 슬롯 1.
 - Creator, Animator 효과의 세부, Marker 웨이포인트.
-- Internal 0x9/0xB/0x11/0x12/0x34..0x37 의 의미.
+- Internal 0x9/0x11/0x12/0x34..0x37 의 의미 (0xB = 질문, 42 문서).
 
 > **27 문서 통합 시 확인**: ATHN01A SpawnEnemy 의 TemplateId 20 = 레벨 RSRCS 적 리소스 R_SKS 의 AI1 020 → TemplateId 는 AI1 템플릿 번호로 판단 [강한 추정].

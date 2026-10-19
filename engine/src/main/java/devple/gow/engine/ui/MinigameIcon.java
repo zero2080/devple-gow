@@ -10,7 +10,9 @@ public final class MinigameIcon {
 	public static final String[] CLIPS = {"XButtonGreek", "TriangleButtonGreek", "CircleButtonGreek", "SquareButtonGreek",
 			"Up180CW", "Up180CCW", "Down180CW", "Down180CCW", "360CW", "360CCW", "XButtonPress", "R2ButtonPress", "WiggleStick",
 			"WiggleBackForth", "R2ButtonStatic"};
-	public static final int NONE = -1, BUTTON_PRESS = 10, R2_PRESS = 11, WIGGLE_STICK = 12, WIGGLE_BACK_FORTH = 13;
+	public static final int NONE = -1, BUTTON_PRESS = 10, R2_PRESS = 11, WIGGLE_STICK = 12, WIGGLE_BACK_FORTH = 13,
+			/** 버튼 안내 센서 (EventSensor PromptOnEnter, 원작 슬롯 1 ← 14). */
+			PROMPT = 14;
 
 	private int current = NONE;
 

@@ -40,7 +40,7 @@ public final class EntitySlots {
 		}
 		add(4, "EventId", INT, 0).add(4, "unk1", INT, 0).add(4, "PromptOnEnter", INT, 0);
 		base(4);
-		add(5, "AnimName", STRING, "").add(5, "unk1", INT, 0).add(5, "unk2", FLOAT, 0f).add(5, "unk3", FLOAT, 0f);
+		add(5, "AnimName", STRING, "").add(5, "unk1", INT, 0).add(5, "unk2", FLOAT, 1f).add(5, "unk3", FLOAT, 0f); // 1 모드 비트, 2 속도 (기본 1.0, 0x1A2D50), 3 시작 시간 (Platforms.play)
 		base(5);
 		add(6, "AnimName", STRING, "").add(6, "unk1", INT, 0);
 		for (int i = 2; i <= 5; i++) {

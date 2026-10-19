@@ -60,10 +60,17 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 	 * 있으면 {@link #applyDamage} 는 HP 를 건드리지 않고 이것만 부르며 잡기 원 통과는 없다.
 	 */
 	public java.util.function.Consumer<Float> damageHook;
+	/** 모델 변형 (원작 모델 컴포넌트 +0x120 강제 LOD, 클래스 코드가 정함 — BMI 단계별 갑옷). −1 = 기본 (렌더러가 AnimatedModel.setVariant 로). */
+	public int modelVariant = -1;
 	private float think = 1f;
 	private Hittable foe;
 	private float deadTime;
 	private static int spawnCount;
+
+	/** 난수 씨앗 순번 초기화 (헤드리스 테스트가 앞선 테스트의 생성 수에 좌우되지 않게). */
+	public static synchronized void resetSpawnCount() {
+		spawnCount = 0;
+	}
 	// ---- 석화 (메두사의 시선, 35 문서 §2) ----
 	/** 동결 게이지 최대 = Sold +0x26C (≥ 60000 면역), 기본 30 (0x1E8C40 초기값). */
 	private final float freezeMax;

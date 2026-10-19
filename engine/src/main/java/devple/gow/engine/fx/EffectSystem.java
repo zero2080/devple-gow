@@ -91,6 +91,8 @@ public final class EffectSystem implements AutoCloseable {
 		public float rateOverride = -1;
 		/** 이미터 속력 배율. */
 		public float speedScale = 1;
+		/** 시간 정지 (act 0 초 포즈 유지 — BMI 갑옷 조각이 깨지기 전, 원작 0x1C1B10 이 애니를 0 초에 둔다). */
+		public boolean hold;
 		private final List<ParticleSystem.Emitter> emitters = new ArrayList<>();
 		private final Matrix4f world = new Matrix4f();
 		private final Matrix4f tmp = new Matrix4f();
@@ -175,8 +177,10 @@ public final class EffectSystem implements AutoCloseable {
 			if (stopped) {
 				return;
 			}
-			time += dt;
-			actTime += dt;
+			if (!hold) {
+				time += dt;
+				actTime += dt;
+			}
 			if (time >= life || anchor == null || !anchor.world(tmp)) {
 				stop();
 				return;
