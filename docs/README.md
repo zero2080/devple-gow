@@ -10,7 +10,7 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 | 02 | [WAD 컨테이너 포맷](02-wad-format.md) | 완료 (태그 레벨) |
 | 03 | [텍스처 / 팔레트 / 머티리얼 (GFX, PAL, TXR, MAT)](03-texture-format.md) | 완료 |
 | 04 | [모델 / 메시 (MDL, 메시, VIF)](04-model-format.md) | 완료 |
-| 05 | 애니메이션 / 스켈레톤 (ANM) | 진행 예정 |
+| 05 | [스켈레톤 / 애니메이션 (CXT 스켈레톤, ANM)](05-animation-format.md) | 완료 (회전·이동 채널, 스키닝; 부속 채널·이벤트 미상) |
 | 06 | 실행 파일(SCKA_300.02) 분석 – 서브시스템 지도 | 진행 예정 |
 | 07 | [UI(FLP) / 스크립트(SCR, ESC) / 텍스트·폰트](07-ui-script-text.md) | 완료 (구조·텍스트·바이트코드, 일부 필드 미상) |
 | 08 | [엔진 아키텍처 (Java + LWJGL)](08-engine-architecture.md) | 골격 완료 |

@@ -17,7 +17,7 @@ public final class TriMesh {
 		public boolean hasUv;
 		public boolean hasNormal;
 
-		Sub(String name, String material) {
+		public Sub(String name, String material) {
 			this.name = name;
 			this.material = material;
 		}

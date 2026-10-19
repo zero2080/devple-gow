@@ -152,9 +152,9 @@ NOP, STCYCL, OFFSET, BASE, ITOP, STMOD, MSKPATH3, MARK, FLUSHE/FLUSH/FLUSHA, MSC
 - 히어로 정점은 **모델 공간 바인드 포즈**로 저장되어 있어 관절 변환 없이도 T자 자세가 나온다.
 - 위치 w 하위 15비트 = 가중치 (4096 = 1.0). GIF 태그 블록마다 NLOOP 개 정점이 같은 관절 쌍을 쓴다:
   상위 워드 `(A<<12) | (B<<2)` → A, B = 오브젝트 jointMap 인덱스 (B*4 는 VU 매트릭스 주소 오프셋으로 추정).
-  강체 블록은 A == B, 가중치 0 (예: 통 조각 `0x701C` = 7,7). 가중치를 A/B 중 어느 쪽에 거는지는 미확정.
+  강체 블록은 A == B, 가중치 0 (예: 통 조각 `0x701C` = 7,7). 가중치는 A 에 w, B 에 1-w (05 문서).
 - 오브젝트 jointMap 은 최대 12개 → VU 메모리에 올라가는 매트릭스 팔레트.
-- **주의:** 부서지는 통(`breakBarrel2`)의 두 번째 조각 세트(관절 11~18)는 **관절 로컬 공간**에 있어 원점 근처에 뭉친다 (첫 세트 관절 2~9 는 모델 공간). CXT 바인드 포즈를 적용해야 제자리로 간다. 로컬/모델 공간을 가르는 플래그는 아직 못 찾았다.
+- **해결(05 문서 1.5절):** 부서지는 통(`breakBarrel2`) 조각처럼 inverse bind 가 없는 관절, 그리고 메시 파트 `jointRefs[0] != 0` 인 파트의 정점은 **관절 로컬 공간**이다. CXT 바인드 포즈(관절 월드 행렬)를 적용하면 제자리로 간다. 가중치는 A 관절에 w, B 에 1-w.
 - CXT `hero`(0x40001, v4) 에 스켈레톤이 있다:
   - 0x1C u32 jointCount (111), 0x30 부터 관절 레코드 16바이트 × N: `s16 firstChild, s16 nextSibling, s16 parent, s16 ?, u32 0xD1000000, u32 flags`
   - 이어서 관절 이름 (`pelvis`, `vertebrae2` … `lWeapIH`, `rightBladeBack`, `skirtJoints` …)
@@ -181,7 +181,7 @@ NOP, STCYCL, OFFSET, BASE, ITOP, STMOD, MSKPATH3, MARK, FLUSHE/FLUSH/FLUSHA, MSC
 
 ## 9. 미해결 질문
 - 메시 헤더 0x0C~0x24, 20바이트 레코드, 오브젝트 0x14/0x18 필드의 정확한 의미.
-- 관절 로컬 / 모델 공간을 구분하는 기준, 가중치가 A/B 어느 관절에 걸리는지 (VU1 마이크로코드 `.DVP.overlay` 분석 필요 → 06 문서).
+- (해결 → 05 문서) 관절 로컬 / 모델 공간 구분, 가중치 대상 관절. VU1 마이크로코드로 재확인은 06 문서.
 - MSCAL 0/3/6 이 고르는 VU 프로그램의 차이 (조명 유무? 클리핑?).
 - UV 에 STMOD 1(오프셋) 이 걸리는 레이어 — 런타임에 STROW 로 UV 스크롤하는 것으로 추정.
 - chainCount 와 CXT 인스턴스(go*)의 대응, MSH_ 좌표계.

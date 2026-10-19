@@ -19,7 +19,7 @@ import java.util.List;
  * 0x18 u8,u8,u16,u16,u16 (레이어 수? / 배치 수 / 정점 수 계열로 추정, 미확정)
  * 0x20 DMA 태그[chainCount][dmaTagCount]  (16바이트: 하위 64비트 DMAtag, 상위 64비트 VIF 코드 2개)
  *        REF(id 3): qwc, addr(오브젝트 시작 기준)  /  RET(id 6): 체인 끝
- * 이후 u32 jointMap[jointCount]   스켈레톤 관절 인덱스 (16바이트 정렬)
+ * 이후 u32 jointMap[chainCount][jointCount]   스켈레톤 관절 인덱스 (체인=인스턴스별, 16바이트 정렬)
  * 이후 REF 가 가리키는 VIF 패킷들
  * </pre>
  */
@@ -32,6 +32,8 @@ public final class MeshObject {
 	public final int dmaTagCount;
 	public final int flags;
 	public final int[] jointMap;
+	/** 체인(인스턴스)별 jointMap. 체인 c 의 맵은 jointMap 영역에서 c*jointCount 번째부터 (05 문서). */
+	public final int[][] jointMaps;
 	public final List<VertexBatch> batches = new ArrayList<>();
 	public final List<String> warnings = new ArrayList<>();
 
@@ -44,10 +46,13 @@ public final class MeshObject {
 		chainCount = b.getInt(off + 12);
 		flags = b.getInt(off + 0x14);
 		int tagsEnd = off + 0x20 + chainCount * dmaTagCount * 16;
-		jointMap = new int[jc];
-		for (int i = 0; i < jc; i++) {
-			jointMap[i] = b.getInt(tagsEnd + i * 4);
+		jointMaps = new int[Math.max(1, chainCount)][jc];
+		for (int c = 0; c < jointMaps.length; c++) {
+			for (int i = 0; i < jc; i++) {
+				jointMaps[c][i] = b.getInt(tagsEnd + (c * jc + i) * 4);
+			}
 		}
+		jointMap = jointMaps[0];
 		ByteBuffer stream = flattenChain(b, off, off + 0x20);
 		List<VifParser.Batch> raw = VifParser.parse(stream, 0, stream.limit(), warnings);
 		for (VifParser.Batch rb : raw) {
