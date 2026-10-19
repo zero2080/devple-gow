@@ -63,6 +63,20 @@ public final class LevelScene implements Scene {
 	private int camMode;
 	private final boolean[] keyPrev = new boolean[3];
 	private final Matrix4f tmp = new Matrix4f();
+	/** true 면 파티클/물 등 이펙트를 render() 에서 그리지 않음 → 게임 씬이 캐릭터 뒤에 {@link #renderEffects} 호출. */
+	private boolean deferEffects;
+
+	public void setDeferEffects(boolean b) {
+		deferEffects = b;
+	}
+
+	/** 이펙트 패스 (캐릭터를 그린 뒤 호출해야 반투명 이펙트가 캐릭터를 올바르게 덮는다). */
+	public void renderEffects(Engine e, Camera c) {
+		e.renderer().begin3d(c);
+		fx.renderEffects(e, c);
+		FxEnvironment.disableFog(e.renderer().basic());
+	}
+
 	/** 게임 씬이 지정하는 카메라 (null 이면 뷰어 자체 카메라). */
 	private Camera external;
 	/** 환경/이펙트 (안개, 비, 파티클, 물 — 31 문서). */
@@ -337,7 +351,9 @@ public final class LevelScene implements Scene {
 				e.renderer().draw(i.model(), tmp);
 			}
 		}
-		fx.renderEffects(e, cam);
+		if (!deferEffects) {
+			fx.renderEffects(e, cam);
+		}
 		FxEnvironment.disableFog(e.renderer().basic());
 		if (showCollision || showVolumes) {
 			e.renderer().begin3d(cam);

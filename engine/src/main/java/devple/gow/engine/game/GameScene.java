@@ -113,6 +113,7 @@ public final class GameScene implements Scene {
 			level = new LevelScene(session.rom.resolve(levelName + ".WAD"), -2, false);
 			level.enter(e);
 			level.setExternalCamera(cam);
+			level.setDeferEffects(true);
 			col = level.collision();
 			hero = new HeroRig(session.rom, session.permk, 0, session.player);
 			hero.difficulty = session.difficulty;
@@ -635,12 +636,19 @@ public final class GameScene implements Scene {
 	public void render(Engine e, float alpha) {
 		updateCamera(alpha);
 		level.render(e, alpha);
+		// 캐릭터에도 레벨 안개 (같은 basic.frag 유니폼)
+		var env = level.fx().env();
+		env.applyFog(hero.shader(), cam, e.window().height());
+		env.applyFog(enemyShader, cam, e.window().height());
 		Matrix4f m = new Matrix4f();
 		for (Enemy en : enemies) {
 			en.model().draw(cam, e.window().aspect(), en.fighter().world(m, alpha), en.fighter().animator().pose(),
 					e.renderer().white());
 		}
 		hero.draw(cam, e.window().aspect(), alpha, e.renderer().white());
+		devple.gow.engine.fx.FxEnvironment.disableFog(hero.shader());
+		devple.gow.engine.fx.FxEnvironment.disableFog(enemyShader);
+		level.renderEffects(e, cam); // 비·파티클·물은 캐릭터 뒤에
 		hud.render(e);
 	}
 

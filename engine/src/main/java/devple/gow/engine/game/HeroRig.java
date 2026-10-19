@@ -118,6 +118,11 @@ public final class HeroRig implements AutoCloseable {
 		return rules.incomingScale(difficulty, player.costume, bladeLevel(), godMode.active());
 	}
 
+	/** 스키닝 셰이더 (레벨 안개 유니폼 적용용). */
+	public Shader shader() {
+		return shader;
+	}
+
 	public Hittable hittable() {
 		return hittable;
 	}
