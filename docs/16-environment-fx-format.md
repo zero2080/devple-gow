@@ -368,7 +368,7 @@ MAT 생성 0x1537C8 이 MAT 그룹 자식을 순회: `ANM_` (서버 3) → mat+0
   법선 있는 메시의 phong 환경 레이어 UV 는 VU1 이 법선으로 만드는 구면 맵 [추정].
 - renderFlags 하위 → VU 플래그: bit2 (0x04) 조명, bit1 (0x02) 조명+환경, 아니면 bit7 텍스처 UV. 최종 VU 프로그램 = `(vuFlags|0x20?) & mesh+0x14 | mesh+0x10`
   (법선 없는 레벨 메시는 0x…25 로 조명/환경이 꺼진다).
-- 미상 비트: rf bit16 (defFogMat/skyline/stencil 만 0 → 안개 무시 후보), rf 0x400 (양면 후보), flags2 하위 5비트 열거 (0 → 4 강제, 0x1534BC), 0x100 / 0x80000000 / 0x10000000.
+- 미상 비트: rf bit16 (defFogMat/skyline/stencil 만 0 → 안개 무시 후보), rf 0x400 (양면 후보 — 단 VU 뒷면 제거는 rf 0x4000 → VU 프로그램 4 뿐이고 디스크에 0 개, 43 §8.1), flags2 하위 5비트 열거 (0 → 4 강제, 0x1534BC), 0x100 / 0x80000000 / 0x10000000.
 - 색 배율: 텍스처 없는 레이어는 rgba 2.0 + 헤더 0.4 → 중립 = `header.rgb × layer.rgb / 0.8` [추정] (텍스처 레이어는 layer.rgb).
 
 ### 3.4 HDES01A 용암 빛
