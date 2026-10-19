@@ -65,6 +65,12 @@ public final class Animation {
 	public final List<AnimTrack> posTracks = new ArrayList<>();
 	/** 타입 10 f32 채널 트랙 (슬롯 순서). 로케이터 관절 위치로 쓰일 수 있는 것은 bake 때 고른다 ({@link #locatorTrack}). */
 	public final List<AnimTrack> channelTracks = new ArrayList<>();
+	/**
+	 * 타입 11 (unk10 = 4) 트랙. 이동 트랙(타입 5)이 없는 오브젝트 세트에서는 <b>관절 이동</b>으로 쓴다 [추정, 38 문서 §5]:
+	 * ATHN05D 엘리베이터는 데이터 타입이 [0, 11, 11] 이고 스트림 5/9 (관절 1/2 의 Y) 절대값 138.47 = 바인드 로컬 Y, 이후 가산으로 -52.2 까지
+	 * 내려간다 (발판이 190 내려가 Warp 도착점 WarpFrom4A 높이와 일치).
+	 */
+	public final List<AnimTrack> objectTracks = new ArrayList<>();
 	/** 타입 10 u8 채널: 관절별 상태 값 (미노타우로스 maiMin01 에서 도끼 부착 관절 36→54 전환). */
 	public final List<ByteTrack> byteTracks = new ArrayList<>();
 	public final float frameTime;
@@ -99,6 +105,12 @@ public final class Animation {
 			} else if (typeIds[k] == 5) {
 				posTracks.addAll(AnimTrack.parse(b, at + sd.offset, sd.trackCount, true));
 				pft = sd.frameTime;
+			} else if (typeIds[k] == 11 && sd.unk10 == 4) {
+				try {
+					objectTracks.addAll(AnimTrack.parse(b, at + sd.offset, sd.trackCount, true));
+				} catch (RuntimeException e) {
+					// 해석 실패 무시
+				}
 			} else if (typeIds[k] == 10) {
 				try {
 					if (sd.unk10 == 4) {
@@ -203,7 +215,7 @@ public final class Animation {
 	}
 
 	public boolean hasSkeletalData() {
-		return !rotTracks.isEmpty() || !posTracks.isEmpty();
+		return !rotTracks.isEmpty() || !posTracks.isEmpty() || !objectTracks.isEmpty();
 	}
 
 	/** 애니메이션이 건드리는 최대 관절 번호 + 1. */
@@ -250,6 +262,9 @@ public final class Animation {
 			}
 		}
 		List<AnimTrack> pt = new ArrayList<>(posTracks);
+		if (posTracks.isEmpty()) {
+			pt.addAll(objectTracks);
+		}
 		for (AnimTrack t : channelTracks) {
 			if (locatorTrack(sk, t)) {
 				pt.add(t);

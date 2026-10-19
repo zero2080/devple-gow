@@ -17,6 +17,7 @@ import java.util.TreeMap;
  * 레벨 스크립트(ESC) 엔티티 도구 (13 문서).
  * <pre>
  *   script:entities &lt;wad&gt;      엔티티별 슬롯 이름 + 상수 값, 소유 오브젝트 / 인스턴스 / ENV 볼륨 연결
+ *   script:entities &lt;wad&gt; --code   상수가 아닌 핸들러 명령까지 출력
  *   script:survey   &lt;romDir&gt;   전 레벨 집계: ENV 없는 진입/이탈 센서, 다중 배치 소유자, 슬롯 상수 분포
  * </pre>
  */
@@ -31,7 +32,10 @@ public final class Cli {
 			System.exit(1);
 		}
 		switch (args[0]) {
-			case "entities" -> entities(Path.of(args[1]));
+			case "entities" -> {
+				showCode = java.util.Arrays.asList(args).contains("--code");
+				entities(Path.of(args[1]));
+			}
 			case "survey" -> survey(Path.of(args[1]));
 			default -> throw new IllegalArgumentException(args[0]);
 		}
@@ -50,6 +54,9 @@ public final class Cli {
 		}
 		return m;
 	}
+
+	/** --code: 상수가 아닌 핸들러의 명령을 모두 출력. */
+	private static boolean showCode;
 
 	/** 상수 슬롯이면 값, 아니면 "code". */
 	static String constant(EscScript.Entity e, EscScript.Handler h) {
@@ -95,7 +102,11 @@ public final class Cli {
 				System.out.printf(Locale.ROOT, "  #%d %-17s '%s' mode=%d region=%d joint=%d pos=(%.1f,%.1f,%.1f) targets=%s%n", e.id(),
 						e.typeName(), e.name(), e.param(), e.baseId(), e.unk40(), e.matrix()[12], e.matrix()[13], e.matrix()[14], e.targets());
 				for (EscScript.Handler h : e.handlers()) {
-					System.out.printf("      %2d %-15s %s%n", h.id(), EntitySlots.name(e.type(), h.id()), constant(e, h));
+					String c = constant(e, h);
+					System.out.printf("      %2d %-15s %s%n", h.id(), EntitySlots.name(e.type(), h.id()), c);
+					if (showCode && c.equals("code")) {
+						h.code().forEach(op -> System.out.println("           | " + op.text()));
+					}
 				}
 			}
 		}

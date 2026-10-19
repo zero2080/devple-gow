@@ -94,6 +94,9 @@ public final class GameScene implements Scene {
 	/** 다른 슬롯 레벨의 충돌 (원작은 이웃 레벨도 상주 → 경계에서 바닥이 이어진다). null = 없음. */
 	private String otherName;
 	private LevelCollision otherCol;
+	private LevelData otherData;
+	/** 기어오르기·줄·발판·R1 오브젝트·이웃 레벨 스크립트 (38 문서). */
+	private SceneNav nav;
 	private float otherFloorTime;
 	private final Map<String, EnemyFactory.Kind> kinds = new HashMap<>();
 	private final List<Enemy> enemies = new ArrayList<>();
@@ -205,6 +208,10 @@ public final class GameScene implements Scene {
 		}
 		cameraRig = new devple.gow.engine.level.CameraRig(level.data());
 		world = new ScriptWorld(level.data(), session.scriptHost, listener());
+		nav = new SceneNav(level.data(), col, hero, world, session.scriptHost, orbTweaks, navHost());
+		if (otherName != null) {
+			nav.setOther(otherName, otherData, otherCol, nav.neighbourListener());
+		}
 		String arrivalCam = placeSpawn();
 		respawn(spawn);
 		checkpoint.set(spawn);
@@ -217,6 +224,9 @@ public final class GameScene implements Scene {
 		cameraRig.update(0, hero.ctl.position, hero.ctl.yaw, false);
 		world.start();
 		world.placePlayer(spawn.x, spawn.y, spawn.z, seamless);
+		if (Float.isNaN(col.groundHeight(spawn.x, spawn.y + STEP, spawn.z, 64))) {
+			nav.settleArrival(spawn); // 움직이는 발판 위 도착점 (ATHN05D WarpFrom4A)
+		}
 		System.out.printf("레벨 %s (진입점 %s): 시작 (%.0f, %.0f, %.0f), 적 종류 %s%n", levelName, entry, spawn.x, spawn.y,
 				spawn.z, kinds.keySet());
 	}
@@ -285,15 +295,23 @@ public final class GameScene implements Scene {
 		}
 		otherName = wad;
 		otherCol = null;
+		otherData = null;
 		try {
-			otherCol = new LevelCollision(new LevelData(devple.gow.tools.wad.WadFile.load(session.rom.resolve(wad + ".WAD"))).sheets);
+			otherData = new LevelData(devple.gow.tools.wad.WadFile.load(session.rom.resolve(wad + ".WAD")));
+			otherCol = new LevelCollision(otherData.sheets);
 		} catch (IOException | RuntimeException ex) {
 			System.out.println("이웃 레벨 충돌 로드 실패 " + wad + ": " + ex.getMessage());
 		}
+		if (nav != null) {
+			nav.setOther(wad, otherData, otherCol, nav.neighbourListener());
+		}
 	}
 
-	/** 현재 + 다른 슬롯 레벨 바닥 중 높은 것 (NaN = 둘 다 없음). */
+	/** 현재 + 다른 슬롯 레벨 바닥 + 움직이는 발판 중 높은 것 (NaN = 없음). */
 	private float ground(float x, float y, float z, float drop) {
+		if (nav != null) {
+			return nav.ground(x, y, z, drop);
+		}
 		float g = col.groundHeight(x, y, z, drop);
 		if (otherCol != null) {
 			float o = otherCol.groundHeight(x, y, z, drop);
@@ -304,11 +322,49 @@ public final class GameScene implements Scene {
 		return g;
 	}
 
+	/** 내비게이션 보조 → 게임 씬 동작. */
+	private SceneNav.Host navHost() {
+		return new SceneNav.Host() {
+			@Override
+			public void heroDied() {
+				GameScene.this.heroDied();
+			}
+
+			@Override
+			public void neighbourLevel(ScriptListener.LevelRequest r) {
+				listener().level(r); // 이웃의 LoadCheck(자기 레벨) = 현재 레벨 리스너와 같은 규칙 (SEAMLESS)
+			}
+
+			@Override
+			public void teleport(float[] pos, float yaw) {
+				spawnYaw = yaw;
+				respawn(new Vector3f(pos[0], pos[1], pos[2]));
+			}
+
+			@Override
+			public void message(int id, float seconds) {
+				showMessage(id, seconds);
+			}
+
+			@Override
+			public void orbs(String emitter, Vector3f at) {
+				for (OrbDrops.Orb o : OrbDrops.roll(orbTweaks, emitter, rnd, hero.player.hp, hero.player.mp)) {
+					hero.player.pickupOrb(o.type(), o.points());
+				}
+				session.sound.play("SND_PICKUPS_ORBS_E");
+			}
+		};
+	}
+
 	private void respawn(Vector3f at) {
 		hero.ctl.position.set(at);
 		hero.ctl.prevPosition.set(at);
 		hero.ctl.yaw = spawnYaw;
 		hero.ctl.vy = 0;
+		hero.ctl.launch.zero();
+		if (nav != null) {
+			nav.reset();
+		}
 	}
 
 	private ScriptListener listener() {
@@ -784,6 +840,7 @@ public final class GameScene implements Scene {
 			session.sound.play("SND_ICON");
 		}
 		Vector3f p = hero.ctl.position;
+		nav.update(dt, p);
 		cameraRig.update(dt, p, hero.ctl.yaw, !hero.ctl.grounded);
 		world.tick(dt, p.x, p.y, p.z);
 		magicFx.update(hero.magic, p, hero.ctl.yaw, enemies.stream().map(Enemy::fighter).toList(), dt, cam.eye);
@@ -846,11 +903,12 @@ public final class GameScene implements Scene {
 
 	/**
 	 * 발소리: 원작 SND_FOOTSTEP_&lt;표면&gt; 은 레지스터 0 으로 STEP/WALK/RUN/LAND 를 고른다 (14 문서).
-	 * 표면 = 충돌 Sheet 속성(미해석) → 현재 PLANK(나무 갑판 등) 고정. 주기 = 이동 클립 길이의 절반 (한 걸음).
+	 * 표면 = 발밑 충돌 면의 SheetFX → TWK /TweakTemplates/MFX/&lt;n&gt;/ "Foot Sound" (38 문서 §1, 예 20 Rock → SND_FOOTSTEP_STONE),
+	 * 없으면 PLANK. 주기 = 이동 클립 길이의 절반 (한 걸음).
 	 */
 	private void footsteps(float dt) {
 		var c = hero.ctl;
-		String surface = "SND_FOOTSTEP_PLANK";
+		String surface = footSound(c.position);
 		if (!c.grounded) {
 			wasAir = true;
 			return;
@@ -872,9 +930,20 @@ public final class GameScene implements Scene {
 		}
 	}
 
-	/** 지면 추종 + 중력 + 벽 밀어내기. */
+	private String footSound(Vector3f p) {
+		LevelCollision.Floor f = col.floorAt(p.x, p.y + 4, p.z, 8);
+		int fx = f != null && f.tri().info() != null ? f.tri().info().sheetFx() : 0;
+		String s = fx > 0 ? orbTweaks.s(String.format("/TweakTemplates/MFX/%03d/", fx), "Foot Sound", null) : null;
+		return s != null && s.startsWith("SND_") ? s : "SND_FOOTSTEP_PLANK";
+	}
+
+	/** 지면 추종 + 중력 + 벽 밀어내기. 내비게이터가 위치를 정하는 상태(매달림·줄·밀기 …)면 건너뛴다. */
 	private void physics(float dt) {
 		Vector3f p = hero.ctl.position;
+		if (nav.navigator.active()) {
+			return;
+		}
+		nav.carry(p, hero.ctl.grounded); // 발판에 실려 감
 		// 허공 방지: 지상에서 이동한 결과 아래에 바닥이 전혀 없으면(배 가장자리 밖 등) 수평 이동 취소.
 		// 원작의 보이지 않는 벽 / 바다 데스존을 대신하는 근사 — 아래층 바닥이 있는 낙하는 허용
 		if (hero.ctl.grounded && Float.isNaN(ground(p.x, p.y + STEP, p.z, 4000))

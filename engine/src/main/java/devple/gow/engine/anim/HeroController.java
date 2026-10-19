@@ -2,6 +2,7 @@ package devple.gow.engine.anim;
 
 import devple.gow.engine.combat.Combatant;
 import devple.gow.engine.input.Input;
+import devple.gow.engine.nav.NavBody;
 import devple.gow.tools.anim.Animation;
 import devple.gow.tools.anim.Skeleton;
 import org.joml.Matrix4f;
@@ -16,7 +17,7 @@ import org.joml.Vector3f;
  * </ul>
  * 원작은 카메라 기준 스틱 방향으로 즉시 회전한다 (회전 보간은 짧게).
  */
-public final class HeroController {
+public final class HeroController implements NavBody {
 
 	public static final float ROOT_FPS = 15f;
 	/** 자동 조준 거리 (TWK /Player/Targeting Range = 10 은 1/16 단위로 추정 → 160 유닛) [추정] */
@@ -47,6 +48,11 @@ public final class HeroController {
 
 	private Animation rootClip;
 	private final Vector3f lastZero = new Vector3f();
+	/** 공중 수평 발사 속도 (줄·벽에서 뛰어내림, 내비게이터가 정함). 착지하면 0. */
+	public final Vector3f launch = new Vector3f();
+	/** 지상 이동 모양 (균형 걷기 등, null = 기본) / 속도 배율. */
+	private String walkOverride, idleOverride;
+	private float speedScale = 1f;
 
 	public HeroController(Animator anim) {
 		this.anim = anim;
@@ -146,6 +152,7 @@ public final class HeroController {
 		if (!wasGrounded) {
 			wasGrounded = true;
 			jumps = 0;
+			launch.zero();
 			anim.play("land", true); // ANILand
 		}
 		if (anim.current() != null && anim.current().name.equals("land") && !anim.finished()
@@ -156,14 +163,14 @@ public final class HeroController {
 		float sx = in.leftX(), sy = in.leftY();
 		float mag = Math.min(1f, (float) Math.hypot(sx, sy));
 		if (mag < 0.15f) {
-			anim.play("standIdle", false);
+			anim.play(idleOverride != null ? idleOverride : "standIdle", false);
 		} else {
 			// 스틱 → 월드 방향 (카메라 정면 = 스틱 위)
 			float dirYaw = camYaw + (float) Math.atan2(-sx, sy);
 			float d = wrap(dirYaw - yaw);
 			yaw += d * Math.min(1f, TURN_RATE * dt);
-			anim.play(mag > RUN_THRESHOLD ? "walkBlend2" : "walkBlend1", false);
-			float speed = clipSpeed(anim.current());
+			anim.play(walkOverride != null ? walkOverride : mag > RUN_THRESHOLD ? "walkBlend2" : "walkBlend1", false);
+			float speed = walkOverride != null ? clipSpeed(anim.find("walkBlend1")) * speedScale : clipSpeed(anim.current());
 			// 정면 -Z 를 yaw 만큼 회전
 			position.add((float) -Math.sin(yaw) * speed * dt, 0, (float) -Math.cos(yaw) * speed * dt);
 		}
@@ -181,6 +188,7 @@ public final class HeroController {
 			float speed = 48f * mag;
 			position.add((float) -Math.sin(yaw) * speed * dt, 0, (float) -Math.cos(yaw) * speed * dt);
 		}
+		position.fma(dt, launch);
 		if (vy < 0 && anim.finished()) {
 			anim.play("fallv", false);
 		}
@@ -214,6 +222,80 @@ public final class HeroController {
 
 	public Animator animator() {
 		return anim;
+	}
+
+	// ---- NavBody (38 문서: 내비게이터가 위치·애니를 직접 정하는 상태) ----
+
+	@Override
+	public Vector3f position() {
+		return position;
+	}
+
+	@Override
+	public float yaw() {
+		return yaw;
+	}
+
+	@Override
+	public void setYaw(float y) {
+		yaw = y;
+	}
+
+	@Override
+	public float vy() {
+		return vy;
+	}
+
+	@Override
+	public void setVy(float v) {
+		vy = v;
+	}
+
+	@Override
+	public boolean grounded() {
+		return grounded;
+	}
+
+	@Override
+	public void setGrounded(boolean g) {
+		grounded = g;
+		if (g) {
+			wasGrounded = true;
+			jumps = 0;
+		}
+	}
+
+	@Override
+	public Vector3f launch() {
+		return launch;
+	}
+
+	@Override
+	public void play(String name, boolean restart) {
+		anim.play(name, restart);
+	}
+
+	@Override
+	public boolean animFinished() {
+		return anim.finished();
+	}
+
+	@Override
+	public void locomotion(String walk, String idle, float scale) {
+		walkOverride = walk;
+		idleOverride = idle;
+		speedScale = scale;
+	}
+
+	/** 내비게이터가 움직인 틱: 보간용 이전 위치 갱신 + 애니 진행. */
+	public void navTick(float dt) {
+		anim.update(dt);
+	}
+
+	/** 틱 시작 (보간 이전 값 저장). */
+	public void beginTick() {
+		prevPosition.set(position);
+		prevYaw = yaw;
 	}
 
 	public Skeleton skeleton() {

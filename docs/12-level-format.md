@@ -90,9 +90,21 @@ GROUP{ RES goobj (CXT 0x20001, 0x5C 바이트) }GROUP
 - kd 트리 레코드 8B: 노드 = `u32` bit0=0, bit1-2 = 축(x/y/z), `u16 +2` 먼 자식, `f32 +4` 분할값 (가까운 자식 = 다음 레코드). 리프 = `u32 (start<<1|1), u32 count`.
 - 면 참조 u16: bit0 = 사각형, 번호 = v>>1.
 - 삼각형 10B `u16 0, u16 surface(&0xFFF), u16 v[3]` / 사각형 12B `u16 0, u16 surface, u16 v[4]`.
-- 표면 레코드 / 스키마: `"Arena06Visuals_Death"`, `"ArenaRails_groundRock"` 같은 Maya 머티리얼 이름과 `bitfield0..3` 아래
-  `Ground, Water, Narrow, Climbable, Ladder, Slide, Death, DeathVolume, doubleSided` 등 속성 이름이 있다.
-  surface 번호 → 속성 비트의 정확한 대응은 미해석 [다음 단계]. 현재 엔진은 법선 Y 로 바닥/벽만 구분한다.
+- 표면 레코드 [3]: 64B × count(0x50) = Maya 머티리얼 이름 char[24] (`"visuals01D_Climbable"`) + 데이터 40B(0x52). 면의 surface 번호 = 레코드 번호.
+- 비트필드 스키마 [4]: 엔트리 0x4C B = `char[32] 이름, +0x20 타입(2 비트/0 정수/1 실수), +0x24 기본값, +0x3C 바이트 오프셋, +0x44 비트 번호(레코드 기준), +0x48 폭` [확실, 102 시트 같은 배치].
+
+#### 2.1.1 표면 속성 (데이터 40B) — 상세·통계는 38 문서 §1
+| 오프셋 | 내용 |
+|---|---|
+| +0x00 bitfield0 | Ground 0, Water 1, Narrow 2, Climbable 3, Ladder 4, Slide 5, Death 6, AIBlock 16, ClimbGuide 17, PushPullSlide 18, BackPress 19, NoPlayerCollision 20, NoAICollision 21, NoPlayerUse 22, NoAIUse 23, GeneralGuide 24, NoDiving 25, NoPushPullCollision 26, CombatGuide 27, NarrowNoBB 28, NoCSMCollision 29 |
+| +0x04 bitfield1 | TakeDamage 0 (기본 1), NoIK 1, NoDecals 2, DarkSurface 3, NoWallHang 4, CamRelControl 5, NoLadderSliding 6, NoBackJumps 7, NoShadows 8 |
+| +0x08 / +0x0C | bitfield2 / bitfield3 (빈 칸) |
+| +0x10 | doubleSided |
+| +0x14 | SheetFX → TWK `/TweakTemplates/MFX/<n>/` (Foot Sound 등) |
+| +0x18 / +0x1C | PartType (기본 8) / WallHangTimer (기본 60) |
+| +0x20 / +0x24 | Damage / AIDamage |
+
+코드: `tools/level/SurfaceAttr`, `SheetSurface`, `CollisionSheet.surfaces`; 엔진 `LevelCollision.Tri.attrs()`, `floorAt`, `surfaceAt`, `wallcast` (NoPlayerCollision 면은 영웅 질의에서 제외).
 - 게임 질의: 선분 캐스트 `0x16BF98` (kd 트리 + 128칸 리프 캐시), 그 외 vtable 슬롯 6/7/0xD (구 질의 추정, 미분석).
 
 ### 2.2 BallHull — 볼륨 (소유 오브젝트 관절 로컬 좌표)
@@ -103,7 +115,7 @@ GROUP{ RES goobj (CXT 0x20001, 0x5C 바이트) }GROUP
 | 0x14 / 0x18 | u32 | ball 수 / hull 수 |
 | 0x1C | vec4 | 경계 구 (x, y, z, r) |
 | 0x34 / 0x38 | u32 | 이름(재질 엔트리) 수 / **엔트리 크기** (CMV 24, CDV·ENV·SEV 0x40 — 34 문서. "평면 수" 해석은 틀림) |
-| 0x3C | u32[11] | 오프셋: [0] 재질 엔트리[] (이름 + CDV 는 +0x30 PartType), [1] ball별 관절 u8, [3] ball별 재질 번호 u8, [4] ball vec4 (x,y,z,r), [5] hull 별 평면 수 u8, [8] hull 중심 vec4, [9] 평면별 이름 번호 u8, [10] 평면 vec4 (n, d) |
+| 0x3C | u32[11] | 오프셋: [0] 재질 엔트리[] (이름 + CDV 는 +0x30 PartType), [1] ball별 관절 u8, [2] ball별 영역 u8, [3] ball별 재질 번호 u8, [4] ball vec4 (x,y,z,r), [5] hull 별 평면 수 u8, [6] **hull 별 관절 u8** (38 문서 §4), [7] hull 별 영역 u8, [8] hull 중심 vec4, [9] 평면별 이름 번호 u8, [10] 평면 vec4 (n, d) |
 
 - 내부 판정: ball 안이거나 hull 의 모든 평면에서 `n·p + d <= 0`. **평면이 1개인 hull 은 구** (x, y, z, r) — 값이 hull 중심과 같다 (ENV 37개, 36 문서 §5). ball off[2] / hull off[7] u8 = 영역 번호 (ESC 엔티티 영역 ID 와 짝). 평면 n 은 관절 스케일이 반영된 비정규 벡터(0.25, 0.5)다 — 로컬 좌표에서 부호만 본다.
 - 이름표: CMV 는 `RCM_<카메라>` (카메라 게임 오브젝트 레지스트리 이름, 실행 파일 `0x13EA98`), SEV 는 `RSE_<이미터>`, CDV/ENV 는 Maya 머티리얼 이름.
@@ -194,5 +206,6 @@ GROUP{ RES goobj (CXT 0x20001, 0x5C 바이트) }GROUP
 - 확실: 인스턴스 레이아웃·행렬(실행 파일 + `level:check` 일치), 관절 결합, STROW 제거, Sheet 면/정점/kd 레이아웃, BallHull 평면·ball, CMV 이름표.
 - 확실(추가): CAM 파라미터 대부분, NCV_ 포맷, CMV 선택·우선순위·전환 (30 문서).
 - 추정: 하늘 돔이 카메라를 따라감, CAM 0x74 하위 바이트(영웅 상태 마스크) 의미, FOV 가로 해석, 0x98..0xA4 데드존, 0x1E flags.
-- 미해결: 표면 번호 → `Ground/Water/Climbable/Ladder/Death` 비트, kd 트리 노드 상위 비트, 체인별 정점색 선택, 스크립트가 숨기는/보이는 물체.
+- 해결 (38 문서): 표면 번호 → 속성 비트 (§2.1.1), BallHull off[6] hull 관절.
+- 미해결: kd 트리 노드 상위 비트, 체인별 정점색 선택, 스크립트가 숨기는/보이는 물체.
 - PAND01A 일부 방(정점색 평균 ≈ 6/255)이 거의 검게 보인다 — 베이크 색이 실제로 어둡거나 다른 체인/동적 조명 몫. MAT 레이어 대부분이 `blend` 로 읽혀 반투명 패스로 그려지는 것도 확인 필요 (03 문서 영역).

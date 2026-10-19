@@ -5,6 +5,9 @@ import devple.gow.engine.game.LevelEntry;
 import devple.gow.engine.game.LevelLink;
 import devple.gow.engine.game.Tweaks;
 import devple.gow.engine.level.LevelCollision;
+import devple.gow.engine.nav.Interactables;
+import devple.gow.engine.nav.NavRope;
+import devple.gow.engine.nav.Platforms;
 import devple.gow.engine.script.ScriptActor;
 import devple.gow.engine.script.ScriptEntity;
 import devple.gow.engine.script.ScriptHost;
@@ -121,6 +124,10 @@ public final class TraversalVerifier {
 		public final Set<Integer> forcedGroups = new java.util.TreeSet<>();
 		/** 내부 점을 못 찾은 볼륨 (방문 불가). */
 		public final List<String> unreachableVolumes = new ArrayList<>();
+		/** 레벨의 줄 (짚라인·수평 줄 끝 → 다른 레벨 바닥 연결, 38 문서 §6). */
+		public final List<NavRope> ropes = new ArrayList<>();
+		/** R1 오브젝트 상호작용 (CSM 과제 진행 · 밀기 상자 Marker) — 강제 아님, 실제 게임 동작. */
+		public final List<String> interactions = new ArrayList<>();
 
 		LevelResult(String level) {
 			this.level = level;
@@ -354,6 +361,9 @@ public final class TraversalVerifier {
 			}
 		};
 		walk(todo, points, player, currentSource, step, r);
+		r.ropes.addAll(NavRope.of(lv));
+		interact(lv, w, levelTweaks, col, points, player, currentSource, step, r);
+		walk(new ArrayList<>(points.keySet()), points, player, currentSource, step, null);
 		// 게임 이벤트 강제 2회: 스크립트가 보내지 않는 이벤트(동영상 끝·보스 사망·과제 완료 …)를 조건 상수 조합으로 → 다시 보행
 		Set<Integer> scriptEvents = new HashSet<>();
 		for (ScriptEntity e : w.entities()) {
@@ -415,6 +425,75 @@ public final class TraversalVerifier {
 			step.run();
 		}
 		return r;
+	}
+
+	/**
+	 * R1 오브젝트 상호작용 (38 문서 §3, 강제 아님): 영웅을 오브젝트 옆에 두고 원작과 같은 이벤트를 보낸다.
+	 * <ul>
+	 *   <li>CSM / 상자: 과제 진행 1023 (인자 0 = 10, 20 … 100 %, 인자 1 = 과제 id) — ATHN01D 쌍발차기 문 (과제 206, ≥ 30 %)</li>
+	 *   <li>PushPull: 붙잡기 1048 (id) → 상자 Marker 를 그 Marker 그룹을 기다리는 진입 센서 볼륨으로 옮김 → 놓기 1049
+	 *       (PAND05B 판도라 상자 Marker 511 → semoMovieHaveBox) [근사: 경로 탐색 없이 순간 이동]</li>
+	 * </ul>
+	 */
+	private void interact(LevelData lv, ScriptWorld w, Tweaks tw, LevelCollision col, Map<Target, float[]> points, float[] player,
+			String[] currentSource, Runnable step, LevelResult r) {
+		Interactables items = Interactables.of(lv, tw);
+		for (ScriptEntity e : w.entities()) {
+			if (e.type() == 11 && "chest".equals(w.slot(e, "Name0")) && e.owner != null) {
+				float[] gp = e.owner.instance().pos();
+				items.addChest(e.owner.instance().name(), new org.joml.Vector3f(gp[0], gp[1], gp[2]), intSlot(w, e, "unk5"), intSlot(w, e, "unk6"), tw);
+			}
+		}
+		for (Interactables.Item it : items.items()) {
+			float g = col.groundHeight(it.pos.x, it.pos.y + UP, it.pos.z, DROP);
+			player[0] = it.pos.x;
+			player[1] = Float.isNaN(g) ? it.pos.y : g + 4;
+			player[2] = it.pos.z;
+			currentSource[0] = "R1 " + it.owner;
+			switch (it.kind) {
+				case CSM, CHEST -> {
+					for (int pct = 10; pct <= 100; pct += 10) {
+						w.postEvent(devple.gow.engine.game.SceneNav.EVENT_TASK, pct, it.id, 0, w.player());
+						step.run();
+					}
+					r.interactions.add(it.kind + " " + it.owner + " 과제 " + it.id);
+				}
+				case LEVER -> {
+					w.postEvent(devple.gow.engine.game.SceneNav.EVENT_ATTACH, it.id, 0, 0, w.player());
+					step.run();
+					w.postEvent(devple.gow.engine.game.SceneNav.EVENT_DETACH, it.id, 0, 0, w.player());
+					r.interactions.add("LEVER " + it.owner + " id " + it.id);
+				}
+				case PUSH -> {
+					w.postEvent(devple.gow.engine.game.SceneNav.EVENT_ATTACH, it.id, 0, 0, w.player());
+					step.run();
+					for (ScriptActor m : w.markers(it.owner)) {
+						for (ScriptEntity e : w.entities()) {
+							Target et = e.volume != null ? new Target(e.volume, ScriptWorld.regionOf(e)) : null;
+							if (e.type() != 0 || et == null || !points.containsKey(et) || intSlot(w, e, "Filter") != m.group) {
+								continue;
+							}
+							float[] p = points.get(et);
+							float[] was = m.pos.clone();
+							currentSource[0] = "밀기 " + it.owner + " → " + e.volume.hull().name;
+							m.moveTo(p[0], p[1], p[2]);
+							for (float t = 0; t < DWELL / 2; t += DT) {
+								step.run();
+							}
+							m.moveTo(was[0], was[1], was[2]);
+							step.run();
+							r.interactions.add("PUSH " + it.owner + " Marker " + m.group + " → " + e.volume.hull().name);
+						}
+					}
+					w.postEvent(devple.gow.engine.game.SceneNav.EVENT_DETACH, it.id, 0, 0, w.player());
+				}
+				default -> {
+				}
+			}
+			for (float t = 0; t < DWELL / 2; t += DT) {
+				step.run();
+			}
+		}
 	}
 
 	/** 방문 대상: 볼륨의 한 영역 (-1 = 볼륨 전체, {@link ScriptWorld#regionOf}). */
@@ -745,6 +824,29 @@ public final class TraversalVerifier {
 						}
 					}
 				}
+				// 짚라인·수평 줄 끝이 이웃 레벨 바닥 위 (ATHN01D 돛대 꼭대기 짚라인 gorope3 → ATHN01E 갑판) → 줄 타고 넘어가 WALK
+				for (NavRope rope : r.ropes) {
+					if (rope.type() == devple.gow.tools.level.RopeDef.Type.HANG) {
+						continue;
+					}
+					float[] top = {rope.top().x, rope.top().y, rope.top().z};
+					float[] end = {rope.end().x, rope.end().y, rope.end().z};
+					if (!nearFloor(r.floorCells, top, 6, 6)) {
+						continue; // 줄 시작점 근처에 L 의 바닥이 없음 (닿을 수 없음)
+					}
+					for (LevelResult x : results.values()) {
+						if (x == r || hasEdge(r, LevelLink.Kind.WALK, x.level) || hasEdge(r, LevelLink.Kind.SEAMLESS, x.level)
+								|| !(r.loads.containsKey(x.level) || x.edges.stream().anyMatch(e -> e.target().equals(r.level)))) {
+							continue;
+						}
+						if (nearFloor(x.floorCells, end, 2, 3)) {
+							Req l = r.loads.get(x.level);
+							r.edges.add(new Edge(LevelLink.Kind.WALK, x.level, true, end, "줄 " + rope.owner() + " (" + rope.type() + ")",
+									l != null && l.forced()));
+							changed = true;
+						}
+					}
+				}
 				if (r.warp != null) {
 					for (String x : r.warpLoads) {
 						if (!hasEdge(r, LevelLink.Kind.WARP, x)) {
@@ -757,12 +859,12 @@ public final class TraversalVerifier {
 		}
 	}
 
-	/** 바닥 삼각형의 꼭짓점·변 중점·무게중심이 든 칸. */
+	/** 영웅이 밟는 바닥 삼각형의 꼭짓점·변 중점·무게중심이 든 칸. */
 	static Set<Long> floorCells(LevelCollision col) {
 		Set<Long> out = new HashSet<>();
 		for (LevelCollision.Tri t : col.triangles()) {
-			if (!t.floor()) {
-				continue;
+			if (!t.floor() || !t.solidForPlayer()) {
+				continue; // AI 전용 바닥 (NoPlayerCollision, 예 HDES01C entities_AIDeath) 은 영웅이 못 밟는다
 			}
 			var a = t.a();
 			var b = t.b();
@@ -872,6 +974,16 @@ public final class TraversalVerifier {
 						float[] p = t.pos();
 						boolean ground = !Float.isNaN(col.groundHeight(p[0], p[1] + UP, p[2], DROP));
 						float[] snap = LevelEntry.snapToFloor(col, p, 256);
+						if (!ground && snap == null) {
+							// 움직이는 발판 위 도착점 (ATHN05D WarpFrom4A = 엘리베이터 애니 끝 자세, 38 문서 §5)
+							Platforms.Body b = Platforms.of(lv, devple.gow.engine.game.SceneNav.animatorOwners(w))
+									.settleUnder(new org.joml.Vector3f(p[0], p[1], p[2]), 24);
+							if (b != null) {
+								dst.arrivals.add(new Arrival(from, e.kind(), (exact ? t.source() : "모드 2 Start 없음 → " + t.source())
+										+ String.format(Locale.ROOT, " → 발판 %s (애니 %.1f 초)", b.owner, b.time()), true));
+								continue;
+							}
+						}
 						String d = (exact ? t.source() : "모드 2 Start 없음 → " + t.source()) + (ground ? ""
 								: String.format(Locale.ROOT, " (%.0f, %.0f, %.0f) 바닥 없음 → %s", p[0], p[1], p[2],
 								snap != null ? String.format(Locale.ROOT, "%.0f 옆 바닥으로 보정", Math.hypot(snap[0] - p[0], snap[2] - p[2])) : "보정 실패"));

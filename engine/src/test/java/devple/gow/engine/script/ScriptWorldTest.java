@@ -349,4 +349,17 @@ class ScriptWorldTest {
 		}
 		assertTrue(r.log.contains("level WARP null"), r.log.toString());
 	}
+
+	/** 이웃 레벨 스크립트 호스트: GlobalData 공유, LevelData 는 따로 (38 문서 §4). */
+	@Test
+	void neighbourHostSharesGlobalsOnly() {
+		ScriptHost main = new ScriptHost();
+		ScriptHost n = ScriptHost.neighbour(main);
+		main.globalData().put(3, true);
+		main.levelData().put(14, 50);
+		assertEquals(true, n.globalData().get(3));
+		assertNull(n.levelData().get(14));
+		n.globalData().put(4, 7);
+		assertEquals(7, main.globalData().get(4));
+	}
 }

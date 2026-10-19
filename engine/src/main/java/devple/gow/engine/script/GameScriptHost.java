@@ -21,7 +21,7 @@ public class GameScriptHost implements EscHost {
 
 	private final GameFlow flow;
 	private final PlayerState player;
-	private final Map<Integer, Object> globalData = new HashMap<>();
+	private final Map<Integer, Object> globalData;
 	private final Map<Integer, Object> levelData = new HashMap<>();
 	private BiConsumer<Integer, Float> onMessage = (id, sec) -> { };
 	private Consumer<String> onGoto = name -> { };
@@ -29,8 +29,14 @@ public class GameScriptHost implements EscHost {
 	private float playTime;
 
 	public GameScriptHost(GameFlow flow, PlayerState player) {
+		this(flow, player, new HashMap<>());
+	}
+
+	/** GlobalData 를 다른 호스트와 공유 (같이 상주하는 이웃 레벨의 스크립트, 38 문서 §4). */
+	protected GameScriptHost(GameFlow flow, PlayerState player, Map<Integer, Object> sharedGlobals) {
 		this.flow = flow;
 		this.player = player;
+		this.globalData = sharedGlobals;
 	}
 
 	public void onMessage(BiConsumer<Integer, Float> l) {
