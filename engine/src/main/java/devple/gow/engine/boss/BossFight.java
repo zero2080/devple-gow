@@ -137,6 +137,8 @@ public abstract class BossFight {
 	/** GameScene/테스트가 적을 만든 직후. */
 	public void onSpawn(EnemyFighter f, ScriptActor a, int template, BossArena arena) {
 		this.arena = arena;
+		// 신들의 분노 게이지는 플레이어 전역: 적 기술의 GOD_METER_ADD(ATHN08B 가족 포옹 865/866 의 +1 ×N)도 크레토스에게
+		f.combat().setGodMeterOwner(arena.heroCombat());
 		if (arena.bridge() != null) {
 			arena.bridge().attach(f, a);
 			if (kinds.containsKey(template)) {

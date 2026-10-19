@@ -1,6 +1,6 @@
 # 37. 구현: 보스전 (히드라 / 메두사 여왕 / 아레스)
 
-원작 보스는 거의 전용 C++ 클래스가 아니다 (예외: 아레스는 Enemy1 하위 클래스 2 — 매 프레임 AresCamera1 요청, 30 문서 §6.3; 판도라 수호자 BMI 도 전용 클래스, §10). **일반 `Enemy1` + 결정 트리(DTre) + CombatFile + 레벨 스크립트(ESC)** 이고,
+원작 보스는 거의 전용 C++ 클래스가 아니다 (예외: 아레스는 Enemy1 하위 클래스 2 — 매 프레임 AresCamera1 요청, 30 문서 §6.3; 판도라 수호자 BMI 는 하위 클래스 1 — 기술 선택·피해 처리 전부 클래스 코드, §10). **일반 `Enemy1` + 결정 트리(DTre) + CombatFile + 레벨 스크립트(ESC)** 이고,
 보스다운 연출(구역별 공격, 내려찍기 → 잡기, 기절 → 처형, 컷신, 레벨 전환)은 거의 전부 **레벨 스크립트가 전투 이벤트를 듣고 지시**한다.
 그래서 구현의 핵심은 (1) 레벨 WAD 안의 보스 리소스 구성, (2) 전투 ↔ 스크립트 이벤트 다리, (3) 영웅·보스 동기 기술이다.
 
@@ -10,6 +10,7 @@
 ./gradlew :engine:run --args="--game ATHN08A --boss-demo --skip-movies"           # 아레스 1단계 → ATHN08B 로 전환
 ./gradlew :engine:run --args="--game ATHN08C --boss-demo --skip-movies"           # 아레스 3단계 → ATHN07B
 ./gradlew :engine:run --args="--game ATHN08B --boss-demo --skip-movies --no-fx"   # 분신 웨이브 + 가족 포옹
+./gradlew :engine:run --args="--game PAND03G --boss-demo --skip-movies --no-fx"   # 판도라 수호자: 배출구 → 올라타기 → 통나무 … → 죽음 (약 110초)
 # --ticks N : 로직 틱(1/60초) N 번 뒤 스크린샷 (--frames 는 렌더 프레임 수라 레벨마다 시간이 다름)
 ./gradlew :engine:test --tests 'devple.gow.engine.boss.*'
 ```
@@ -54,12 +55,13 @@
 
 | 클래스 | 역할 |
 |---|---|
-| `BossDirector` | 레벨 → 보스전 등록표 (`hostsBoss`, `create`). ATHN01E/02D/08A/08B/08C/PAND03G |
+| `BossDirector` | 레벨 → 보스전 등록표 (`hostsBoss`, `create`). ATHN01E/02D/08A/08B/08C/PAND03G (`BmiFight`) |
 | `BossKinds` | 레벨 WAD 의 스켈레톤·MDL·ANM + 지정 CombatFileSet + AI1/DTre/Sold → `EnemyFactory.Kind` |
 | `CombatScriptBridge` | 1035/1047(기술), 1039(피해), 1019(EvtForce → 보스 기술 요청), 1054(구역 → 조건 26), 1055/1056(체력 표시) |
 | `BossFight` | 공통: 스폰 연결, SELF_HP(바닥 무시 자기 피해 / 회복), ExplodeDeath, SonicScream 밀어내기, FlashSprite 프롬프트, 영웅 SELF_HP, 소리 전용 템플릿, 데모 |
-| `BossSync` | 같은 ID 동기 기술 쌍 + RepeatPress(속도 0 이 아니어도) + TimedPress. 정렬 BOSS_TO_HERO(아레스) / HERO_TO_BOSS(히드라) / SYNCH(synchJoint, 포옹) |
+| `BossSync` | 같은 ID 동기 기술 쌍 + RepeatPress(속도 0 이 아니어도) + TimedPress (보스 기술에 없으면 영웅 기술의 것 — BMI 451–453). 정렬 (§11): BOSS_TO_HERO(아레스·분신 잡기) / SYNCH(가족 포옹) = synchJoint **위치** 겹침·같은 방향, HERO_TO_BOSS(히드라), ZERO(BMI 올라타기 = zeroJoint 차) |
 | `HydraFight`, `MedusaQueenFight`, `AresFight`, `EvilKratosFight` | 보스별 보정·단계 이름·데모 |
+| `BmiFight` | 판도라 수호자 전용 클래스 재현 (Think 0x1C0A48 / TakeDamage 0x1C1838, §10) |
 | `AutoPad` | 미니게임 자동 입력 (데모·검증) |
 | `BossArena` | 보스가 보는 게임 쪽 (GameScene / 헤드리스 테스트) |
 
@@ -80,6 +82,14 @@
 | `AiBrain` | 조건 25–27 공급자 `setScriptSense`, `engage()` (스크립트가 깨운 보스는 시야 판정 생략) |
 | `EnemyFighter.hpFloor` | 피격 최저 HP (보스 1: 피격으로는 죽지 않고 원작 EV_DEATH 분기로 기절) |
 | `EnemyFighter.damageFrom` | 피해를 주는 공격자 거르기 (ATHN08B 가족: 영웅 공격은 무시, 잡기 자세 200 만 통과) |
+| `EnemyFighter.damageHook` / `CombatOwner.killedBy` | 클래스가 피해를 직접 처리 (vtable +0x40 TakeDamage 재정의, BMI) — HP·잡기 원·EV_DEATH 판정을 건너뜀 |
+| `Combatant` 흔들기 게이지 | 플레이어 +0x50 (sub_001D8B98): 두 스틱 |Δ|·0.2·(1+0.6·(1−|스틱|)) 최댓값 누적 − "Wiggle Meter Drain"(2.0)·dt, 기술 시작 시 0. 방향 조건 7/8/15 = 게이지 > 2/4/15 (InputOK 0x2082BC) — 예전 "낙하 높이 [추정]" 은 틀림 [확실] |
+| `Combatant.poll` 즉시 분기 | 창 끝을 기다리는 AUTO 가 큐에 있어도 나중에 조건이 맞은 즉시(!) 분기가 앞선다 (861 "AUTO fall>2 → 862") [추정: 원작 큐 교체 규칙] |
+| `Combatant.setGodMeterOwner` | 적 기술의 GOD_METER_ADD 를 크레토스 게이지로 (게이지는 플레이어 전역; 가족 포옹 865/866 의 +1 ×N). `BossFight.onSpawn` 이 보스전 적 전부에 연결 |
+| `Combatant.fireFrom` | 투사체(Arrow Context = 자세 태그) 피격 분기 (BMI 통나무 456) |
+| `GrabSync.updateTimed(Combatant…)` | TimedPress 를 가진 쪽이 영웅 기술일 때 (실패 = 영웅 REQUEST0 분기) |
+| `CombatScriptBridge` 1039 → 적 | 스크립트가 적에게 보낸 1039 = 피해 인자1 (0x25B6E8 → 0x1CC810 → 0x204690) [확실] — PAND03G LogDamageBoss 999 |
+| `LevelData.behaviors` | GO 하나에 비헤이비어가 여럿이면 Creator 대신 다음 것 (PAND03G gologlever = Creator 100 + PushPull 15 "BMI Log Puller" 과제 351 → 레버 R1 오브젝트) |
 | `Combatant.setBystanders` | 대상 외에 같은 공격 판정을 받는 개체 (분신 공격이 가족에게 휘말림 — 피격자 처리만, 공격자 HIT_CONFIRM 없음) |
 | `HeroNavigator.deepWater` | Water 면 아래 16+4 안에 단단한 바닥이 있으면 헤엄치지 않음 (ATHN08A/08C 아레스 만: 수면 y 1, 바다 바닥 −6.7 = "bay floor" −0.4125·16) — 전엔 크레토스가 바닥 아래 y −15 에 헤엄 상태로 갇혔다 [추정: 깊이 기준] |
 | `ScriptWorld` / `BallHull` / `LevelData.PlacedVolume` | **영역 ID 있는 진입/이탈 센서** — 같은 ENV 의 hull 마다 다른 센서. 전엔 히드라 구역 1–6 센서가 한꺼번에 발동했다 |
@@ -163,13 +173,15 @@ HP ≤ 9800 → 잡기 원 → ○ GRAB → 260 MAIMEWGRAB (일반 GrabSync, 같
 | 미니게임 버튼 아이콘 (FlashSprite idx 10, TimedPress 아이콘) | 미표시 (35 문서 공백과 같음) |
 | 스크립트 카메라 (grabLeftCam, bossKillCam 등), AresCamera1 | **해결** (30 문서 §6): ESC 0x9/0x8 + 관절 애니 카메라(0x1000 재시작) + 전환 이벤트 1037. AresCamera1 = 원작 0x1F67C0 비용 함수 (30 §6.3) |
 | 히드라 잡기·처형 카메라에서 크레토스가 안 보임 | **부분**: 좌우 반전은 고침(위 §4). 남은 원인 — 잡기 애니에서 히드라 머리(JAW/TIP 관절)가 영웅 자리에서 100–200 옆 (손–관절 최소 거리 ≥ 84, 어떤 회전·반사로도 접촉 안 됨). 보스 grab 애니 synchJoint 는 원점·180°, 영웅 synchJoint 는 원점·0° 라 synchJoint 규칙(아래 §9)으로는 영웅이 바다 높이가 됨 → 히드라 쪽 정렬 규칙 미해결 |
-| 아레스 잡기 (BOSS_TO_HERO) | synchJoint 로 보면 아레스 MAIBARGrab* (0,0,−32) 180° / 영웅 (0,0,−32) 0° → 64 떨어져 마주 봄이 맞을 수 있다 (현재는 같은 위치·같은 요) [미검증] |
+| 아레스 잡기 (BOSS_TO_HERO) | **검증** (§11): 같은 원점·같은 방향이 맞다 (손목 ↔ 아레스 손가락 관절 평균 7.0). "64 앞 마주 봄" 은 25, zeroJoint 차 규칙은 40 |
 | RegenHealthBar (RegenBar 250/252: Regen Speed 150, 비율 0.8/0.45) | 의미 미확정 → 무시 |
 | SonicScream 힘 | 근사 (거리 ×16 안에서 Force/500 단위/초) |
 | 히드라 HERO_TO_BOSS 정렬, 메두사 석화, 아레스 차지 | [추정]/[근사] |
 | 아기 히드라 enc3 (`bhb` 253/258) | 리소스·DTre 로 싸움, 돛대 핀(110–117) 연출 미검증 |
-| ATHN08B 분신 크레토스·가족 | **해결** (§9): 가족 보호·포옹·휘말림·사망 실패. 분신의 영웅 잡기 EVIGRAB 860–863 (dir 7 "fall>2" 조건) 은 일반 경로 그대로 [미검증] |
-| 판도라 수호자 BMI (PAND03G) | 분석만 (§10): 전용 C++ 클래스 AI — 리소스 등록·스크립트 카메라만 동작 |
+| ATHN08B 분신 크레토스·가족 | **해결** (§9): 가족 보호·포옹(정렬 고침 §11)·휘말림·사망 실패, 분신 잡기 860–863 (흔들기 탈출 / 실패 피해), 포옹 신들의 분노 게이지 |
+| 판도라 수호자 BMI (PAND03G) | **구현** (§10): 전용 클래스 Think/TakeDamage 원작 해독 → `BmiFight`, 결말(245 → p03MP07 → Pand03H)까지. 통나무 궤적·증기/갑옷 조각·HUD EnemyState·카메라 대상 슬롯은 근사/미구현 |
+| AresFight 데모 크레토스가 ~2.5초부터 멈춤 | **해결**: 1단계 데모는 0.9초마다 정면 60 에서 공격 (4 번에 500 임계 밑, 원 임계마다 290), 그 뒤 ○ 잡기. 예전엔 3초까지 서 있다가 불덩이에 맞고 정지 |
+| FakeDeadBMI (죽은 수호자 장식, 통나무 박힘) | 생성 센서 VisOff 가 안 먹어 전투 내내 보임 (GameScene/Vis 쪽, 이 작업에서 손대지 않음) |
 | ATHN02D 메두사 방 바닥 충돌이 없음 (충돌 삼각형 138) | **해결**: 바닥은 숙주 레벨 ATHN02C 시트에 있음 (아래 §8.1) |
 | 다른 슬롯 레벨 렌더 | ATHN02D 직접 진입 시 방 지오메트리(ATHN02C)가 그려지지 않음 — 충돌·스크립트만 올림 |
 | 0x800 차지 분기 일반 지원, 조건 25(스크립트 변수 해시), 27(+0x64 쓰는 곳) | 미구현 |
@@ -201,24 +213,86 @@ beginEvil 볼륨 → LevelData17+30 초 뒤 궁수 669 (DTre "dark lightning!" 2
 ```
 - 엔진: 가족 = 본체(보호 대상), 분신 = 쫄. 가족 스켈레톤은 **xmc** (CombatFile 의 XMC* 애니; 예전 등록은 정지 모델 `family`) — 이동 애니가 없고 DTre 001 이 비어 있어 위치·요 고정.
   분신 공격 판정이 가족에게도 (`Combatant.setBystanders`), 영웅 공격은 가족 피해 없음 (`damageFrom`, 잡기 자세 200 만 통과 — 포옹 개시).
-  포옹 정렬 **SYNCH** [추정: synchJoint 의미]: 영웅 = 가족 · S_가족 · S_영웅⁻¹ — 가족 MAIEVIHug* synch (0,0,−16) 180°, 영웅 (0,0,−32) 0° → 가족 정면 48 에서 마주 봄.
+  포옹 정렬 **SYNCH** (§11): synchJoint **위치**만 겹치고 방향은 같게 — 가족 MAIEVIHug* synch (0,0,−16), 영웅 (0,0,−32) → 영웅 원점이 가족 원점 16 뒤, 같은 방향
+  (손목 ↔ 가족 관절 6.4; 예전 "정면 48 마주 봄" 은 약 25 — 크레토스가 가족 앞 허공을 안았다).
   가족 HP 0 인데 대기 순환(M0/M1, EV_DEATH (block))이면 엔진이 기술 분기를 루트 액션보다 먼저 보므로 A150 이 안 걸린다 → 사망 기술 150 으로 [추정: 원작 우선순위].
   포옹 뒤 가족 기술이 없으면 0 요청 (원작 865 SYNC → M0, 스크립트 1019(0) 와 같은 대기 순환).
+- **분신 잡기** (860–863) [확실: 데이터 + 0x1D8B98]:
+  ```
+  분신 M0 EVIGRAB (판정 [0.47–0.53] dmg 0, SET_1B0 860) 적중 → 영웅 A860 EV_HIT_REACT tag 860 → 860 EVIGRABHEROSTART / 분신 HIT_CONFIRM → 860 → AUTO 861
+  861 EVIGRABHEROLOOP: 영웅 "[0–1]! AUTO dir 7 → 862 WIN" (dir 7 = 스틱 흔들기 게이지 > 2, §3.2) / "[0–1] AUTO → 863 LOSE" (창 끝), FlashSprite 12 = 흔들기 아이콘
+  862: 분신 SELF_HP 5+15 · SCR_ExplodeDeath(on-dead) / 863: 영웅 SELF_HP 10, 분신 PlayFX 672/673
+  ```
+  엔진: `EvilKratosFight` 가 잡은 분신을 찾아 별도 `BossSync`(860–863, BOSS_TO_HERO — synch 둘 다 (0,0,−32), 쌍 기술 ID 따라가기)로 묶는다. 예전엔 영웅 860 이
+  SYNC 분기(엔진에서 발동 안 함)만 가져 861 로 못 가고 끝났다. 탈출 분기는 창 끝 AUTO 가 큐에 있어도 즉시(!) 분기가 앞서게 고침 (§3.2).
+- 신들의 분노: 가족 865/866 의 GOD_METER_ADD(+1 ×10, ×N)는 원작에서 플레이어 전역 게이지 → 크레토스에게 (예전엔 가족 combatant 에 쌓여 사라짐).
 - 순회 검증: 격파할 본체가 없어 `HeadlessBoss` 는 맡지 않음 (`headless() == false`) — 분신은 일반 적처럼 처치되어 25 → ATHN08C (기존 TraversalTest 그대로 통과).
-- 테스트 `EvilKratosFightTest`: 가족 xmc·HP 100·세트 660/661/662, M0 → M1, 제자리, 영웅 공격 무피해 / 포옹 동기(정면 48·마주 봄), ○ 유지 HP 이동(+24 이상 / −24 이하), 메시지 454, 끝나면 대기 /
+- 테스트 `EvilKratosFightTest`: 가족 xmc·HP 100·세트 660/661/662, M0 → M1, 제자리, 영웅 공격 무피해 / 포옹 동기(16 뒤·같은 방향, 손목 접촉 < 8), ○ 유지 HP 이동(+24 이상 / −24 이하), 메시지 454, 크레토스 게이지 ≥ 10, 끝나면 대기 /
+  분신 잡기 흔들기 → 862 탈출 / 흔들지 않으면 863 → 영웅 피해 10 /
   분신 칼날이 가족에 휘말림, HP 0 → XMCDEATH2 → camWifeDeatho + A07MP04 → FailedScreen.
 - 스크린샷 (`work/shots/37b/`): `evil_a.png` (집 안: 가족 앞 크레토스, 분신 4 — 하나는 스폰 점프), `evil_hug.png` (포옹 + 메시지 454, 영웅 HP 감소).
 
-## 10. 판도라 수호자 BMI (PAND03G) — 분석 (미구현)
-- **전용 C++ 클래스** [확실: 실행 파일]: AI1 200 은 DTre 가 없고(-1) 모든 기술이 REQUEST0 루트 액션(0–49 이동·도발, 50–94 공격, 200–260 비틀거림·거북 기절·통나무 기절·갑옷 파괴 232·죽음 전환 242·증기 배출 250, 450–460 올라타기)이라
-  기술 선택을 클래스 코드가 한다. 0x1C0000–0x1C2D00: BMI_RegisterTweaks 0x1C1EB0 (`/GlobGame/BMI`: Camera Target Weight 0.35 / Radius 2.0, Damage Per Vent Stage 100,
-  Damage Per Armor Stage 150, No Armor Health Threshold 99, 기술 번호 Walk Forward / Leap Back / Dodge / Stagger First Time / Stagger / Stunned),
-  SCR_BMITurnOffVents / SCR_BMIOnPlatform / SCR_BMIBrokenPieces / SCR_BMINoDodge / SCR_GlowEnemyMeter (0x1C2B90), 증기 배출구 소리 SND_MB_VENT%d_LP (0x1C1518/0x1C1D70),
-  관절 표 BMI01JOCHEA1 …(0x2B7360..). AresCamera1 처럼 카메라 대상 슬롯을 쓰는 것으로 보인다 ("Camera Target Weight").
-- 데이터로 확인된 연출 고리: 영웅 ○ GRAB → HIT_CONFIRM M450 BMIRIDEMOUNT (tgt=200 tag=203) — tag 203 은 M450 자신이 세우므로 올라탈 기회는 클래스 코드가 연다.
-  450 → SYNC → 451/452/453 BMIRIDE01..03 → 454 RIDEFAIL / 455 RIDEWIN (→ 208 통나무 기절). 스크립트 Mount/MinGame451..453/MinGameFail/MinGameWin/ArmorBreak(232)/SpitCams 는
-  1035(기술) Filter 200 으로 카메라만 바꾼다 (mountcam, cam451 …, FailCam, WinCam1–3, ArmorCam1/2) — 일반 이벤트 다리로 이미 동작.
-- 남은 일: 0x1C0000 대의 BMI 갱신(배출구 단계·갑옷 단계 피해 누적 → 비틀거림/기절 기술 요청, 올라타기 열기) 해독 후 `PandoraGuardianFight`.
+## 10. 판도라 수호자 BMI (PAND03G) — `BmiFight` (전용 클래스, 결말까지)
+원작 [확실: 실행 파일]: 팩토리 0x1CEBA0 클래스 1 = BMI (객체 0x400, 생성자 0x1C0378, vtable 0x2BB3D8). 재정의 = +0x08 소멸, **+0x10 갱신 0x1C13E0**
+(Think 0x1C0A48 → 기본 Enemy1 갱신 0x1EBD78 → 갑옷 조각 0x1C1B10), **+0x40 TakeDamage 0x1C1838** (0x204690 피해 적용이 부름). AI1 200 은 DTre 가 없다.
+수치 `/GlobGame/BMI` (R_PERMK, BMI_RegisterTweaks 0x1C1EB0; 짧은 필드는 TWK 덤프에서 float 로 보이나 하위 u16 이 값):
+
+| 항목 | 값 |
+|---|---|
+| Damage Per Vent / Armor Stage, No Armor Health Threshold | 100 / 150 / 99 |
+| 기술 | Walk Forward 1, Leap Back 2, Dodge 220, Stagger First Time 250, Stagger 200, Stunned 201, Armor Stagger 230, Armor Stunned 232, No Armor Stunned 240, Platform … 251/205/206/231/232/241, Platform Mount 10 / Dismount 2, Victory 5 / 13, Retreat 40 |
+| 거리 (×16) | Behind Close 2.5, Close Mid 12, Mid Far 18, Far Walk 34, Retreat 45, Platform 53, Platform Back 75. 각도 Center 30°, Platform Center 55° (tan) |
+| 단계표 0x303EC0 (S0..S3, 0x24) | Close L/C/R, Mid L/C/R, Far L/C/R, Idle Time, Platform L/C/R/Back, Platform Idle Time. S0 = 78/150/79, 1/151/1, 1/152/1, 0.5, 105/100/103/103, 0.25 … S3 = 78/180/79, 1/181/1, 72/182/72, 0, 0 (150–182 = CombatFile 203 의 "대기 → AUTO 무작위 공격" 기술) |
+
+```
+Think (매 프레임): d = 영웅 − BMI, fz = 정면·d, fx = 왼쪽·d, hy = 높이, bA = 정면·(BMI − 앵커), hA = 정면·(영웅 − 앵커)
+  기술 중: 영웅이 뒤(fz < 40) / 걷는 중 Close 안·낮음 / 발판 위에서 영웅이 내려옴 → CHARGED (대기·걷기·도발의 0x800 AUTO 로 끝냄)
+  기술 없음: 대기 시간 −1/60. 같은 프레임 나중 요청이 이김 —
+    발판: 영웅 HP 0 → 13, 뒤·낮음 → Dismount 2 / 아니면 영웅 HP 0 → 5, bA > Retreat → 40, fz > Far Walk 또는 hy > 96 → 1, fz < Behind → 2
+    없으면 단계표: 쪽 = |fx| < |fz|·tan(Center) ? 가운데 : 왼/오, 띠 = Close/Mid/Far → 기술 + Idle Time 대기 (발판: Back/가운데/왼/오)
+  앵커 선 고정: HP > 99 면 bA 를 [0, Platform Dist] 로 (BMI 는 돌지 않고 앵커 정면 선 위에서만 움직인다). 걷다가 Platform Dist → Mount 10 (발판)
+TakeDamage: ≥ 1000 → 단계 +1 (통나무) / == 999 → NoDodge 아니면 Dodge 220 / 잠금(기절 연쇄) 중 무시 / 그 밖 누적:
+  단계 0·1 배출구: 100 마다 하나 (소리 SND_MB_VENTSHOT·VENT%d_LP). 5 번째 = Stunned 201 (잠금), 첫 번째 = 250 STEAMVENT, 나머지 200
+  단계 2 갑옷: 150 마다 230, 5 번째 = 232 갑옷 파괴 + 단계 3 (잠금)
+  단계 3: HP 감소, 99 바닥에서 240 (잠금) → 242 → 243 통나무 기절 (INVULNERABLE·NoDodge, 22초 CHARGE_CHECK → 244 SELF_HP −10×25 회복)
+  HP 는 단계 0–2 동안 1500 그대로
+SCR: BMITurnOffVents(b) = 배출구 수 −b, 누적 0 (204/207/209/222/227 — 기절 풀림·올라타기 실패) / BMIOnPlatform (77 들이받기) / BMIBrokenPieces(b) / BMINoDodge (창)
+```
+연출 고리 (데이터):
+```
+5 번째 배출구 → 201 → 202 → 203 TURTLESTUNIDLE (CIRCLE_ON, 자세 203, CHARGE_CHECK 2초 → 204 흔들기 → 배출구 4)
+  영웅 ○ GRAB(자세 200) → 203 EV_HIT_REACT tag 200 → 450 BMIRIDEMOUNT / 영웅 HIT_CONFIRM tgt=200 tag=203 → 450 (1035(450) → mountcam, 메시지 589)
+  영웅 450 → AUTO 451 → 452 → 453 → 455: 각 기술 TimedPress 206 "arcPress180rand" ×2 (453 은 + 207 "arcPress360rand"), 실패 → REQUEST0 454 RIDEFAIL
+  BMI 는 같은 ID 로 따라감 (BossSync), 454 → 207 도발 (배출구 −1) / 455 RIDEWIN → 208 LOGSTUNIDLE (22초, NoDodge, 1035(208) → LevelData4 "Boss is stunned")
+레버 gologlever (PushPull 15 "BMI Log Puller", 과제 351) → 1023 → LevelData0 = % → 99: 통나무 장전·카메라
+  LevelData4 거짓 → 0.5초 뒤 1039(999) → Dodge 220 (통나무 빗나감) / 2.5초 뒤 1020(1000) "fire log arrow" → Arrow/060 (피해 1000, Context 456)
+  적중 → 단계 +1, EV_HIT_REACT tag 456 → A210 LOGHIT (HP 1001..) → 75 들이받기 / A245 (HP ≤ 1000) → SCR_ExplodeDeath
+  단계 0 → 1 → 2 는 통나무 2 번, 2 → 3 은 갑옷 파괴, 마지막 243 의 통나무 → 245 → 1035(245) FinalMpegStuff → p03MP07 → LoadWad Pand03H
+```
+엔진 (`BmiFight`) 근사: 위치 = 기술 애니 zeroJoint 변화량 (BMI 애니는 zeroJoint 절대값이 클립마다 다르고 몸은 제자리), 앵커 = 스폰 위치 (원작은 GO 부모 로케이터),
+통나무 = 1020(1000) 뒤 (거리 / 150·16) 초에 "이번 레버 주기에 999 로 피하지 않았으면" 적중 [근사: Arrow 궤적·logAim 미구현, Arrow "Ignore Invulnerable"],
+올라타기 정렬 ZERO (§11). 미구현: 배출구 증기 GO·갑옷 조각 BRK·HUD EnemyState(MeterState)·카메라 대상 슬롯(Camera Target Weight/Radius), 통나무 모델.
+순회 검증은 아직 맡지 않음 (`headless() == false`, 검증 하네스 경로 그대로).
+
+- 테스트 `BmiFightTest`: 문 앞 볼륨 → P03MP06 → Goto → 231 → 스폰 / 단계표 (멀리 → 1 걷기 이동, 정면 가까이 → 150), 앵커 선 /
+  배출구 250·200·200·200·201 (HP 1500 유지, VentCam) → 203 → 잠금 중 무피해 → ○ → 450 (메시지 589) → 451–453 TimedPress 7 → 455 → 208 (LevelData4) → 레버 → 통나무 적중 → 단계 1, 210 /
+  비기절 레버 → 999 → 220 → 빗나감 / 데모 끝까지: 232 (ArmorCam1/2), 240 → 242 → 243 → 245, 통나무 3 번, p03MP07 → camMinoDeado, LoadWad Pand03H.
+- 스크린샷 (`work/shots/37c/`): `bmi_t600.png` (정면 BMI 다리 사이 크레토스), `bmi_mount.png`·`bmi_ride1.png`·`bmi_ride3.png` (등에 올라탐), `bmi_loghit.png`·`bmi_armor.png` (통나무 카메라, 갑옷 균열), `bmi_final.png` (격파 뒤 문).
+
+## 11. 동기 애니 정렬 — 관절 접촉 검사
+synchJoint 의 의미를 추정으로 정하던 것을 **데이터로 검사**: 동기 중 매 프레임 영웅 손목(lwrist/rwrist) ↔ 상대 골격 관절의 최소 거리 평균 (`BossSyncContact`).
+
+| 동기 | synchJoint (보스 / 영웅) | 같은 원점·같은 방향 | synch 위치 겹침 | synch 행렬 통째 (마주 봄) | zeroJoint 차 |
+|---|---|---|---|---|---|
+| 아레스 MAIBARGrab* | (0,0,−32) 180° / (0,0,−32) 0° | **7.0** | = 같은 원점 | 25 (64 앞) | 40 |
+| 가족 포옹 MAIEVIHug* | (0,0,−16) 180° / (0,0,−32) 0° | 약 12 | **6.4** (16 뒤) | 약 25 (48 앞) | 33 |
+| BMI 올라타기 BMIRide* | (0,0,0) / (0,0,0) | 20–45 (바닥) | = 같은 원점 | – | 19–45, **영웅 zeroJoint 높이 0 → 212 (등)** |
+
+- 규칙: **synchJoint 위치를 겹치고 방향은 같게** (`BossSync.synchOffset`, 보스 배율 무시 — 아레스 1.15 를 곱하면 7.0 → 9.9). synchJoint 회전(180°)은 정렬에 안 쓴다 [추정: 상대 방향 표식].
+  아레스 잡기의 "64 떨어져 마주 봄" 가설은 틀림 — 아레스가 크레토스를 두 손에 쥔 화면 (`ares_t330.png`).
+- BMI 올라타기는 거대한 몸에 관절이 드물어 접촉 수치로 못 가린다. 영웅 BMIRide* 애니는 몸이 제자리이고 zeroJoint 가 높이 212 까지 기어오르므로
+  **ZERO** = 영웅 = BMI + R·(zero_영웅 − zero_BMI) (높이 포함, 바닥 아래로는 안 내려감) [추정: 화면 확인 — 크레토스가 BMI 등·어깨 위].
+- 스크린샷 (`work/shots/37c/`): `ares_t330.png`·`ares_t700.png` (잡기), `hug_t530.png` (포옹), `ares_demo_t200.png` (1단계 데모 공격).
 
 ## 보스 체력 미터 (HUD)
 - 미터는 FLP_HUDK 가 아니라 **레벨 WAD 의 FLP_&lt;레벨&gt;** (ATHN01B/C/E, ATHN08A/B/C, PAND03G) 에 있다. `GameScene` 이 이 FLP 를 HUD 와 변수를 공유하는

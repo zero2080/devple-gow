@@ -46,4 +46,9 @@ public interface CombatOwner {
 	default boolean applyDamage(float damage) {
 		return false;
 	}
+
+	/** 이 피해로 죽는지 (피격 이벤트 EV_DEATH 판정, 피해 적용 전). 피해를 클래스가 직접 다루는 적(BMI)은 false. */
+	default boolean killedBy(float damage) {
+		return hp() > 0 && hp() <= damage;
+	}
 }

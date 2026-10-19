@@ -83,6 +83,39 @@ class AresFightTest {
 		assertTrue(r.log.stream().anyMatch(s -> s.startsWith("level WARP")), r.log.toString());
 	}
 
+	/** 잡기 정렬 (37 문서 §11): 같은 원점·같은 방향에서 영웅 손목이 아레스 손가락 관절에 붙는다 (평균 7). synchJoint 행렬을 맞춘 "64 앞 마주 봄"(25),
+	 * zeroJoint 차 규칙(40) 은 멀다. */
+	@Test
+	void grabAlignmentSameOrigin() throws Exception {
+		BossRig r = spawned("ATHN08A");
+		EnemyFighter b = r.fight.boss();
+		b.hp = 520;
+		until(r, 6, () -> !b.combat().active());
+		b.hp = 480;
+		assertTrue(until(r, 3, () -> bossMove(r) == 290), r.bossMoves.toString());
+		place(r, 40);
+		contact(r, 200, 0);
+		assertTrue(until(r, 3, () -> r.fight.sync().active() && r.fight.sync().pairedMove() == 606), r.bossMoves.toString());
+		float same = 0, apart = 0, zrule = 0;
+		int n = 0;
+		for (int k = 0; k < 120; k++, r.tick()) {
+			if (k % 10 != 0 || !r.fight.sync().active()) {
+				continue;
+			}
+			var bw = b.world(new org.joml.Matrix4f(), 1);
+			same += BossSyncContact.handGap(r.ctl.animator(), r.ctl.world(new org.joml.Matrix4f(), 1), b.animator(), bw);
+			var facing = new org.joml.Matrix4f().translation(b.pos).rotateY(b.yaw).translate(0, 0, -64).rotateY((float) Math.PI);
+			apart += BossSyncContact.handGap(r.ctl.animator(), facing, b.animator(), bw);
+			zrule += BossSyncContact.handGap(r.ctl.animator(), BossSyncContact.zeroRule(r.ctl.animator(), b.animator(), b.pos, b.yaw), b.animator(), bw);
+			n++;
+		}
+		assertTrue(n > 5);
+		assertEquals(0, r.ctl.position.distance(b.pos), 1e-3f, "BOSS_TO_HERO: synchJoint (0,0,−32) 둘 다 → 같은 원점");
+		assertTrue(same / n < 10, "손목 ↔ 아레스 관절 평균 " + same / n);
+		assertTrue(apart / n > 2 * (same / n), "64 앞 마주 봄 " + apart / n + " vs 같은 원점 " + same / n);
+		assertTrue(zrule / n > 2 * (same / n), "zeroJoint 차 규칙 " + zrule / n + " vs 같은 원점 " + same / n);
+	}
+
 	@Test
 	void stage3ShowdownFinisher() throws Exception {
 		BossRig r = spawned("ATHN08C");

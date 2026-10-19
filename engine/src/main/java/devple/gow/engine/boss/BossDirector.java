@@ -19,7 +19,7 @@ import java.util.Locale;
  *  ATHN08A  아레스 1단계 (bar, 600)                   AresFight(1)
  *  ATHN08B  분신 크레토스 / 가족 (evi 666–669, xmc 660)    EvilKratosFight (가족 보호·포옹, 분신 공격 휘말림)
  *  ATHN08C  아레스 3단계 (ba2, 601)                   AresFight(3)
- *  PAND03G  판도라 수호자 BMI (bmi, 200)               리소스만 (/GlobGame/BMI 판정 미구현)
+ *  PAND03G  판도라 수호자 BMI (bmi, 200)               BmiFight (전용 클래스 Think/TakeDamage, 올라타기·통나무)
  * </pre>
  */
 public final class BossDirector {
@@ -47,7 +47,7 @@ public final class BossDirector {
 				case "ATHN08A" -> new AresFight(lv, rom, permk, 1);
 				case "ATHN08C" -> new AresFight(lv, rom, permk, 3);
 				case "ATHN08B" -> new EvilKratosFight(rom, permk);
-				case "PAND03G" -> new ResourceOnlyFight(lv, rom, permk, new int[][]{{200, 200}}, new String[]{"bmi"});
+				case "PAND03G" -> new BmiFight(rom, permk);
 				default -> null;
 			};
 		} catch (IOException | RuntimeException ex) {

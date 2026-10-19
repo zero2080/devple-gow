@@ -25,11 +25,15 @@ import java.util.function.IntPredicate;
 public final class BossSync {
 
 	/**
-	 * SYNCH = 두 애니의 synchJoint 를 맞춘다: 영웅 = 보스 · S_보스 · S_영웅⁻¹ (수평 위치·요). 예 포옹 MAIEVIHug*: 가족 xmc synch
-	 * (0, 0, −16) 180°, 영웅 (0, 0, −32) 0° → 영웅은 가족 정면 48 에서 가족을 마주 봄. 분신 잡기 EVIGrabHero*(evi (0,0,−32) 0°,
-	 * 영웅 (0,0,−32) 180°)도 같은 규칙이면 64 앞 [추정: synchJoint 의미].
+	 * 동기 애니 정렬 = 두 synchJoint 의 <b>위치</b>를 겹치고 <b>방향은 같게</b> ({@link #synchOffset}). 회전 성분(아레스 보스 180° / 영웅 0°)은
+	 * 정렬에 쓰지 않는다 [추정: 상대 방향 표식]. 근거 [데이터: 관절 접촉 검사, 37 문서 §11] — 영웅 손목 ↔ 상대 관절 평균 거리:
+	 * 아레스 MAIBARGrab* (synch 둘 다 (0,0,−32) → 같은 원점) 7.0, synchJoint 행렬을 통째로 맞춘 "64 앞 마주 보기" 25;
+	 * 포옹 MAIEVIHug* (가족 (0,0,−16), 영웅 (0,0,−32) → 영웅이 16 뒤·같은 방향) 6.4, 예전 "정면 48 마주 봄" 약 25.
+	 * BOSS_TO_HERO = 보스를 영웅 쪽에 (아레스), SYNCH = 영웅을 고정 보스 쪽에 (가족 포옹), HERO_TO_BOSS = 히드라 (zeroJoint 규칙),
+	 * ZERO = 영웅 = 보스 + R(요)·(zero_영웅 − zero_보스) (높이 포함, BMI 올라타기 BMIRide*: 영웅 zeroJoint 가 높이 0 → 212 로 등에 기어오름,
+	 * 몸 관절은 제자리 — 같은 원점이면 크레토스가 BMI 다리 사이 바닥에 남는다) [추정: 화면 확인].
 	 */
-	public enum Align { NONE, BOSS_TO_HERO, HERO_TO_BOSS, SYNCH }
+	public enum Align { NONE, BOSS_TO_HERO, HERO_TO_BOSS, SYNCH, ZERO }
 
 	private final IntPredicate syncId;
 	private final Align align;
@@ -107,9 +111,10 @@ public final class BossSync {
 			return;
 		}
 		if (align == Align.BOSS_TO_HERO) {
-			boss.pos.set(ctl.position);
-			boss.prevPos.set(ctl.prevPosition);
 			boss.yaw = ctl.yaw;
+			org.joml.Vector3f v = synchOffset(boss, ctl.animator());
+			boss.pos.set(ctl.position).sub(v);
+			boss.prevPos.set(ctl.prevPosition).sub(v);
 		} else if (align == Align.HERO_TO_BOSS) {
 			if (anchor == null) {
 				anchor = new org.joml.Vector3f(ctl.position);
@@ -134,17 +139,22 @@ public final class BossSync {
 			ctl.yaw = yaw;
 			ctl.vy = 0;
 		}
+		if (align == Align.ZERO) {
+			float[] zh = zero(ctl.animator()), zb = zero(boss.animator());
+			org.joml.Vector3f v = new org.joml.Vector3f(zh[0] - zb[0], zh[1] - zb[1], zh[2] - zb[2]).mul(boss.scale).rotateY(boss.yaw);
+			ctl.position.set(boss.pos).add(v);
+			ctl.position.y = Math.max(boss.pos.y, ctl.position.y); // 실패 애니(454)는 zeroJoint 가 바닥 아래로 내려감
+			ctl.prevPosition.set(ctl.position);
+			ctl.yaw = boss.yaw;
+			ctl.vy = 0;
+		}
 		if (align == Align.SYNCH) {
-			float[] sb = synch(boss.animator()), sh = synch(ctl.animator());
-			if (sb != null && sh != null) {
-				float ab = (float) Math.atan2(sb[8], sb[10]), ah = (float) Math.atan2(sh[8], sh[10]);
-				// S_h⁻¹(0) = −R(−ah)·p_h → S_b → 보스 월드
-				org.joml.Vector3f v = new org.joml.Vector3f(-sh[12], 0, -sh[14]).rotateY(-ah).rotateY(ab).add(sb[12], 0, sb[14]);
-				v.rotateY(boss.yaw).add(boss.pos.x, 0, boss.pos.z);
-				ctl.position.set(v.x, ctl.position.y, v.z);
-				ctl.prevPosition.set(ctl.position);
-				ctl.yaw = boss.yaw + ab - ah;
-			}
+			// 영웅 = 보스 · T(S_보스 위치) · T(−S_영웅 위치), 같은 방향 (고정 보스 쪽으로 영웅) [데이터: 접촉 검사, 37 문서 §11]
+			org.joml.Vector3f v = synchOffset(boss, ctl.animator());
+			ctl.position.set(boss.pos).add(v);
+			ctl.prevPosition.set(ctl.position);
+			ctl.yaw = boss.yaw;
+			ctl.vy = 0;
 		}
 		// 연타: 보스 기술(또는 영웅 기술)의 SCR_RepeatPress
 		var rp = bc.activeScript(RepeatPressQte.SCR_REPEAT_PRESS);
@@ -164,13 +174,41 @@ public final class BossSync {
 			}
 		}
 		// 타이밍 버튼
-		timedHelper.updateTimed(boss, tw, in);
+		// TimedPress 는 보통 보스 기술에, BMI 올라타기(451–453)처럼 영웅 기술에만 있으면 영웅 쪽 (실패 → 영웅 REQUEST0 → 454)
+		timedHelper.updateTimed(hasTimed(bc) || !hasTimed(hero) ? bc : hero, tw, in);
+	}
+
+	/** 현재 자세의 zeroJoint 로컬 위치 (없으면 0). */
+	static float[] zero(devple.gow.engine.anim.Animator an) {
+		int j = an.skeleton().indexOf("zeroJoint");
+		if (j < 0 || an.current() == null) {
+			return new float[3];
+		}
+		float[] p = an.current().sample(an.skeleton(), an.time(), an.current().looping()).pos[j];
+		return new float[]{p[0], p[1], p[2]};
+	}
+
+	private static boolean hasTimed(Combatant c) {
+		return c.active() && c.move().events().stream().anyMatch(e -> e.type() == 8 && e.hash() == TimedPressQte.SCR_TIMED_PRESS);
 	}
 
 	/** 현재 자세의 synchJoint 행렬 (없으면 null). */
 	private static float[] synch(devple.gow.engine.anim.Animator an) {
 		int j = an.skeleton().indexOf("synchJoint");
 		return j < 0 || an.current() == null ? null : an.pose().world(an.skeleton())[j];
+	}
+
+	/**
+	 * 보스 원점 → 영웅 원점 (월드, 수평): R(보스 요)·(S_보스 − S_영웅) (애니 로컬, 보스 배율 무시). 두 synchJoint 의 <b>위치</b>가 겹치고 방향은 같다.
+	 * 아레스 MAIBARGrab* 는 둘 다 (0,0,−32) → 같은 원점, 포옹 MAIEVIHug* 는 가족 (0,0,−16) / 영웅 (0,0,−32) → 영웅이 16 뒤.
+	 */
+	static org.joml.Vector3f synchOffset(EnemyFighter boss, devple.gow.engine.anim.Animator hero) {
+		float[] sb = synch(boss.animator()), sh = synch(hero);
+		org.joml.Vector3f v = new org.joml.Vector3f();
+		if (sb != null && sh != null) {
+			v.set(sb[12] - sh[12], 0, sb[14] - sh[14]).rotateY(boss.yaw); // 배율 무시: 아레스(1.15)는 배율을 곱하면 손목 간격 7.0 → 9.9 로 나빠짐
+		}
+		return v;
 	}
 
 	private static void follow(Combatant c, int move) {

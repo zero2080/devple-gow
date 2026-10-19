@@ -32,7 +32,8 @@ public final class AresFight extends BossFight {
 	private float lastHp = -1;
 	/** 불덩이 모으기(21 루프) 경과 — CHARGE_CHECK(이벤트 33) a = 4.5초 뒤 0x800 분기(→ 22 던지기). */
 	private float charge;
-	private int demoStep;
+	private int demoStep, demoHits;
+	private float demoWait;
 
 	AresFight(String level, Path rom, WadFile permk, int stage) throws IOException {
 		super(level);
@@ -125,6 +126,17 @@ public final class AresFight extends BossFight {
 			demoStep = 1;
 			c.position.set(f.pos.x - (float) Math.sin(f.yaw) * 60, c.position.y, f.pos.z - (float) Math.cos(f.yaw) * 60);
 			c.prevPosition.set(c.position);
+		} else if (demoStep == 1 && stage == 1 && demoTime > 0.8f && !sync.active()) {
+			// 1단계: 크레토스가 계속 싸운다 (예전엔 3초 동안 서 있다가 불덩이에 맞은 뒤 ~2.5초부터 멈춰 있었음) — 0.9초마다 정면 60 에서
+			// 공격 한 번, 피해는 4 번 만에 500 임계 밑 (원 임계 3000/2000/1000/500 마다 290 비틀거림)
+			if ((demoWait -= dt) <= 0 && (!arena.heroCombat().active() || arena.heroCombat().move().id() == 80)) {
+				demoWait = 0.9f;
+				faceBoss(c, f, 60);
+				contact(71, Math.max(1, (f.hp - 480) / Math.max(1, 4 - demoHits)));
+				if (++demoHits >= 4) {
+					demoStep = 2;
+				}
+			}
 		} else if (demoStep == 1 && demoTime > 3 && !sync.active()) {
 			demoStep = 2;
 			if (stage == 1) {
@@ -135,7 +147,19 @@ public final class AresFight extends BossFight {
 			}
 		} else if (demoStep == 2 && stage == 1 && (m == 290 || m == 94 || m == 95)) {
 			demoStep = 3;
+			faceBoss(c, f, 40);
 			contact(200, 0);
+		} else if (demoStep == 2 && stage == 1 && f.hp > 500 && !sync.active() && (demoWait -= dt) <= 0) {
+			demoWait = 0.9f; // 무적 기술 중이라 피해가 안 들어갔으면 다시
+			faceBoss(c, f, 60);
+			contact(71, f.hp - 480);
 		}
+	}
+
+	/** 영웅을 아레스 정면 dist 에, 아레스를 보게. */
+	private static void faceBoss(devple.gow.engine.anim.HeroController c, EnemyFighter f, float dist) {
+		c.position.set(f.pos.x - (float) Math.sin(f.yaw) * dist, c.position.y, f.pos.z - (float) Math.cos(f.yaw) * dist);
+		c.prevPosition.set(c.position);
+		c.yaw = f.yaw + (float) Math.PI;
 	}
 }

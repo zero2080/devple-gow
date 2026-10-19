@@ -67,6 +67,15 @@ public final class Combatant {
 	public float reach = REACH, hitRadius = HIT_RADIUS;
 	public int hitCounter;
 	public float godMeter;
+	/** GOD_METER_ADD 를 받을 combatant (null = 자기). 원작 게이지는 플레이어 전역 — 적 기술(ATHN08B 가족 포옹 865/866)의 충전도 크레토스에게 간다. */
+	private Combatant godMeterOwner;
+	/**
+	 * 스틱 흔들기 게이지 = 플레이어 객체 +0x50 (sub_001D8B98, 매 프레임): 두 스틱 각각 |Δ스틱|·0.2·(1 + 0.6·(1 − |스틱|)) 중 큰 값을 더하고
+	 * "Wiggle Meter Drain"(/Player/, 2.0)·dt 를 뺌 (≥ 0). 기술 시작 시 0 (0x209750). 분기 방향 조건 7/8/15 = 게이지 &gt; 2/4/15 (InputOK 0x2082BC)
+	 * — 분신 잡기 EVIGRABHEROLOOP 861 "AUTO fall&gt;2 → 862 탈출" [확실: 디스어셈블].
+	 */
+	private float wiggle, wiggleLX, wiggleLY, wiggleRX, wiggleRY;
+	public float wiggleDrain = 2f;
 	/** 기술 시작마다 1 증가 (같은 기술 재시작 구분 — 마법 스크립트 이벤트 1회 발동용). */
 	private int moveSerial;
 	private java.util.function.IntPredicate moveHold = id -> false;
@@ -126,6 +135,27 @@ public final class Combatant {
 
 	public void onLog(Consumer<String> l) {
 		log = l;
+	}
+
+	/** GOD_METER_ADD 이벤트를 다른 combatant(크레토스)의 게이지로 보낸다. */
+	public void setGodMeterOwner(Combatant c) {
+		godMeterOwner = c;
+	}
+
+	/** 스틱 흔들기 게이지 (플레이어 +0x50). */
+	public float wiggle() {
+		return wiggle;
+	}
+
+	private void updateWiggle(Input in, float dt) {
+		float lx = in.leftX(), ly = in.leftY(), rx = in.rightX(), ry = in.rightY();
+		float a = (float) (Math.hypot(lx - wiggleLX, ly - wiggleLY) * 0.2 * (1 + 0.6 * (1 - Math.min(1, Math.hypot(lx, ly)))));
+		float b = (float) (Math.hypot(rx - wiggleRX, ry - wiggleRY) * 0.2 * (1 + 0.6 * (1 - Math.min(1, Math.hypot(rx, ry)))));
+		wiggleLX = lx;
+		wiggleLY = ly;
+		wiggleRX = rx;
+		wiggleRY = ry;
+		wiggle = Math.max(0, wiggle + Math.max(a, b) - wiggleDrain * dt);
 	}
 
 	public boolean active() {
@@ -252,6 +282,7 @@ public final class Combatant {
 		clip = data.animation(m);
 		virtualClip(m);
 		heldAtStart = 0;
+		wiggle = 0;
 		accumDamage = 0;
 		stanceTag = -1;
 		hitLog.clear();
@@ -326,6 +357,9 @@ public final class Combatant {
 	/** @param in 영웅 = 패드, AI = null */
 	public void update(Input in, float dt) {
 		hitThisFrame = false;
+		if (in != null) {
+			updateWiggle(in, dt);
+		}
 		if (volumes != null && anim.current() != null) {
 			volumes.update(anim.pose().world(anim.skeleton()), owner.position(), owner.yaw());
 		}
@@ -411,8 +445,17 @@ public final class Combatant {
 					cands.add(b);
 				}
 			}
-			if (cands.isEmpty() || (queued != null && queuedPrio >= best)) {
+			if (cands.isEmpty()) {
 				return;
+			}
+			if (queued != null && queuedPrio >= best) {
+				// 창 끝을 기다리는 분기(예 EVIGRABHEROLOOP 861 의 [0–1] AUTO → 863)가 있어도, 나중에 조건이 맞은 즉시(!) 분기
+				// (같은 창의 "AUTO fall>2 → 862")는 앞선다 [추정: 원작 큐 교체 규칙 미분석 — 그대로면 탈출 분기가 영영 막힘]
+				List<Branch> imm = cands.stream().filter(b -> b.immediate() && b != queued).toList();
+				if (queuedAt <= t || imm.isEmpty() || queuedPrio > best) {
+					return;
+				}
+				cands = imm;
 			}
 			Branch c = cands.get(rnd.nextInt(cands.size()));
 			float execAt = c.immediate() ? 0 : c.winEnd();
@@ -495,6 +538,8 @@ public final class Combatant {
 		return switch (k) {
 			case 1 -> mag < 0.8f;
 			case 2 -> mag >= 0.8f;
+			case 7 -> !right && wiggle > 2; // 플레이어 +0x50 > 2 (스틱 흔들기 게이지)
+			case 8 -> !right && wiggle > 4;
 			case 3, 4, 5, 6 -> {
 				if (mag < 0.8f) {
 					yield false;
@@ -510,7 +555,7 @@ public final class Combatant {
 					default -> -fz >= c;
 				};
 			}
-			default -> false; // 7, 8, 15: 낙하 높이 조건 (미구현)
+			default -> d == 15 && wiggle > 15;
 		};
 	}
 
@@ -618,6 +663,7 @@ public final class Combatant {
 		clip = data.animation(m);
 		virtualClip(m);
 		heldAtStart = in != null ? CombatInput.mask(in) : 0;
+		wiggle = 0; // 0x209750: 기술 시작 시 플레이어 +0x50 = 0
 		// 기술 시작 시 +0x1AC = 세트 플래그 | (이전 & 0x4004) → 차지·트리거 비트는 새 기술마다 지움, 누른 시간 0 (10 문서 §17)
 		stateBits &= 0x4004;
 		accumDamage = 0;
@@ -649,6 +695,24 @@ public final class Combatant {
 	 * 이벤트 코드(13 피격, 14 사망, 16 막음, 17 적중, 21 잡기 원, 22 막힘)로 분기 발동 → 즉시 큐.
 	 * 현재 기술의 분기 → 없으면 루트 액션. reaction 은 분기 +0x20 과 비교 (-1 = 무관).
 	 */
+	private void addGodMeter(float v) {
+		godMeter = Math.min(100f, godMeter + v);
+	}
+
+	/** 전투 combatant 가 아닌 공격자(투사체: Arrow "Context" = 자세 태그)의 이벤트. 예 BMI 통나무 Arrow/060 Context 456 → A210/A245. */
+	public void fireFrom(int code, int reaction, float attackerHp, int attackerClass, int attackerTag) {
+		Other o = new Other(attackerHp, attackerClass, attackerTag, false, false);
+		Branch c = move != null ? bestMatch(eventBranches(move.branches(), code, reaction), null, o) : null;
+		if (c == null) {
+			c = bestMatch(eventBranches(data.rootActions(), code, reaction), null, o);
+		}
+		if (c != null) {
+			queued = c;
+			queuedAt = 0;
+			queuedPrio = 5;
+		}
+	}
+
 	public void fire(int code, int reaction, Combatant attacker) {
 		// 공격자 쪽 이벤트(17 적중 확인, 22 막힘)는 attacker == null → 상대 = 맞은 대상(락온 대상)
 		Other o = attacker == null ? other()
@@ -707,7 +771,7 @@ public final class Combatant {
 				case 3, 40 -> soundSink.accept(e.hash(), owner.position()); // SOUND
 				case 21 -> {
 					if ((e.cond() != 1 && e.cond() != 2) || hitThisFrame) {
-						godMeter = Math.min(100f, godMeter + e.b()); // GOD_METER_ADD
+						(godMeterOwner != null ? godMeterOwner : this).addGodMeter(e.b()); // GOD_METER_ADD
 					}
 				}
 				default -> {
@@ -858,7 +922,7 @@ public final class Combatant {
 		}
 		accumDamage += dmg;
 		boolean react = (aflags & 6) != 0 || move == null || (move.poise() != -1 && accumDamage > move.poise());
-		boolean kill = owner.hp() > 0 && owner.hp() <= dmg;
+		boolean kill = owner.killedBy(dmg);
 		boolean circle = owner.applyDamage(dmg);
 		if (react || kill || circle) {
 			fire(kill ? CombatInput.EV_DEATH : circle ? CombatInput.EV_CIRCLE : CombatInput.EV_HIT,
