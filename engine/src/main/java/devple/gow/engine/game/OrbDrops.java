@@ -21,8 +21,12 @@ public final class OrbDrops {
 	}
 
 	public static List<Orb> roll(Tweaks tw, String emitterName, Random rnd, float playerHp, float playerMp) {
+		return rollNode(tw, tw.findTemplate("/TweakTemplates/OrbEmitter/", emitterName), rnd, playerHp, playerMp);
+	}
+
+	/** 템플릿 노드로 직접 (부서지는 물체 Brkb +0x28 = OrbEmitter 번호, 41 문서). node 가 null 이면 빈 목록. */
+	public static List<Orb> rollNode(Tweaks tw, String node, Random rnd, float playerHp, float playerMp) {
 		List<Orb> out = new ArrayList<>();
-		String node = tw.findTemplate("/TweakTemplates/OrbEmitter/", emitterName);
 		if (node == null) {
 			return out;
 		}

@@ -26,14 +26,14 @@ WAD 안에서는 소문자 (`goeyebeam`), 조회는 대소문자 무시 (Hash127
 | `MDL_x` | 메시 (빔·충격파·번개 가지·영혼). 머티리얼 ANM (UV 스크롤·불투명도) 이 대부분 붙는다 |
 | `FXC_x` (서브타입 1–10) | 이미터. +0x54 모양 이름 → 같은 WAD 의 `PTC_` (+0x54 같은 이름) |
 | `FXC_x` (0xC) | 필드 (중력 등) |
-| `SEM_x` | 사운드 이미터 (재생은 기존 소리 경로가 담당, 미연결) |
+| `SEM_x` | 사운드 이미터: 슬롯 1 소리를 이펙트 생성 때 재생 (§4.4). 같은 이름이 여러 번 정의된다 → 오브젝트 그룹 바로 앞의 정의 |
 
 정의 위치 (전부 `EffectLibrary.add` 가 인스턴스를 훑어 등록, 나중에 더한 WAD 가 같은 이름을 덮음):
 
 | WAD | 이펙트 (오브젝트: 구성) |
 |-----|------------------------|
 | R_PERMK | sklblood (ANM 3채널 + FXC 3 + 중력), bloodspot, rundust (ANM 1채널, 반복 0.2초), fleshslice/armorslice/metalslice/woodslice/rockslice/…, *land (착지 먼지), splash, maisweffect, maishockwave(MDL), combo3fexplode(MDL+FXC 6), fxfirepath(MDL), strikegrp/flashgrp(MDL), doublejump, maifreeze, stoneherobrk, 오브(healthorb …) |
-| R_MEDHD0..2 | eyebeam (MDL 17관절, ANM 반복 5초), medheadflash (FXC 1 + 채널, 1회 0.333초), medheadnuke (MDL 2관절, 반복 2초), mewh (메두사 머리 모델) |
+| R_MEDHD0..2 | eyebeam (MDL 17관절, ANM 반복 5초), medheadflash (FXC 1 + 채널, 1회 0.333초), medheadnuke (MDL 2관절, 반복 2초), mewh (메두사 머리 MDL_MEWH 15관절, act main/burn/off/On, FXC_MHBemit 커브 이미터) |
 | R_THBLT0..2 | bolt (MDL + FXC, 반복), stdbolt (FXC 상수 150/초 = 꼬리), bolthit (MDL 25관절, 1회 0.8초), boltchargeup |
 | R_RDEAD0..2 | dedred (영혼 MDL + FXC 60/초), deadhit / deaddie (FXC + 채널, 1회 1초) |
 | R_LGHTN0..2 | lightningattackmain (MDL 52관절 + FXC 3), lightningsinglebolt (MDL, 반복 0.2초), lightningradius (MDL) |
@@ -109,12 +109,14 @@ VU 4 (반짝이 점) 는 기존 휴리스틱 (A·u + B·u² 알파) 을 쓴다.
 ### 4.1 마법 (MagicFx)
 | 효과 | 원작 | 엔진 |
 |------|------|------|
-| 메두사 광선 | goEyeBeam 을 메두사 머리 GO 관절(0x3368C8)에 부착, 광선 동안 유지 | 영웅 `rWeapIH` 위치 + 조준 yaw (메시 −Z 400 = 정면) [근사: 머리 GO 미렌더] |
+| 메두사 머리 | SCR_ShowMedusaHead (0x197280, 이벤트 해시 0xE5D96CF1) → 0x1970D0: `/Player/MedusaHead` "HeadName" (goMewH) GO 를 만들어 영웅의 "JointName" (rWeapIH) 관절에 부착 (sub_00131460), act "Off" (0x196B18). 광선 시작 때 "On" (0x1972E8). 참조 수 0 (스크립트 끝, 0x197248) 이면 제거 [확실] | 영웅 rWeapIH 관절 월드 그대로 (회전 포함), 광선 중 "On" / 아니면 "Off", 기술이 바뀌고 광선도 꺼지면 제거 [추정: 스크립트 수명 = 기술]. 첫 act "main" (0.03초)은 수명이 아니다 |
+| 메두사 광선 | goEyeBeam 을 **영웅** 관절 0x3368C8 에 부착 — 0x3368C8 은 0x1964D0 이 영웅 스켈레톤에서 찾은 rWeapIH 번호 (머리와 같은 관절) [확실] | rWeapIH 위치 + 조준 yaw (메시 −Z 400 = 정면) [근사: 관절 회전 대신 조준 방향] |
 | 메두사 섬광 | goMedHeadFlash 1회 (행렬 = 머리) | 손 위치·조준 방향, MHESemit 5000/초 × 0.3초, 로컬 회전 Y→−Z |
 | 메두사 Nuke | Concussion 0/1(동결) + 3/4(FX) 의 Effect goMedHeadNuke @synchJoint, Scale X/Y/Z 플래그 | 템플릿마다 재생, 배율 = 반경(TWK m)×16/27 (메시 반경 27) 을 Start→End 로 Duration 동안, 이후 0.5초 페이드 [근사] |
+| 제우스 차지 | SCR_ShowThunderbolt (0x19FF60, 0x8D7EAE7F): 이벤트 인자 1 이면 LWEAPIH, 아니면 RWEAPIH 에 goBolt + goBoltChargeUp (0x19FE10) 부착 [확실] | 같은 관절에 부착, SCR_ThrowThunderbolt (0x96EDE590) 또는 기술 변경에서 뗀다 [추정] |
 | 제우스 | Arrow GO Name goBolt + Trail goStdBolt 를 화살에, 명중 Hit Effect goBoltHit | 화살 위치·속도 방향(+Z) 부착, 화살 소멸 시 정지, 명중 1회 0.8초 |
 | 하데스 | goDedRed 영혼, goDeadHit, goDeadDie | 영혼 위치·속도 방향 부착 (꼬리 −Z) |
-| 포세이돈 | goLightningAttackMain (루프 기술 동안), goLightningSingleBolt | 루프 동안 영웅 부착, 피해 틱마다 대상 위 230 에 가지 0.25초 [추정] |
+| 포세이돈 | SCR_Lightning (0x1948F0): 시작 때 goLightningAttackMain + goLightningRadius 를 만들어 매 프레임 영웅 행렬에. 타이머 0x3368A8 이 (1/60)·연타율·"Stage n Flash Freq" 씩 줄어 0 이면 goStrikeGrp 를 반경 (1 − rnd²)·Reach·(1 + 연타율·(Mash Reach Scale − 1))·16, 임의 각에 (슬롯 4 순환) [확실: 식] | 두 GO 영웅 부착, goStrikeGrp 바닥 높이에 1회. 연타율 = 매시 미터/최대 — 미터 미구현이라 0.5 [근사]. 피해 틱마다 goLightningSingleBolt (기존) |
 
 마법 WAD 는 처음 필요할 때 현재 단계(`Magic.stage`)의 `R_MEDHD<n>` 등을 등록하고, 단계가 바뀌면 다시 등록해 같은 이름을 덮는다.
 
@@ -125,11 +127,22 @@ f32 `Scale X/Y/Z` +0x18, `Offset X/Y/Z` +0x24 (#cc9eaf6b..), `Rot X/Y/Z` +0x30 (
 (키 이름은 Hash127 역산으로 복원 — `Scale X` 0x79D90A02 등.)
 발동: 영웅/적 CombatFile 의 SCRIPT 이벤트 해시 **0x097AE822 = Hash127Upper("SCR_PlayEffect")**, idx = 템플릿 (R_PERMK 영웅 기술에 35/36 각 57회, 100–108, 311–313).
 엔진: `MagicFx.bind` 가 `Combatant.addEventListener` 로 받아 관절 위치에 재생. Attached 면 매 프레임 관절을 따르고, 아니면 발동 순간 위치. Looped 는 기술이 바뀌면 끈다.
+- Rot X/Y/Z (도, FirePath 017/018 = Y 90°) = 관절 기준 로컬 회전 (X→Y→Z), Scale X/Y/Z 비균일 (Y/Z 는 X 대비 행렬, X 는 이펙트 배율) [확실: 값, 추정: 순서].
+- Left/Right Weapon (0x20/0x40): 블레이드 로케이터 lWeapOH / rWeapOH 기준 [추정: 0x19AEE0 의 무기 오브젝트 경로를 로케이터로 근사].
+- Remove (0x80): 그 전투자가 PlayFX 로 켠 같은 이름의 이펙트를 끈다 [추정]. Blood Drop (0x400): 관절 아래 바닥 피 자국 (0x19B798 → 0x221A50, §6.1) [추정].
+- 적 WAD 의 PlayFX/MFX 템플릿·이펙트 GO: 적 스폰 때 `MagicFx.addWad(kind.assets())` (튜닝 + GO 등록, WAD 당 1번). 같은 번호는 나중 WAD 가 덮는다 [근사: 원작은 WAD 별 표].
 
 ### 4.3 Concussion 템플릿 이펙트 (sub_00191720)
 `Effect Name` / `Joint Name`, u32 플래그 (Scale X 0x1, Y 0x2, Z 0x4, No Orient 0x8, Link Duration 0x10, #a0cdb24e 0x40 — 덤프의 각 키 값 하위 바이트),
 `Start/End Radius`, `Duration`. 발동: SCRIPT 해시 **0x242EF94F = SCR_ConcussionBurst** (idx = 템플릿, 영웅 7A/BF 기술의 7–10 goRunDust),
 메두사 Nuke 는 SCR_MedusaNuke 가 같은 템플릿을 쓴다 (`Magic.Sink.concussion` 신설). 판정(넉백·동결)은 기존 코드, 이 문서는 이펙트만.
+
+### 4.4 이펙트 소리 (SEM_) [추정: 슬롯·시점]
+- 오브젝트 그룹의 `SEM_` 이미터 슬롯 1 을 GO 가 처음 갱신될 때 재생 (`EffectSystem.Sounds`), 위치는 매 프레임 이펙트 원점, 거리 = SEM near/far.
+  반복 이펙트(eyebeam SND_MEDUSA_RAY_LOOP, bolt SND_BOLT_LP, lightningattackmain SND_LIGHTNING360_LP, dedred SND_RAISEDEAD_LP)는 GO 를 지우면 끄고, 1회성(medheadflash RAY_SHOT, 항아리 SND_POTTERYSMASH)은 끝까지 둔다.
+- 같은 이름(`SEM_soundEmitter`)이 WAD 에 여러 번 정의된다 (R_PERMK 5개: chest / strikegrp / deathparts / stoneherobrk …). WAD 는 순차 적재라 참조는 **그룹 앞의 마지막 정의** [확실: 배치, 추정: 로더].
+- 게임 쪽 코드가 같은 소리를 직접 내는 경우 (MedusaGaze 의 SND_MEDUSA_RAY_SHOT, 원작 0x197A48 도 직접 재생) 0.3초 안 같은 이름은 한 번만 [근사].
+- 연결: `GameScene.wireEffects` → `SoundManager.play/setRange/setPosition/stop`.
 
 ## 5. 메시 이펙트 축 [추정: 바인드 포즈 범위]
 | 오브젝트 | 범위 | 배치 |
@@ -161,9 +174,27 @@ MFX 템플릿 0x48 바이트 (`/TweakTemplates/MFX/nnn/`):
 - **적중** (0x2032C0, 공격자 쪽 OnContact): ① 공격 MFX (Attack +0x16, flags 0x2) 와 ② 피격 부위 재질 MFX (표 0x3376FC) 각각
   `sub_00221810(mfx, 접촉점, 방향, …, 배율)` → +0x28 GO 를 0x228558 로 1회 재생 + `sub_00221A50` 이 Drop Blood 면 바닥 피 자국(0x1F9278, /GlobGame/BloodSpots).
   영웅 기술의 520 "Hit Effect" 는 +0x28 이 비어 있어 피는 ② 에서만 나온다.
-  엔진: `Combatant.addContactListener` → 피격자가 적이면 MFX 500, 영웅이면 501 의 +0x28 (= goSklBlood) 을 피격자 높이 40, 공격자→피격자 방향에 [근사: 부위 재질 표 미해석]. 바닥 피 자국 미구현.
-- **Slice Hit Name** 은 무기가 월드(벽·바닥)를 칠 때 (0x202248 → 0x221918) — 미연결.
+  - **0x3376FC 는 표가 아니라 속성 오프셋 변수**다: 0x1BECA0 가 충돌 재질 속성 스키마(0x29C978)에서 "bitfield0..3", "SheetFX", "PartType",
+    "WallHangTimer", "Damage", "AIDamage" 의 오프셋을 찾아 0x3376EC.. 에 둔다 → SheetFX = 재질 엔트리 +0x2C, PartType = +0x30 [확실].
+    레벨 충돌 시트의 SheetFX (발소리) 와 같은 속성이다. 0x203450: `MFX 번호 = *(피격 구 재질 엔트리 + SheetFX)` → sub_00182D50 템플릿.
+  - CDV 값: CDV_hero Body 501 "Hero Flesh", CDV_MIN / SKA / HAR 510 "Zombie Flesh", CY2 506 "Cyclops Flesh", 석상 파편 22 "Breakable Rock" [확실: 데이터].
+    MFX 5xx 는 레벨 WAD 에 있다 (510 은 ATHN01B/03A … , 501 은 R_HERO*, 502 "UW Hero Flesh" = goWaterBlood, 하이드라 "Hyd Bod Flesh" = goBHABloodBB).
+  엔진: `HitVolumes` 가 구마다 SheetFX 를 들고 `sweptHit` 이 맞은 피격 구의 SheetFX·접촉점(두 구 중심을 반지름 비로 내분)을 피격자 쪽에 기록 →
+  `MagicFx.hitBlood` 가 그 MFX 의 +0x28 GO 를 접촉점에. 기록이 없으면(폴백 판정) 몸 구 SheetFX, 템플릿이 든 WAD 가 없으면 500/501 [근사].
+- **바닥 피 자국** (§6.1): MFX "Drop Blood" (bit 0x2) 면 sub_00221A50 → 0x1F9278.
+- **Slice Hit Name** (무기가 월드를 칠 때, 0x202248 → 0x221918): 엔진 `MagicFx.weaponWorld` — 공격 창(피해 &gt; 0) 안의 공격 부위 구의 이전→현재 중심 선분을
+  이동 방향으로 반지름만큼 늘려 레벨 충돌 레이캐스트 → 면 SheetFX 의 MFX +0x30 GO 를 충돌점·면 법선 방향에, +0x3C 소리 (SND_SWORDHIT_STONE …).
+  (기술, 공격 번호) 당 1번 [추정: 원작 구-시트 접촉 0x13C400 을 선분으로 근사]. ARENA06 □□□ 는 블레이드 구 바닥이 바닥 위 4–10 이라 없음, △ 내려찍기 = goRockSlice 2회 (SheetFX 20 Rock).
+- **착지** (sub_00221EA8, 0x1FE490/0x1FE518): 발밑 MFX "Jump Land Effect" (+0x2C, Rock → goRockLand, Dirt → goDirtLand …) + Foot Sound 레지스터 3 [확실: 경로].
+  엔진: `GameScene.footsteps` 의 착지 순간 `MagicFx.land`.
+
+### 6.1 바닥 피 자국 (/GlobGame/BloodSpots, 0x1F9550 등록, 0x1F9278 생성)
+키: Offset 0.1, Cone 25, Impulse 1, Gravity 18, Nominal Distance 8 / Particles 36 / Size 3, Fall Time / Emit Time (s16) 3, Clamp Spread Size 1.3 / Part Size 0.65 / Num Part 10,
+"Particle System 1 Light" = goBloodSpot (FXC_BloodSemit 상수 생성률 0, PTC_BloodSpart VU 9, 수명 3초) [확실: 키·값]. 원작은 전용 코드로 방울을 떨어뜨려 바닥에 붙인다.
+엔진: 접촉점 아래 바닥(충돌 질의) + Offset 에서 goBloodSpot 을 0.1초 동안 Nominal Particles 개 분출 (속력 ¼, `Effect.rateOverride`) [근사: 낙하·바닥 부착·Size 미반영].
 - **발소리 먼지** (0x221A90): 발 관절 아래 지면 MFX 의 +0x34. 엔진: `GameScene.footsteps` 의 달리기 걸음마다 발밑 SheetFX 의 Run Dust Name (Rock → goRunDust) 을 0.6초.
+
+### 6.2 부서지는 물체 이펙트 → 41 문서 §2
 
 ## 7. 연결 (변경 파일)
 | 파일 | 변경 |
@@ -180,6 +211,12 @@ MFX 템플릿 0x48 바이트 (`/TweakTemplates/MFX/nnn/`):
 | `engine/game/HeroRig` | `jointWorld(name, out)` |
 | `engine/game/GameScene` | MagicFx 생성(rom)·sink·bind (영웅·적)·render(white)·달리기 먼지 (최소 변경) |
 | `engine/scene/HeroTestScene` | `-PgowScript`, `-PgowMagicStage`, MagicFx 연결 |
+| (2차) `tools/fx/EffectLibrary` | `EffectDef.acts`/`act(name)`, `sem` (그룹 앞 SEM 정의), act 지정 `rate/param` |
+| (2차) `engine/fx/EffectSystem` | `Effect.setAct`, `setLife`, `rateOverride`/`speedScale`, `Sounds` (SEM), `add(WadAssets)` (비소유) |
+| (2차) `engine/fx/MagicFx` | 메두사 머리, 제우스 차지, 포세이돈 Radius/StrikeGrp, PlayFX 플래그, 부위 MFX, 바닥 피, 착지, 무기-월드 베기, `breakObject`, `addWad`, `setSounds`, `setSurface` |
+| (2차) `tools/level/BallHull`, `engine/combat/HitVolumes` | `materialFx` (+0x2C SheetFX), `lastHitFx/lastHitPoint/bodyFx/sweeps` |
+| (2차) `engine/game/GameScene` | `wireEffects` (레벨·적 WAD, 소리, 충돌), `onBreak`, 착지·무기-월드 호출, 스폰 때 `addWad` (최소 변경) |
+| (2차) `engine/level/LevelScene` | `assets()` |
 
 ## 8. 검증
 - `EffectTest` (5): 메두사 해석·채널 생성률(5000 → 0)·광선 반복, 피 3채널·스트림 3/4 = FXC 값·중력 아래, 마법 WAD (bolthit 0.8초, stdbolt 상수 꼬리, chargeup 스케일 0.25,
@@ -188,10 +225,20 @@ MFX 템플릿 0x48 바이트 (`/TweakTemplates/MFX/nnn/`):
 - 스크린샷 (커밋 안 함, 스크래치): 게임 씬 ATHN01A 메두사 광선(원작 나선 빔 메시), 연습 씬 단계 2 섬광·Nuke(감산 용암 + 청록 소용돌이 원반),
   제우스 명중, 하데스 영혼(붉은 낫 영혼 메시), 포세이돈(번개 가지·하늘 번개 메시), 적중 피(검붉은 분출).
 
+2차 (이 문서 §4.1 머리·차지·포세이돈, §4.2 플래그, §4.4 소리, §6 부위 MFX·베기·착지·피 자국, 41 §2 파괴):
+- `EffectTest` +3: 메두사 머리 act (On/Off, 수명), SEM 소리 (그룹 앞 정의, 반복만 정지), 부서지는 물체 GO·Brkb (OrbEmitter 900, Fade Time, Hit Points 8, 오브 롤).
+- `HitVolumesTest`: CDV_hero SheetFX [501, 0, 0], combo3A 정면 적중의 피격 구 SheetFX = 510.
+- 전체 `:engine:test` 196 통과.
+- 스크린샷 (스크래치 `fx2/shots`): `fx2_medusa_hero.png` (손에 든 메두사 머리 + 광선), `fx2_medusa.png` (ATHN01A), `fx2_pots.png` (ARENA06 항아리 파편 애니),
+  `fx2_zeus_charge.png` (손의 번개 + 차지 불꽃), `fx2_poseidon.png` (StrikeGrp 기둥 + Radius), `fx2_blood.png` (ARENA08 적중 MFX 510/501 + 피 자국), `fx2_land.png` (goRockLand).
+
 ## 9. 남은 것
-- 메두사 머리 GO (mewh) 렌더와 그 관절에 광선 부착, 영웅 rWeapIH 대신.
-- PTC 크기 단위 (VU 3 q10/q11, VU 4 상수), VU 4·8·9 상수 배치, PTC 플래그 0x8000 = 알파 가정 검증.
-- 피격 부위 재질 표 0x3376FC (적 CDV 재질 → MFX), 바닥 피 자국(BloodSpots), 무기-월드 Slice Hit, Jump Land Effect (착지 먼지).
-- SEM_ 이펙트 소리, 표면/커브 이미터 (FXC 3/4: mewh 의 MHBcurve), FXC 필드 소용돌이·뉴턴.
-- PlayFX 의 Rot X/Y/Z·Left/Right Weapon·Remove·Blood Drop, Concussion No Orient/Link Duration, #a4e61bc3.
-- 제우스 차지(goBoltChargeUp), 포세이돈 goLightningRadius·goStrikeGrp/goFlashGrp 연결, 적 전용 이펙트(BHA 피 등)의 적 WAD 템플릿 로드 (`MagicFx.addTweaks`).
+- PTC 크기 단위 (VU 3 q10/q11, VU 4 상수), VU 4·8·9 상수 배치, PTC 플래그 0x8000 = 알파 가정 검증 — 2차에서 0x8000 검사 함수 후보만 훑음(PTC 로더 미발견), 미해결.
+  rslicepart (돌 조각, 0x680) 처럼 0x8000 없는 불투명 조각도 가산으로 그려지는 문제 남음.
+- 메두사 광선 방향: 원작은 rWeapIH 관절 행렬 그대로 (팔 조준 자세가 방향을 만든다) — 엔진은 조준 yaw [근사]. 머리 MHBemit 은 커브 이미터 (FXC 4, MHBcurve) + 링크 3 인데 On act 의 채널 그룹은 1개 — 링크 대응 미해석.
+- 표면/커브 이미터 (FXC 3/4), FXC 필드 소용돌이·뉴턴.
+- 바닥 피 자국의 원작 낙하·부착 (Cone/Impulse/Gravity/Fall Time), Particle System 1 Dark / 2.
+- MFX 배율 (0x221810 f12: 1 / 0.125) 미적용, MFX #33317a59/#da729778 (진동·소리 추정), Slice Hit 의 원작 접촉 조건.
+- 포세이돈 매시 미터 (연타 → 반경·빈도), goFlashGrp (0x1DAB08 사용처) 미연결.
+- Concussion No Orient/Link Duration, PlayFX #a4e61bc3 / #71bfa948 / #a6de59b7, Left/Right Weapon 의 정확한 부착 대상.
+- 적 템플릿 번호 충돌 (여러 적 WAD 의 같은 PlayFX 번호) — 마지막 WAD 가 덮음.

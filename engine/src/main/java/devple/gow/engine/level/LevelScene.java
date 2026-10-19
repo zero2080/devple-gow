@@ -93,6 +93,11 @@ public final class LevelScene implements Scene {
 		this.showVolumes = collisionOn;
 	}
 
+	/** 레벨 WAD 자산 (이펙트 GO 등록용, 40 문서). enter 전이면 null. */
+	public WadAssets assets() {
+		return assets;
+	}
+
 	public LevelData data() {
 		return data;
 	}

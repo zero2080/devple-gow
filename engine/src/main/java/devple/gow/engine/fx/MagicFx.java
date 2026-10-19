@@ -27,12 +27,14 @@ import java.util.Map;
 /**
  * 마법·전투 시각 효과 (35 문서 §7, 40 문서). 원작 이펙트 GO 를 {@link EffectSystem} 으로 붙인다:
  * <ul>
- *   <li>메두사: 광선 goEyeBeam (반복, 손 관절 rWeapIH 부착, 조준 방향), 섬광 goMedHeadFlash (1회), Nuke = Concussion 템플릿의 goMedHeadNuke (반경 확대)</li>
+ *   <li>메두사: 머리 goMewH (SCR_ShowMedusaHead, rWeapIH 부착, act On/Off), 광선 goEyeBeam (반복, 같은 관절, 조준 방향), 섬광 goMedHeadFlash (1회),
+ *       Nuke = Concussion 템플릿의 goMedHeadNuke (반경 확대)</li>
+ *   <li>제우스 차지: SCR_ShowThunderbolt → goBolt + goBoltChargeUp 을 L/RWEAPIH 에</li>
  *   <li>제우스: 투사체 goBolt + 꼬리 goStdBolt (Arrow 템플릿 GO Name / Trail Name), 명중 goBoltHit</li>
  *   <li>하데스: 영혼 goDedRed (속도 방향), 명중 goDeadHit, 소멸 goDeadDie</li>
- *   <li>포세이돈: 루프 동안 goLightningAttackMain, 피해 틱마다 대상에 goLightningSingleBolt</li>
+ *   <li>포세이돈: 루프 동안 goLightningAttackMain + goLightningRadius, 주기적으로 주변 goStrikeGrp, 피해 틱마다 대상에 goLightningSingleBolt</li>
  *   <li>전투: 영웅/적 기술의 SCR_PlayEffect(PlayFX 템플릿) / SCR_ConcussionBurst(Concussion 템플릿) 이벤트, 적중 시 피격자 MFX 피 (goSklBlood),
- *       발소리 MFX Run Dust Name (goRunDust)</li>
+ *       발소리 MFX Run Dust Name (goRunDust), 착지 Jump Land Effect, 무기-월드 Slice Hit, 바닥 피 자국, 부서지는 물체 GO (41 문서)</li>
  * </ul>
  * 원작 데이터가 없는 것(석상 먼지·석상 파괴 *stonedbrk)이나 WAD 가 없을 때는 예전 근사 파티클을 쓴다.
  */
@@ -42,6 +44,21 @@ public final class MagicFx implements AutoCloseable {
 	public static final int SCR_PLAY_EFFECT = 0x097AE822, SCR_CONCUSSION_BURST = 0x242EF94F;
 	/** MFX 템플릿의 피 이펙트 GO (+0x28, 키 이름 미복원 #405ce7fc): 500 Flesh / 501 Hero Flesh = goSklBlood. */
 	static final int MFX_BLOOD = 0x405CE7FC;
+	/** MFX +0x2C Jump Land Effect (#35159154), +0x30 Slice Hit Name (#e54a19a6), +0x3C Slice Hit Sound (#0f01c134). */
+	static final int MFX_LAND = 0x35159154, MFX_SLICE = 0xE54A19A6, MFX_SLICE_SOUND = 0x0F01C134;
+	/** Hash127Upper: SCR_ShowMedusaHead (0x197280), SCR_ShowThunderbolt (0x19FF60), SCR_ThrowThunderbolt (0x1A0B00). */
+	public static final int SCR_SHOW_MEDUSA_HEAD = 0xE5D96CF1, SCR_SHOW_THUNDERBOLT = 0x8D7EAE7F, SCR_THROW_THUNDERBOLT = 0x96EDE590;
+
+	/**
+	 * 레벨 충돌 질의 (무기-월드 베기, 바닥 피 자국, 착지). GameScene 이 LevelCollision 으로 제공.
+	 */
+	public interface Surface {
+		/** 선분 from→to 의 첫 충돌: {x, y, z, nx, ny, nz, sheetFx} 또는 null. */
+		float[] cast(Vector3f from, Vector3f to);
+
+		/** p 아래 maxDrop 안의 바닥: {y, sheetFx} 또는 null. */
+		float[] floor(Vector3f p, float maxDrop);
+	}
 
 	/** 관절 월드 조회 (관절 이름 대소문자 무시). */
 	@FunctionalInterface
@@ -64,6 +81,24 @@ public final class MagicFx implements AutoCloseable {
 	private EffectSystem.Effect beamFx, lightningFx;
 	private final Map<Hittable, ParticleSystem.Emitter> stones = new IdentityHashMap<>();
 	private Joints heroJoints = (j, out) -> false;
+	private Combatant heroCombat;
+	private Surface surface;
+	private final java.util.Random rnd = new java.util.Random(7);
+	/** 메두사 머리 GO (goMewH, 0x1970D0): 영웅 rWeapIH 에 부착, 광선 중 act "On", 아니면 "Off" (0x196B18). */
+	private EffectSystem.Effect head;
+	private int headSerial = -1;
+	/** 제우스 손 번개 (SCR_ShowThunderbolt: goBolt + goBoltChargeUp 을 L/RWEAPIH 에, 0x19FE10). */
+	private final List<EffectSystem.Effect> charge = new ArrayList<>();
+	private int chargeSerial = -1;
+	/** 포세이돈 goLightningRadius (0x1948F0 이 AttackMain 과 함께 생성) 와 goStrikeGrp 타이머 (0x3368A8). */
+	private EffectSystem.Effect radiusFx;
+	private float strikeTimer = 1;
+	/** Sink 로 직접 낸 소리 (이름 → 남은 초): 같은 소리를 이펙트 SEM 이 다시 내지 않게. */
+	private final Map<String, Float> recentSounds = new HashMap<>();
+	/** 무기-월드 베기 기록 (기술 serial << 16 | 공격 번호). */
+	private final java.util.Set<Long> sliced = new java.util.HashSet<>();
+	/** PlayFX 로 켠 이펙트 (전투자별, Remove 플래그가 끈다). */
+	private final Map<Combatant, List<EffectSystem.Effect>> playFxLive = new IdentityHashMap<>();
 	private Vector3f heroPos = new Vector3f();
 	private float heroYaw;
 	private float aimYaw;
@@ -122,6 +157,49 @@ public final class MagicFx implements AutoCloseable {
 		tw.load(wad);
 	}
 
+	/**
+	 * 레벨·적 WAD: 그 WAD 의 이펙트 GO (goBHABloodBB, 부서지는 물체 GO …) 와 튜닝 템플릿 (MFX 0xx 표면 재질, 적 PlayFX/MFX 5xx) 등록.
+	 * 원작은 WAD 를 적재하면 GO·템플릿이 전역 표에 들어간다. 같은 WAD 를 두 번 넣으면 무시.
+	 */
+	public void addWad(devple.gow.engine.asset.WadAssets a) {
+		if (fx.add(a)) {
+			tw.load(a.wad());
+		}
+	}
+
+	/** 이펙트 SEM 소리 출력 (SoundManager). Sink 로 막 낸 같은 이름은 건너뛴다 (MedusaGaze 의 SND_MEDUSA_RAY_SHOT 등). */
+	public void setSounds(EffectSystem.Sounds out) {
+		fx.sounds = out == null ? null : new EffectSystem.Sounds() {
+			@Override
+			public int play(String snd, Vector3f at, float near, float far) {
+				if (recentSounds.containsKey(snd)) {
+					return 0;
+				}
+				recentSounds.put(snd, 0.3f);
+				return out.play(snd, at, near, far);
+			}
+
+			@Override
+			public void move(int handle, Vector3f at) {
+				out.move(handle, at);
+			}
+
+			@Override
+			public void stop(int handle) {
+				out.stop(handle);
+			}
+		};
+	}
+
+	/** 레벨 충돌 (무기-월드 베기·바닥 피·착지). */
+	public void setSurface(Surface s) {
+		surface = s;
+	}
+
+	public Tweaks tweaks() {
+		return tw;
+	}
+
 	/** 관절 이름 → 번호 (대소문자 무시, 없으면 −1). 튜닝은 "head"/"synchJoint", 이벤트 해시는 대문자 이름. */
 	public static int joint(Skeleton sk, String name) {
 		if (sk == null || name == null) {
@@ -169,7 +247,93 @@ public final class MagicFx implements AutoCloseable {
 	/** 영웅 관절 (마법 이펙트 부착: 메두사 머리 손 rWeapIH). */
 	public void bindHero(Combatant c, Joints joints) {
 		heroJoints = joints != null ? joints : (j, out) -> false;
+		heroCombat = c;
 		bind(c, heroJoints, true);
+		c.addEventListener(e -> {
+			if (e.type() != 8) {
+				return;
+			}
+			if (e.hash() == SCR_SHOW_MEDUSA_HEAD) {
+				showHead(c);
+			} else if (e.hash() == SCR_SHOW_THUNDERBOLT) {
+				showThunderbolt(c, e.index());
+			} else if (e.hash() == SCR_THROW_THUNDERBOLT) {
+				hideThunderbolt();
+			}
+		});
+	}
+
+	/**
+	 * SCR_ShowMedusaHead (0x197280 → 0x1970D0): /Player/MedusaHead "HeadName" (goMewH) GO 를 만들어 영웅의 "JointName" (rWeapIH) 관절에
+	 * 부착 (sub_00131460) 하고 act "Off" 로 시작. 스크립트가 끝나면(참조 수 0, 0x197248) 지운다 → 엔진: 기술이 바뀔 때 [추정: 기술 = 스크립트 수명].
+	 */
+	private void showHead(Combatant c) {
+		headSerial = c.moveSerial();
+		if (head != null && !head.done()) {
+			return;
+		}
+		stage("R_MEDHD", stages[4]);
+		String n = "/Player/MedusaHead/";
+		String name = tw.s(n, "HeadName", "goMewH");
+		String jn = tw.s(n, "JointName", "rWeapIH");
+		head = fx.play(name, out -> {
+			if (!heroJoints.world(jn, out)) {
+				out.translation(heroPos).translate(0, 50, 0).rotateY(heroYaw);
+			}
+			return true;
+		}, Float.MAX_VALUE); // 첫 act "main" (0.03초) 은 수명이 아니다 — 머리는 스크립트가 지울 때까지
+		if (head != null) {
+			head.setAct("Off");
+		}
+	}
+
+	/** 메두사 머리: 광선 중 "On" (MHBemit 채널·눈 회전), 아니면 "Off". 기술이 바뀌고 광선도 꺼지면 제거 (0x1971B0). */
+	private void updateHead(Magic m) {
+		if (head == null) {
+			return;
+		}
+		boolean beam = m.medusa.beamOn();
+		if (head.done() || (!beam && heroCombat != null && (heroCombat.moveSerial() != headSerial || !heroCombat.active()))) {
+			head.stop();
+			head = null;
+			return;
+		}
+		head.setAct(beam ? "On" : "Off");
+	}
+
+	/** 머리 GO (테스트·디버그). */
+	public EffectSystem.Effect head() {
+		return head;
+	}
+
+	/**
+	 * SCR_ShowThunderbolt (0x19FF60): 이벤트 인자 1 이면 LWEAPIH, 아니면 RWEAPIH 에 goBolt + goBoltChargeUp (0x19FE10) 을 부착.
+	 * SCR_ThrowThunderbolt 또는 기술 변경에서 뗀다 [추정: 던질 때 화살 객체로 넘어감].
+	 */
+	private void showThunderbolt(Combatant c, int arg) {
+		chargeSerial = c.moveSerial();
+		if (!charge.isEmpty()) {
+			return;
+		}
+		stage("R_THBLT", stages[5]);
+		String jn = arg == 1 ? "lWeapIH" : "rWeapIH";
+		EffectSystem.Anchor a = out -> {
+			if (!heroJoints.world(jn, out)) {
+				out.translation(heroPos).translate(0, 50, 0);
+			}
+			return true;
+		};
+		addIf(charge, fx.play("goBolt", a));
+		addIf(charge, fx.play("goBoltChargeUp", a));
+	}
+
+	private void hideThunderbolt() {
+		charge.forEach(EffectSystem.Effect::stop);
+		charge.clear();
+	}
+
+	public List<EffectSystem.Effect> charge() {
+		return charge;
 	}
 
 	/**
@@ -208,21 +372,52 @@ public final class MagicFx implements AutoCloseable {
 			return null;
 		}
 		ensureFor(name);
-		String jn = tw.s(n, "Joint Name", null);
-		boolean attachedFlag = (tw.raw(n, "Attached").orElse(0) & 0xFF) != 0;
-		boolean looped = (tw.raw(n, "Looped").orElse(0) & 0xFF) != 0;
-		float sx = tw.f(n, "Scale X", 1f);
-		Vector3f off = new Vector3f(tw.f(n, "Offset X", 0), tw.f(n, "Offset Y", 0), tw.f(n, "Offset Z", 0)).mul(Magic.UNIT);
-		EffectSystem.Anchor live = out -> {
-			if (!joints.world(jn, out)) {
-				return true; // 관절 없음 → 소유자 원점
+		boolean attachedFlag = flag(n, "Attached");
+		boolean looped = flag(n, "Looped");
+		boolean left = flag(n, "Left Weapon"), right = flag(n, "Right Weapon");
+		// Remove (0x80): 같은 이름의 이펙트를 끈다 [추정: 0x19A98C 의 GO 제거 경로]
+		if (flag(n, "Remove")) {
+			List<EffectSystem.Effect> l = playFxLive.get(c);
+			if (l != null) {
+				l.removeIf(e -> {
+					if (e.def.go().equalsIgnoreCase(name) || ("go" + e.def.object()).equalsIgnoreCase(name)) {
+						e.stop();
+						return true;
+					}
+					return e.done();
+				});
 			}
-			out.translate(off);
+			return null;
+		}
+		// Left/Right Weapon (0x20/0x40): 블레이드 로케이터 lWeapOH / rWeapOH 기준 [추정], 아니면 Joint Name
+		String jn = left ? "lWeapOH" : right ? "rWeapOH" : tw.s(n, "Joint Name", null);
+		float sx = tw.f(n, "Scale X", 1f), sy = tw.f(n, "Scale Y", sx), sz = tw.f(n, "Scale Z", sx);
+		if (!(sx > 0 && sx < 50)) {
+			sx = sy = sz = 1;
+		}
+		Vector3f off = new Vector3f(tw.f(n, "Offset X", 0), tw.f(n, "Offset Y", 0), tw.f(n, "Offset Z", 0)).mul(Magic.UNIT);
+		// Rot X/Y/Z (+0x30, 도): 관절 기준 로컬 회전 (FirePath 017/018 = Y 90°) [확실: 키·값, 추정: 순서 X→Y→Z]
+		float rx = (float) Math.toRadians(tw.f(n, "Rot X", 0)), ry = (float) Math.toRadians(tw.f(n, "Rot Y", 0)),
+				rz = (float) Math.toRadians(tw.f(n, "Rot Z", 0));
+		float ux = sx, uy = sy / sx, uz = sz / sx;
+		EffectSystem.Anchor live = out -> {
+			if (jn == null || !joints.world(jn, out)) {
+				if (c == null) {
+					return true;
+				}
+				out.translation(c.owner().position()).rotateY(c.owner().yaw()); // 관절 없음 → 소유자 원점
+			}
+			out.translate(off).rotateXYZ(rx, ry, rz).scale(1, uy, uz);
 			return true;
 		};
 		EffectSystem.Effect e = fx.play(name, attachedFlag ? live : snapshot(live), -1);
 		if (e != null) {
-			e.scale = sx > 0 && sx < 50 ? sx : 1;
+			e.scale = ux;
+			if (c != null) {
+				List<EffectSystem.Effect> l = playFxLive.computeIfAbsent(c, k -> new ArrayList<>());
+				l.removeIf(EffectSystem.Effect::done);
+				l.add(e);
+			}
 			if (looped && c != null) {
 				int serial = c.moveSerial();
 				perFrame.add(new Runnable() {
@@ -236,7 +431,18 @@ public final class MagicFx implements AutoCloseable {
 				});
 			}
 		}
+		// Blood Drop (0x400): 관절 아래 바닥 피 자국 (0x19B798 → sub_00221A50 → 0x1F9278) [추정]
+		if (flag(n, "Blood Drop")) {
+			Matrix4f m = new Matrix4f();
+			live.world(m);
+			bloodDrop(m.getTranslation(new Vector3f()), 1f);
+		}
 		return e;
+	}
+
+	/** PlayFX/Concussion 비트 키 (값의 하위 바이트, 06 문서 §TWK). */
+	private boolean flag(String node, String key) {
+		return (tw.raw(node, key).orElse(0) & 0xFF) != 0;
 	}
 
 	private static EffectSystem.Anchor snapshot(EffectSystem.Anchor a) {
@@ -288,16 +494,38 @@ public final class MagicFx implements AutoCloseable {
 	}
 
 	/**
-	 * 적중 피 (0x2032C0 → sub_00221810): 피격자 재질 MFX 의 +0x28 GO 를 접촉점에, 공격자→피격자 방향으로.
-	 * 공격 자체의 MFX (Attack +0x16, flags 0x2) 도 같은 필드를 쓰지만 영웅 기술의 520 "Hit Effect" 는 비어 있다.
+	 * 적중 (0x2032C0 → sub_00221810): ① 공격 MFX (Attack +0x16, flags 0x2) 와 ② 피격 구 재질의 SheetFX (CDV 재질 엔트리 +0x2C,
+	 * exe 속성 오프셋 표 0x3376FC; 0x203450) MFX 의 +0x28 GO 를 접촉점에, 공격자→피격자 방향으로 1회. MFX "Drop Blood" (bit 0x2) 면
+	 * 바닥 피 자국 (sub_00221A50 → 0x1F9278). 영웅 기술의 520 "Hit Effect" 는 +0x28 이 비어 피는 ② 에서만 나온다.
+	 * 피격 구를 모르면 (히트박스 폴백) 피격자 몸 구의 SheetFX, 그것도 없으면 500 Flesh / 501 Hero Flesh [근사].
 	 */
 	private void hitBlood(CombatFile.Attack a, Vector3f from, Hittable victim, boolean victimHero) {
+		int mfx = mfxOf(victim, victimHero);
+		if (tw.s(String.format("/TweakTemplates/MFX/%03d/", mfx), "Instance Name", null) == null) {
+			mfx = victimHero ? 501 : 500; // 템플릿이 든 WAD (510 Zombie Flesh 는 레벨 WAD) 가 없으면 기본 살 [근사]
+		}
 		Vector3f p = new Vector3f(victim.position()).add(0, 40, 0);
+		var hv = victim.hitVolumes();
+		Vector3f cp = hv != null ? hv.lastHitPoint() : null;
+		if (cp != null && cp.distance(victim.position()) < 200) {
+			p.set(cp);
+		}
 		Vector3f d = new Vector3f(p).sub(from);
 		float yaw = (float) Math.atan2(-d.x, -d.z);
-		String go = tw.sHash(String.format("/TweakTemplates/MFX/%03d/", victimHero ? 501 : 500), MFX_BLOOD, "goSklBlood");
-		if (fx.play(go, EffectSystem.Anchor.at(p, yaw)) == null) {
-			burst("blood", p);
+		String node = String.format("/TweakTemplates/MFX/%03d/", mfx);
+		String go = tw.sHash(node, MFX_BLOOD, mfx == 500 || mfx == 501 ? "goSklBlood" : null);
+		if (go == null || fx.play(go, EffectSystem.Anchor.at(p, yaw)) == null) {
+			if (mfx >= 500) {
+				burst("blood", p);
+			}
+		}
+		lastHitMfx = mfx;
+		lastHitGo = go;
+		if (EffectSystem.LOG) {
+			System.out.printf("적중 MFX %d (%s) → %s%n", mfx, hv != null && hv.lastHitFx() > 0 ? "피격 구" : "기본", go);
+		}
+		if (flag(node, "Drop Blood")) {
+			bloodDrop(p, 1f);
 		}
 		if (a != null && a.mfx() > 0 && (a.flags() & 2) != 0) {
 			String g2 = tw.sHash(String.format("/TweakTemplates/MFX/%03d/", a.mfx()), MFX_BLOOD, null);
@@ -307,12 +535,158 @@ public final class MagicFx implements AutoCloseable {
 		}
 	}
 
+	/** 마지막 적중의 MFX 번호·GO (테스트). */
+	public int lastHitMfx = -1;
+	public String lastHitGo;
+
+	/** 피격 재질 MFX: 맞은 구의 SheetFX → 몸 구 SheetFX → 500/501. */
+	public static int mfxOf(Hittable victim, boolean victimHero) {
+		var hv = victim.hitVolumes();
+		int m = hv != null ? hv.lastHitFx() : -1;
+		if (m <= 0 && hv != null) {
+			m = hv.bodyFx();
+		}
+		return m > 0 ? m : victimHero ? 501 : 500;
+	}
+
+	/**
+	 * 바닥 피 자국 (/GlobGame/BloodSpots, 0x1F9278): "Particle System 1 Light" (goBloodSpot) 의 PTC 로 Nominal Particles 개를
+	 * 접촉점 아래 바닥에 뿌린다 (Offset 위, Fall Time 동안 남음). 원작은 Cone/Impulse/Gravity 로 떨어뜨려 바닥에 붙이는 전용 코드 —
+	 * 엔진은 바닥 위치에서 0.1초 분출(속력 ¼) [근사].
+	 */
+	public void bloodDrop(Vector3f at, float scale) {
+		if (surface == null) {
+			return;
+		}
+		float[] fl = surface.floor(new Vector3f(at).add(0, 4, 0), 400);
+		if (fl == null) {
+			return;
+		}
+		String n = "/GlobGame/BloodSpots/";
+		String go = tw.s(n, "Particle System 1 Light", "goBloodSpot");
+		float count = Math.min(tw.f(n, "Nominal Particles", 36f) * scale, 200);
+		Vector3f p = new Vector3f(at.x, fl[0] + tw.f(n, "Offset", 0.1f) * Magic.UNIT, at.z);
+		EffectSystem.Effect e = fx.play(go, EffectSystem.Anchor.of(new Matrix4f().translation(p)), 0.1f);
+		if (e != null) {
+			e.rateOverride = count / 0.1f;
+			e.speedScale = 0.25f;
+			bloodSpots++;
+		}
+	}
+
+	/** 바닥 피 자국 횟수 (테스트). */
+	public int bloodSpots;
+
 	/** 발소리 (GameScene): 발밑 SheetFX → MFX "Run Dust Name" (+0x34, 예 Rock → goRunDust) 를 발 위치에 (sub_00221A90) [달리기만]. */
 	public void footstep(int sheetFx, Vector3f at, float yaw) {
 		String go = sheetFx > 0 ? tw.s(String.format("/TweakTemplates/MFX/%03d/", sheetFx), "Run Dust Name", null) : null;
 		if (go != null && go.startsWith("go")) {
 			fx.play(go, EffectSystem.Anchor.at(at, yaw), 0.6f);
 		}
+	}
+
+	/**
+	 * 착지 (sub_00221EA8, 0x1FE490/0x1FE518): 발밑 SheetFX 의 MFX "Jump Land Effect" (+0x2C, 예 Rock → goRockLand) 를 발 위치에 1회.
+	 * 소리 (Foot Sound 레지스터 3 LAND) 는 GameScene 이 낸다.
+	 */
+	public EffectSystem.Effect land(int sheetFx, Vector3f at, float yaw) {
+		String go = sheetFx > 0 ? tw.sHash(String.format("/TweakTemplates/MFX/%03d/", sheetFx), MFX_LAND, null) : null;
+		if (EffectSystem.LOG) {
+			System.out.printf("착지 SheetFX %d → %s%n", sheetFx, go);
+		}
+		if (go == null || !go.startsWith("go")) {
+			return null;
+		}
+		return fx.play(go, EffectSystem.Anchor.at(at, yaw), -1);
+	}
+
+	/**
+	 * 무기-월드 베기 (0x202248 → sub_00221918): 공격 창 안의 공격 부위 구가 이전→현재 프레임 사이 월드 면을 지나면,
+	 * 그 면 SheetFX 의 MFX "Slice Hit Name" (+0x30) GO 를 충돌점에 면 법선 방향으로, "Slice Hit Sound" (+0x3C) 를 1회.
+	 * 같은 (기술, 공격 번호) 는 한 번 [추정: 원작 접촉 기록 +0xAC 와 같은 규칙].
+	 *
+	 * @return 재생한 GO 이름 (없으면 null)
+	 */
+	public String weaponWorld(Combatant c, java.util.function.BiConsumer<String, Vector3f> sound) {
+		if (surface == null || c == null || !c.active() || c.move() == null || c.hitVolumes() == null) {
+			sliced.clear();
+			return null;
+		}
+		float t = c.progress();
+		String played = null;
+		for (CombatFile.Attack a : c.move().attacks()) {
+			if (t < a.start() || t > a.end() || a.damage() <= 0) {
+				continue;
+			}
+			long key = ((long) c.moveSerial() << 16) | a.index();
+			if (sliced.contains(key)) {
+				continue;
+			}
+			for (float[] sw : c.hitVolumes().sweeps(a.part())) {
+				Vector3f p0 = new Vector3f(sw[0], sw[1], sw[2]), p1 = new Vector3f(sw[3], sw[4], sw[5]);
+				if (p0.distanceSquared(p1) < 1e-4f) {
+					continue;
+				}
+				// 구 스윕 근사: 이동 방향으로 반지름만큼 늘린 선분 (원작은 구-시트 접촉 0x13C400)
+				Vector3f ext = new Vector3f(p1).sub(p0).normalize().mul(sw[6]).add(p1);
+				float[] h = surface.cast(p0, ext);
+				if (h == null) {
+					continue;
+				}
+				if (EffectSystem.LOG) {
+					System.out.printf("무기-월드 공격#%d 부위 %d → 면 SheetFX %d at (%.0f, %.0f, %.0f)%n", a.index(), a.part(), (int) h[6], h[0], h[1], h[2]);
+				}
+				sliced.add(key);
+				int sfx = (int) h[6];
+				String node = String.format("/TweakTemplates/MFX/%03d/", sfx);
+				String go = sfx > 0 ? tw.sHash(node, MFX_SLICE, null) : null;
+				Vector3f hp = new Vector3f(h[0], h[1], h[2]);
+				if (go != null && go.startsWith("go")) {
+					Vector3f nrm = new Vector3f(h[3], h[4], h[5]);
+					Matrix4f m = new Matrix4f().translation(hp);
+					if (nrm.lengthSquared() > 1e-6f) {
+						m.rotateTowards(nrm.normalize(), Math.abs(nrm.y) > 0.9f ? new Vector3f(0, 0, 1) : new Vector3f(0, 1, 0));
+					}
+					if (fx.play(go, EffectSystem.Anchor.of(m)) != null) {
+						played = go;
+					}
+				}
+				String snd = sfx > 0 ? tw.sHash(node, MFX_SLICE_SOUND, null) : null;
+				if (snd != null && snd.toUpperCase().startsWith("SND_") && sound != null) {
+					sound.accept(snd.toUpperCase(), hp);
+				}
+				break;
+			}
+		}
+		return played;
+	}
+
+	/**
+	 * 부서지는 물체 (41 문서): 물체 GO 자체를 이펙트로 재생 — 오브젝트 ANM 첫 act (파편이 흩어지는 애니) + 메시 + FXC 먼지 + SEM 소리
+	 * (pot: SND_POTTERYSMASH). 원작 0x1DDF70 이 GO 애니 컴포넌트를 0초부터 재생(sub_00100578)하고 이벤트 1018 을 보낸다.
+	 * act 가 끝나면 Brkb "Fade Time" 동안 마지막 포즈를 흐리게 한다 [추정: Fade Time 사용처 미확인].
+	 *
+	 * @param world 인스턴스 월드 행렬 (열벡터, {@code GoInstance.matrix()} 전치)
+	 */
+	public EffectSystem.Effect breakObject(String goName, Matrix4f world, float fadeTime) {
+		EffectSystem.Effect e = fx.play(goName, EffectSystem.Anchor.of(world), -1);
+		if (e == null) {
+			return null;
+		}
+		float dur = e.def.anim() != null ? Math.max(e.def.anim().duration, 0.1f) : 1f;
+		float fade = Math.max(fadeTime, 0);
+		e.setLife(dur + fade);
+		e.scale = 1f / Math.max(e.def.scale(), 1e-3f); // 인스턴스 스케일은 world 에 이미 들어 있다
+		perFrame.add(new Runnable() {
+			@Override
+			public void run() {
+				e.alpha = e.time() > dur && fade > 0 ? Math.max(0, 1 - (e.time() - dur) / fade) : 1;
+				if (e.done()) {
+					perFrame.remove(this);
+				}
+			}
+		});
+		return e;
 	}
 
 	/** 마법 WAD 가 필요한 이름이면 해당 단계 WAD 를 등록 (원작은 WadPlan 이 마법 WAD 를 상주시킨다). */
@@ -338,6 +712,7 @@ public final class MagicFx implements AutoCloseable {
 		return new Magic.Sink() {
 			@Override
 			public void sound(String name, Vector3f at) {
+				recentSounds.put(name, 0.3f);
 				sound.accept(name, at);
 			}
 
@@ -471,7 +846,13 @@ public final class MagicFx implements AutoCloseable {
 			return false;
 		});
 		medusaBeam(m, heroPos);
-		lightning(m, heroPos, heroYaw);
+		updateHead(m);
+		if (!charge.isEmpty() && heroCombat != null && (heroCombat.moveSerial() != chargeSerial || !heroCombat.active())) {
+			hideThunderbolt();
+		}
+		lightning(m, heroPos, heroYaw, dt);
+		recentSounds.replaceAll((k, v) -> v - dt);
+		recentSounds.values().removeIf(v -> v <= 0);
 		for (Hittable h : enemies) {
 			boolean st = h.petrified();
 			ParticleSystem.Emitter e = stones.get(h);
@@ -506,7 +887,8 @@ public final class MagicFx implements AutoCloseable {
 			if (beamFx == null && beam == null) {
 				stage("R_MEDHD", stages[4]);
 				String name = tw.s("/Player/MedusaHead/", "Stage " + stages[4] + " Effect", "goEyeBeam");
-				// 원작: 메두사 머리 GO 의 관절에 부착 (0x1969F0 → sub_00131460). 엔진은 영웅 손 rWeapIH + 조준 방향 [근사]
+				// 원작: 영웅 관절 0x3368C8 (= rWeapIH, 머리와 같은 관절) 에 부착 (0x1969F0 → sub_00131460) [확실].
+				// 엔진은 그 관절 위치 + 조준 방향 [근사: 관절 회전 대신 조준 yaw]
 				beamFx = fx.play(name, out -> {
 					out.set(hand(this.heroPos));
 					return true;
@@ -533,20 +915,60 @@ public final class MagicFx implements AutoCloseable {
 		}
 	}
 
-	private void lightning(Magic m, Vector3f heroPos, float heroYaw) {
+	/**
+	 * 포세이돈 (SCR_Lightning 0x1948F0): 시작 때 goLightningAttackMain·goLightningRadius 를 만들어 매 프레임 영웅 행렬에 둔다.
+	 * 타이머(0x3368A8)가 (1/60)·연타율·"Stage n Flash Freq" 씩 줄어 0 이 되면 goStrikeGrp 를 반경
+	 * (1 − rnd²) · Reach · (1 + 연타율·(Mash Reach Scale − 1)) · 16 의 임의 방향에 1회 (슬롯 4개 순환). 연타율 = 매시 미터/최대 —
+	 * 엔진은 매시 미터가 없어 0.5 [근사].
+	 */
+	private void lightning(Magic m, Vector3f heroPos, float heroYaw, float dt) {
 		if (m.lightningOn()) {
 			if (lightningFx == null) {
 				stage("R_LGHTN", stages[3]);
-				lightningFx = fx.play("goLightningAttackMain", out -> {
+				EffectSystem.Anchor a = out -> {
 					out.translation(this.heroPos).rotateY(this.heroYaw);
 					return true;
-				});
+				};
+				lightningFx = fx.play("goLightningAttackMain", a);
+				radiusFx = fx.play("goLightningRadius", a);
+				strikeTimer = 1;
 			}
-		} else if (lightningFx != null) {
-			lightningFx.stop();
-			lightningFx = null;
+			String n = "/Player/Lightning/";
+			int st = stages[3];
+			float mash = 0.5f;
+			float freq = Math.max(1, Math.round(tw.f(n, "Stage " + st + " Flash Freq", 1f)));
+			strikeTimer -= dt * mash * freq;
+			if (strikeTimer <= 0) {
+				strikeTimer = 1;
+				float reach = tw.f(n, "Stage " + st + " Reach", 5f) * (1 + mash * (tw.f(n, "Stage " + st + " Mash Reach Scale", 1f) - 1));
+				float u = rnd.nextFloat();
+				float r = (1 - u * u) * reach * Magic.UNIT;
+				float ang = rnd.nextFloat() * (float) Math.PI * 2;
+				Vector3f p = new Vector3f(heroPos).add((float) Math.sin(ang) * r, 0, (float) Math.cos(ang) * r);
+				if (surface != null) {
+					float[] fl = surface.floor(new Vector3f(p).add(0, 60, 0), 300);
+					if (fl != null) {
+						p.y = fl[0];
+					}
+				}
+				if (fx.play("goStrikeGrp", EffectSystem.Anchor.at(p, ang)) != null) {
+					strikes++;
+				}
+			}
+		} else {
+			if (lightningFx != null) {
+				lightningFx.stop();
+				lightningFx = null;
+			}
+			if (radiusFx != null) {
+				radiusFx.stop();
+				radiusFx = null;
+			}
 		}
 	}
+
+	/** goStrikeGrp 횟수 (테스트). */
+	public int strikes;
 
 	private static void addIf(List<EffectSystem.Effect> l, EffectSystem.Effect e) {
 		if (e != null) {

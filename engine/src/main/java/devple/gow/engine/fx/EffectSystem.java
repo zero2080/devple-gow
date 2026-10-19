@@ -56,17 +56,41 @@ public final class EffectSystem implements AutoCloseable {
 		}
 	}
 
+	/**
+	 * 이펙트 소리 출력 (SEM_ 이미터, 40 문서 §4.4). 핸들 ≤ 0 = 재생 실패.
+	 */
+	public interface Sounds {
+		int play(String snd, Vector3f at, float near, float far);
+
+		void move(int handle, Vector3f at);
+
+		void stop(int handle);
+	}
+
 	/** 실행 중 이펙트 하나. */
 	public final class Effect {
 		public final EffectLibrary.EffectDef def;
 		private Anchor anchor;
-		private final float life;
+		private float life;
 		private float time;
 		private boolean stopped;
+		/** 현재 오브젝트 act (기본 = 첫 act, mewh 는 "On"/"off" 로 바꾼다) 와 그 act 의 경과 시간. */
+		private devple.gow.tools.anim.Animation act;
+		private float actTime;
+		/** SEM 소리 끄기 (호출자가 같은 소리를 이미 낸 경우). */
+		public boolean silent;
+		/** 메시를 그리지 않음 (이미터·소리만). */
+		public boolean hideMesh;
+		private int soundHandle;
+		private boolean soundStarted;
 		/** 사용자 배율 (Concussion 반경 등), 인스턴스 스케일과 곱한다. */
 		public float scale = 1;
 		/** 메시 불투명도 배율 (페이드). */
 		public float alpha = 1;
+		/** 생성률 강제 (초당, &lt; 0 = 데이터대로). 원작이 코드로 직접 뿌리는 이펙트(BloodSpots 0x1F9278)용 [근사]. */
+		public float rateOverride = -1;
+		/** 이미터 속력 배율. */
+		public float speedScale = 1;
 		private final List<ParticleSystem.Emitter> emitters = new ArrayList<>();
 		private final Matrix4f world = new Matrix4f();
 		private final Matrix4f tmp = new Matrix4f();
@@ -75,6 +99,29 @@ public final class EffectSystem implements AutoCloseable {
 			this.def = def;
 			this.anchor = anchor;
 			this.life = life;
+			this.act = def.anim();
+		}
+
+		/** 오브젝트 act 를 이름으로 바꾼다 (같은 act 면 그대로). 원작 sub_00196B18: GO 애니 컴포넌트에서 act 해시로 재생. */
+		public boolean setAct(String name) {
+			devple.gow.tools.anim.Animation a = def.act(name);
+			if (a == null) {
+				return false;
+			}
+			if (a != act) {
+				act = a;
+				actTime = 0;
+			}
+			return true;
+		}
+
+		public String actName() {
+			return act != null ? act.name : null;
+		}
+
+		/** 수명 연장/단축 (Fade Time 등). */
+		public void setLife(float l) {
+			life = l;
 		}
 
 		public float time() {
@@ -103,13 +150,18 @@ public final class EffectSystem implements AutoCloseable {
 				ps.emitters().removeAll(emitters);
 			}
 			emitters.clear();
+			// 반복 이펙트의 소리(*_LP)는 GO 와 함께 끈다. 1회성 소리는 끝까지 둔다 [추정]
+			if (soundHandle > 0 && sounds != null && !def.oneShot()) {
+				sounds.stop(soundHandle);
+			}
+			soundHandle = 0;
 		}
 
 		/** 현재 이미터별 생성률 (테스트). */
 		public float[] rates() {
 			float[] r = new float[def.emitters().size()];
 			for (int i = 0; i < r.length; i++) {
-				r[i] = def.rate(def.emitters().get(i), time);
+				r[i] = def.rate(act, def.emitters().get(i), act == def.anim() ? time : actTime);
 			}
 			return r;
 		}
@@ -124,12 +176,14 @@ public final class EffectSystem implements AutoCloseable {
 				return;
 			}
 			time += dt;
+			actTime += dt;
 			if (time >= life || anchor == null || !anchor.world(tmp)) {
 				stop();
 				return;
 			}
 			float s = def.scale() * scale;
 			world.set(tmp).scale(s);
+			sound();
 			if (ps == null) {
 				return;
 			}
@@ -158,27 +212,47 @@ public final class EffectSystem implements AutoCloseable {
 				if (ld.lengthSquared() > 1e-8f) {
 					e.dir.set(ld).normalize();
 				}
-				e.rate = def.rate(ed, time) * lodScale;
-				e.speed = def.param(ed, 4, time, fx.speed()) * 16 * Math.min(s, 4f);
-				e.speedRnd = def.param(ed, 5, time, fx.speedRnd()) * 16 * Math.min(s, 4f);
+				float at = act == def.anim() ? time : actTime;
+				float ct = act != null && act.looping() && act.duration > 0 ? at % act.duration : at;
+				e.rate = (rateOverride >= 0 ? rateOverride : def.rate(act, ed, at)) * lodScale;
+				e.speed = def.param(act, ed, 4, ct, fx.speed()) * 16 * Math.min(s, 4f) * speedScale;
+				e.speedRnd = def.param(act, ed, 5, ct, fx.speedRnd()) * 16 * Math.min(s, 4f) * speedScale;
 				if (fx.subtype() == 1 || fx.subtype() == 8) {
-					e.cone = def.param(ed, 3, time, fx.spread());
+					e.cone = def.param(act, ed, 3, ct, fx.spread());
 				}
 				e.sizeScale = Math.min(s, 6f);
 			}
 		}
 
+		/** SEM_ 이미터 슬롯 1 소리 (GO 생성 때 1번, 위치는 매 프레임 이펙트 원점 + SEM 로컬 이동) [추정: 슬롯 1·생성 시점]. */
+		private void sound() {
+			if (sounds == null || def.sem() == null) {
+				return;
+			}
+			Vector3f p = world.getTranslation(new Vector3f());
+			if (!soundStarted) {
+				soundStarted = true;
+				String snd = def.sem().sound(1);
+				if (snd != null && !silent) {
+					soundHandle = sounds.play(snd, p, def.sem().near(), def.sem().far());
+				}
+			} else if (soundHandle > 0) {
+				sounds.move(soundHandle, p);
+			}
+		}
+
 		void draw(Camera cam, float aspect, Texture white) {
-			if (stopped || def.model() == null) {
+			if (stopped || def.model() == null || hideMesh) {
 				return;
 			}
 			AnimatedModel m = model(def);
 			if (m == null) {
 				return;
 			}
-			Pose pose = def.anim() != null && def.anim().hasSkeletalData()
-					? def.anim().sample(def.skeleton(), time, def.anim().looping()) : Pose.idle(def.skeleton());
-			m.draw(cam, aspect, world, pose, white, time, alpha);
+			float at = act == def.anim() ? time : actTime;
+			Pose pose = act != null && act.hasSkeletalData()
+					? act.sample(def.skeleton(), at, act.looping()) : Pose.idle(def.skeleton());
+			m.draw(cam, aspect, world, pose, white, at, alpha);
 		}
 	}
 
@@ -194,6 +268,8 @@ public final class EffectSystem implements AutoCloseable {
 	static final boolean LOG = System.getProperty("gow.fxlog") != null;
 	/** 생성률 배율 (성능 여유, 1 = 원작). */
 	public float lodScale = 1;
+	/** SEM 소리 출력 (없으면 소리 없음). */
+	public Sounds sounds;
 
 	/** 렌더용 (GL 컨텍스트 필요). */
 	public EffectSystem(int maxParticles) {
@@ -230,6 +306,16 @@ public final class EffectSystem implements AutoCloseable {
 		} catch (java.io.IOException | RuntimeException ex) {
 			return false;
 		}
+	}
+
+	/** 이미 열린 WAD 자산(레벨·적 WAD)의 이펙트 GO 를 등록. 자산은 소유자가 닫는다. 이미 등록한 WAD 면 false. */
+	public boolean add(WadAssets a) {
+		if (a == null || assets.containsKey(a.wad())) {
+			return false;
+		}
+		lib.add(a.wad());
+		assets.put(a.wad(), a);
+		return true;
 	}
 
 	public EffectLibrary library() {

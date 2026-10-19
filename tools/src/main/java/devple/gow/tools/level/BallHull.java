@@ -43,6 +43,11 @@ public final class BallHull {
 	public final int[] hullJoint;
 	/** 재질 엔트리별 PartType (+0x30, 엔트리 크기 0x34 미만이면 0). 히어로 몸 1, 오른발 7, extra1 9 / 블레이드 2, 쌍 11. */
 	public final int[] materialPart;
+	/**
+	 * 재질 엔트리별 SheetFX (+0x2C) = MFX 템플릿 번호 (exe 속성 "SheetFX", 오프셋 표 0x3376FC; 0x203450 이 피격 구의 이 값으로
+	 * /TweakTemplates/MFX/&lt;n&gt;/ 을 찾는다). 히어로 몸 501 "Hero Flesh", 미노타우로스 510, 키클롭스 506, 0 = 없음.
+	 */
+	public final int[] materialFx;
 
 	public BallHull(String name, ByteBuffer d) {
 		this.name = name;
@@ -68,9 +73,11 @@ public final class BallHull {
 			names.add(new String(b, 0, len, StandardCharsets.ISO_8859_1));
 		}
 		materialPart = new int[nameCount];
+		materialFx = new int[nameCount];
 		for (int i = 0; i < nameCount; i++) {
 			if (nameStride >= 0x34 && off[0] + i * nameStride + 0x34 <= d.limit()) {
 				materialPart[i] = d.getInt(off[0] + i * nameStride + 0x30);
+				materialFx[i] = d.getInt(off[0] + i * nameStride + 0x2C);
 			}
 		}
 		ballJoint = new int[ballCount];
@@ -110,6 +117,12 @@ public final class BallHull {
 			}
 			hulls.add(new Hull(c, ps, nameIndex));
 		}
+	}
+
+	/** ball b 의 SheetFX = MFX 템플릿 (재질 엔트리 +0x2C, 0 = 없음). */
+	public int ballFx(int b) {
+		int m = ballMaterial[b];
+		return m < materialFx.length ? materialFx[m] : 0;
 	}
 
 	/** ball b 의 PartType (재질 엔트리 +0x30). */
