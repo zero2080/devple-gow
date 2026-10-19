@@ -23,20 +23,23 @@ public record EscOp(int offset, int code, String text) {
 	public static final String[] SCOPES = {"Entity", "Internal", "GlobalData", "LevelData"};
 	private static final String[] TYPES = {"float", "int", "bool", "string"};
 
-	/** 함수 이름 (scope:id). mogaika 분석 기반 + 인자 패턴 대조, '?' 는 추정. */
+	/** 함수 이름 (scope:id). Entity 스코프는 0x1AF848 분석(13 문서 §3), Internal 은 GameMgr_OnMessage, '?' 는 추정. */
 	public static final Map<Integer, String> FUNCS = Map.ofEntries(
-			Map.entry(0x0008, "Printf"),
-			Map.entry(0x0009, "EntityRef0?"), Map.entry(0x000a, "EntityRef1?"),
-			Map.entry(0x000b, "EntityRef2?"), Map.entry(0x000c, "EntityRef3?"),
-			Map.entry(0x000d, "PlayStreamed?"), Map.entry(0x0010, "PreloadStreamed?"),
-			Map.entry(0x1000, "CheckPoint"), Map.entry(0x1002, "Load?"), Map.entry(0x1003, "LoadWad?"),
-			Map.entry(0x1004, "LoadForWarp?"), Map.entry(0x1005, "Warp?"), Map.entry(0x1006, "LoadCheck?"),
-			Map.entry(0x1007, "Goto?"), Map.entry(0x1008, "SwitchCamera?"), Map.entry(0x1009, "AbortCutscene?"),
-			Map.entry(0x100a, "ShowMessage(msgId,fSec?)"), Map.entry(0x100c, "Idle"),
+			Map.entry(0x0000, "Min"), Map.entry(0x0001, "Max"), Map.entry(0x0002, "Clamp"),
+			Map.entry(0x0003, "RandomRange"), Map.entry(0x0004, "Sqrt"), Map.entry(0x0005, "FadeOut(r,g,b,sec)"),
+			Map.entry(0x0006, "FadeIn(sec)"), Map.entry(0x0007, "FindObject"), Map.entry(0x0008, "Printf"),
+			Map.entry(0x0009, "EventArg"), Map.entry(0x000a, "EventArg"),
+			Map.entry(0x000b, "EventArg"), Map.entry(0x000c, "EventArg"),
+			Map.entry(0x000d, "PlayMovie"), Map.entry(0x000e, "MovieCtl?"), Map.entry(0x000f, "MovieSkip?"),
+			Map.entry(0x0010, "PreloadMovie"),
+			Map.entry(0x1000, "CheckPoint"), Map.entry(0x1002, "Load"), Map.entry(0x1003, "LoadWad"),
+			Map.entry(0x1004, "LoadForWarp"), Map.entry(0x1005, "Warp"), Map.entry(0x1006, "LoadCheck"),
+			Map.entry(0x1007, "Goto"), Map.entry(0x1008, "SwitchCamera"), Map.entry(0x1009, "CameraCtl?"),
+			Map.entry(0x100a, "ShowMessage(msgId,fSec)"), Map.entry(0x100c, "Idle"),
 			Map.entry(0x1010, "ZoneTitle?"), Map.entry(0x1013, "FailedScreen"),
 			Map.entry(0x1014, "CreateTimer?"), Map.entry(0x1017, "DestroyTimer?"), Map.entry(0x1018, "TimerElapsed?"),
 			Map.entry(0x1019, "StartTimer?"), Map.entry(0x101b, "MusicGroupStart"), Map.entry(0x101c, "MusicGroupStop"),
-			Map.entry(0x101d, "MusicGroupParam?"), Map.entry(0x101f, "ShowMessage2?"),
+			Map.entry(0x101d, "MusicGroupParam?"), Map.entry(0x101f, "ShowItemCard"),
 			Map.entry(0x102f, "CompleteGame"), Map.entry(0x1038, "PlaySound?"));
 
 	/** Internal scope 변수 이름 (mogaika). */

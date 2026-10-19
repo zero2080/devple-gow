@@ -18,9 +18,15 @@ public final class EscVm {
 	public static final int MAX_STEPS = 100_000;
 
 	private final EscHost host;
+	/** 검증용: return 뒤 스택이 비지 않으면 통지 (호스트 인자 수 검증, 13 문서 §4). */
+	private java.util.function.Consumer<String> unbalanced;
 
 	public EscVm(EscHost host) {
 		this.host = host;
+	}
+
+	public void onUnbalanced(java.util.function.Consumer<String> l) {
+		unbalanced = l;
 	}
 
 	public Object run(EscContext ctx, EscScript.Handler h) {
@@ -112,7 +118,12 @@ public final class EscVm {
 					boolean b = bool(st.pop()), a = bool(st.pop());
 					st.push(op == 0x25 ? a && b : op == 0x26 ? a || b : a ^ b);
 				}
-				case 0x38 -> result = st.isEmpty() ? null : st.pop();
+				case 0x38 -> {
+					result = st.isEmpty() ? null : st.pop();
+					if (unbalanced != null && !st.isEmpty()) {
+						unbalanced.accept(String.format("%s '%s' @%04x 남은 스택 %d", ctx.script(), ctx.entity().name(), pc - 1, st.size()));
+					}
+				}
 				default -> {
 					if (op >= 0x28 && op <= 0x37) {
 						compare(op, st);

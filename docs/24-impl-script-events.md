@@ -37,7 +37,8 @@
 | 0xC / 0x10 / 0x2F / 0x3A | Idle / ZoneReport / CompleteGame / SetEndGame | 1개 |
 | 0x1F | ShowItemCard | msg, sec, kind |
 
-미확인 함수는 스택을 건드리지 않는다. 핸들러가 끝나면 스택은 버려지므로 같은 핸들러 안의 이후 연산에만 영향이 있다 → 함수별 인자 수는 사용 패턴을 보고 계속 보강.
+→ 전 함수 인자 수 표와 검증은 [13 문서](13-script-entities.md) §5·§6, 구현은 `ScriptHost` ([28 문서](28-impl-script-world.md)).
+`GameScriptHost` 단독 사용 시 미확인 함수는 스택을 건드리지 않는다. 핸들러가 끝나면 스택은 버려지므로 같은 핸들러 안의 이후 연산에만 영향이 있다 → 함수별 인자 수는 사용 패턴을 보고 계속 보강.
 
 ## 4. 검증 (`EscVmTest`)
 - ARENA06 `Start` 엔티티의 파라미터 핸들러 → `"Hero"`
@@ -45,5 +46,5 @@
 - **전 레벨 WAD 의 모든 핸들러**가 예외 없이 실행 완료
 
 ## 5. 남은 일
-- 엔티티 타입별 발동 규칙 (EntrySensor = 볼륨 진입 시 핸들러 N, Creation/Destruction/Event 센서, EventTransmitter → 대상 엔티티) 은 레벨 런타임(23 문서)에서 연결
+- (완료 → 13 / 28 문서) 엔티티 타입별 발동 규칙 (EntrySensor = 볼륨 진입 시 핸들러 N, Creation/Destruction/Event 센서, EventTransmitter → 대상 엔티티) 은 레벨 런타임(23 문서)에서 연결
 - Entity 스코프 함수(0x9 등) 의미 분석

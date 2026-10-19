@@ -10,7 +10,7 @@ import java.util.List;
  * {@code CDV_} 동적 충돌(kind 0), {@code CMV_} 카메라 볼륨(1), {@code ENV_} 환경 트리거(2), {@code SEV_} 사운드 영역(3).
  * <pre>
  * 0x00 u32 0x11   0x04 u32 kind   0x08 "BallHull"   0x10 u32 크기   0x14 u32 ballCount   0x18 u32 hullCount
- * 0x1C vec4 경계구 (x, y, z, r)   0x2C u32 ?   0x30 u32 ? (CDV 0x1F)   0x34 u32 nameCount   0x38 u32 planeCount
+ * 0x1C vec4 경계구 (x, y, z, r)   0x2C u32 ?   0x30 u32 ? (CDV 0x1F)   0x34 u32 nameCount   0x38 u32 ? (평면 수가 아님: ENV_LoadCheckB 는 0 인데 평면 6개)
  * 0x3C u32[11] 오프셋: [0] 이름 char[24][nameCount]  [1..3] ball 보조 표(미상)  [4] vec4 ball (x, y, z, r)
  *                     [5] u8 hull별 평면 수  [6][7] 미상  [8] vec4 hull 중심
  *                     [9] u8 평면별 이름 번호(CMV: 활성화할 카메라 RCM_x)  [10] vec4 평면 (n, d)
@@ -40,7 +40,6 @@ public final class BallHull {
 			sphere[k] = d.getFloat(0x1C + k * 4);
 		}
 		int nameCount = d.getInt(0x34);
-		int planeCount = d.getInt(0x38);
 		int[] off = new int[11];
 		for (int i = 0; i < 11; i++) {
 			off[i] = d.getInt(0x3C + i * 4);
@@ -63,8 +62,9 @@ public final class BallHull {
 			int n = d.get(off[5] + h) & 0xFF;
 			float[] c = {d.getFloat(off[8] + h * 16), d.getFloat(off[8] + h * 16 + 4), d.getFloat(off[8] + h * 16 + 8)};
 			List<float[]> ps = new ArrayList<>();
-			int nameIndex = plane < planeCount ? d.get(off[9] + plane) & 0xFF : 0;
-			for (int k = 0; k < n && plane < planeCount; k++, plane++) {
+			// 평면 수 = hull 별 평면 수의 합 (0x38 은 평면 수가 아니다)
+			int nameIndex = off[9] + plane < d.limit() ? d.get(off[9] + plane) & 0xFF : 0;
+			for (int k = 0; k < n && off[10] + plane * 16 + 16 <= d.limit(); k++, plane++) {
 				int o = off[10] + plane * 16;
 				ps.add(new float[]{d.getFloat(o), d.getFloat(o + 4), d.getFloat(o + 8), d.getFloat(o + 12)});
 			}
