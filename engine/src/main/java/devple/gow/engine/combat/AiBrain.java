@@ -396,7 +396,7 @@ public final class AiBrain {
 	/**
 	 * 칸 선택 (0x20BA60 → 0x20BFB0):
 	 * <ol>
-	 *   <li>막힌 칸 = 다른 적이 점유한 칸 + 대상 칸 (원작은 여기에 벽 칸 비트 +0x40 도 OR — 미구현 [근사])</li>
+	 *   <li>막힌 칸 = 다른 적이 점유한 칸 + 대상 칸 + 벽 칸 (대상에서 시선이 막힌 칸 — 원작 +0x40 근사)</li>
 	 *   <li>자기 칸에서 4방향 flood fill → 도달 불가 칸도 제외 (자기 칸이 격자 밖이면 생략)</li>
 	 *   <li>대상 중심 ±반경 정사각형 안 균등 무작위 점 → 칸, 제외 칸이 아니면 채택. 최대 5번</li>
 	 *   <li>실패하면 121 칸 중 무작위, 막혔으면 대체 (원작 sub_00243B68 — 미상 → 자신에 가장 가까운 빈 칸 [근사])</li>
@@ -410,6 +410,15 @@ public final class AiBrain {
 			blocked[c] = !cellFree(c);
 		}
 		blocked[HALF * GRID + HALF] = true;
+		// 벽 칸 (원작 격자 +0x40, 0x20B038 이 대상→칸 선분 sub_0020B870 + 충돌 질의 sub_001853E8 로 채움): 대상 눈높이 → 칸 중심 시선이 막히면 막힘 [근사]
+		if (sightBlocked != null) {
+			Vector3f te = new Vector3f(target.position()).add(0, EYE, 0);
+			for (int c = 0; c < n; c++) {
+				if (!blocked[c] && sightBlocked.test(te, cellPos(c).setComponent(1, te.y))) {
+					blocked[c] = true;
+				}
+			}
+		}
 		boolean[] excluded = blocked.clone();
 		int start = cellOf(self.pos);
 		if (start >= 0) {
