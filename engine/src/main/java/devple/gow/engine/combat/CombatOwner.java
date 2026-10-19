@@ -25,4 +25,11 @@ public interface CombatOwner {
 
 	/** 이동 방향 yaw (정면 = 모델 -Z 를 yaw 만큼 회전). */
 	float yaw();
+
+	/**
+	 * 피해 적용. 반환값 = 잡기 원 임계 HP(AI1 "Circle HP")를 이번 피해로 통과했는지 (이벤트 21).
+	 */
+	default boolean applyDamage(float damage) {
+		return false;
+	}
 }

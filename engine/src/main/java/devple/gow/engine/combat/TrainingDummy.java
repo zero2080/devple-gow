@@ -56,14 +56,11 @@ public final class TrainingDummy implements Hittable {
 	}
 
 	@Override
-	public boolean guarding() {
-		return block;
-	}
-
-	@Override
-	public boolean receive(float damage, Attack attack, boolean unblockable, boolean forceReact, Vector3f knock) {
+	public Result receive(Attack attack, Combatant attacker, float damage, Vector3f knock) {
+		boolean unblockable = attacker.move() != null && (attacker.move().flags() & 2) != 0;
+		boolean forceReact = attacker.move() != null && (attacker.move().flags() & 6) != 0;
 		if (block && !unblockable) {
-			return false;
+			return Result.BLOCKED;
 		}
 		accum += damage;
 		hp = Math.max(0, hp - damage);
@@ -77,6 +74,6 @@ public final class TrainingDummy implements Hittable {
 		if (hp <= 0) {
 			respawn = 2f;
 		}
-		return true;
+		return Result.HIT;
 	}
 }

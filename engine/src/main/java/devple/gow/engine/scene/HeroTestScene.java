@@ -84,7 +84,9 @@ public final class HeroTestScene implements Scene {
 		Animator animator = new Animator(sk, set, tw, "/Animation/goHero/");
 		ctl = new HeroController(animator);
 		CombatData data = new CombatData(perm, CombatData.heroFiles(), set);
-		combat = new Combatant(data, animator, owner(), new DamageRules(tw));
+		combat = new Combatant(data, animator, owner());
+		DamageRules rules = new DamageRules(tw);
+		combat.setDamageScale(() -> rules.playerScale(1, 0, bladeLevel, false));
 		combat.onLog(System.out::println);
 		combat.debug = auto == Auto.COMBO;
 		System.out.printf("전투 데이터: 기술 %d개, 루트 액션 %d개, 블레이드 레벨 %d%n", data.moveCount(),

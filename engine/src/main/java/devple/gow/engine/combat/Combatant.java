@@ -17,10 +17,11 @@ import java.util.List;
 import java.util.Random;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
- * 전투 컴포넌트 (원작 Combat_Update 0x205968 / PollInput 0x208A98 / StartBranch 0x209488).
- * 상태 = (기술 없음 | 현재 기술). 기술 없음이면 이동 시스템이 캐릭터를 움직이고, 입력이 루트 액션과 맞으면 기술 시작.
+ * 전투 컴포넌트 (원작 Combat_Update 0x205968 / PollInput 0x208A98 / StartBranch 0x209488 / OnContact).
+ * 영웅·적 공용. 상태 = (기술 없음 | 현재 기술). 영웅은 패드 입력으로, 적(AI)은 {@link #request(int)} 로 기술을 시작한다.
  */
 public final class Combatant {
 
@@ -30,10 +31,14 @@ public final class Combatant {
 	 */
 	public static final float REACH = 55f, HIT_RADIUS = 55f;
 
+	/** 분기 매칭 상대 정보 (폴링: 락온 대상, 이벤트: 공격자). */
+	private record Other(float hp, int classId, int tag) {
+		static final Other NONE = new Other(0, -1, -1);
+	}
+
 	private final CombatData data;
 	private final Animator anim;
 	private final CombatOwner owner;
-	private final DamageRules rules;
 	private final Random rnd = new Random(1);
 
 	private Move move;
@@ -43,24 +48,29 @@ public final class Combatant {
 	private int queuedPrio;
 	private int heldAtStart;
 	private float accumDamage;
+	private int stanceTag = -1;
 	private final Set<Long> hitLog = new HashSet<>();
 	private final Set<Integer> firedEvents = new HashSet<>();
 	private boolean hitThisFrame;
 	private boolean hitThisMove;
 	private float hitPause;
 	private Hittable target;
+	private Supplier<Float> damageScale = () -> 1f;
 	private Consumer<String> log = s -> { };
 	public boolean debug;
-	public int difficulty = 1;
-	public int costume;
+	public float reach = REACH, hitRadius = HIT_RADIUS;
 	public int hitCounter;
 	public float godMeter;
 
-	public Combatant(CombatData data, Animator anim, CombatOwner owner, DamageRules rules) {
+	public Combatant(CombatData data, Animator anim, CombatOwner owner) {
 		this.data = data;
 		this.anim = anim;
 		this.owner = owner;
-		this.rules = rules;
+	}
+
+	/** 공격자 측 피해 배율 (영웅 = Player_DamageScale, 적 = AI1 Damage Multiplier × 난이도 AI 배율). */
+	public void setDamageScale(Supplier<Float> s) {
+		damageScale = s;
 	}
 
 	public void onLog(Consumer<String> l) {
@@ -75,8 +85,16 @@ public final class Combatant {
 		return move;
 	}
 
+	public CombatOwner owner() {
+		return owner;
+	}
+
 	public void setTarget(Hittable t) {
 		target = t;
+	}
+
+	public int stanceTag() {
+		return stanceTag;
 	}
 
 	/** 현재 기술 진행률 0..1 (애니 시간 / 길이). */
@@ -100,6 +118,7 @@ public final class Combatant {
 		return hitPause;
 	}
 
+	/** @param in 영웅 = 패드, AI = null */
 	public void update(Input in, float dt) {
 		hitThisFrame = false;
 		if (hitPause > 0) {
@@ -125,14 +144,30 @@ public final class Combatant {
 		}
 	}
 
+	/** AI/스크립트의 기술 요청 (sub_00209378): 해당 기술로 가는 루트 액션을 Match 해서 시작. */
+	public boolean request(int moveId) {
+		for (Branch b : data.rootActions()) {
+			if (b.target() == moveId && score(b, other()) >= 0) {
+				start(b, null);
+				return true;
+			}
+		}
+		return false;
+	}
+
 	// ---------------- 입력 / 분기 ----------------
 
+	private Other other() {
+		return target == null ? Other.NONE : new Other(target.hp(), target.classId(), target.stanceTag());
+	}
+
 	private void poll(Input in, float t) {
-		List<Branch> cands = new ArrayList<>();
-		int best = -1;
+		Other o = other();
 		if (move != null) {
+			List<Branch> cands = new ArrayList<>();
+			int best = -1;
 			for (Branch b : move.branches()) {
-				if (t < b.winStart() || t > b.winEnd() || !inputOk(b, in) || score(b) < 0) {
+				if (t < b.winStart() || t > b.winEnd() || !inputOk(b, in) || score(b, o) < 0) {
 					continue;
 				}
 				int prio = b.input() == CombatInput.AUTO ? 1 : 3;
@@ -166,7 +201,7 @@ public final class Combatant {
 			queuedAt = execAt;
 			queuedPrio = best;
 		} else if (in != null) {
-			Branch c = bestMatch(data.rootActions(), in);
+			Branch c = bestMatch(data.rootActions(), in, o);
 			if (c != null) {
 				queued = c;
 				queuedAt = 0;
@@ -175,14 +210,14 @@ public final class Combatant {
 		}
 	}
 
-	private Branch bestMatch(List<Branch> list, Input in) {
+	private Branch bestMatch(List<Branch> list, Input in, Other o) {
 		int bestScore = Integer.MAX_VALUE;
 		List<Branch> ties = new ArrayList<>();
 		for (Branch b : list) {
 			if (in != null && !inputOk(b, in)) {
 				continue;
 			}
-			int s = score(b);
+			int s = score(b, o);
 			if (s < 0) {
 				continue;
 			}
@@ -240,9 +275,9 @@ public final class Combatant {
 				if (mag < 0.8f) {
 					yield false;
 				}
-				// 스틱(화면 기준)을 캐릭터 기준으로: 원작은 카메라 기준 월드 방향과 캐릭터 정면을 비교. 여기서는 카메라 yaw=정면 근사
+				// 스틱(카메라 정면 근사)을 캐릭터 기준으로 변환
 				float ang = (float) Math.atan2(-sx, sy) - owner.yaw();
-				float fx = (float) -Math.sin(ang), fz = (float) Math.cos(ang); // 캐릭터 기준 (오른쪽 +x, 앞 +z)
+				float fx = (float) -Math.sin(ang), fz = (float) Math.cos(ang);
 				float c = 0.7071f;
 				yield switch (k) {
 					case 3 -> -fx >= c;
@@ -255,25 +290,21 @@ public final class Combatant {
 		};
 	}
 
-	/**
-	 * Match (0x208578). 통과 못하면 -1, 통과하면 와일드카드 점수 (낮을수록 구체적).
-	 */
-	private int score(Branch b) {
+	/** Match (0x208578). 통과 못하면 -1, 통과하면 와일드카드 점수 (낮을수록 구체적). */
+	private int score(Branch b, Other o) {
 		int f = b.flags();
 		int state = owner.onGround() ? 0x2 : 0x4;
 		if ((f & 0x100A6) != 0 && (f & state) == 0) {
 			return -1;
 		}
-		boolean god = owner.godMode();
-		if ((f & 0x200) == 0 && ((f & 0x100) != 0) != god) {
+		if ((f & 0x200) == 0 && ((f & 0x100) != 0) != owner.godMode()) {
 			return -1;
 		}
-		boolean art = owner.artemisEquipped();
-		if ((f & 0x8000) == 0 && ((f & 0x2000) != 0) != art) {
+		if ((f & 0x8000) == 0 && ((f & 0x2000) != 0) != owner.artemisEquipped()) {
 			return -1;
 		}
-		if ((f & 0x20000) != 0 || (f & 0x80000) != 0 || (f & 0x800) != 0 || (f & 0x8) != 0) {
-			return -1; // 미상 플래그 / 차지 / 특수 플래그는 아직 미지원
+		if ((f & 0x20000) != 0 || (f & 0x80000) != 0 || (f & 0x800) != 0 || (f & 0x8) != 0 || (f & 0x4000) != 0) {
+			return -1; // 미상 플래그 / 차지 / 특수 태그 일치는 아직 미지원
 		}
 		if ((f & 0x400) != 0 && target == null) {
 			return -1;
@@ -291,8 +322,7 @@ public final class Combatant {
 		if (hp < b.hpMin() || hp > b.hpMax()) {
 			return -1;
 		}
-		float thp = target != null ? target.hp() : 0;
-		if (thp < b.argMin() || thp > b.argMax()) {
+		if (o.hp() < b.argMin() || o.hp() > b.argMax()) {
 			return -1;
 		}
 		int s = 0;
@@ -304,12 +334,12 @@ public final class Combatant {
 		}
 		if (b.matchB() == -1) {
 			s += 4;
-		} else {
-			return -1; // 상대 자세 태그는 아직 미지원
+		} else if (b.matchB() != o.tag()) {
+			return -1;
 		}
 		if (b.matchA() == -1) {
 			s += 8;
-		} else if (target == null || target.classId() != b.matchA()) {
+		} else if (b.matchA() != o.classId()) {
 			return -1;
 		}
 		if (b.classId() == -1) {
@@ -328,7 +358,7 @@ public final class Combatant {
 		if (b.target() == -1) {
 			// 기술만 끝내는 분기(IDLECOMBAT 의 ANY_INPUT 등): 같은 입력으로 루트 액션 재평가
 			if (in != null) {
-				Branch r = bestMatch(data.rootActions(), in);
+				Branch r = bestMatch(data.rootActions(), in, other());
 				if (r != null && r.target() >= 0) {
 					start(r, in);
 				}
@@ -344,6 +374,7 @@ public final class Combatant {
 		clip = data.animation(m);
 		heldAtStart = in != null ? CombatInput.mask(in) : 0;
 		accumDamage = 0;
+		stanceTag = -1;
 		hitLog.clear();
 		firedEvents.clear();
 		hitThisMove = false;
@@ -360,29 +391,35 @@ public final class Combatant {
 		anim.setRate(1f);
 	}
 
-	/** 이벤트 코드(13 피격, 14 사망, 16 막음, 17 적중, 22 막힘 …)로 분기 발동 — 즉시 큐. */
-	public void fire(int code, int reaction) {
-		List<Branch> src = new ArrayList<>();
+	/**
+	 * 이벤트 코드(13 피격, 14 사망, 16 막음, 17 적중, 21 잡기 원, 22 막힘)로 분기 발동 → 즉시 큐.
+	 * 현재 기술의 분기 → 없으면 루트 액션. reaction 은 분기 +0x20 과 비교 (-1 = 무관).
+	 */
+	public void fire(int code, int reaction, Combatant attacker) {
+		Other o = attacker == null ? Other.NONE
+				: new Other(attacker.owner.hp(), attacker.owner.classId(), attacker.stanceTag);
+		Branch c = null;
 		if (move != null) {
-			for (Branch b : move.branches()) {
-				if (b.input() == code && (b.reaction() == -1 || b.reaction() == reaction)) {
-					src.add(b);
-				}
-			}
+			c = bestMatch(eventBranches(move.branches(), code, reaction), null, o);
 		}
-		if (src.isEmpty()) {
-			for (Branch b : data.rootActions()) {
-				if (b.input() == code && (b.reaction() == -1 || b.reaction() == reaction)) {
-					src.add(b);
-				}
-			}
+		if (c == null) {
+			c = bestMatch(eventBranches(data.rootActions(), code, reaction), null, o);
 		}
-		Branch c = bestMatch(src, null);
 		if (c != null) {
 			queued = c;
 			queuedAt = 0;
 			queuedPrio = 5;
 		}
+	}
+
+	private static List<Branch> eventBranches(List<Branch> src, int code, int reaction) {
+		List<Branch> l = new ArrayList<>();
+		for (Branch b : src) {
+			if (b.input() == code && (b.reaction() == -1 || b.reaction() == reaction)) {
+				l.add(b);
+			}
+		}
+		return l;
 	}
 
 	// ---------------- 이벤트 / 공격 ----------------
@@ -406,8 +443,15 @@ public final class Combatant {
 			if (once && !firedEvents.add(e.bit())) {
 				continue;
 			}
-			if (e.type() == 21 && (e.cond() != 1 && e.cond() != 2 || hitThisFrame)) {
-				godMeter = Math.min(100f, godMeter + e.b()); // GOD_METER_ADD
+			switch (e.type()) {
+				case 20 -> stanceTag = e.index(); // SET_1B0: 공격 자세 태그 → 피격자 반응 분기 선택
+				case 21 -> {
+					if ((e.cond() != 1 && e.cond() != 2) || hitThisFrame) {
+						godMeter = Math.min(100f, godMeter + e.b()); // GOD_METER_ADD
+					}
+				}
+				default -> {
+				}
 			}
 		}
 	}
@@ -418,43 +462,34 @@ public final class Combatant {
 		}
 		Vector3f p = owner.position();
 		float yaw = owner.yaw();
-		Vector3f hit = new Vector3f((float) -Math.sin(yaw), 0, (float) -Math.cos(yaw)).mul(REACH).add(p);
+		Vector3f hit = new Vector3f((float) -Math.sin(yaw), 0, (float) -Math.cos(yaw)).mul(reach).add(p);
 		Vector3f tp = target.position();
 		float dx = tp.x - hit.x, dz = tp.z - hit.z;
-		if (dx * dx + dz * dz > HIT_RADIUS * HIT_RADIUS) {
-			if (debug) {
-				for (Attack a : move.attacks()) {
-					if (t >= a.start() && t <= a.end()) {
-						log.accept(String.format("  (빗나감 공격#%d 거리 %.0f 영웅(%.0f,%.0f) yaw %.0f° 표적(%.0f,%.0f))", a.index(),
-								Math.sqrt(dx * dx + dz * dz), p.x, p.z, Math.toDegrees(yaw), tp.x, tp.z));
-						break;
-					}
-				}
-			}
-			return;
-		}
+		boolean inRange = dx * dx + dz * dz <= hitRadius * hitRadius;
 		for (Attack a : move.attacks()) {
 			if (t < a.start() || t > a.end()) {
 				continue;
 			}
-			long key = ((long) System.identityHashCode(target) << 16) | a.index();
-			if (!hitLog.add(key)) {
+			if (!inRange) {
+				if (debug) {
+					log.accept(String.format("  (빗나감 공격#%d 거리 %.0f)", a.index(), Math.sqrt(dx * dx + dz * dz)));
+				}
 				continue;
 			}
-			contact(a);
+			long key = ((long) System.identityHashCode(target) << 16) | a.index();
+			if (hitLog.add(key)) {
+				contact(a);
+			}
 		}
 	}
 
 	/** OnContact (10 문서 §15.4) 공격자 쪽. */
 	private void contact(Attack a) {
-		boolean unblockable = (move.flags() & 2) != 0;
-		boolean force = (move.flags() & 6) != 0;
-		float dmg = a.damage() * rules.playerScale(difficulty, costume, owner.bladeLevel(), owner.godMode());
-		float yaw = owner.yaw();
+		float dmg = a.damage() * damageScale.get();
 		// 충격 벡터 (x 좌우, y 상하, z 전후 — 추정) 를 공격자 방향으로 회전
-		Vector3f knock = new Vector3f(a.impulse()[0], a.impulse()[1], -a.impulse()[2]).rotateY(yaw);
-		boolean landed = target.receive(dmg, a, unblockable, force, knock);
-		if (landed) {
+		Vector3f knock = new Vector3f(a.impulse()[0], a.impulse()[1], -a.impulse()[2]).rotateY(owner.yaw());
+		Hittable.Result r = target.receive(a, this, dmg, knock);
+		if (r == Hittable.Result.HIT) {
 			hitThisFrame = hitThisMove = true;
 			if (dmg > 0) {
 				hitCounter++;
@@ -464,14 +499,33 @@ public final class Combatant {
 					hitPause = Math.max(hitPause, e.a()); // HIT_PAUSE
 				}
 			}
-			fire(CombatInput.EV_HIT_CONFIRM, -1);
-		} else {
-			fire(CombatInput.EV_WAS_BLOCKED, -1);
+			fire(CombatInput.EV_HIT_CONFIRM, -1, null);
+		} else if (r == Hittable.Result.BLOCKED) {
+			fire(CombatInput.EV_WAS_BLOCKED, -1, null);
 		}
-		log.accept(String.format("  적중 공격#%d 기본 %d → 피해 %.1f%s", a.index(), a.damage(), dmg, landed ? "" : " (막힘)"));
+		log.accept(String.format("  적중 공격#%d 기본 %d → 피해 %.1f (%s)", a.index(), a.damage(), dmg, r));
 	}
 
-	public float accumulatedDamage() {
-		return accumDamage;
+	/**
+	 * OnContact 피격자 쪽: 무적 → 방어(이벤트 16) → 누적 피해 / 경직(poise) → 사망(14)·잡기 원(21)·반응(13).
+	 */
+	public Hittable.Result takeHit(Attack a, Combatant attacker, float dmg) {
+		if (invulnerable()) {
+			return Hittable.Result.IGNORED;
+		}
+		int aflags = attacker.move != null ? attacker.move.flags() : 0;
+		if (guarding() && (aflags & 2) == 0) {
+			fire(CombatInput.EV_BLOCKED, a.blockReaction(), attacker);
+			return Hittable.Result.BLOCKED;
+		}
+		accumDamage += dmg;
+		boolean react = (aflags & 6) != 0 || move == null || (move.poise() != -1 && accumDamage > move.poise());
+		boolean kill = owner.hp() > 0 && owner.hp() <= dmg;
+		boolean circle = owner.applyDamage(dmg);
+		if (react || kill || circle) {
+			fire(kill ? CombatInput.EV_DEATH : circle ? CombatInput.EV_CIRCLE : CombatInput.EV_HIT,
+					kill ? a.death() : a.reaction(), attacker);
+		}
+		return Hittable.Result.HIT;
 	}
 }

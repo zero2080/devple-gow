@@ -52,7 +52,9 @@ class CombatantTest {
 			public Vector3f position() { return ctl.position; }
 			public float yaw() { return ctl.yaw; }
 		};
-		Combatant c = new Combatant(new CombatData(perm, CombatData.heroFiles(), set), animator, owner, new DamageRules(tw));
+		Combatant c = new Combatant(new CombatData(perm, CombatData.heroFiles(), set), animator, owner);
+		DamageRules rules = new DamageRules(tw);
+		c.setDamageScale(() -> rules.playerScale(1, 0, blade, false));
 		c.setTarget(dummy);
 		c.onLog(s -> {
 			if (s.startsWith("기술 ")) {
