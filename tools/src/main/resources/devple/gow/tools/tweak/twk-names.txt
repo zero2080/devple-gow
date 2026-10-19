@@ -1,0 +1,3145 @@
+# TWK 키 이름 사전 (tweak:dict 생성). 해시 h = h*127 + c (실행 파일 sub_001758a0)
+# 직접 일치 + 접미사(_Tween/_Cycle) 역산
+AI Damage Mult
+AI Recovery Time Mult
+ANIBRope
+ANIBRopeF
+ANIBalanceCatch
+ANIBalancePullupL
+ANIBalancePullupR
+ANIBalanceWalk
+ANICSM1
+ANICSM2
+ANIClimb
+ANIClimbAL
+ANIClimbALIdle
+ANIClimbAR
+ANIClimbARIdle
+ANIClimbCL
+ANIClimbCR
+ANIClimbIdle
+ANICrankIdle
+ANICrankPull
+ANICrankPullL
+ANICrankPullR
+ANICrankPush
+ANICrankPushL
+ANICrankPushR
+ANIDblFall
+ANIDblJump
+ANIDive1
+ANIDive2
+ANIDiveDash
+ANIDiveDashC
+ANIDiveDashCI
+ANIFall
+ANIFlyB
+ANIFlyF
+ANIFlyH
+ANIFlyL
+ANIFlyR
+ANIHighFall
+ANIHighLand
+ANIJump
+ANIKickBox
+ANIKickBoxIdle
+ANILDis1
+ANILDis2
+ANILSlide
+ANILadder
+ANILadderD
+ANILadderU
+ANILand
+ANILever
+ANIPushB
+ANIPushF
+ANIPushI
+ANIPushL
+ANIPushR
+ANIRSlide
+ANIRope
+ANIRopeD
+ANIRopeIdle
+ANIRopeSW1
+ANIRopeSW2
+ANIRopeSW3
+ANIRopeSW4
+ANIRopeSWStart
+ANIRopeU
+ANISlide
+ANIStand
+ANIStartKickBox
+ANIStrafeB
+ANIStrafeF
+ANIStrafeL
+ANIStrafeR
+ANISwim
+ANISwimIdle
+ANITandF1
+ANITandF2
+ANITandF3
+ANITread
+ANITreadSwim
+ANITurnOnSpot
+ANIUWLever
+ANIVDblFall
+ANIVDblJump
+ANIVFall
+ANIVJump
+ANIVLand
+ANIWJump
+ANIWalk
+ANIWallBack
+ANIWallBackL
+ANIWallBackR
+ANIWallCatch
+ANIWallFront
+ANIWallFrontL
+ANIWallFrontR
+ANIWallHang
+ANIWallHangCatch
+ANIWallHangL
+ANIWallHangR
+ANIWallPullup
+ANIZipLine
+AarrowIdle_Cycle
+AarrowIdle_Tween
+Acc
+Active
+AdrawReset_Cycle
+AdrawReset_Tween
+Adraw_Cycle
+Adraw_Tween
+Aim Speed
+Air Impulse Away
+Air Impulse Right
+Air Impulse Up
+Allow God Mode
+Allow God Mode Inf Magic
+Allow Movement
+Ambient Streams (U1)
+Ambient UW nomod(U10)
+Amount
+Angle
+Anim Rate
+Armor Stagger
+Armor Stunned
+Ashoot00_Cycle
+Ashoot00_Tween
+Ashoot01_Cycle
+Ashoot01_Tween
+Ashoot02_Cycle
+Ashoot02_Tween
+Ashoot3x_Cycle
+Ashoot3x_Tween
+AshootSpread_Cycle
+AshootSpread_Tween
+AstandIdle_Cycle
+AstandIdle_Tween
+Aswipe_Cycle
+Aswipe_Tween
+Ataunt00_Cycle
+Ataunt00_Tween
+Ataunt01_Cycle
+Ataunt01_Tween
+Attack
+BAR2HitAxe_Cycle
+BAR2HitAxe_Tween
+BAR2HitSword_Cycle
+BAR2HitSword_Tween
+BARAxeUppercut_Cycle
+BARAxeUppercut_Tween
+BARBladeHitThrow_Cycle
+BARBladeHitThrow_Tween
+BARBlockSwatLeft_Cycle
+BARBlockSwatLeft_Tween
+BARBlockSwatRight_Cycle
+BARBlockSwatRight_Tween
+BARDashForward_Cycle
+BARDashForward_Tween
+BARFireBallThrowLoop_Cycle
+BARFireBallThrowLoop_Tween
+BARFireBallThrow_Cycle
+BARFireBallThrow_Tween
+BARHammerAttack_Cycle
+BARHammerAttack_Tween
+BARHammerShove_Cycle
+BARHammerShove_Tween
+BARHitHighHard_Cycle
+BARHitHighHard_Tween
+BARHitMidHard_Cycle
+BARHitMidHard_Tween
+BARHitStagger_Cycle
+BARHitStagger_Tween
+BARMAIbladesHitThrow_Cycle
+BARMAIbladesHitThrow_Tween
+BARMultiHitBladesLeft_Cycle
+BARMultiHitBladesLeft_Tween
+BARMultiHitBladesRight_Cycle
+BARMultiHitBladesRight_Tween
+BARParryHit_Cycle
+BARParryHit_Tween
+BARParry_Cycle
+BARParry_Tween
+BARS3Block00_Cycle
+BARS3Block00_Tween
+BARS3Block01_Cycle
+BARS3Block01_Tween
+BARS3Block02_Cycle
+BARS3Block02_Tween
+BARS3Block03_Cycle
+BARS3Block03_Tween
+BARS3BlockParry_Cycle
+BARS3BlockParry_Tween
+BARS3DiagonalSword_Cycle
+BARS3DiagonalSword_Tween
+BARS3HitHighHard_Cycle
+BARS3HitHighHard_Tween
+BARS3HitMidHard_Cycle
+BARS3HitMidHard_Tween
+BARS3HitStagger_Cycle
+BARS3HitStagger_Tween
+BARS3LeftFireball_Cycle
+BARS3LeftFireball_Tween
+BARS3MagicPillars_Cycle
+BARS3MagicPillars_Tween
+BARS3MagicSwarm_Cycle
+BARS3MagicSwarm_Tween
+BARS3RunForward_Cycle
+BARS3RunForward_Tween
+BARS3StandIdle_Cycle
+BARS3StandIdle_Tween
+BARS3SwordBladesCombo_Cycle
+BARS3SwordBladesCombo_Tween
+BARS3SwordUppercut_Cycle
+BARS3SwordUppercut_Tween
+BARS3Taunt01_Cycle
+BARS3Taunt01_Tween
+BARS3Taunt02_Cycle
+BARS3Taunt02_Tween
+BARS3TeleportIn_Cycle
+BARS3TeleportIn_Tween
+BARS3TeleportOut_Cycle
+BARS3TeleportOut_Tween
+BARS3WalkBackward_Cycle
+BARS3WalkBackward_Tween
+BARS3WalkForward_Cycle
+BARS3WalkForward_Tween
+BARS3WalkLeft_Cycle
+BARS3WalkLeft_Tween
+BARS3WalkRight_Cycle
+BARS3WalkRight_Tween
+BARStandIdle_Cycle
+BARStandIdle_Tween
+BARStraightBlades_Cycle
+BARStraightBlades_Tween
+BARTaunt01_Cycle
+BARTaunt01_Tween
+BARTaunt02_Cycle
+BARTaunt02_Tween
+BARTaunt03_Cycle
+BARTaunt03_Tween
+BARTaunt04_Cycle
+BARTaunt04_Tween
+BARTeleportIn_Cycle
+BARTeleportIn_Tween
+BARTeleportOut_Cycle
+BARTeleportOut_Tween
+BARWalkBackward_Cycle
+BARWalkBackward_Tween
+BARWalkForward_Cycle
+BARWalkForward_Tween
+BARWalkLeft_Cycle
+BARWalkLeft_Tween
+BARWalkRight_Cycle
+BARWalkRight_Tween
+BARrunForward_Cycle
+BARrunForward_Tween
+BHAbabyBiteCenter_Cycle
+BHAbabyBiteCenter_Tween
+BHAbabyBiteLeft_Cycle
+BHAbabyBiteLeft_Tween
+BHAbabyBiteRight_Cycle
+BHAbabyBiteRight_Tween
+BHAbabyBlowCenter_Cycle
+BHAbabyBlowCenter_Tween
+BHAbabyBlowLeft_Cycle
+BHAbabyBlowLeft_Tween
+BHAbabyBlowRight_Cycle
+BHAbabyBlowRight_Tween
+BHAbabyEmerge_Cycle
+BHAbabyEmerge_Tween
+BHAbabyGrab_Cycle
+BHAbabyGrab_Tween
+BHAbabyHitSm01_Cycle
+BHAbabyHitSm01_Tween
+BHAbabyHitSm02_Cycle
+BHAbabyHitSm02_Tween
+BHAbabyHit_Cycle
+BHAbabyHit_Tween
+BHAbabyIdle_Cycle
+BHAbabyIdle_Tween
+BHAbabySweep_Cycle
+BHAbabySweep_Tween
+BHAbabyTaunt_Cycle
+BHAbabyTaunt_Tween
+BHAbossBiteLeft_Cycle
+BHAbossBiteLeft_Tween
+BHAbossBiteMiddle_Cycle
+BHAbossBiteMiddle_Tween
+BHAbossBiteRight_Cycle
+BHAbossBiteRight_Tween
+BHAbossGrabLeftFail_Cycle
+BHAbossGrabLeftFail_Tween
+BHAbossGrabLeftStrug_Cycle
+BHAbossGrabLeftStrug_Tween
+BHAbossGrabLeftWin_Cycle
+BHAbossGrabLeftWin_Tween
+BHAbossGrabLeft_Cycle
+BHAbossGrabLeft_Tween
+BHAbossGrabRightFail_Cycle
+BHAbossGrabRightFail_Tween
+BHAbossGrabRightStrug_Cycle
+BHAbossGrabRightStrug_Tween
+BHAbossGrabRightWin_Cycle
+BHAbossGrabRightWin_Tween
+BHAbossGrabRight_Cycle
+BHAbossGrabRight_Tween
+BHAbossHit01_Cycle
+BHAbossHit01_Tween
+BHAbossHit02_Cycle
+BHAbossHit02_Tween
+BHAbossIdle_Cycle
+BHAbossIdle_Tween
+BHAbossKillFail04_Cycle
+BHAbossKillFail04_Tween
+BHAbossKillFail_Cycle
+BHAbossKillFail_Tween
+BHAbossKillStrug_Cycle
+BHAbossKillStrug_Tween
+BHAbossKillWin_Cycle
+BHAbossKillWin_Tween
+BHAbossKill_Cycle
+BHAbossKill_Tween
+BHAbossMastSlam_Cycle
+BHAbossMastSlam_Tween
+BHAbossScream_Cycle
+BHAbossScream_Tween
+BHAbossSlamLeftR_Cycle
+BHAbossSlamLeftR_Tween
+BHAbossSlamLeft_Cycle
+BHAbossSlamLeft_Tween
+BHAbossSlamLftLoop_Cycle
+BHAbossSlamLftLoop_Tween
+BHAbossSlamRgtLoop_Cycle
+BHAbossSlamRgtLoop_Tween
+BHAbossSlamRightR_Cycle
+BHAbossSlamRightR_Tween
+BHAbossSlamRight_Cycle
+BHAbossSlamRight_Tween
+BHAbossStunLoop_Cycle
+BHAbossStunLoop_Tween
+BHAbossStun_Cycle
+BHAbossStun_Tween
+BHAbossTaunt_Cycle
+BHAbossTaunt_Tween
+BHAenc1Bite2x_Cycle
+BHAenc1Bite2x_Tween
+BHAenc1Bite_Cycle
+BHAenc1Bite_Tween
+BHAenc1Burst_Cycle
+BHAenc1Burst_Tween
+BHAenc1GrabFail1_Cycle
+BHAenc1GrabFail1_Tween
+BHAenc1GrabFail2_Cycle
+BHAenc1GrabFail2_Tween
+BHAenc1GrabFail3_Cycle
+BHAenc1GrabFail3_Tween
+BHAenc1GrabFail4_Cycle
+BHAenc1GrabFail4_Tween
+BHAenc1GrabFail5_Cycle
+BHAenc1GrabFail5_Tween
+BHAenc1GrabFail6_Cycle
+BHAenc1GrabFail6_Tween
+BHAenc1Grab_Cycle
+BHAenc1Grab_Tween
+BHAenc1HitSm01_Cycle
+BHAenc1HitSm01_Tween
+BHAenc1Hit_Cycle
+BHAenc1Hit_Tween
+BHAenc1Idle_Cycle
+BHAenc1Idle_Tween
+BHAenc1StunGetup_Cycle
+BHAenc1StunGetup_Tween
+BHAenc1StunLoop_Cycle
+BHAenc1StunLoop_Tween
+BHAenc1Stun_Cycle
+BHAenc1Stun_Tween
+BHAenc1Taunt2_Cycle
+BHAenc1Taunt2_Tween
+BHAenc1Taunt_Cycle
+BHAenc1Taunt_Tween
+BHAenc2DeckHits_Cycle
+BHAenc2DeckHits_Tween
+BHAenc2Getup_Cycle
+BHAenc2Getup_Tween
+BHAenc2Retreat_Cycle
+BHAenc2Retreat_Tween
+BHAenc2biteFail_Cycle
+BHAenc2biteFail_Tween
+BHAenc2biteGrab_Cycle
+BHAenc2biteGrab_Tween
+BHAenc2biteHit_Cycle
+BHAenc2biteHit_Tween
+BHAenc2biteStruggle_Cycle
+BHAenc2biteStruggle_Tween
+BHAenc2biteWin_Cycle
+BHAenc2biteWin_Tween
+BHAenc3GrabLeft_Cycle
+BHAenc3GrabLeft_Tween
+BHAenc3GrabRight_Cycle
+BHAenc3GrabRight_Tween
+BHAenc3mastLeft_Cycle
+BHAenc3mastLeft_Tween
+BHAenc3mastRight_Cycle
+BHAenc3mastRight_Tween
+BHAenc3pinLeftGetup_Cycle
+BHAenc3pinLeftGetup_Tween
+BHAenc3pinLeftLoop_Cycle
+BHAenc3pinLeftLoop_Tween
+BHAenc3pinLeftR_Cycle
+BHAenc3pinLeftR_Tween
+BHAenc3pinLeftSlam_Cycle
+BHAenc3pinLeftSlam_Tween
+BHAenc3pinLeft_Cycle
+BHAenc3pinLeft_Tween
+BHAenc3pinRightGetup_Cycle
+BHAenc3pinRightGetup_Tween
+BHAenc3pinRightLoop_Cycle
+BHAenc3pinRightLoop_Tween
+BHAenc3pinRightR_Cycle
+BHAenc3pinRightR_Tween
+BHAenc3pinRightSlam_Cycle
+BHAenc3pinRightSlam_Tween
+BHAenc3pinRight_Cycle
+BHAenc3pinRight_Tween
+BMIBullChargeFireSlide_Cycle
+BMIBullChargeFireSlide_Tween
+BMIBullChargeRam_Cycle
+BMIBullChargeRam_Tween
+BMIBullChargeRun_Cycle
+BMIBullChargeRun_Tween
+BMICineArmorBreak_Cycle
+BMICineArmorBreak_Tween
+BMICineDeath_Cycle
+BMICineDeath_Tween
+BMIDeathTransition_Cycle
+BMIDeathTransition_Tween
+BMIDoubleSlam_Cycle
+BMIDoubleSlam_Tween
+BMIFireBreathLeft_Cycle
+BMIFireBreathLeft_Tween
+BMIFireSpit_Cycle
+BMIFireSpit_Tween
+BMIHeadButt00_Cycle
+BMIHeadButt00_Tween
+BMIHeadButt01_Cycle
+BMIHeadButt01_Tween
+BMIHeadButt02_Cycle
+BMIHeadButt02_Tween
+BMIJumpBack_Cycle
+BMIJumpBack_Tween
+BMILeftAnticipation_Cycle
+BMILeftAnticipation_Tween
+BMILeftBackhand_Cycle
+BMILeftBackhand_Tween
+BMILeftJab00_Cycle
+BMILeftJab00_Tween
+BMILeftJab01_Cycle
+BMILeftJab01_Tween
+BMILeftJabX_Cycle
+BMILeftJabX_Tween
+BMILogHit_Cycle
+BMILogHit_Tween
+BMILogStunExit_Cycle
+BMILogStunExit_Tween
+BMILogStunIdle_Cycle
+BMILogStunIdle_Tween
+BMIPlatformClap_Cycle
+BMIPlatformClap_Tween
+BMIPlatformGrabToss_Cycle
+BMIPlatformGrabToss_Tween
+BMIPlatformGrab_Cycle
+BMIPlatformGrab_Tween
+BMIPlatformIdle_Cycle
+BMIPlatformIdle_Tween
+BMIPlatformMount_Cycle
+BMIPlatformMount_Tween
+BMIPlatformRightSlam00_Cycle
+BMIPlatformRightSlam00_Tween
+BMIPlatformRightSlam01_Cycle
+BMIPlatformRightSlam01_Tween
+BMIPlatformRightSlam02_Cycle
+BMIPlatformRightSlam02_Tween
+BMIPlatformStagger_Cycle
+BMIPlatformStagger_Tween
+BMIPlatformStairHit_Cycle
+BMIPlatformStairHit_Tween
+BMIPlatformTaunt_Cycle
+BMIPlatformTaunt_Tween
+BMIPlatformWallHit_Cycle
+BMIPlatformWallHit_Tween
+BMIRide01_Cycle
+BMIRide01_Tween
+BMIRide02_Cycle
+BMIRide02_Tween
+BMIRide03_Cycle
+BMIRide03_Tween
+BMIRideFail_Cycle
+BMIRideFail_Tween
+BMIRideMount_Cycle
+BMIRideMount_Tween
+BMIRideWin_Cycle
+BMIRideWin_Tween
+BMIRightAnticipation_Cycle
+BMIRightAnticipation_Tween
+BMIRightJab00_Cycle
+BMIRightJab00_Tween
+BMIRightJab01_Cycle
+BMIRightJab01_Tween
+BMIRightJabX_Cycle
+BMIRightJabX_Tween
+BMIRightRake_Cycle
+BMIRightRake_Tween
+BMIRightWallRake_Cycle
+BMIRightWallRake_Tween
+BMIShuffleBack_Cycle
+BMIShuffleBack_Tween
+BMIStagger1_Cycle
+BMIStagger1_Tween
+BMIStagger2_Cycle
+BMIStagger2_Tween
+BMIStandIdle_Cycle
+BMIStandIdle_Tween
+BMITaunt00_Cycle
+BMITaunt00_Tween
+BMITaunt01_Cycle
+BMITaunt01_Tween
+BMITurtleStunIdle_Cycle
+BMITurtleStunIdle_Tween
+BMITurtleStunShake_Cycle
+BMITurtleStunShake_Tween
+BMITurtleStun_Cycle
+BMITurtleStun_Tween
+BMIVictory_Cycle
+BMIVictory_Tween
+BMIwalkForward_Cycle
+BMIwalkForward_Tween
+BackPlane_A
+Base Reverb
+Behind Close Dist
+Blade Collision Tolerance
+Blade Damping
+Blade Scale In Hand
+Blade Scale On Back
+Blade Scale Out Hand
+Blend Mode
+Block
+Breakable
+Bright Camera Filter
+CN2BowSwingCombo_Cycle
+CN2BowSwingCombo_Tween
+CNMBlockIdle_Cycle
+CNMBlockIdle_Tween
+CNMBlockShove_Cycle
+CNMBlockShove_Tween
+CNMBlockSwingLeft_Cycle
+CNMBlockSwingLeft_Tween
+CNMBlockSwingRight_Cycle
+CNMBlockSwingRight_Tween
+CNMBlock_Cycle
+CNMBlock_Tween
+CNMDrawReset_Cycle
+CNMDrawReset_Tween
+CNMDraw_Cycle
+CNMDraw_Tween
+CNMMultiShootLeftFire_Cycle
+CNMMultiShootLeftFire_Tween
+CNMMultiShootLeft_Cycle
+CNMMultiShootLeft_Tween
+CNMMultiShootRightFire_Cycle
+CNMMultiShootRightFire_Tween
+CNMMultiShootRight_Cycle
+CNMMultiShootRight_Tween
+CNMSlam_Cycle
+CNMSlam_Tween
+CY2Shootout_Cycle
+CY2Shootout_Tween
+CYWheroMiss_Cycle
+CYWheroMiss_Tween
+CYWherograb_Cycle
+CYWherograb_Tween
+Camera Target Radius
+Camera Target Weight
+Center Angle
+CentreZ
+Circle Health Threshold
+Circle Health Threshold 1
+Circle Health Threshold 2
+Circle Health Threshold 3
+Circle Health Threshold 4
+Circle Health Threshold 5
+Circle Sound Delay
+Clamp Num Part
+Clamp Part Size
+Clamp Spread Size
+Climb
+Close Mid Dist
+Concussion
+Cone
+Context
+Context 0
+Context 1
+Control Tween Safety
+Control Tween Speed
+Control Tween Threshold
+Count
+Damage
+Damage Freq
+Damage Mult
+Damage Multiplier
+Damage Per Armor Stage
+Damage Per Vent Stage
+Dark Camera Filter
+Death Menu Time
+Deaths Before Easy Offer
+Dec
+DecisionTree
+Directionality
+Distance
+Dive
+DiveDash
+Dmg Mult
+Dodge
+Doppler
+Doppler Limit
+Down Angle Degree
+Dry Effects     (U12)
+Duration
+EVIAttack01_Cycle
+EVIAttack01_Tween
+EVIAttack02_Cycle
+EVIAttack02_Tween
+EVIAttack03_Cycle
+EVIAttack03_Tween
+EVIAttack04_Cycle
+EVIAttack04_Tween
+EVIAttack05_Cycle
+EVIAttack05_Tween
+EVIGrabHeroLoop_Cycle
+EVIGrabHeroLoop_Tween
+EVIGrabHeroLose_Cycle
+EVIGrabHeroLose_Tween
+EVIGrabHeroStart_Cycle
+EVIGrabHeroStart_Tween
+EVIGrabHeroWin_Cycle
+EVIGrabHeroWin_Tween
+EVIGrab_Cycle
+EVIGrab_Tween
+EVISpawn2Land_Cycle
+EVISpawn2Land_Tween
+EVISpawn2_Cycle
+EVISpawn2_Tween
+EVIberComboH1_Cycle
+EVIberComboH1_Tween
+EVIberComboH2_Cycle
+EVIberComboH2_Tween
+EVIberComboV3_Cycle
+EVIberComboV3_Tween
+EVIberExecution_Cycle
+EVIberExecution_Tween
+EVIberFallV_Cycle
+EVIberFallV_Tween
+EVIberIdle_Cycle
+EVIberIdle_Tween
+EVIberLand_Tween
+EVIberWalkBlend0_Cycle
+EVIberWalkBlend0_Tween
+EVIberWalkBlend1_Cycle
+EVIberWalkBlend1_Tween
+EVIberWalkBlend2_Cycle
+EVIberWalkBlend2_Tween
+EVIboltPullout_Cycle
+EVIboltPullout_Tween
+EVIboltThrow_Cycle
+EVIboltThrow_Tween
+EVIdeath01_Cycle
+EVIdeath01_Tween
+EVIdeath02_Cycle
+EVIdeath02_Tween
+EVIfreezePose_Cycle
+EVIfreezePose_Tween
+EVIfrozenBreakout_Cycle
+EVIfrozenBreakout_Tween
+EVIhitAir_Cycle
+EVIhitAir_Tween
+EVIhitBack_Cycle
+EVIhitBack_Tween
+EVIhitBounce_Cycle
+EVIhitBounce_Tween
+EVIhitFront_Cycle
+EVIhitFront_Tween
+EVIhitGetup_Cycle
+EVIhitGetup_Tween
+EVIhitLand_Cycle
+EVIhitLand_Tween
+EVIhitLaunch_Cycle
+EVIhitLaunch_Tween
+EVIhitLeft_Cycle
+EVIhitLeft_Tween
+EVIhitRight_Cycle
+EVIhitRight_Tween
+EVIhitSpin_Cycle
+EVIhitSpin_Tween
+EVIhitStagger_Cycle
+EVIhitStagger_Tween
+EVIspawnB_Cycle
+EVIspawnB_Tween
+EVIspawn_Cycle
+EVIspawn_Tween
+EVIstandIdle2_Cycle
+EVIstandIdle2_Tween
+EVIstandIdle3_Cycle
+EVIstandIdle3_Tween
+EVIstandIdle_Cycle
+EVIstandIdle_Tween
+EVIwalk3B_Cycle
+EVIwalk3B_Tween
+EVIwalk3F_Cycle
+EVIwalk3F_Tween
+EVIwalk3L_Cycle
+EVIwalk3L_Tween
+EVIwalk3R_Cycle
+EVIwalk3R_Tween
+EVIwalkBack_Cycle
+EVIwalkBack_Tween
+EVIwalkFront_Cycle
+EVIwalkFront_Tween
+EVIwalkLeft_Cycle
+EVIwalkLeft_Tween
+EVIwalkRight_Cycle
+EVIwalkRight_Tween
+Elevation 17
+Emit Time
+Extra GO 0 Cap
+Extra GO 0 Name
+Extra GO 1 Cap
+Extra GO 1 Name
+Extra GO 2 Cap
+Extra GO 2 Name
+Extra GO 3 Cap
+Extra GO 3 Name
+Extra GO 4 Cap
+Extra GO 4 Name
+Extra GO 5 Cap
+Extra GO 5 Name
+Fall Time
+Far Walk Dist
+File 0
+File 1
+File 2
+File 3
+File 4
+File 5
+File 6
+File 7
+Flash Anim Pos
+Flash Freq
+Fly
+Fog Template
+Fog_A
+Fog_B
+Fog_G
+Fog_R
+Footsteps       (U3)
+Freeze
+Freeze Factor
+From Above Bolt Freq
+Front_Cycle
+Front_Tween
+Frozen Invulnerable Time
+GO 0 Name
+GO 1 Name
+GO 10 Name
+GO 11 Name
+GO 12 Name
+GO 13 Name
+GO 14 Name
+GO 15 Name
+GO 16 Name
+GO 17 Name
+GO 18 Name
+GO 19 Name
+GO 2 Name
+GO 20 Name
+GO 21 Name
+GO 22 Name
+GO 23 Name
+GO 24 Name
+GO 25 Name
+GO 26 Name
+GO 27 Name
+GO 28 Name
+GO 29 Name
+GO 3 Name
+GO 30 Name
+GO 31 Name
+GO 32 Name
+GO 33 Name
+GO 34 Name
+GO 35 Name
+GO 36 Name
+GO 37 Name
+GO 38 Name
+GO 39 Name
+GO 4 Name
+GO 40 Name
+GO 41 Name
+GO 42 Name
+GO 43 Name
+GO 44 Name
+GO 45 Name
+GO 46 Name
+GO 47 Name
+GO 48 Name
+GO 49 Name
+GO 5 Name
+GO 50 Name
+GO 51 Name
+GO 52 Name
+GO 53 Name
+GO 54 Name
+GO 55 Name
+GO 56 Name
+GO 57 Name
+GO 58 Name
+GO 59 Name
+GO 6 Name
+GO 60 Name
+GO 61 Name
+GO 62 Name
+GO 63 Name
+GO 7 Name
+GO 8 Name
+GO 9 Name
+GO Name
+GOABDOMENBRK
+GOAIRIMPALE
+GOAOBHB
+GOAOHAR
+GOAORED
+GOAOREDCAGE
+GOAOSKB
+GOAOSKS
+GOAOTIT
+GOAOXAR
+GOAOXDI
+GOAOXF1
+GOAOXF2
+GOAOXF3
+GOAOXF4
+GOAOXFC
+GOAOXOR
+GOAOXPT
+GOAOXR5
+GOAOXSA
+GOAOXSC
+GOAOXUS
+GOAOXX1
+GOAOXX2
+GOAOXY1
+GOAOXY2
+GOARETGLOW
+GOARETGLOW1
+GOARETGLOW1E
+GOARETGLOW2
+GOARETGLOW2E
+GOARETGLOW3
+GOARETGLOW3E
+GOARETGLOW4
+GOARETGLOW4E
+GOARETGLOW5
+GOARETGLOW5E
+GOARETGLOWA
+GOARETGLOWA1
+GOARETGLOWA1E
+GOARETGLOWA2
+GOARETGLOWA2E
+GOARETGLOWA3
+GOARETGLOWA3E
+GOARETGLOWAE
+GOARETGLOWB
+GOARETGLOWBE
+GOARETGLOWE
+GOARETGLOWL
+GOARETGLOWL1
+GOARETGLOWL1E
+GOARETGLOWL2
+GOARETGLOWL2E
+GOARETGLOWL3
+GOARETGLOWL3E
+GOARETGLOWLE
+GOARETGLOWS
+GOARETGLOWS1
+GOARETGLOWS1E
+GOARETGLOWS2
+GOARETGLOWS2E
+GOARETGLOWS3
+GOARETGLOWS3E
+GOARETGLOWSE
+GOARMORSLICE
+GOARROWBUBBLE
+GOARROWHALF
+GOARROWLOW
+GOATHENABLADE
+GOBA2
+GOBAR
+GOBARFBIMPACT
+GOBARFIREBALL
+GOBARFIREBALLHIT
+GOBARFIRESPHERE
+GOBARFLAMETHRO
+GOBARHAMAPP01
+GOBARHAMAPP02
+GOBARHAMJAB01
+GOBARHAMJAB02
+GOBARHANDBLASTL
+GOBARHANDGLOWL
+GOBARHANDGLOWR
+GOBARIMPACT02
+GOBARPALMBLAST
+GOBARROCKBREAK
+GOBARROCKGRP
+GOBARSHOCKWAVE
+GOBARSPARKS
+GOBARSPARKS1
+GOBARWARDOG
+GOBERSERKBLADE
+GOBHA
+GOBHA3PINBLDLS
+GOBHA3PINBLDRS
+GOBHA3PINWTRLS
+GOBHA3PINWTRRS
+GOBHABB3MASTLT
+GOBHABB3MASTRT
+GOBHABB3PINLT
+GOBHABB3PINRT
+GOBHABBDROOL
+GOBHABBDROOL1
+GOBHABBEMRGFX
+GOBHABBEMRGFX1
+GOBHABBGBLOOD
+GOBHABBGWATER
+GOBHABBSWEEPFX
+GOBHABGRBLOOD
+GOBHABGRBLOOD1
+GOBHABLOOD
+GOBHABLOODBB
+GOBHABLOW
+GOBHABREAKW
+GOBHADROOL
+GOBHAENC1GEFX
+GOBHAENC1GEFX1
+GOBHAENCBWBLD
+GOBHAENCBWWTR
+GOBHAENCEYEG
+GOBHAENCEYELRG
+GOBHAEYEGLOW
+GOBHAEYEGLOWLRG
+GOBHAGLFBLOOD
+GOBHAGLFBLOOD2
+GOBHAGLFBLOOD3
+GOBHAGLWBLOOD
+GOBHAGLWBOOD1
+GOBHAGLWSPLASH
+GOBHAGRABBLOOD
+GOBHAGRFBLOOD1
+GOBHAGRFBLOOD2
+GOBHAGRFBLOOD3
+GOBHAGRWBLOOD
+GOBHAGRWBOOD1
+GOBHAGRWSPLASH
+GOBHAHEADR
+GOBHAIDLESMOKE
+GOBHARIGHTEARR
+GOBHARSLAM
+GOBHASLSPLASH
+GOBHASRSPLASH
+GOBHASUCK
+GOBHAWATERWDFX
+GOBHB
+GOBHH
+GOBLOODCHEST
+GOBLOODHEAD
+GOBLOODHOOFL
+GOBLOODHOOFR
+GOBLOODSPOT
+GOBMI
+GOBMIBULLCEFX
+GOBMIBULLCFFX
+GOBMIBULLLFFX
+GOBMIBULLRFFX
+GOBMIBULLSPARK
+GOBMIBULLSPARK1
+GOBMIDOUBLESEFX
+GOBMIDOWN
+GOBMIEYEGLOW
+GOBMIFIREBL
+GOBMIFIREDECAL
+GOBMIFIRESPIT
+GOBMIFIRESPITEFX
+GOBMIFIREWALL
+GOBMIFISTGLOW
+GOBMIHEADBUHD
+GOBMIHEADBUTT
+GOBMIJABEFX
+GOBMIJUMPBKFX
+GOBMINAILS1
+GOBMINAILS2
+GOBMINAILS3
+GOBMINAILS4
+GOBMINAILS5
+GOBMINAILS6
+GOBMINAILS7
+GOBMINAILS8
+GOBMINAILTAUNT1
+GOBMINAILTAUNT2
+GOBMINAILTAUNT3
+GOBMINAILTAUNT4
+GOBMINOSESMOKE
+GOBMIPLATGTOSS
+GOBMIRAKEFX1
+GOBMIRAKEFX2
+GOBMIRAKEFX3
+GOBMIRRAKEXPLD
+GOBMIRWR1
+GOBMIRWR2
+GOBMIRWR3
+GOBMIRWR4
+GOBMITAUNTEFX
+GOBMITAUNTSPARKS
+GOBMITURTLEEFX
+GOBOLT
+GOBOLTCHARGEUP
+GOBOLTHIT
+GOBRACERL
+GOBRACERR
+GOBREASTPLATE
+GOBROKENARROWB
+GOCAMERA
+GOCEA
+GOCEAATTACKEXP
+GOCEAATTACKL
+GOCEAATTACKM
+GOCEAATTACKR
+GOCEADAMBLD
+GOCEAFIREBALL
+GOCEAFIREDROLL
+GOCEAFIREDROLM
+GOCEAFIREDROLR
+GOCEAFREEZE
+GOCEAHITFB
+GOCEAHITLAND
+GOCEAKILLBLD
+GOCEALAVASPOT
+GOCEALEAPB1
+GOCEALEAPB2
+GOCEASTONEDBRK
+GOCEAVOMITF
+GOCEP
+GOCEP1
+GOCEPBALLAT2
+GOCEPBALLAT2A
+GOCEPBALLAT3
+GOCEPBALLAT3A
+GOCEPBALLATK
+GOCEPBALLATK1
+GOCEPBALLATK2
+GOCEPDECAPT
+GOCEPDECAPV
+GOCEPDUST
+GOCEPFREEZE
+GOCEPSMALLB1
+GOCEPSTOMP
+GOCEPSTOMP1
+GOCEPSTOMP2
+GOCEPSTOMP3
+GOCEPSTONEDBRK
+GOCEPTRANEND
+GOCEPTRANSPARK
+GOCERGROW
+GOCHESTBRK
+GOCN2
+GOCNM
+GOCNMARROW
+GOCNMARROWHIT
+GOCNMFREEZE
+GOCNMPLASMABALL
+GOCNMRUBBLEBITS 
+GOCNMSHOKWAVE
+GOCNMSPARKS
+GOCNMSPARKS1
+GOCNMSTONEDBRK
+GOCOLLARBRK
+GOCOMBO3FEXPLODE
+GOCY2
+GOCY2OVERHEAD
+GOCY2SHOOTEFX
+GOCY2SHOOTEFX2
+GOCY2STONEDBRK
+GOCY2SWIPE
+GOCY3
+GOCY3MIN1BLD
+GOCY3MIN1BLD1
+GOCY3MIN1BLD2
+GOCY3SRAM
+GOCY3STONEDBRK
+GOCY3SWEEPCLUB
+GOCY3SWEEPS
+GOCY3TSMASHCLUB
+GOCY3TSMASHS
+GOCY3TSMASHS1
+GOCY4
+GOCY4STONEDBRK
+GOCYF
+GOCYW
+GOCYWFREEZE
+GOCYWSTONEDBRK
+GODEADDIE
+GODEADHIT
+GODEATHPARTS
+GODEDRED
+GODIRTLAND
+GODIRTSLICE
+GODIVESHADOW
+GODOUBLEJUMP
+GOEDBLADE
+GOEVI
+GOEVIBERSERK
+GOEVIBOLT
+GOEVIBOLTHIT
+GOEVISPAWNHOLE
+GOEVISPAWNJUMP
+GOEVISTONEDBRK
+GOEYEBEAM
+GOEYEBEAM1
+GOEYEBEAM2
+GOEYEPOWER
+GOFIRETRAIL
+GOFLASHGRP
+GOFLESHSLICE
+GOFXFIREPATH
+GOFXLCOMBO3F
+GOFXRCOMBO3F
+GOFXTIPGLOW
+GOGRIEVEL
+GOGRIEVER
+GOHA2
+GOHA2STONEDBRK
+GOHAF
+GOHAFEXPLODE
+GOHAFSLAMEFX
+GOHAFSTONEDBRK
+GOHAFSWFIRE
+GOHAFSWFIRE2
+GOHAFSWFIRE3
+GOHAFSWFIRE4
+GOHAFSWFIRE5
+GOHAFSWFIRE6
+GOHAR
+GOHARDECAPL
+GOHARDECAPR
+GOHARDECAPT
+GOHARFREEZE
+GOHARSTONEDBRK
+GOHEALTHORB
+GOHEALTHORBBIG
+GOHELMET
+GOHELMETBRK
+GOHERO
+GOLEFTARMSHATTERBRK
+GOLEFTSHOULDBRK
+GOLIGHTNINGATTACKMAIN
+GOLIGHTNINGRADIUS
+GOLIGHTNINGSINGLEBOLT
+GOLINEBUBBLE
+GOMAGICORB
+GOMAGICORBBIG
+GOMAIBERZTRAIL
+GOMAIBLADE
+GOMAIBSACTIVE
+GOMAIFREEZE
+GOMAIGODBLADE
+GOMAIPGTFIRE
+GOMAIPGTFIRE1
+GOMAIPGTSMOKE
+GOMAISHOCKWAVE
+GOMAISWEFFECT
+GOMAIVKILLFX
+GOMAIVKILLFX2
+GOME2
+GOME3
+GOMEDHEADFLASH
+GOMEDHEADNUKE
+GOMETALLAND
+GOMETALSLICE
+GOMEW
+GOMEWBRUTALFX2
+GOMEWH
+GOMHC
+GOMHCB
+GOMI2
+GOMI2IMPACT
+GOMI2SHOKWAVE
+GOMI2STONEDBRK
+GOMI3
+GOMI3STONEDBRK
+GOMI4
+GOMI4STONEDBRK
+GOMI5
+GOMI5STONEDBRK
+GOMIF
+GOMIFSTONEDBRK
+GOMIN
+GOMINFREEZE
+GOMINHEADBUTT
+GOMINIGAMECIRCLE
+GOMINIMPACT01
+GOMINSTONEDBRK
+GOMINTRAIL01
+GONYA
+GONYAHEROKISS
+GONYAHPAA
+GONYAHPAA1
+GONYAHPAA2
+GONYAHPAA3
+GONYAHPAA6
+GONYAHPAA7
+GONYAHPAA8
+GONYAHPAG1
+GONYAHPAG2
+GOPORTAL
+GOPORTALE
+GORARM2BRK
+GORED
+GORIGHTANTEFX
+GORIGHTJABEFX
+GORIGHTSHOULDBRK
+GORJABHIT
+GOROCKHITS
+GOROCKLAND
+GOROCKSLICE
+GORTDSLASH
+GORUBBLEBITS
+GORUNDUST
+GOSAF
+GOSAFSTONEDBRK
+GOSANDLAND
+GOSANDSLICE
+GOSAT
+GOSATBLADESA
+GOSATBLADESB
+GOSATBLOODCS
+GOSATDECAPT
+GOSATDECAPV
+GOSATFREEZE
+GOSATSPARKPS
+GOSATSTONEDBRK
+GOSD2
+GOSD2STONEDBRK
+GOSHOCKWAVE
+GOSHOCKWAVE2
+GOSHOULDERGUARDL
+GOSHOULDERGUARDR
+GOSID
+GOSIDSTONEDBRK
+GOSIR
+GOSIRBLOWEFX
+GOSIRDUST
+GOSIREHIT
+GOSIRENERGYP
+GOSIRENERGYP1
+GOSIRENSPIRITGRP
+GOSIRFIREBALL
+GOSIRFREEZE
+GOSIRSCREAMEFX
+GOSIRSTONEDBRK
+GOSIRSUCKEFX
+GOSIRSUMAG
+GOSIRSUMAG1
+GOSIRSUMAG2
+GOSIRSUMAG3
+GOSIRSUMBODYG
+GOSIRSUMG1
+GOSIRSUMG2
+GOSK2
+GOSK2STONEDBRK
+GOSK3
+GOSK3STONEDBRK
+GOSK4
+GOSK4STONEDBRK
+GOSK5
+GOSK5STONEDBRK
+GOSKA
+GOSKASTONEDBRK
+GOSKAXPLODE
+GOSKB
+GOSKBFREEZE
+GOSKBSHATTER
+GOSKBSHIELD
+GOSKBSHIELDBGLOW
+GOSKBSTONE
+GOSKBSTONEDBRK
+GOSKC
+GOSKCDIVEHIT
+GOSKCFLASHER
+GOSKCSTONEDBRK
+GOSKD
+GOSKDBUROWFX
+GOSKDBURROWL
+GOSKDDECAPL
+GOSKDDECAPR
+GOSKDDECAPT
+GOSKDDECAPV
+GOSKDDIVEEFX
+GOSKDDUST
+GOSKDEMERGE
+GOSKDEVADE
+GOSKDFREEZE
+GOSKDSTONEDBRK
+GOSKF
+GOSKFEYEFX
+GOSKFFIREHITS
+GOSKFKAMIEFX
+GOSKFKILLB
+GOSKFKXPLODEF
+GOSKFKXPLODEF1
+GOSKFKXPLODEF2
+GOSKFSTONEDBRK
+GOSKFWTRAIL1HIT
+GOSKFWTRAIL1HIT1
+GOSKFWTRAIL360
+GOSKFWTRAIL4HIT
+GOSKFWTRAIL4HITS
+GOSKLBLOOD
+GOSKLBLOODA
+GOSKLBLOODN
+GOSKLBLOODN1
+GOSKLBLOODS
+GOSKS
+GOSKSDECAPT
+GOSKSDECAPV
+GOSKSSTONEDBRK
+GOSKSXPLODEF
+GOSKSXPLODEF1
+GOSKSXPLODEF2
+GOSPAWNHOLE
+GOSPLASH
+GOSTDARROW
+GOSTDBOLT
+GOSTEAMVENT01
+GOSTOMPFX
+GOSTONEHEROBRK
+GOSTRIKEGRP
+GOTARGETLK
+GOWEAPONORB
+GOWEAPONORBBIG
+GOWOODHITS
+GOWOODLAND
+GOWOODSLICE
+GOXF1
+GOXF2
+GOXFC
+GOXGM
+GOXMC
+GOXPT
+GOXR1
+GOXRG
+GOXSA
+GOXUS
+GOXY1
+Glow Diameter
+God Mode Dmg Mult
+God Mode End Name
+God Mode End Threshold
+God Mode Enmy Dmg Mult
+God Mode Loop Name
+God Mode Meter Drain
+God Mode Off Threshold
+God Mode On Threshold
+God Mode Tint B
+God Mode Tint G
+God Mode Tint R
+God Mode Trail Tint A
+God Mode Trail Tint B
+God Mode Trail Tint G
+God Mode Trail Tint R
+God Mode Weapon Length
+Gravity
+Ground Impulse Away
+Ground Impulse Right
+Ground Impulse Up
+Group 0 Idx
+Group 1 Idx
+Group 2 Idx
+Group 3 Idx
+Group 4 Idx
+HAFslamDown_Cycle
+HAFslamDown_Tween
+HAFslamLand_Cycle
+HAFslamLand_Tween
+HAFslamLoop_Cycle
+HAFslamLoop_Tween
+HAFslamUp_Cycle
+HAFslamUp_Tween
+HAFslam_Cycle
+HAFslam_Tween
+HARswipe_Cycle
+HARswipe_Tween
+HarAirThrow1_Cycle
+HarAirThrow1_Tween
+HeadName
+Health Orb Mult
+Health Threshold
+Hit Context
+Hit Counter Reset Time
+Hit Effect
+Hit Sound
+Hit Sound 1
+Hit Sound 2
+Hit Sound 3
+Hit Sound 4
+Hit Sound 5
+Hit Sound 6
+Hold Time
+IOP Streams     (U2)
+IOP UW no mod   (U11)
+Impulse
+Indoor Large
+Indoor Medium
+Indoor Small
+Infinite Magic
+Input 0 Bias
+Input 0 Operator
+Input 0 Scale
+Input 1 Bias
+Input 1 Operator
+Input 1 Scale
+Input 2 Bias
+Input 2 Operator
+Input 2 Scale
+Input 3 Bias
+Input 3 Operator
+Input 3 Scale
+Interactives    (U5)
+Invalid Tint B
+Invalid Tint G
+Invalid Tint R
+JointName
+Jump
+KickBox1_Cycle
+KickBox1_Tween
+KickBox2_Tween
+KickBox3_Cycle
+KickBox3_Tween
+Lag
+Leap Back
+Length
+Level
+LightningExit_Cycle
+LightningExit_Tween
+Link Diameter
+Low Health Death Freq
+Low Health Death Timer
+Low Health Max Freq
+Low Health Min Freq
+Low Health Min Volume
+Low Health Threshold
+MAIBARAutoStruggle_Cycle
+MAIBARAutoStruggle_Tween
+MAIBARGrabLegsFail01_Cycle
+MAIBARGrabLegsFail01_Tween
+MAIBARGrabLose_Cycle
+MAIBARGrabLose_Tween
+MAIBARGrabStart_Cycle
+MAIBARGrabStart_Tween
+MAIBARGrabWin_Cycle
+MAIBARGrabWin_Tween
+MAIBARSdLose_Cycle
+MAIBARSdLose_Tween
+MAIBARSdStrug_Cycle
+MAIBARSdStrug_Tween
+MAIBARSdWin_Cycle
+MAIBARSdWin_Tween
+MAIBARShowdown_Cycle
+MAIBARShowdown_Tween
+MAIBHAbossStruggleC_Cycle
+MAIBHAbossStruggleC_Tween
+MAIBMISteamVent_Cycle
+MAIBMISteamVent_Tween
+MAICEAAirThrow1_Cycle
+MAICEAAirThrow1_Tween
+MAICEADamage_Cycle
+MAICEADamage_Tween
+MAICEAKill_Cycle
+MAICEAKill_Tween
+MAICEALeapBite_Cycle
+MAICEALeapBite_Tween
+MAICEALeapBreakout_Cycle
+MAICEALeapBreakout_Tween
+MAICEALeapDeath_Cycle
+MAICEALeapDeath_Tween
+MAICEALeapPin_Cycle
+MAICEALeapPin_Tween
+MAICEPAirThrow_Cycle
+MAICEPAirThrow_Tween
+MAICEPSpike_Cycle
+MAICEPSpike_Tween
+MAICEPStomp_Cycle
+MAICEPStomp_Tween
+MAICNMDamage_Cycle
+MAICNMDamage_Tween
+MAICNMKill_Cycle
+MAICNMKill_Tween
+MAICNMairThrow1_Cycle
+MAICNMairThrow1_Tween
+MAICY3Mini01_Cycle
+MAICY3Mini01_Tween
+MAICY3MiniF01_Cycle
+MAICY3MiniF01_Tween
+MAICY3MiniF02_Cycle
+MAICY3MiniF02_Tween
+MAICY3MiniF03_Cycle
+MAICY3MiniF03_Tween
+MAICYWMini02F1_Cycle
+MAICYWMini02F1_Tween
+MAICYWMini02F2_Cycle
+MAICYWMini02F2_Tween
+MAICYWMini02F4_Cycle
+MAICYWMini02F4_Tween
+MAICYWMini02FT3_Cycle
+MAICYWMini02FT3_Tween
+MAICYWMini02FT9_Cycle
+MAICYWMini02FT9_Tween
+MAICYWMini02_Cycle
+MAICYWMini02_Tween
+MAIEVIHugExit_Cycle
+MAIEVIHugExit_Tween
+MAIEVIHugLoop_Cycle
+MAIEVIHugLoop_Tween
+MAIEVIHugStart_Cycle
+MAIEVIHugStart_Tween
+MAIEVIKill_Cycle
+MAIEVIKill_Tween
+MAIEVIairThrow_Cycle
+MAIEVIairThrow_Tween
+MAISKDdmg_Cycle
+MAISKDdmg_Tween
+MAISKDslam_Cycle
+MAISKDslam_Tween
+MAISKFgrab_Cycle
+MAISKFgrab_Tween
+MAISKFkill_Cycle
+MAISKFkill_Tween
+MAIXPTBedMountWin_Cycle
+MAIXPTBedMountWin_Tween
+MAIXPTBedMount_Cycle
+MAIXPTBedMount_Tween
+MEWairThrow_Cycle
+MEWairThrow_Tween
+MEWbeamOff_Cycle
+MEWbeamOff_Tween
+MEWbeamOn_Cycle
+MEWbeamOn_Tween
+MEWbeamReplace_Cycle
+MEWbeamReplace_Tween
+MEWclawStrike_Cycle
+MEWclawStrike_Tween
+MEWslitherBack_Cycle
+MEWslitherBack_Tween
+MEWsnakeStrike_Cycle
+MEWsnakeStrike_Tween
+MEWtaunt01_Cycle
+MEWtaunt01_Tween
+MEWtaunt02_Cycle
+MEWtaunt02_Tween
+MPEG            (U6)
+Magic Orb Mult
+MaiSirDmg_Cycle
+MaiSirDmg_Tween
+MaiSirKill_Cycle
+MaiSirKill_Tween
+MaiSirSoul_Cycle
+MaiSirSoul_Tween
+Manual Targeting Range
+Mash Max Spin
+Max Hit Points Level 0
+Max Hit Points Level 1
+Max Hit Points Level 2
+Max Hit Points Level 3
+Max Hit Points Level 4
+Max Magic Level 0
+Max Magic Level 1
+Max Magic Level 2
+Max Magic Level 3
+Max Magic Level 4
+Max Magic Level 5
+Menu Sounds     (U4)
+Meter Bar Hold Time
+Mic Boom Ratio
+Mic Max Distance
+Mid Far Dist
+Milestone 0 Hits
+Milestone 1 Hits
+Milestone 10 Hits
+Milestone 11 Hits
+Milestone 12 Hits
+Milestone 13 Hits
+Milestone 14 Hits
+Milestone 15 Hits
+Milestone 16 Hits
+Milestone 17 Hits
+Milestone 18 Hits
+Milestone 19 Hits
+Milestone 2 Hits
+Milestone 3 Hits
+Milestone 4 Hits
+Milestone 5 Hits
+Milestone 6 Hits
+Milestone 7 Hits
+Milestone 8 Hits
+Milestone 9 Hits
+Mime Dialogue
+Move 0
+Move 1
+Move 2
+Move 3
+Move 4
+Move 5
+Move 6
+Move 7
+Move 8
+Move 9
+Movement Speed
+Msg Style 1 Blue
+Msg Style 1 Green
+Msg Style 1 Red
+Msg Style 2 Blue
+Msg Style 2 Green
+Msg Style 2 Red
+Msg Type Rate
+Music
+Music UW no mod (U7)
+No Armor Health Threshold
+No Armor Stunned
+Nominal Distance
+Nominal Particles
+Nominal Size
+Off
+Offset
+On
+On Back 99
+Outdoor Large
+Outdoor Medium
+Outdoor Small
+Override Reverb
+PORTAL
+PORTALE
+Particle System 1 Dark
+Particle System 1 Light
+Particle System 2 Dark
+Particle System 2 Light
+Particle System 3 Dark
+Particle System 3 Light
+Platform Armor Stagger
+Platform Armor Stunned
+Platform Back Dist
+Platform Center Angle
+Platform Dismount
+Platform Dist
+Platform Mount
+Platform No Armor Stunned
+Platform Stagger
+Platform Stagger First Time
+Platform Stunned
+Platform Victory
+Player Soldier Tweaks
+Points
+R6< 44
+Radius
+Rear_Cycle
+Rear_Tween
+Retreat
+Retreat Dist
+Right_Cycle
+Right_Tween
+Rope
+RopeSlide
+S0 Close Center
+S0 Close Left
+S0 Close Right
+S0 Far Center
+S0 Far Left
+S0 Far Right
+S0 Idle Time
+S0 Mid Center
+S0 Mid Left
+S0 Mid Right
+S0 Platform Back
+S0 Platform Center
+S0 Platform Idle Time
+S0 Platform Left
+S0 Platform Right
+S1 Close Center
+S1 Close Left
+S1 Close Right
+S1 Far Center
+S1 Far Left
+S1 Far Right
+S1 Idle Time
+S1 Mid Center
+S1 Mid Left
+S1 Mid Right
+S1 Platform Back
+S1 Platform Center
+S1 Platform Idle Time
+S1 Platform Left
+S1 Platform Right
+S2 Close Center
+S2 Close Left
+S2 Close Right
+S2 Far Center
+S2 Far Left
+S2 Far Right
+S2 Idle Time
+S2 Mid Center
+S2 Mid Left
+S2 Mid Right
+S2 Platform Back
+S2 Platform Center
+S2 Platform Idle Time
+S2 Platform Left
+S2 Platform Right
+S3 Close Center
+S3 Close Left
+S3 Close Right
+S3 Far Center
+S3 Far Left
+S3 Far Right
+S3 Idle Time
+S3 Mid Center
+S3 Mid Left
+S3 Mid Right
+S3 Platform Back
+S3 Platform Center
+S3 Platform Idle Time
+S3 Platform Left
+S3 Platform Right
+SATcomboThrow_Cycle
+SATcomboThrow_Tween
+SD2Burrow01_Cycle
+SD2Burrow01_Tween
+SD2Burrow02_Cycle
+SD2Burrow02_Tween
+SD2Burrow03_Cycle
+SD2Burrow03_Tween
+SD2Burrow04_Cycle
+SD2Burrow04_Tween
+SD2Burrow05_Cycle
+SD2Burrow05_Tween
+SD2Burrow06_Cycle
+SD2Burrow06_Tween
+SD2BurrowNull_Cycle
+SD2BurrowNull_Tween
+SD2DashSplit_Cycle
+SD2DashSplit_Tween
+SFX
+SFX UW no mod   (U9)
+SFX UW pitch    (U8)
+SIRScream_Cycle
+SIRScream_Tween
+SIRevadeBack_Cycle
+SIRevadeBack_Tween
+SIRevadeLeft_Cycle
+SIRevadeLeft_Tween
+SIRevadeRight_Cycle
+SIRevadeRight_Tween
+SIRfireBallLeft_Cycle
+SIRfireBallLeft_Tween
+SIRfireBallRight_Cycle
+SIRfireBallRight_Tween
+SIRfireSong_Cycle
+SIRfireSong_Tween
+SIRlitSong_Cycle
+SIRlitSong_Tween
+SIRsummon_Cycle
+SIRsummon_Tween
+SKBBlock_Cycle
+SKBBlock_Tween
+SKBRam_Cycle
+SKBRam_Tween
+SKBShatter_Cycle
+SKBShatter_Tween
+SKBStagger_Cycle
+SKBStagger_Tween
+SKBTaunt_Cycle
+SKBTaunt_Tween
+SKBblockShove_Cycle
+SKBblockShove_Tween
+SKBrunBackward_Cycle
+SKBrunBackward_Tween
+SKBrunForward_Cycle
+SKBrunForward_Tween
+SKBrunLeft_Cycle
+SKBrunLeft_Tween
+SKBrunRight_Cycle
+SKBrunRight_Tween
+SKBrunSlam_Cycle
+SKBrunSlam_Tween
+SKBstandIdle_Cycle
+SKBstandIdle_Tween
+SKBstrike_Cycle
+SKBstrike_Tween
+SKBuppercut_Cycle
+SKBuppercut_Tween
+SKBwalkBackward_Cycle
+SKBwalkBackward_Tween
+SKBwalkForward_Cycle
+SKBwalkForward_Tween
+SKBwalkLeft_Cycle
+SKBwalkLeft_Tween
+SKBwalkRight_Cycle
+SKBwalkRight_Tween
+SKDairThrow01_Cycle
+SKDairThrow01_Tween
+SKDairThrow02_Cycle
+SKDairThrow02_Tween
+SKFMAIgrab_Cycle
+SKFMAIgrab_Tween
+SKSblockSword_Cycle
+SKSblockSword_Tween
+SKSleapingStrike_Cycle
+SKSleapingStrike_Tween
+SKSstabCombo_Cycle
+SKSstabCombo_Tween
+SKSswordStrike_Cycle
+SKSswordStrike_Tween
+SKSswordSwipe_Cycle
+SKSswordSwipe_Tween
+SKSwallSpawn_Cycle
+SKSwallSpawn_Tween
+SKTdiveHit_Cycle
+SKTdiveHit_Tween
+SKU3hit_Cycle
+SKU3hit_Tween
+SceSifrpcCall_52
+Segment Length
+Shadow Diameter
+Shards Per Meter Level
+Slow Mo Max Slew
+Slow Mo Scale
+Soldier Tweaks
+Speed
+Sphere 00
+Sphere 01
+Sphere 02
+Sphere 03
+Sphere 04
+Sphere 05
+Sphere 06
+Sphere 07
+Sphere 08
+Sphere 09
+Sphere 10
+Sphere 11
+Sphere 12
+Sphere 13
+Sphere 14
+Sphere 15
+Sphere 16
+Sphere 17
+Sphere 18
+Sphere 19
+Sphere 20
+Sphere 21
+Sphere 22
+Sphere 23
+Stage 0 Allow Charging
+Stage 0 Allow Flash Freeze
+Stage 0 Allow Mashing
+Stage 0 Allow Nuke
+Stage 0 Arrow Emitter
+Stage 0 Bright Camera Filter
+Stage 0 Ch1 Arrow Emitter
+Stage 0 Ch1 Magic Drain
+Stage 0 Ch1 Threshold
+Stage 0 Ch2 Arrow Emitter
+Stage 0 Ch2 Magic Drain
+Stage 0 Ch2 Threshold
+Stage 0 Charge Time
+Stage 0 Cone Base Rad
+Stage 0 Cone Top Rad
+Stage 0 Damage Multiplier
+Stage 0 Damage Per Hit
+Stage 0 Damage Per Second
+Stage 0 Dark Camera Filter
+Stage 0 Distance
+Stage 0 Drain
+Stage 0 Duration
+Stage 0 Effect
+Stage 0 Flash Cone Base Rad
+Stage 0 Flash Cone Top Rad
+Stage 0 Flash Distance
+Stage 0 Flash Effect
+Stage 0 Flash Freeze Factor
+Stage 0 Flash Freq
+Stage 0 Flash Points
+Stage 0 Fog Template
+Stage 0 Freeze Factor
+Stage 0 GO Name
+Stage 0 Homing Amount
+Stage 0 Magic Drain
+Stage 0 Mash Damage Scale
+Stage 0 Mash Reach Scale
+Stage 0 Mashometer Drain
+Stage 0 Mashometer Max
+Stage 0 Max Damage
+Stage 0 Max Reach
+Stage 0 Max Time
+Stage 0 Max Velocity
+Stage 0 Nuke Points
+Stage 0 Num Dead Guys
+Stage 0 Playback Speed
+Stage 0 Reach
+Stage 0 Tint Blue
+Stage 0 Tint Green
+Stage 0 Tint Red
+Stage 1 Allow Charging
+Stage 1 Allow Flash Freeze
+Stage 1 Allow Mashing
+Stage 1 Allow Nuke
+Stage 1 Arrow Emitter
+Stage 1 Bright Camera Filter
+Stage 1 Ch1 Arrow Emitter
+Stage 1 Ch1 Magic Drain
+Stage 1 Ch1 Threshold
+Stage 1 Ch2 Arrow Emitter
+Stage 1 Ch2 Magic Drain
+Stage 1 Ch2 Threshold
+Stage 1 Charge Time
+Stage 1 Cone Base Rad
+Stage 1 Cone Top Rad
+Stage 1 Damage Multiplier
+Stage 1 Damage Per Hit
+Stage 1 Damage Per Second
+Stage 1 Dark Camera Filter
+Stage 1 Distance
+Stage 1 Drain
+Stage 1 Duration
+Stage 1 Effect
+Stage 1 Flash Cone Base Rad
+Stage 1 Flash Cone Top Rad
+Stage 1 Flash Distance
+Stage 1 Flash Effect
+Stage 1 Flash Freeze Factor
+Stage 1 Flash Freq
+Stage 1 Flash Points
+Stage 1 Fog Template
+Stage 1 Freeze Factor
+Stage 1 GO Name
+Stage 1 Homing Amount
+Stage 1 Magic Drain
+Stage 1 Mash Damage Scale
+Stage 1 Mash Reach Scale
+Stage 1 Mashometer Drain
+Stage 1 Mashometer Max
+Stage 1 Max Damage
+Stage 1 Max Reach
+Stage 1 Max Time
+Stage 1 Max Velocity
+Stage 1 Nuke Points
+Stage 1 Num Dead Guys
+Stage 1 Playback Speed
+Stage 1 Reach
+Stage 1 Tint Blue
+Stage 1 Tint Green
+Stage 1 Tint Red
+Stage 2 Allow Charging
+Stage 2 Allow Flash Freeze
+Stage 2 Allow Mashing
+Stage 2 Allow Nuke
+Stage 2 Arrow Emitter
+Stage 2 Bright Camera Filter
+Stage 2 Ch1 Arrow Emitter
+Stage 2 Ch1 Magic Drain
+Stage 2 Ch1 Threshold
+Stage 2 Ch2 Arrow Emitter
+Stage 2 Ch2 Magic Drain
+Stage 2 Ch2 Threshold
+Stage 2 Charge Time
+Stage 2 Cone Base Rad
+Stage 2 Cone Top Rad
+Stage 2 Damage Multiplier
+Stage 2 Damage Per Hit
+Stage 2 Damage Per Second
+Stage 2 Dark Camera Filter
+Stage 2 Distance
+Stage 2 Drain
+Stage 2 Duration
+Stage 2 Effect
+Stage 2 Flash Cone Base Rad
+Stage 2 Flash Cone Top Rad
+Stage 2 Flash Distance
+Stage 2 Flash Effect
+Stage 2 Flash Freeze Factor
+Stage 2 Flash Freq
+Stage 2 Flash Points
+Stage 2 Fog Template
+Stage 2 Freeze Factor
+Stage 2 GO Name
+Stage 2 Homing Amount
+Stage 2 Magic Drain
+Stage 2 Mash Damage Scale
+Stage 2 Mash Reach Scale
+Stage 2 Mashometer Drain
+Stage 2 Mashometer Max
+Stage 2 Max Damage
+Stage 2 Max Reach
+Stage 2 Max Time
+Stage 2 Max Velocity
+Stage 2 Nuke Points
+Stage 2 Num Dead Guys
+Stage 2 Playback Speed
+Stage 2 Reach
+Stage 2 Tint Blue
+Stage 2 Tint Green
+Stage 2 Tint Red
+Stagger
+Stagger First Time
+Statue Vertical Break Speed
+Stunned
+Swim
+TIT1d01Mi02_Cycle
+TIT1d01Mi02_Tween
+TIT1d01Mi03_Cycle
+TIT1d01Mi03_Tween
+TIT1d01Mi04_Cycle
+TIT1d01Mi04_Tween
+TIT1d01Mi05_Cycle
+TIT1d01Mi05_Tween
+Target Radius
+Target Weight
+Targeting Range
+Template 0
+Template 1
+Template 10
+Template 11
+Template 12
+Template 13
+Template 14
+Template 15
+Template 16
+Template 17
+Template 18
+Template 19
+Template 2
+Template 3
+Template 4
+Template 5
+Template 6
+Template 7
+Template 8
+Template 9
+Thing On A Spring Factor 1
+Thing On A Spring Factor 2
+Threshold
+Trail Tint A
+Trail Tint B
+Trail Tint G
+Trail Tint R
+Type
+Underwater
+Underwater Music Vol Scale
+Underwater Pitch Offset
+Underwater Tween Time
+Underwater Volume Scale
+Unfreeze Speed
+Up Angle Degree
+Valid Tint B
+Valid Tint G
+Valid Tint R
+Velocity
+Victory
+Walk Forward
+Walkable Slope Angle
+WallPullup
+Weapon Length
+Weapon Orb Mult
+Weight
+Wiggle Meter Drain
+XMCDeath2_Cycle
+XMCDeath2_Tween
+XMCStandIdle_Cycle
+XMCStandIdle_Tween
+XMChitHard_Cycle
+XMChitHard_Tween
+XMChitMedium_Cycle
+XMChitMedium_Tween
+XMCtaunt_Cycle
+XMCtaunt_Tween
+air360_Cycle
+air360_Tween
+airBlock_Cycle
+airBlock_Tween
+airBoltThrow_Cycle
+airBoltThrow_Tween
+airDash_Cycle
+airDash_Tween
+airEvadeLand_Cycle
+airEvadeLand_Tween
+airEvade_Cycle
+airEvade_Tween
+airForwardFlip_Cycle
+airForwardFlip_Tween
+airH1_Cycle
+airH1_Tween
+airH2_Cycle
+airH2_Tween
+airH3_Cycle
+airH3_Tween
+airImpaleLand_Cycle
+airImpaleLand_Tween
+airImpale_Cycle
+airImpale_Tween
+airLightningLoop_Cycle
+airLightningLoop_Tween
+airLightningStart_Cycle
+airLightningStart_Tween
+airRaiseTheDead_Cycle
+airRaiseTheDead_Tween
+airThrow1_Cycle
+airThrow1_Tween
+airThrowMIN_Cycle
+airThrowMIN_Tween
+airThrowMiss_Cycle
+airThrowMiss_Tween
+airUseHead_Cycle
+airUseHead_Tween
+airV1_Cycle
+airV1_Tween
+aoXDI1a06Mi01_Cycle
+aoXDI1a06Mi01_Tween
+aoXDI1a06Mi01a_Cycle
+aoXDI1a06Mi01a_Tween
+aoXF11a01Hl01_Cycle
+aoXF11a01Hl01_Tween
+aoXF11a01Hl02_Cycle
+aoXF11a01Hl02_Tween
+aoXF11a01Hl03_Cycle
+aoXF11a01Hl03_Tween
+aoXF11a01Hl06_Cycle
+aoXF11a01Hl06_Tween
+aoXF11a01Hl29_Cycle
+aoXF11a01Hl29_Tween
+aoXF11a01Mi01_Cycle
+aoXF11a01Mi01_Tween
+aoXF11a01Mi02_Cycle
+aoXF11a01Mi02_Tween
+aoXF11a01Mi08I_Cycle
+aoXF11a01Mi08I_Tween
+aoXF11a01Mi08_Cycle
+aoXF11a01Mi08_Tween
+aoXF12a01Hl29_Cycle
+aoXF12a01Hl29_Tween
+aoXOR1a06Mi02_Cycle
+aoXOR1a06Mi02_Tween
+aoXOR1a06hl02_Cycle
+aoXOR1a06hl02_Tween
+aoXOR1a06hl02a_Cycle
+aoXOR1a06hl02a_Tween
+aoXPT1a02Mi01_Cycle
+aoXPT1a02Mi01_Tween
+aoXPT1a02Mi02_Cycle
+aoXPT1a02Mi02_Tween
+aoXPT1a02Mi06_Cycle
+aoXPT1a02Mi06_Tween
+aoXUS1p00Mi01_Cycle
+aoXUS1p00Mi01_Tween
+aoXUS1p00Mi02_Cycle
+aoXUS1p00Mi02_Tween
+aoXUS1p00Mi99_Cycle
+aoXUS1p00Mi99_Tween
+attackSlam_Cycle
+attackSlam_Tween
+attackSwipe_Cycle
+attackSwipe_Tween
+autoOrient_Cycle
+autoOrient_Tween
+axeAttack2_Cycle
+axeAttack2_Tween
+axeCombo_Cycle
+axeCombo_Tween
+axeHammerslash_Cycle
+axeHammerslash_Tween
+axeUpperCut_Cycle
+axeUpperCut_Tween
+backhandAxe_Cycle
+backhandAxe_Tween
+balanceBeamCatch_Cycle
+balanceBeamCatch_Tween
+balanceBeamPullUp2_Cycle
+balanceBeamPullUp2_Tween
+balanceBeamPullUp_Cycle
+balanceBeamPullUp_Tween
+balanceWblend0_Cycle
+balanceWblend0_Tween
+balanceWblend1_Cycle
+balanceWblend1_Tween
+balanceWblend2_Cycle
+balanceWblend2_Tween
+balanceWblend3_Cycle
+balanceWblend3_Tween
+balanceWblend4_Cycle
+balanceWblend4_Tween
+balanceWblendI_Cycle
+balanceWblendI_Tween
+ballAttack1_Cycle
+ballAttack1_Tween
+ballAttack2_Cycle
+ballAttack2_Tween
+bay floor
+berAirEnter_Cycle
+berAirEnter_Tween
+berAirH1_Cycle
+berAirH1_Tween
+berAirH2_Cycle
+berAirH2_Tween
+berAirStab_Cycle
+berAirStab_Tween
+berAirV2Land_Cycle
+berAirV2Land_Tween
+berAirV2_Cycle
+berAirV2_Tween
+berBlockExit_Cycle
+berBlockExit_Tween
+berBlockHit01_Cycle
+berBlockHit01_Tween
+berBlockIdle_Cycle
+berBlockIdle_Tween
+berBlockParry_Cycle
+berBlockParry_Tween
+berComboH1_Cycle
+berComboH1_Tween
+berComboH2_Cycle
+berComboH2_Tween
+berComboH3_Cycle
+berComboH3_Tween
+berComboH4_Cycle
+berComboH4_Tween
+berComboStab_Cycle
+berComboStab_Tween
+berComboV1_Cycle
+berComboV1_Tween
+berComboV2_Cycle
+berComboV2_Tween
+berComboV3_Cycle
+berComboV3_Tween
+berComboV4_Cycle
+berComboV4_Tween
+berFallN_Cycle
+berFallN_Tween
+berJumpAir_Cycle
+berJumpAir_Tween
+berJumpDoubleAir_Cycle
+berJumpDoubleAir_Tween
+berLand_Cycle
+berLand_Tween
+berWalkBlend0_Cycle
+berWalkBlend0_Tween
+berWalkBlend1_Cycle
+berWalkBlend1_Tween
+berWalkBlend2_Cycle
+berWalkBlend2_Tween
+berserkEnter_Cycle
+berserkEnter_Tween
+berserkExit_Cycle
+berserkExit_Tween
+berserkIdle_Cycle
+berserkIdle_Tween
+berserkReact_Cycle
+berserkReact_Tween
+bigStaffSpin_Cycle
+bigStaffSpin_Tween
+block01_Cycle
+block01_Tween
+block02_Cycle
+block02_Tween
+block03_Cycle
+block03_Tween
+block04_Cycle
+block04_Tween
+block360_Cycle
+block360_Tween
+blockBackFlip_Cycle
+blockBackFlip_Tween
+blockBreak_Cycle
+blockBreak_Tween
+blockEvade_Cycle
+blockEvade_Tween
+blockForwardFlip_Cycle
+blockForwardFlip_Tween
+blockLauncherB_Cycle
+blockLauncherB_Tween
+blockLauncher_Cycle
+blockLauncher_Tween
+blockReaction_Cycle
+blockReaction_Tween
+blockShove_Cycle
+blockShove_Tween
+blockSlam_Cycle
+blockSlam_Tween
+block_Cycle
+block_Tween
+boltChargeIdle_Cycle
+boltChargeIdle_Tween
+boltChargeTurnLeft_Cycle
+boltChargeTurnLeft_Tween
+boltChargeTurnRight_Cycle
+boltChargeTurnRight_Tween
+boltCharge_Cycle
+boltCharge_Tween
+boltLoop_Cycle
+boltLoop_Tween
+boltPullout_Cycle
+boltPullout_Tween
+boltThrowL_Cycle
+boltThrowL_Tween
+boltThrow_Cycle
+boltThrow_Tween
+boltTurnLeft_Cycle
+boltTurnLeft_Tween
+boltTurnRight_Cycle
+boltTurnRight_Tween
+boom speed in
+boom speed out
+bowl base
+bowl centre x
+bowl centre z
+bowl radius
+bowl slope
+brutal1_Cycle
+brutal1_Tween
+brutal3_Cycle
+brutal3_Tween
+burrowLand_Cycle
+burrowLand_Tween
+charge_Cycle
+charge_Tween
+chestGrab_Cycle
+chestGrab_Tween
+chestOpen_Cycle
+chestOpen_Tween
+civManStone_Cycle
+civManStone_Tween
+closeAttack_Cycle
+closeAttack_Tween
+combatFall_Cycle
+combatFall_Tween
+combatLand2_Cycle
+combatLand2_Tween
+combo01_Cycle
+combo01_Tween
+combo02_Cycle
+combo02_Tween
+combo03_Cycle
+combo03_Tween
+combo04_Cycle
+combo04_Tween
+combo05_Cycle
+combo05_Tween
+combo06_Cycle
+combo06_Tween
+combo07_Cycle
+combo07_Tween
+combo08_Cycle
+combo08_Tween
+combo3A_Cycle
+combo3A_Tween
+combo3B_Cycle
+combo3B_Tween
+combo3C_Cycle
+combo3C_Tween
+combo3D_Cycle
+combo3D_Tween
+combo3E_Cycle
+combo3E_Tween
+combo3F_Cycle
+combo3F_Tween
+combo4A_Cycle
+combo4A_Tween
+combo4B_Cycle
+combo4B_Tween
+combo4C_Cycle
+combo4C_Tween
+combo4D_Cycle
+combo4D_Tween
+combo5A_Cycle
+combo5A_Tween
+combo5B_Cycle
+combo5B_Tween
+combo5b_Cycle
+combo5b_Tween
+combo6A_Cycle
+combo6A_Tween
+combo7A_Cycle
+combo7A_Tween
+comboJump_Cycle
+comboJump_Tween
+comboLR2_Cycle
+comboLR2_Tween
+comboLR3_Cycle
+comboLR3_Tween
+comboLR4_Cycle
+comboLR4_Tween
+crankIdle_Cycle
+crankIdle_Tween
+crankPickUpGround_Cycle
+crankPickUpGround_Tween
+crankPullL_Cycle
+crankPullL_Tween
+crankPullR_Cycle
+crankPullR_Tween
+crankPull_Cycle
+crankPull_Tween
+crankPushL_Cycle
+crankPushL_Tween
+crankPushR_Cycle
+crankPushR_Tween
+crankPush_Cycle
+crankPush_Tween
+cy2Overhead_Cycle
+cy2Overhead_Tween
+cy2Swipe_Cycle
+cy2Swipe_Tween
+dashAttack_Cycle
+dashAttack_Tween
+dashMultiStab_Cycle
+dashMultiStab_Tween
+dash_Cycle
+dash_Tween
+death01_Cycle
+death01_Tween
+death01land_Cycle
+death01land_Tween
+death02_Cycle
+death02_Tween
+deathDecap01_Cycle
+deathDecap01_Tween
+deathFall01_Cycle
+deathFall01_Tween
+dismount1_Cycle
+dismount1_Tween
+dismount2_Cycle
+dismount2_Tween
+distance min
+distance min weight
+dive_Cycle
+dive_Tween
+dolly rot angle
+dolly rot limit
+dolly rot weight
+doubleKick_Cycle
+doubleKick_Tween
+emerge_Cycle
+emerge_Tween
+evadeBack_Cycle
+evadeBack_Tween
+evadeForward_Cycle
+evadeForward_Tween
+evadeFront_Cycle
+evadeFront_Tween
+evadeLeft_Cycle
+evadeLeft_Tween
+evadeRight_Cycle
+evadeRight_Tween
+evade_Cycle
+evade_Tween
+f line angle
+f line symetrical
+f line weight
+fallN_Cycle
+fallN_Tween
+fallV_Cycle
+fallV_Tween
+fall_Cycle
+fall_Tween
+fireAttack_Cycle
+fireAttack_Tween
+fishStone_Cycle
+fishStone_Tween
+footSmash_Cycle
+footSmash_Tween
+forearmPower_Cycle
+forearmPower_Tween
+freezePose_Cycle
+freezePose_Tween
+freezepose_Cycle
+freezepose_Tween
+frozenBreakout_Cycle
+frozenBreakout_Tween
+gogo_Cycle
+gogo_Tween
+grabHero00_Cycle
+grabHero00_Tween
+grabHero01_Cycle
+grabHero01_Tween
+grabHero02_Cycle
+grabHero02_Tween
+grabHeroFail_Cycle
+grabHeroFail_Tween
+grabMiss_Cycle
+grabMiss_Tween
+grabReject_Cycle
+grabReject_Tween
+grab_Cycle
+grab_Tween
+graveDigLoop_Cycle
+graveDigLoop_Tween
+hammerAxCombo_Cycle
+hammerAxCombo_Tween
+hammerSlam_Cycle
+hammerSlam_Tween
+harAthensSpawn02B_Cycle
+harAthensSpawn02B_Tween
+harAthensSpawn02_Cycle
+harAthensSpawn02_Tween
+harAthensSpawnB_Cycle
+harAthensSpawnB_Tween
+harAthensSpawn_Cycle
+harAthensSpawn_Tween
+harMaiPeck_Cycle
+harMaiPeck_Tween
+harPeckFail_Cycle
+harPeckFail_Tween
+harPeckMiss_Cycle
+harPeckMiss_Tween
+harSpawn_Cycle
+harSpawn_Tween
+headNukeSlam_Cycle
+headNukeSlam_Tween
+headNukeStart_Cycle
+headNukeStart_Tween
+heroGrab_Cycle
+heroGrab_Tween
+heroKiss_Cycle
+heroKiss_Tween
+heroPullAway_Cycle
+heroPullAway_Tween
+highFallLand_Cycle
+highFallLand_Tween
+highFall_Cycle
+highFall_Tween
+hitAir1_Cycle
+hitAir1_Tween
+hitAir2_Cycle
+hitAir2_Tween
+hitAir3_Cycle
+hitAir3_Tween
+hitAir4_Cycle
+hitAir4_Tween
+hitAir_Cycle
+hitAir_Tween
+hitBack_Cycle
+hitBack_Tween
+hitBall_Cycle
+hitBall_Tween
+hitBounce_Cycle
+hitBounce_Tween
+hitDizzy_Cycle
+hitDizzy_Tween
+hitFireball_Cycle
+hitFireball_Tween
+hitFront_Cycle
+hitFront_Tween
+hitGetUp_Cycle
+hitGetUp_Tween
+hitGetupGround_Cycle
+hitGetupGround_Tween
+hitGetup_Cycle
+hitGetup_Tween
+hitKnockdown_Cycle
+hitKnockdown_Tween
+hitLand_Cycle
+hitLand_Tween
+hitLaunch_Cycle
+hitLaunch_Tween
+hitLeft_Cycle
+hitLeft_Tween
+hitLie_Cycle
+hitLie_Tween
+hitRight_Cycle
+hitRight_Tween
+hitSpin_Cycle
+hitSpin_Tween
+hitStagger_Cycle
+hitStagger_Tween
+horizontal max
+horizontal weight
+hover_Cycle
+hover_Tween
+idleCombat2_Cycle
+idleCombat2_Tween
+idleCombat_Cycle
+idleCombat_Tween
+ightAim_32
+impaleSlamCharge_Cycle
+impaleSlamCharge_Tween
+inside rim min
+inside rim weight
+jumpAir_Cycle
+jumpAir_Tween
+jumpDoubleAir_Cycle
+jumpDoubleAir_Tween
+jumpDoubleWallL_Cycle
+jumpDoubleWallL_Tween
+jumpUp_Cycle
+jumpUp_Tween
+jumpWall_Cycle
+jumpWall_Tween
+jump_Cycle
+jump_Tween
+ky61
+ladderDown_Cycle
+ladderDown_Tween
+ladderSlide_Cycle
+ladderSlide_Tween
+ladderUp_Cycle
+ladderUp_Tween
+land_Cycle
+land_Tween
+leapAttack_Cycle
+leapAttack_Tween
+leapStrike_Cycle
+leapStrike_Tween
+left_Cycle
+left_Tween
+leverBlowOut_Cycle
+leverBlowOut_Tween
+leverIdle_Cycle
+leverIdle_Tween
+leverPullUW_Cycle
+leverPullUW_Tween
+leverPull_Cycle
+leverPull_Tween
+liftDoor1_Cycle
+liftDoor1_Tween
+liftDoor2_Cycle
+liftDoor2_Tween
+liftDoor3_Cycle
+liftDoor3_Tween
+maiHarWingRip_Cycle
+maiHarWingRip_Tween
+maiMewEscape_Cycle
+maiMewEscape_Tween
+maiMewGrab_Cycle
+maiMewGrab_Tween
+maiMin01_Cycle
+maiMin01_Tween
+maiMin02Legs_Cycle
+maiMin02Legs_Tween
+maiMin02_Cycle
+maiMin02_Tween
+maiMin03_Cycle
+maiMin03_Tween
+maiMin04_Cycle
+maiMin04_Tween
+maiSATDamage_Cycle
+maiSATDamage_Tween
+maiSATKill_Cycle
+maiSATKill_Tween
+maiSATairThrowLand_Cycle
+maiSATairThrowLand_Tween
+maiSATairThrow_Cycle
+maiSATairThrow_Tween
+maiSATcombo5b_Cycle
+maiSATcombo5b_Tween
+maiSATgrab_Cycle
+maiSATgrab_Tween
+maiSATstruggle_Cycle
+maiSATstruggle_Tween
+maiSirAirthrow_Cycle
+maiSirAirthrow_Tween
+maiSkb05_Cycle
+maiSkb05_Tween
+maiSkb06_Cycle
+maiSkb06_Tween
+maiSkb20_Cycle
+maiSkb20_Tween
+maiSkb21_Cycle
+maiSkb21_Tween
+maiSkb22_Cycle
+maiSkb22_Tween
+maiSkb30_Cycle
+maiSkb30_Tween
+maiSkb31_Cycle
+maiSkb31_Tween
+maiSkb32_Cycle
+maiSkb32_Tween
+main_Cycle
+main_Tween
+maiskb00_Cycle
+maiskb00_Tween
+maiskb01_Cycle
+maiskb01_Tween
+maiskb02_Cycle
+maiskb02_Tween
+maiskb03_Cycle
+maiskb03_Tween
+max rail speed
+maximum dist
+maximum dist weight
+minimum dist
+minimum dist weight
+npcAirThrow_Cycle
+npcAirThrow_Tween
+npcBentOverIdle_Cycle
+npcBentOverIdle_Tween
+npcCower1_Cycle
+npcCower1_Tween
+npcCower2_Cycle
+npcCower2_Tween
+npcDamage_Cycle
+npcDamage_Tween
+npcIdle2_Cycle
+npcIdle2_Tween
+npcIdle_Cycle
+npcIdle_Tween
+npcKill_Cycle
+npcKill_Tween
+npcRunForward_Cycle
+npcRunForward_Tween
+npcRunPanic2_Cycle
+npcRunPanic2_Tween
+npcRunPanic_Cycle
+npcRunPanic_Tween
+npcWalkForward_Cycle
+npcWalkForward_Tween
+obscured symetrical
+obscured weight
+oracleIdle_Cycle
+oracleIdle_Tween
+parry01_Cycle
+parry01_Tween
+parry02_Cycle
+parry02_Tween
+parryHitLeft_Cycle
+parryHitLeft_Tween
+pause AI
+psentHead_Cycle
+psentHead_Tween
+pullL_Cycle
+pullL_Tween
+pullR_Cycle
+pullR_Tween
+pull_Cycle
+pull_Tween
+pushIdle_Cycle
+pushIdle_Tween
+push_Cycle
+push_Tween
+putAwayHead_Cycle
+putAwayHead_Tween
+raiseTheDead_Cycle
+raiseTheDead_Tween
+redBlock01_Cycle
+redBlock01_Tween
+redBlock02_Cycle
+redBlock02_Tween
+redStone1_Cycle
+redStone1_Tween
+redStone2_Cycle
+redStone2_Tween
+ropeDecap_Cycle
+ropeDecap_Tween
+ropeDown_Cycle
+ropeDown_Tween
+ropeHOHA_Cycle
+ropeHOHA_Tween
+ropeHOHI_Cycle
+ropeHOHI_Tween
+ropeHOHR1_Cycle
+ropeHOHR1_Tween
+ropeHOHR_Cycle
+ropeHOHR_Tween
+ropeHOH_Cycle
+ropeHOH_Tween
+ropeHOHgrab_Cycle
+ropeHOHgrab_Tween
+ropeIdle_Cycle
+ropeIdle_Tween
+ropeLeap_Cycle
+ropeLeap_Tween
+ropePower01_Cycle
+ropePower01_Tween
+ropeSlide_Cycle
+ropeSlide_Tween
+ropeSwingBACKtoMID_Cycle
+ropeSwingBACKtoMID_Tween
+ropeSwingFRNTtoMID_Cycle
+ropeSwingFRNTtoMID_Tween
+ropeSwingIdle_Cycle
+ropeSwingIdle_Tween
+ropeSwingMIDtoBACK_Cycle
+ropeSwingMIDtoBACK_Tween
+ropeSwingMIDtoFRNT_Cycle
+ropeSwingMIDtoFRNT_Tween
+ropeSwingStart_Cycle
+ropeSwingStart_Tween
+ropeUp_Cycle
+ropeUp_Tween
+runAttack_Cycle
+runAttack_Tween
+runBack_Cycle
+runBack_Tween
+runBackward_Cycle
+runBackward_Tween
+runBlend0_Cycle
+runBlend0_Tween
+runBlend1_Cycle
+runBlend1_Tween
+runBlend2_Cycle
+runBlend2_Tween
+runBlend3_Cycle
+runBlend3_Tween
+runForward_Cycle
+runForward_Tween
+runFront_Cycle
+runFront_Tween
+runLand_Cycle
+runLand_Tween
+runLeft_Cycle
+runLeft_Tween
+runRear_Cycle
+runRear_Tween
+runRight_Cycle
+runRight_Tween
+seperating max
+seperating min
+seperating weight
+shoulderRam_Cycle
+shoulderRam_Tween
+skf360Swing_Cycle
+skf360Swing_Tween
+skf4HitCombo_Cycle
+skf4HitCombo_Tween
+skfLand_Cycle
+skfLand_Tween
+skfTaunt_Cycle
+skfTaunt_Tween
+slope weight
+spawnDrop_Cycle
+spawnDrop_Tween
+spawnLand_Cycle
+spawnLand_Tween
+spawnVomitLand_Cycle
+spawnVomitLand_Tween
+spawnVomit_Cycle
+spawnVomit_Tween
+spawn_Cycle
+spawn_Tween
+spinAttack_Cycle
+spinAttack_Tween
+standIdle_Cycle
+standIdle_Tween
+stepForward_Cycle
+stepForward_Tween
+sweepSmash_Cycle
+sweepSmash_Tween
+swimDashIdle_Cycle
+swimDashIdle_Tween
+swimDashPU_Cycle
+swimDashPU_Tween
+swimDash_Cycle
+swimDash_Tween
+swimDie_Cycle
+swimDie_Tween
+swimDive1_Cycle
+swimDive1_Tween
+swimDive_Cycle
+swimDive_Tween
+swimGrab_Cycle
+swimGrab_Tween
+swimHit_Cycle
+swimHit_Tween
+swimIdle_Cycle
+swimIdle_Tween
+swim_Cycle
+swim_Tween
+swipeAttack_Cycle
+swipeAttack_Tween
+swipe_Cycle
+swipe_Tween
+tailSpinAttack_Cycle
+tailSpinAttack_Tween
+taunt01_Cycle
+taunt01_Tween
+taunt02_Cycle
+taunt02_Tween
+taunt03_Cycle
+taunt03_Tween
+taunt04_Cycle
+taunt04_Tween
+taunt1_Cycle
+taunt1_Tween
+taunt2_Cycle
+taunt2_Tween
+taunt_Cycle
+taunt_Tween
+topSpinDizzy_Cycle
+topSpinDizzy_Tween
+transform_Cycle
+transform_Tween
+tread_Cycle
+tread_Tween
+treadswim_Cycle
+treadswim_Tween
+tripleSmash_Cycle
+tripleSmash_Tween
+useHead00_Cycle
+useHead00_Tween
+useHead01_Cycle
+useHead01_Tween
+useHead02_Cycle
+useHead02_Tween
+useHeadTurnLeft_Cycle
+useHeadTurnLeft_Tween
+useHeadTurnRight_Cycle
+useHeadTurnRight_Tween
+vertical max
+vertical weight
+vomit_Cycle
+vomit_Tween
+wClimbBlend0_Cycle
+wClimbBlend0_Tween
+wClimbBlend1_Cycle
+wClimbBlend1_Tween
+wClimbBlend2_Cycle
+wClimbBlend2_Tween
+wClimbBlend3_Cycle
+wClimbBlend3_Tween
+walkBack_Cycle
+walkBack_Tween
+walkBackward_Cycle
+walkBackward_Tween
+walkBlend0_Cycle
+walkBlend0_Tween
+walkBlend1_Cycle
+walkBlend1_Tween
+walkBlend2L_Cycle
+walkBlend2L_Tween
+walkBlend2R_Cycle
+walkBlend2R_Tween
+walkBlend2_Cycle
+walkBlend2_Tween
+walkBlend3_Cycle
+walkBlend3_Tween
+walkForward_Cycle
+walkForward_Tween
+walkFront_Cycle
+walkFront_Tween
+walkLeft_Cycle
+walkLeft_Tween
+walkRight_Cycle
+walkRight_Tween
+walkSing_Cycle
+walkSing_Tween
+wallBackI_Cycle
+wallBackI_Tween
+wallBackL_Cycle
+wallBackL_Tween
+wallBackR_Cycle
+wallBackR_Tween
+wallCatch_Cycle
+wallCatch_Tween
+wallClimbALIdle_Cycle
+wallClimbALIdle_Tween
+wallClimbAL_Cycle
+wallClimbAL_Tween
+wallClimbARIdle_Cycle
+wallClimbARIdle_Tween
+wallClimbAR_Cycle
+wallClimbAR_Tween
+wallClimbATD_Cycle
+wallClimbATD_Tween
+wallClimbATL_Cycle
+wallClimbATL_Tween
+wallClimbATR_Cycle
+wallClimbATR_Tween
+wallClimbATU_Cycle
+wallClimbATU_Tween
+wallClimbCL_Cycle
+wallClimbCL_Tween
+wallClimbCR_Cycle
+wallClimbCR_Tween
+wallClimbIdle_Cycle
+wallClimbIdle_Tween
+wallFrontI_Tween
+wallFrontL_Cycle
+wallFrontL_Tween
+wallFrontR_Cycle
+wallFrontR_Tween
+wallGrabL_Cycle
+wallGrabL_Tween
+wallGrabLeft_Cycle
+wallGrabLeft_Tween
+wallGrabR_Cycle
+wallGrabR_Tween
+wallGrabRight_Cycle
+wallGrabRight_Tween
+wallGrabU_Cycle
+wallGrabU_Tween
+wallGrabUp_Cycle
+wallGrabUp_Tween
+wallHangCatch_Cycle
+wallHangCatch_Tween
+wallHangI_Cycle
+wallHangI_Tween
+wallHangL_Cycle
+wallHangL_Tween
+wallHangR_Cycle
+wallHangR_Tween
+wallHitLeft2_Cycle
+wallHitLeft2_Tween
+wallHitLeft_Cycle
+wallHitLeft_Tween
+wallHitRight2_Cycle
+wallHitRight2_Tween
+wallHitRight_Cycle
+wallHitRight_Tween
+wallJabDown_Cycle
+wallJabDown_Tween
+wallJabLeft_Cycle
+wallJabLeft_Tween
+wallJabRight_Cycle
+wallJabRight_Tween
+wallJabUp_Cycle
+wallJabUp_Tween
+wallJumpLeft_Cycle
+wallJumpLeft_Tween
+wallJumpRight_Cycle
+wallJumpRight_Tween
+wallJumpUp_Cycle
+wallJumpUp_Tween
+wallLeapLeft_Cycle
+wallLeapLeft_Tween
+wallLeap_Cycle
+wallLeap_Tween
+wallPullup_Cycle
+wallPullup_Tween
+ype(%d)-141
+zipLine_Cycle
+zipLine_Tween
+# 2단어 조합 (추정: 대조군 기준 우연 일치 약 3/93)
+AI Mode
+ANIBalancePullup
+ANIClimbHO
+Adult Scale
+Aim Joint
+Angle Offset
+Arrow Template
+Attached
+Away Mult
+Block Down
+Block Sound
+Blood Drop
+BottomPoint
+Bpf_B2
+Chest Type
+Circle Scale
+Distance Force
+Drop Blood
+Effect Name
+EffectName
+Emitter Joint
+Emitter Radius
+Enable Flash
+End Effect
+End Move
+End Radius
+Entity Name
+FX Name
+Fade Time
+Fail Move
+Foot Sound
+Force Feedback
+ForceRadius
+Forward Amount
+FreezeFactor
+Global Damping
+Gravity Flag
+Handle Angle
+Health Template
+Hit Points
+HitPoints
+Ignore Hits
+Ignore Invulnerable
+Instance Name
+Joint Name
+Left Weapon
+Link Duration
+Looped
+MFX Template
+Magic Template
+Magic Threshold
+Midpoint
+Particle Effect
+Pause Timer
+PauseTime
+Pole
+Push Sound
+Regen Effect
+Regen Sound
+Regen Speed
+Reset Sound
+Reticle Scale
+Right Weapon
+ScaleCenter
+ScaleRange
+Search Move
+Segment Mass
+Show Disk
+Show R2
+Slide Sound
+Small Radius
+SoldierTemplate
+Spawn Time
+Spread Angle
+Spring Damping
+Start Radius
+Start Stage
+SwitchView
+TF Time
+Target Joint
+Toppoint
+Track Target
+TrackTime
+Trail Left
+Trail Name
+Trail Right
+TurnFactor
+Weapon Template
+Wide Radius
+Zoom End
+Zoom Start
+dlOvlytab
+jq KI

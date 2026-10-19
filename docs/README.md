@@ -11,9 +11,9 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 | 03 | [텍스처 / 팔레트 / 머티리얼 (GFX, PAL, TXR, MAT)](03-texture-format.md) | 완료 |
 | 04 | [모델 / 메시 (MDL, 메시, VIF)](04-model-format.md) | 완료 |
 | 05 | 애니메이션 / 스켈레톤 (ANM) | 진행 예정 |
-| 06 | 실행 파일(SCKA_300.02) 분석 – 서브시스템 지도 | 진행 예정 |
+| 06 | [실행 파일(SCKA_300.02) 분석 – 서브시스템 지도 / TWK 해시](06-executable-analysis.md) | 1차 완료 (심화 목록 §10) |
 | 07 | [UI(FLP) / 스크립트(SCR, ESC) / 텍스트·폰트](07-ui-script-text.md) | 완료 (구조·텍스트·바이트코드, 일부 필드 미상) |
-| 08 | [엔진 아키텍처 (Java + LWJGL)](08-engine-architecture.md) | 골격 완료 |
+| 08 | [엔진 아키텍처 (Java + LWJGL)](08-engine-architecture.md) | 골격 + 모델 렌더 |
 | 09 | [오디오 포맷 (VAG / VPK)](09-audio-format.md) | 완료 |
 | 1x | 게임 시스템 재구현: 전투, 스킬/마법, 성장, 씬 이동, 이벤트, UI | 진행 예정 |
 
@@ -25,4 +25,7 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 ./gradlew :tools:run --args="wad-ls gow-rom/ATHN01A.WAD"
 ./gradlew :tools:run --args="texture:export gow-rom/R_HERO0.WAD work/textures/R_HERO0"   # TXR → PNG
 ./gradlew :tools:run --args="model:export gow-rom/R_HERO0.WAD work/models/R_HERO0 --preview"   # OBJ+MTL(+PNG 미리보기)
+./gradlew :tools:run --args="exe:listing work/SCKA_300.02 work/exe/SCKA.asm"      # R5900 주석 디스어셈블리
+./gradlew :tools:run --args="exe:calls work/SCKA_300.02 0x175c98"                  # 등록 함수 호출 인자 표
+./gradlew :tools:run --args="tweak:dump gow-rom/R_HERO0.WAD work/exe/twk_R_HERO0.txt"  # TWK 튜닝값 (키 이름 복원)
 ```

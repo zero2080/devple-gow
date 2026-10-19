@@ -81,11 +81,7 @@ GROUP{ RES ANM_hero_<level> } ...         레벨별 애니메이션 세트
 | 0x21 | FLP | `FLP_` | UI 레이아웃 / 2D 애니메이션 |
 | 0x27 | SHG | `SHG_` | 그림자 지오메트리 |
 
-## 5. TWEAK(TWK_) 테이블 — 1차 관찰
-```
-u32 0xFEDCBA98   매직 (0x77542F80 변형도 존재)
-u32 count | 0x80000000
-cstr path        예: "/Animation/goHero/"
-반복 { u8 0x20, u32 keyHash, u32 value(float 또는 int) } ...
-```
-키는 해시라서 실행 파일의 해시 함수와 문자열 테이블로 역산해야 한다 → 06 문서에서 계속.
+## 5. TWEAK(TWK_) 테이블
+1차 관찰의 "count|0x80000000" 해석은 틀렸다 — 0x80 은 경로 레코드 타입이다.
+정확한 레코드 문법(0x80 경로 / 0x10 그룹 / 0x40 그룹 끝 / 0x2N 값)과 키 해시(`h = h*127 + c`)는
+**[06 문서 §5](06-executable-analysis.md#5-twk-튜닝-시스템)** 참고. 파서: `devple.gow.tools.tweak.TweakFile`.
