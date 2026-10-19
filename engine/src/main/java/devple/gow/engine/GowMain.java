@@ -21,7 +21,7 @@ import java.nio.file.Path;
  *   ./gradlew :engine:run --args="--anim gow-rom/R_HERO0.WAD MDL_hero hero ANM_hero [애니이름]"   (애니메이션 뷰어)
  *   ./gradlew :engine:run --args="--ui gow-rom/R_SHELLK.WAD FLP_ShellK [menu|hud|pause|powerup] [--ui-warm n]"   (FLP UI)
  *   ./gradlew :engine:run --args="--level gow-rom/ATHN01A.WAD [--cam N|auto] [--col]"   (레벨 배치 뷰어, 23 문서)
- *   ./gradlew :engine:run --args="--game [ATHN01A] [--auto-run s]"   (통합 게임: 레벨 + 크레토스 + 전투 + HUD)
+ *   ./gradlew :engine:run --args="--game [ATHN01A] [--auto-run s] [--entry 인스턴스]"   (통합 게임: 레벨 + 크레토스 + 전투 + HUD)
  * </pre>
  */
 public final class GowMain {
@@ -40,9 +40,10 @@ public final class GowMain {
 			} else if (args[i].equals("--game")) {
 				String lvl = i + 1 < args.length && !args[i + 1].startsWith("--") ? args[++i] : "ATHN01A";
 				int ri = java.util.Arrays.asList(args).indexOf("--auto-run");
+				int ei = java.util.Arrays.asList(args).indexOf("--entry"); // 시작 인스턴스/오브젝트 이름 (진입점)
 				try {
 					first = new devple.gow.engine.game.GameScene(new devple.gow.engine.game.GameSession(Path.of("gow-rom")), lvl,
-							null, ri >= 0 ? Float.parseFloat(args[ri + 1]) : 0);
+							ei >= 0 ? args[ei + 1] : null, ri >= 0 ? Float.parseFloat(args[ri + 1]) : 0);
 				} catch (java.io.IOException ex) {
 					throw new java.io.UncheckedIOException(ex);
 				}

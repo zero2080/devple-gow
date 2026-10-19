@@ -7,7 +7,7 @@
 |------|-------|----------|
 | 레벨 렌더 (배치·하늘) | `level/LevelScene` (외부 카메라 모드 `setExternalCamera`) | 12, 23 |
 | 지면/벽 | `level/LevelCollision.groundHeight / collideSphere` | 12, 23 |
-| 카메라 | `LevelData.activeCamera` (CMV 볼륨 → 레벨 카메라 위치) + 크레토스를 주시 | 12 |
+| 카메라 | `level/CameraRig` (CMV 선택·레일/궤도·전환 보간, 원작 재구현) | 12, 30 |
 | 크레토스 | `game/HeroRig` = 모델·스켈레톤·애니 + `HeroController` + `Combatant` + `PlayerState` + `GodMode` + `HitCounter` | 05, 10, 11, 25, 26 |
 | HUD / 일시정지 | `ui/UiLayer`(FLP_HUDK) + `HudBinding` | 07, 21 |
 
@@ -16,7 +16,7 @@
 - 지면: 발 위 14 유닛(계단 허용)에서 아래로 바닥 탐색. 바닥과 2 유닛 이내면 붙이고, 아니면 중력 낙하
 - 중력: 9.82 × 16 유닛/s². 1 m ≈ 16 유닛은 크레토스 키(≈37 유닛 ≈ 2.3 m 의 거구)와 Orb 템플릿 `Gravity = 9.82` 로부터의 **추정**
 - 벽: 허리(+20) 높이 반지름 12 구를 비바닥 면 밖으로 밀어냄
-- 카메라: 원작은 볼륨별 고정/레일 카메라. 현재는 레일 이동·FOV 파라미터가 미해석이라 **레벨 카메라 위치에서 크레토스를 바라보는 방식**으로 근사. 볼륨 밖이면 추적 카메라
+- 카메라: `CameraRig` (30 문서) — 원작과 같은 CMV 선택·우선순위·전환표, 레일(NCV_) 위 기준점, 설계 각도/범위, 거리 제한, FOV
 - 이동 입력은 카메라 기준 (원작과 동일)
 - START → `PS2_PauseMenu_Event` 로 원작 일시정지 메뉴, 메뉴가 `*Done`/`*Menu_Choice` 를 쓰면 복귀 (선택 1 = 체크포인트 재시작)
 - 사망(HP 0) 또는 바닥 없는 곳 낙하 → 시작 위치로 (체크포인트 시스템은 스크립트 런타임 연결 시 교체)
