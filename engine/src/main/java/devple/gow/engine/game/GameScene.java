@@ -81,6 +81,7 @@ public final class GameScene implements Scene {
 	/** 세이브 포인트: 저장 질문(SaveGameMenu) 대기 중 / 메모리카드 화면 진행 중 (22 문서 §7). */
 	private boolean saveAsk;
 	private MemoryCardFlow saveFlow;
+	private final devple.gow.engine.ui.MinigameIcon minigameIcon = new devple.gow.engine.ui.MinigameIcon();
 	private float time;
 	private float messageTimer;
 	private float stepTimer;
@@ -624,6 +625,19 @@ public final class GameScene implements Scene {
 	 * 세이브 포인트 (원작 상태 15 SavePoint → 16 SaveGameMenu → 17 SaveWrite): HUD 의 "저장하시겠습니까?"(PS2_SaveGame_Event) →
 	 * 예 → 원작 메모리카드 화면을 {@link MemoryCardFlow} 로 진행 (카드 → 파일 → 덮어쓰기/새 파일 → 저장 중 → 완료).
 	 */
+	/** 현재 미니게임 아이콘 (35 문서 §6): 타이밍 프롬프트 = 종류 아이콘, 연타 = XButtonPress [추정: 연타 아이콘 선택], 없으면 숨김. */
+	private int minigameIconIndex() {
+		if (!grab.active()) {
+			return devple.gow.engine.ui.MinigameIcon.NONE;
+		}
+		if (grab.timed() != null) {
+			return grab.timed().iconIndex();
+		}
+		var q = grab.qte();
+		return q != null && q.state() == devple.gow.engine.combat.RepeatPressQte.State.RUNNING
+				? devple.gow.engine.ui.MinigameIcon.BUTTON_PRESS : devple.gow.engine.ui.MinigameIcon.NONE;
+	}
+
 	private void askSave() {
 		paused = saveAsk = true;
 		hud.variables().event("PS2_SaveGame_Event", 1);
@@ -766,6 +780,7 @@ public final class GameScene implements Scene {
 				target.hp = 0; // 처형 성공 → 사망 처리 (원작은 처형 기술의 피해/스크립트) [근사]
 			}
 		}
+		minigameIcon.show(hud.player(), minigameIconIndex());
 		Vector3f p = hero.ctl.position;
 		cameraRig.update(dt, p, hero.ctl.yaw, !hero.ctl.grounded);
 		world.tick(dt, p.x, p.y, p.z);

@@ -8,6 +8,8 @@
 ./gradlew :engine:run --args="--ui gow-rom/R_PERMK.WAD FLP_HUDK hud --ui-warm 60"         # HUD (데모 PlayerState)
 ./gradlew :engine:run --args="--ui gow-rom/R_PERMK.WAD FLP_HUDK pause --ui-warm 90"       # 일시정지 메뉴
 ./gradlew :engine:run --args="--ui gow-rom/R_PERMK.WAD FLP_HUDK powerup --ui-warm 120"    # 파워업(업그레이드) 메뉴
+./gradlew :engine:run --args="--ui gow-rom/R_PERMK.WAD FLP_HUDK icon:CircleButtonGreek"  # 미니게임 아이콘 심볼 (35 §6)
+./gradlew :engine:run --args="--ui gow-rom/R_SHELLK.WAD FLP_ShellK memcard --ui-warm 120" # 메모리카드 파일 선택 화면 (22 §7)
 #   --ui-warm n : 시작 전에 n 틱 미리 진행 (스크린샷 결정성), 환경변수 GOW_UI_DUMP=1 : 표시 트리 덤프
 ./gradlew :engine:test --tests 'devple.gow.engine.ui.*'                                    # GL 없이 VM/타임라인 검증
 ```

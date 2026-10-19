@@ -18,6 +18,7 @@ import java.nio.file.Path;
  *   <li>menu (기본): 무비를 그대로 재생 — R_SHELLK/FLP_ShellK 메인 메뉴. 방향키 ↑↓, L = ○ 선택, I = △ 뒤로</li>
  *   <li>hud: 데모 PlayerState 를 {@link HudBinding} 으로 연결 (체력/마법 바, 오브 미터)</li>
  *   <li>pause / powerup: hud + PS2_PauseMenu_Event / PS2_PSMMenu_Event = 1</li>
+ *   <li>icon:&lt;이름&gt;: hud + 미니게임 아이콘 심볼 ({@link MinigameIcon#CLIPS}, 예 icon:CircleButtonGreek)</li>
  *   <li>memcard: 메인 메뉴 + 불러오기 메모리카드 화면 ({@link devple.gow.engine.game.MemoryCardFlow}) — 견본 세이브 2개가 든
  *       임시 카드로 파일 선택 화면(23)까지 진행</li>
  * </ul>
@@ -66,6 +67,9 @@ public final class UiScene implements Scene {
 				card.start();
 			} else if (card != null && i == 50) {
 				card.command("PS2_MemoryCard_Select", "1");
+			}
+			if (i == 20 && mode.startsWith("icon:")) {
+				ui.player().attach(mode.substring(5));
 			}
 			if (i == 20 && mode.equals("pause")) {
 				ui.variables().event("PS2_PauseMenu_Event", 1);

@@ -123,6 +123,9 @@ public final class FlpRenderer implements AutoCloseable {
 						draw(s, m, col);
 					}
 				}
+				for (FlpNode s : n.attached) {
+					draw(s, m, col);
+				}
 			}
 			case MESH -> {
 				if (n.index >= 0) {

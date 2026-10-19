@@ -142,6 +142,9 @@ public final class FlpPlayer {
 				collect(s, out, spritesOnly);
 			}
 		}
+		for (FlpNode s : n.attached) {
+			collect(s, out, spritesOnly);
+		}
 	}
 
 	// ---------------------------------------------------------------- 엔진 API
@@ -161,6 +164,58 @@ public final class FlpPlayer {
 		n.playing = play;
 		runActions();
 		return true;
+	}
+
+	/**
+	 * 이름 붙은 심볼을 루트에 붙인다 (원작 sub_0014A980: HUD 미니게임 아이콘 XButtonGreek 등 — 루트 타임라인 키프레임 중 그 이름의
+	 * 배치를 찾아 같은 변환으로 새 인스턴스를 만든다. 루트 타임라인이 지나가도 남는다). 없으면 false.
+	 */
+	public boolean attach(String name) {
+		if (attachedNode(name) != null) {
+			return true;
+		}
+		List<FlpFile.Layer> layers = root.timeline.layers();
+		for (FlpFile.Layer layer : layers) {
+			List<FlpFile.KeyFrame> keys = layer.keys();
+			for (int i = 0; i < keys.size(); i++) {
+				FlpFile.KeyFrame k = keys.get(i);
+				if (k.name() == null || !k.name().equalsIgnoreCase(name) || k.handler() < 0 || k.handler() >= flp.handlers.size()) {
+					continue;
+				}
+				FlpNode n = create(root, flp.handlers.get(k.handler()), k.handler(), i);
+				n.name = k.name();
+				apply(n, k);
+				root.attached.add(n);
+				if (n.kind == FlpNode.Kind.MOVIE) {
+					showFrame(n, 0);
+				}
+				runActions();
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** {@link #attach} 한 심볼 떼기 (원작 sub_0014AB18). */
+	public void detach(String name) {
+		FlpNode n = attachedNode(name);
+		if (n != null) {
+			n.markRemoved();
+			root.attached.remove(n);
+		}
+	}
+
+	public boolean attached(String name) {
+		return attachedNode(name) != null;
+	}
+
+	private FlpNode attachedNode(String name) {
+		for (FlpNode n : root.attached) {
+			if (n.name != null && n.name.equalsIgnoreCase(name)) {
+				return n;
+			}
+		}
+		return null;
 	}
 
 	/** 스크립트 변수 읽기 ({@code "_level0/:PausePowerUp_State"}, {@code "PS2_X"}). */

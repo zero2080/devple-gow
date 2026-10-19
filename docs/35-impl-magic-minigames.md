@@ -195,7 +195,14 @@ TWK `/Player/MedusaHead` 의 일부 값은 덤프가 float 로 잘못 보여준�
 - `PS2_PickUp_Event` 가 선택 마법 아이콘이다. 0 = 없음, 2·id − 1 = 시전 가능, 2·id = 불가 [짝/홀 의미 추정].
 - FLP_HUDK 는 MainMeter/PickUps 를 GotoFrame(1 + 값) 한다. 바뀔 때만 보낸다 (`HudBinding`).
 - `*_Status` 는 아이템 비트 0x4–0x40 (기존 구현 그대로).
-- 미니게임 버튼 아이콘은 변수가 아니다. 엔진이 FLP_HUDK 루트의 이름 붙은 클립(0x29DA40)을 8 우선순위 슬롯(0x338788) 중 슬롯 3 에 띄운다. 미구현 — `GrabSync.timed().iconIndex()` 로 이름은 얻을 수 있다.
+- 미니게임 버튼 아이콘은 변수가 아니다. 원작 `sub_001BA338(hud, idx)`: idx 가 바뀌면 이전 인스턴스를 떼고(`sub_0014AB18`),
+  idx &lt; 15 이면 표 0x29DA40 의 이름 심볼을 FLP 에 붙인다(`sub_0014A980`). 표: 0–9 TimedPress 종류(XButtonGreek … 360CCW),
+  10 XButtonPress(연타 ○ 버튼 그림), 11 R2ButtonPress, 12 WiggleStick, 13 WiggleBackForth, 14 R2ButtonStatic.
+- **엔진**: `FlpPlayer.attach/detach(name)` — 루트 타임라인 키프레임에서 그 이름의 배치를 찾아 같은 변환으로 인스턴스를 만들어
+  루트 위에 그린다 (루트 타임라인이 지나가도 유지). `MinigameIcon.show(player, idx)` 가 한 번에 하나만 유지.
+  `GameScene`: 결합 중 타이밍 프롬프트 → `timed().iconIndex()`, 연타 진행 중 → 10 XButtonPress [추정: 연타 아이콘 선택], 그 밖 숨김.
+  검증 `MinigameIconTest` (15개 전부 FLP_HUDK 에 있음, 붙이기/떼기/유지), 화면 `--ui gow-rom/R_PERMK.WAD FLP_HUDK icon:CircleButtonGreek`
+  (`work/uirt/icon_circle.png` 화면 위 가운데 ○, `icon_press.png` 왼쪽 아래 연타 버튼).
 
 ## 7. 시각 효과 (`fx/MagicFx`, 근사)
 원작 GO 이펙트는 마법 WAD(R_THBLT/R_MEDHD/R_RDEAD)에 FXC/PTC 로 들어 있다 (goBolt/goStdBolt/goBoltHit, goEyeBeam/goMedHeadFlash, goDedRed/goDeadHit/goDeadDie).
@@ -226,7 +233,7 @@ GO 부착과 애니 구동이 미구현이라 같은 색·수명의 파티클로
 ## 9. 남은 것
 - 메두사 Nuke(Concussion 원형 Freeze 30000), 시선 충돌 검사, 석상 흔들림, `*stonedbrk` 파편 모델, 영웅 석화(적 메두사 EyeAttack).
 - 제우스 차지 연출(boltCharge* 애니 혼합, goBoltChargeUp), 연속 입력 큐 2개, rWeapIH 관절 기준 발사 위치.
-- 원작 FXC/PTC 이펙트를 GO 단위로 붙이기, 미니게임 버튼 아이콘 HUD 클립 표시, Wiggle Meter.
+- 원작 FXC/PTC 이펙트를 GO 단위로 붙이기, Wiggle Meter (아이콘 12/13 은 있으나 사용처 미확인).
 - 마법 선택·섬광·차지 버튼 비트(0x10/0x80)의 실제 패드 대응 확인.
 
 ## 9. 아르테미스의 검 (리드, 2026-10-19)

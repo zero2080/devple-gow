@@ -37,6 +37,8 @@ final class FlpNode {
 	final int index;
 
 	boolean removed;
+	/** 루트 전용: 엔진이 이름으로 붙인 심볼 인스턴스 (원작 sub_0014A980, 표시 목록 위에 그린다). */
+	final java.util.List<FlpNode> attached = new java.util.ArrayList<>();
 
 	FlpNode(Kind kind, int handler, int segment, FlpNode parent, FlpFile.Timeline timeline, FlpFile.Sprite sprite, int index) {
 		this.kind = kind;
