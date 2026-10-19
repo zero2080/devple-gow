@@ -4,6 +4,7 @@ import devple.gow.engine.core.Engine;
 import devple.gow.engine.scene.DebugScene;
 import devple.gow.engine.scene.ModelViewerScene;
 import devple.gow.engine.scene.Scene;
+import devple.gow.engine.ui.UiScene;
 
 import java.nio.file.Path;
 
@@ -13,6 +14,7 @@ import java.nio.file.Path;
  *   ./gradlew :engine:run
  *   ./gradlew :engine:run --args="--screenshot work/shot.png"   (몇 프레임 후 캡처하고 종료)
  *   ./gradlew :engine:run --args="--view gow-rom/R_HERO0.WAD [MDL이름]"   (모델 뷰어)
+ *   ./gradlew :engine:run --args="--ui gow-rom/R_SHELLK.WAD FLP_ShellK [menu|hud|pause|powerup] [--ui-warm n]"   (FLP UI)
  * </pre>
  */
 public final class GowMain {
@@ -27,6 +29,11 @@ public final class GowMain {
 				Path wad = Path.of(args[++i]);
 				String mdl = i + 1 < args.length && !args[i + 1].startsWith("--") ? args[++i] : null;
 				first = new ModelViewerScene(wad, mdl);
+			} else if (args[i].equals("--ui") && i + 2 < args.length) {
+				Path wad = Path.of(args[++i]);
+				String flp = args[++i];
+				String mode = i + 1 < args.length && !args[i + 1].startsWith("--") ? args[++i] : null;
+				first = new UiScene(wad, flp, mode, uiWarm(args));
 			}
 		}
 		try (Engine engine = new Engine("God of War (재구현)", 1280, 720)) {
@@ -35,5 +42,14 @@ public final class GowMain {
 			}
 			engine.run(first);
 		}
+	}
+
+	private static int uiWarm(String[] args) {
+		for (int i = 0; i + 1 < args.length; i++) {
+			if (args[i].equals("--ui-warm")) {
+				return Integer.parseInt(args[i + 1]);
+			}
+		}
+		return 0;
 	}
 }
