@@ -109,9 +109,9 @@ engine/build/install/engine/bin/engine --game LEVEL --skip-movies --screenshot s
 ## 4. 남은 의심 (미해결, 근거)
 - ~~**ATHN05AA** 회색 화면~~ → §7.2 해결: 자기 CMV 만 질의해 볼륨 밖 Follow 카메라(눈 y 694)가 숙주 ATHN05A 의 길거리 연기층 `gosmokeplane2main`
   (y 665–697) 안에 있었다. 원작처럼 숙주 CMV 도 질의하면 RublRmCam19 (눈 y 712) 가 방을 내려다본다.
-- **ATHN07B** 금색 덩어리: 카메라(camMagical4/6, 레일 swordSideRail)는 맞다. 화면을 덮는 것은 `gortalfakereflections` (포털 거울 `goportalreflect` 의
+- ~~**ATHN07B** 금색 덩어리~~ → §9 해결 (반사 전용 메시 bit 57 은 거울 뷰에만): 카메라(camMagical4/6, 레일 swordSideRail)는 맞다. 화면을 덮는 것은 `gortalfakereflections` (포털 거울 `goportalreflect` 의
   SCR_Mirror 반사 사본) — `GOW_HIDE=gortalfakereflections` 면 포털 앞 크레토스가 보인다. 거울 패스(31 §7) 몫.
-- ~~**OLYMP02** 바닥~~ → §6.2 (SCR_Mirror 반사 패스). 반사에 캐릭터는 아직 없다.
+- ~~**OLYMP02** 바닥~~ → §6.2 (SCR_Mirror 반사 패스). 반사의 크레토스는 §9.
 - ~~**PAND03A** 붉은 쐐기~~ → §6.1 해결 (시작 act "DMC" 의 가시성 트랙이 결계를 숨김).
 - **ATHN01A** 오른쪽 흰 물보라: `--no-fx`/`GOW_FX=off` 면 사라지는 파티클 (폭포 `gowaterfall03` 옆, `govolumefoge` 볼륨 이미터 배율 10.77 또는 `gosplash2` 표면 이미터).
   FXC 5–9 볼륨 상자 배율·표면 이미터(FXC 3) 해석이 [추정] 이라 과밝음 여부 판단 보류. → §6.3 (데이터 대조, 수정 안 함).
@@ -146,10 +146,11 @@ engine/build/install/engine/bin/engine --game LEVEL --skip-movies --screenshot s
 - 엔진: 스텐실 + 깊이 초기화 + VP·R 로 하늘·레벨 인스턴스 다시 그리기 (`gl_ClipDistance` 로 평면 뒤 자름) → 거울 모델은 일반 패스에서 빼고
   (원작 bit 61) 반사 뒤 두 패스로 그 위에 그린다 — 처음엔 일반 불투명 패스에 두었더니 ATHN04B 대리석 타일이 반사로 덮였다.
   평면 아닌 거울 (ATHN07 sword1, PAND05B oorMirrorGRP 등) 은 생략. 캐릭터·스키닝 오브젝트·파티클은 반사 안 함 [근사]. 비교 `GOW_MIRROR=off`.
+  → **§9 에서 정정**: 원작은 거울 소유자를 일반 그리기에서 빼지 않고 (bit 61 = 반사에 비침 을 끔), 정적 월드를 다시 그리지 않으며 반사 전용 대리 메시·bit 61 모델·영웅만 그린다.
 - 거울 인스턴스가 평면으로 잡힌 레벨 25 곳 (ATHN01F, 03A/03AA/03D/03E, 04A/04B/04C, 05B/05D, 06B/06C, 07/07B, ATRET01B/01C, OLYMP01/02, PAND00B/00D/01BB/03H/03I/05A/05B).
 - 화면: OLYMP02 복도 바닥에 벽·횃불·왕좌 반사 + 대리석 결 (이전: 안개색으로 하얗게), ATHN04B 반투명 대리석 타일에 벽화 반사, OLYMP01·ATHN03A·PAND05A 바닥 반사.
   ATHN06B/PAND01BB/PAND03I 는 이미 가짜 반사 지오메트리 (`fakereflections`, `goreflection`, `bloodstairreflect`) 가 있어 변화가 작다.
-- 데이터 관찰: 여러 레벨에 미리 뒤집어 둔 가짜 반사 메시가 있다 — 원작 SCR_Mirror 가 정적 월드까지 다시 그리는지, 값 [0]/[4] 로 캐릭터만 그리는지는
+- (§9 에서 해결) 데이터 관찰: 여러 레벨에 미리 뒤집어 둔 가짜 반사 메시가 있다 — 원작 SCR_Mirror 가 정적 월드까지 다시 그리는지, 값 [0]/[4] 로 캐릭터만 그리는지는
   0x12ABA0 GS 패킷 해석 전에는 [추정] (OLYMP02 복도처럼 가짜 메시가 없는 거울도 있어 월드 반사로 둠).
 - PAND05B 는 엘리베이터 시작이라 240 프레임 시점의 카메라가 실행마다 달라 화소 차가 크다 (거울과 무관).
 
@@ -203,3 +204,51 @@ PAND03C 바위 반복 act · 9.25 초, OLYMP02 gomirror 수평 평면 · 반사 
   — 원작은 뒷면 제거로 보일 것 [추정] (렌더 몫, 08 문서 양면 렌더).
 - ATRET01C ← ATRET01B Warp: Start CameraName LWRCAM11 은 한 프레임 후보라 볼륨 카메라 LwrCam18 로 돌아간다 (원작 SwitchCamera 와 같은 규칙).
 - 리셋(레벨 시작·Warp) 직후 레일 첫 표본 기준점은 해독대로면 (0, 0, T.z) 인데 실제 Warp 도착(ATHN06C → 06B)에서 벽 속에 걸려 대상 T 를 쓴다 [근사] (30 §7.3).
+
+## 9. SCR_Mirror 거울 뷰에 그리는 것 (§6.2 후속) — 16 §1.7, 31 §8
+§6.2 의 열린 질문 (정적 월드를 다시 그리나, 값 [0]/[4] 의 뜻) 을 실행 파일로 정했다. 결론: **정적 월드는 다시 그리지 않는다.**
+거울 뷰 = 반사 전용 대리 메시 + 렌더 플래그 bit 61 모델 + (값 [4] = 0 이면) 영웅. 가짜 반사 메시는 "미리 뒤집은" 것이 아니라 방의 **간이 사본**
+(ATHN06B `fakeReflections` y 736..1216 = 바닥 위 방 공간) 이고 거울 뷰에서만 반사 카메라로 그린다. 이전 엔진은 이 사본을 일반 뷰에도 그려
+ATHN07B (화면 전체), ATHN06B (방 안이 흐린 벽), PAND03I (주황 판) 를 덮었다.
+
+### 9.1 뷰 마스크 [확실: 디스어셈블 + 데이터]
+- 모든 모델은 뷰 마스크 (모델 +0xD8) 를 가진다. 렌더러 (0x151120, 0x15CD50, 0x162F20 …) 는 `모델 마스크 & 현재 뷰 +0x3AC ≠ 0` 일 때만 그린다.
+- **0x1508D0(모델, m)**: 렌더 플래그 (+0xC0 u64) bit 57 → `(m & 0x40000055) << 1` (거울 뷰만), bit 61 → `m | 그 시프트` (둘 다), 그 밖 → `m & 0x7FFFFF55` (일반만).
+- 뷰: 생성자 0x168D38/0x168E68 → 0x41. 거울 관리자 0x129A18 (Engine_Init) 의 거울 뷰 = `(0x41 & 0x40000055) << 1` = **0x82**.
+  갱신 0x12A6C8 가 고른 거울의 값 [4] (렌더러 +0x28) ≠ 0 이면 0x80 을 빼 **0x02**, 0 이면 0x80 을 켠다.
+- 레벨 모델: 0x156820 이 MDL 렌더 플래그를 모델 +0xC0 으로 복사, m = 1 (0x1503E0). **MDL 데이터 +0x28 u64** 가 그 플래그다 (04 문서):
+  전 WAD 조사 — bit 57 28 개 (전부 반사 대리: `fakeReflections`, `refkect`, `reflection`, `…ReflectONLY`, `mirroredStatue`, `swordReflections`, `PAND05A Mirror*` …),
+  bit 61 60 개 (ATHN04 방·벽화·문·항아리, PAND03H 석상, PAND05A, ATHN05 `…Reflect`), bit 56 671 개 (글로우·플레어 [추정]). 적 MDL 은 bit 61 이 없다.
+- 실행 중 bit 61 + m = 0x40 (→ 0xC0) 을 주는 곳: 영웅 0x1DAEC0 (Player 0x22C958 → 0x1D62B0), 블레이드 Blades_Init·0x2015B8, 무기 부착 0x19C240 (`RWEAPIH`),
+  0x1DF1E0 ← PushPull 0x20FB98 / IO_TandF 0x213C08 / IO_CSM 0x2154F8 (+ 0x1E7B90). → 값 [4] 가 끄는 쪽 (0x80) 이 "영웅 무리".
+- 0x129820 (SCR_Mirror 시작) 은 소유 모델의 bit 61 을 **지운다** = 거울이 자기 자신을 비추지 않게 (일반 뷰에는 그대로 그림 — §6.2 의 "일반 그리기에서 뺀다" 는 오독).
+  0x150738(모델, 0) 은 파트 플래그 bit 32..36 을 모드 0 (bit 32) 으로 [미해석: 파트 그리기 모드].
+
+### 9.2 거울 고르기 · 값 [0] [확실: 흐름 / 추정: 의미]
+- 0x12A6C8: 관리자 목록 (+0x1C) 의 렌더러마다 0x12A330 (모델 숨김 bit 54 면 FLT_MAX, 모델 Y 축 = 법선, 카메라가 앞쪽일 때 거리) → **가장 가까운 하나만** 거울 뷰를 켜고
+  0x12A4E8 로 반사 카메라. 없으면 거울 뷰 끔 (+0x3A4 = 0).
+- 값 [0] (렌더러 +0x24) ≠ 0 → 거울 관리자 목록 +0x14 (vtable 0x2BE268, 그리기 0x120498 → 0x11FEA0 스프라이트 2 회, 계수 0.5) 켬 — 반사 이미지 후처리 [추정: 흐림]. 미구현.
+- 목록 +0xC/+0x10 (vtable 0x2BE240 = 0x121128), +0x18 (vtable 0x2BDC10 = **0x12ABA0**, §6.2 의 "vtable 5" 는 이 목록의 그리기) 는 0x15F288 로 단계 (2,6)/(2,7)/(0,7) 에 등록되는
+  GS 패킷 목록. 0x12ABA0 = TEST_2 0x3000D, ALPHA_2 0, TEX1 선형, 뷰 사각형 (+0x368..0x374) 을 32 화소 띠 스프라이트로 복사 — 합성 세부 [미해석].
+
+### 9.3 엔진 (`Mirrors`, `LevelScene.renderMirrors`, `GowModel.renderFlags`)
+- 인스턴스 뷰 마스크 = `Mirrors.modelMask(MDL +0x28, 1)` (PushPull/IO_TandF/IO_CSM 비헤이비어 GO 는 bit 61 + 0x40), 거울 소유자는 bit 61 뺌.
+  일반 패스·이웃 슬롯·자세 인스턴스는 마스크 & 0x41 ≠ 0 만 → **반사 전용 메시는 일반 뷰에 안 그림**.
+- 반사 패스: 가장 가까운 거울 하나 (`Mirrors.nearest`, 눈 → 거울 중심 거리 [근사: 0x12A330 의 앞쪽 검사 생략]) 만 스텐실 반사, 나머지 거울은 모델만.
+  `마스크 & 거울 뷰 마스크` 인 레벨 인스턴스 + 자세/반복 act 인스턴스 (스키닝) + 값 [4] = 0 이면 영웅·블레이드 (`LevelScene.setMirrorActors`, GameScene 이 건다).
+  적·시체·파티클은 그리지 않는다 (원작 마스크에 없음 — 파티클 노드 마스크 +0x48 의 기본값은 [미해석]). 하늘도 반사하지 않는다 (bit 61 없음).
+- 반사 카메라 = `Camera.mirror` (VP·R) + `Camera.clipPlane` (skinned.vert 에도 `gl_ClipDistance`), `glFrontFace(GL_CW)` 로 감김 반전 (면 컬링 패스 대비).
+- 평면이 아닌 거울 메시 (ATHN01E goreflfloor 이탈 10, PAND05B oorMirrorGRP 5) 는 생략하던 것을 0x12A330 처럼 모델 Y 축 (관절 0 월드 2 행) 평면으로 —
+  평면 거울의 맞춘 법선도 모두 이 축과 평행 (ATHN01E 는 이제 거울 1).
+- 디버그: `GOW_MIRROR=raw` = 거울 모델을 반사 위에 그리지 않음 (반사 장면만), `GOW_MIRROR=off` = 이전 동작 (반사 없음, 대리 메시도 일반 뷰에).
+
+### 9.4 검증 (스크린샷 `/Users/obeomsu/.claude/jobs/6f65672f/tmp/qa3/`, 커밋 안 함, `_on` / `_off` = `GOW_MIRROR=off`)
+- OLYMP02: 대리석 복도 바닥에 크레토스가 거꾸로 비치고 벽 반사는 `refkect` 대리 메시 (이전: 벽 반사만, `off` 는 대리 메시가 벽 무늬를 늘어뜨림).
+- ATHN04B: 바닥 타일에 bit 61 벽화 + 크레토스 다리 반사 (쓰러진 적은 반사 없음).
+- ATHN07B: 이전엔 `rtalFakeReflections` 가 화면 전체를 덮었다 → 포털 앞 크레토스와 포털 속 반사 장면 (§4·§7.3 의 "거울 반사 사본" 해결).
+- ATHN06B (`_hero*` = `--arrive ATHN06B@-2800,740,-1520,90`): 방 안을 덮던 흐린 사본 벽이 사라지고 실제 방이 보인다. PAND03I: 주황 판 사라짐. PAND01BB·PAND05A·ATHN01E: 작은 변화.
+- 테스트: `MirrorViewMaskTest` 3 (마스크 식, MDL bit 57/61 — OLYMP02 refkect, ATHN06B fakeReflections, ATHN04B polySurface16576, 가장 가까운 거울·모델 축 평면). 엔진 테스트 290.
+
+### 9.5 남은 것
+- ATHN06B floorReflect 등 거울 모델 머티리얼이 불투명이면 반사가 전부 덮인다 (`GOW_MIRROR=raw` 로만 보임) — 원작 합성 0x12ABA0 (거울 뷰 버퍼 → 프레임 복사 순서) 해석 필요.
+- 값 [0] 후처리 (0x120498), 0x12A330 의 앞쪽 검사·정확한 거리 기준점 (메시 경계 구 중심 +0x48..), 파티클 노드 뷰 마스크.

@@ -167,6 +167,11 @@ public final class GameScene implements Scene {
 			level.enter(e);
 			level.setExternalCamera(cam);
 			level.setDeferEffects(true);
+			// SCR_Mirror 반사 패스의 영웅 (원작 0x1DAEC0: 영웅 모델 bit 61, 마스크 0x40 → 거울 뷰 0x80, 값 [4] ≠ 0 인 거울은 뺀다 — 43 문서 §9)
+			level.setMirrorActors(rc -> {
+				level.fx().env().applyFog(hero.shader(), rc, e.window().height());
+				hero.draw(rc, e.window().aspect(), renderAlpha, e.renderer().white());
+			});
 			col = level.collision();
 			hero = new HeroRig(session.rom, session.permk, session.player != null ? session.player.costume : session.costume, session.player);
 			hero.difficulty = session.difficulty;
@@ -1446,6 +1451,9 @@ public final class GameScene implements Scene {
 		}
 	}
 
+	/** 이번 프레임 렌더 보간 값 (반사 패스 콜백용). */
+	private float renderAlpha = 1f;
+
 	private void updateCamera(float alpha) {
 		// 원작 카메라 시스템 (CMV 선택 + 레일/궤도 + 전환 보간): CameraRig, 30 문서. 갱신은 update() 틱에서
 		cameraRig.apply(cam, alpha);
@@ -1454,6 +1462,7 @@ public final class GameScene implements Scene {
 
 	@Override
 	public void render(Engine e, float alpha) {
+		renderAlpha = alpha;
 		updateCamera(alpha);
 		level.fx().env().setFogOverride(magicFx.screen.fog()); // 포세이돈 Fog Template (0x195C90, 35 문서 §4.6)
 		level.render(e, alpha);
