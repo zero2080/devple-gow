@@ -50,3 +50,20 @@
 - 레벨 스크립트 런타임(13/28 문서, 진행 중) 연결: 센서 → 메시지/체크포인트/사망 구역/레벨 전환(LoadWad·Warp)/적 스폰
 - 적 스폰: SpawnEnemy 엔티티 + WadInfo 가 지정한 적 WAD(`R_SKS` 등) 로 `EnemyFighter` 생성
 - 레일 카메라(NCV 커브), FOV, 바다면(SCR_Water) 등 연출
+
+## 6. 세이브 / 불러오기
+| 항목 | 구현 |
+|------|------|
+| 세이브 포인트 생성 | SaveZoneOn 센서 → Creator 엔티티(이름 슬롯 `Name0 = "savepoint"`) → 소유 GO(`gosavegamezone*`) 위치에 세이브 포인트 |
+| 저장 | 세이브 포인트 45 유닛 안에서 R1 → `SaveGame` 슬롯 0 (`~/Library/Application Support/devple-gow/slot0.save`) + 체크포인트 갱신 |
+| 형식 | 자체 properties(UTF-8): 레벨·위치·방향, 난이도·코스튬, PlayerProgress 항목, 무기별 레벨/투자, ESC GlobalData (11 문서 §5.2 순서) |
+| 불러오기 | 메인 메뉴 "불러오기"(Menu_Choice 2) → 슬롯 0 이 있으면 세션 복원 후 저장 위치에서 시작. 원작 규칙 `hp = max(저장, 2)`, 사망 수 0 |
+| 생략 | 원작 메모리카드 UI(SaveGameMenu 예/아니오, SaveLoadMenu 슬롯 선택, `FSCommand:PS2_MemoryCard_Select`) |
+
+`SaveGameTest`: 진행도·무기·마법·GlobalData 왕복 일치.
+
+## 7. 적 템플릿 매칭 보강
+- 한 적 WAD 에 AI1 이 여러 개(R_SKA: 031 / 032 / 039) → 스폰 TemplateId 를 가진 WAD 를 찾아 그 번호로 생성 (`Kind.hasTemplate/spawn(int)`)
+- 레벨 WAD 자체의 AI1 (ATHN01D 의 301 "AOXF1", 303 "AOXF4") → 레벨 튜닝값을 합쳐 그 템플릿으로 생성
+  → **TemplateId = AI1 번호** 판단 재확인. 단 301 계열 모델 연결(어떤 스켈레톤/모델을 쓰는지)은 미해결: 현재 레벨 첫 적 종류 모델로 표시되며 거꾸로 보이는 개체가 있음
+- 디버그: `./gradlew :engine:run -PgowDebug --args="--game ATHN01D"` → 1초마다 영웅 위치/지면 출력

@@ -35,10 +35,9 @@ public final class ShellScene implements Scene {
 		v.addListener((name, value) -> {
 			if (name.equals("PS2_Done") && "1".equals(num(value)) && !started) {
 				String choice = num(v.get("PS2_Menu_Choice"));
-				if ("1".equals(choice) || "2".equals(choice)) {
-					if ("2".equals(choice)) {
-						System.out.println("불러오기: 메모리카드 세이브는 미구현 → 새 게임으로 시작");
-					}
+				if ("2".equals(choice) && java.nio.file.Files.exists(SaveGame.slot(0))) {
+					loadGame(e);
+				} else if ("1".equals(choice) || "2".equals(choice)) {
 					startGame(e, parseInt(num(v.get("PS2_Difficulty_Level")), 1));
 				}
 			}
@@ -52,6 +51,20 @@ public final class ShellScene implements Scene {
 			s.difficulty = Math.max(0, Math.min(3, difficulty));
 			System.out.println("새 게임: 난이도 " + s.difficulty + " (" + devple.gow.engine.combat.DamageRules.DIFFICULTY[s.difficulty] + ")");
 			e.scenes().transitionTo(new GameScene(s, GameFlow.START_LEVEL, null, 0));
+		} catch (IOException ex) {
+			throw new UncheckedIOException(ex);
+		}
+	}
+
+	/** 불러오기 (원작 상태 5 LoadCard → 8 LoadApply): 슬롯 0 의 세이브로 세션 복원 후 저장 위치에서 시작. */
+	private void loadGame(Engine e) {
+		started = true;
+		try {
+			GameSession s = new GameSession(rom);
+			SaveGame g = SaveGame.read(SaveGame.slot(0));
+			g.applyTo(s);
+			System.out.println("불러오기: " + g.level + " 붉은 오브 " + s.player.redOrbs);
+			e.scenes().transitionTo(new GameScene(s, g));
 		} catch (IOException ex) {
 			throw new UncheckedIOException(ex);
 		}

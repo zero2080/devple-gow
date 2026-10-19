@@ -85,6 +85,18 @@ public final class GameScene implements Scene {
 	private devple.gow.engine.combat.GrabSync grab;
 	private final Random rnd = new Random();
 
+	/** 불러오기 시 시작 위치 (null 이면 진입점/시작 인스턴스). */
+	private float[] loadPos;
+	private float loadYaw;
+	/** 레벨에 생성된 세이브 포인트 위치 (스크립트 Creator "savepoint"). */
+	private final List<Vector3f> savePoints = new ArrayList<>();
+
+	public GameScene(GameSession session, SaveGame save) {
+		this(session, save.level, null, 0);
+		this.loadPos = save.pos;
+		this.loadYaw = save.yaw;
+	}
+
 	public GameScene(GameSession session, String levelName, String entry, float autoRun) {
 		this.session = session;
 		this.levelName = levelName.toUpperCase();
@@ -167,6 +179,11 @@ public final class GameScene implements Scene {
 	}
 
 	private void placeSpawn() {
+		if (loadPos != null) {
+			spawn.set(loadPos[0], loadPos[1], loadPos[2]);
+			spawnYaw = loadYaw;
+			return;
+		}
 		LevelData data = level.data();
 		GoInstance start = null;
 		if (entry != null) {
@@ -240,6 +257,17 @@ public final class GameScene implements Scene {
 			public void spawnEnemy(SpawnRequest r) {
 				spawn(r);
 			}
+
+			@Override
+			public void create(ScriptEntity source) {
+				// Creator 엔티티: 이름 슬롯 "savepoint" → R_SAVEPT 세이브 포인트를 소유 GO 위치에 생성
+				Object name = world.slot(source, "Name0");
+				if ("savepoint".equals(name) && source.owner != null) {
+					float[] gp = source.owner.instance().pos();
+					savePoints.add(new Vector3f(gp[0], gp[1], gp[2]));
+					System.out.printf("세이브 포인트 생성 (%.0f, %.0f, %.0f)%n", gp[0], gp[1], gp[2]);
+				}
+			}
 		};
 	}
 
@@ -259,9 +287,16 @@ public final class GameScene implements Scene {
 			return;
 		}
 		// TemplateId → 적 종류 매핑은 미해결 (13 문서 공백) → AI1 번호가 같은 종류, 없으면 레벨의 첫 종류
-		EnemyFactory.Kind kind = kinds.values().stream().filter(k -> k.ai1() == r.templateId()).findFirst()
-				.orElse(kinds.values().iterator().next());
-		EnemyFighter f = kind.spawn();
+		EnemyFactory.Kind kind = kinds.values().stream().filter(k -> k.hasTemplate(r.templateId())).findFirst().orElse(null);
+		EnemyFighter f;
+		if (kind != null) {
+			f = kind.spawn(r.templateId());
+		} else {
+			// 레벨 WAD 자체에 정의된 AI1 템플릿 (예 ATHN01D 의 301 "AOXF1") → 레벨 튜닝값을 첫 적 종류에 합쳐 그 템플릿으로
+			kind = kinds.values().iterator().next();
+			kind.tweaks().load(level.data().wad);
+			f = kind.hasTemplate(r.templateId()) ? kind.spawn(r.templateId()) : kind.spawn();
+		}
 		float[] w = r.world();
 		f.pos.set(w[12], w[13], w[14]);
 		f.prevPos.set(f.pos);
@@ -285,6 +320,30 @@ public final class GameScene implements Scene {
 		v.event("PS2_MessageTemplate_Event", 1);
 		messageTimer = seconds > 0 ? seconds : 4f;
 		System.out.println("메시지 " + id + ": " + text.replace('\n', ' '));
+	}
+
+	private boolean nearSavePoint() {
+		for (Vector3f sp : savePoints) {
+			if (sp.distance(hero.ctl.position) < 45) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * 세이브 포인트 저장 (원작 상태 15 SavePoint → 17 SaveWrite). 원작 메모리카드 슬롯 UI(SaveGameMenu/SaveLoadMenu)는
+	 * 생략하고 슬롯 0 에 바로 저장한다.
+	 */
+	private void save() {
+		try {
+			Vector3f p = hero.ctl.position;
+			SaveGame.capture(session, levelName, new float[]{p.x, p.y, p.z}, hero.ctl.yaw).write(SaveGame.slot(0));
+			checkpoint.set(p);
+			System.out.println("저장 완료: " + SaveGame.slot(0));
+		} catch (IOException ex) {
+			System.out.println("저장 실패: " + ex.getMessage());
+		}
 	}
 
 	private void heroDied() {
@@ -325,6 +384,11 @@ public final class GameScene implements Scene {
 	public void update(Engine e, float dt) {
 		pendingEngine = e;
 		time += dt;
+		if (System.getProperty("gow.debug") != null && ((int) (time * 60)) % 60 == 0) {
+			Vector3f hp = hero.ctl.position;
+			System.out.printf("[디버그] t=%.0f 영웅 (%.0f, %.0f, %.0f) 지면=%s 바닥높이=%.1f%n", time, hp.x, hp.y, hp.z,
+					hero.ctl.grounded, col.groundHeight(hp.x, hp.y + STEP, hp.z, 4000));
+		}
 		if (!powerUp) {
 			hudBinding.update(hero.player, hud.variables());
 		}
@@ -339,6 +403,9 @@ public final class GameScene implements Scene {
 			paused = true;
 			hud.variables().event("PS2_PauseMenu_Event", 1);
 			return;
+		}
+		if (e.input().pressed(PadButton.R1) && !hero.combat.active() && nearSavePoint()) {
+			save();
 		}
 		if (e.input().pressed(PadButton.SELECT)) {
 			paused = powerUp = true;

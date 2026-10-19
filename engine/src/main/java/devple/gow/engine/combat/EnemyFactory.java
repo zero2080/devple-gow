@@ -35,8 +35,18 @@ public final class EnemyFactory {
 					   List<String> combatFiles, int[] attacks, int block, String idle, String walk, String animNode) {
 
 		public EnemyFighter spawn() {
-			return new EnemyFighter(assets.wad(), tweaks, skeleton, anims, ai1, combatFiles, attacks, block, idle, walk,
-					30f, animNode);
+			return spawn(ai1);
+		}
+
+		/** 같은 WAD 의 다른 AI1 템플릿(예 R_SKA: 031 궁수 / 032 궁수 -P / 039 dumbArcher)으로 생성. */
+		public EnemyFighter spawn(int ai1Template) {
+			return new EnemyFighter(assets.wad(), tweaks, skeleton, anims, ai1Template, combatFiles, attacks, block, idle,
+					walk, 30f, animNode);
+		}
+
+		/** 이 적 WAD 에 해당 AI1 템플릿이 있는지. */
+		public boolean hasTemplate(int ai1Template) {
+			return tweaks.findNode(String.format("/TweakTemplates/AI1/%03d/", ai1Template)) != null;
 		}
 
 		public AnimatedModel buildModel(Shader skinned) {
