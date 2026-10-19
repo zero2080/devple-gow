@@ -13,7 +13,7 @@ import static org.lwjgl.glfw.GLFW.*;
  * <p>
  * 키보드 기본 배치: J=□ I=△ L=○ K=X, Q=L1 E=R1 Z=L2 C=R2, WASD=좌스틱, 방향키=우스틱(회피), Enter=START, Tab=SELECT
  */
-public final class Input {
+public class Input {
 
 	private static final Map<PadButton, Integer> KEYS = new EnumMap<>(Map.ofEntries(
 			Map.entry(PadButton.SQUARE, GLFW_KEY_J), Map.entry(PadButton.TRIANGLE, GLFW_KEY_I),

@@ -3,6 +3,7 @@ package devple.gow.engine;
 import devple.gow.engine.core.Engine;
 import devple.gow.engine.scene.AnimViewerScene;
 import devple.gow.engine.scene.DebugScene;
+import devple.gow.engine.scene.HeroTestScene;
 import devple.gow.engine.scene.ModelViewerScene;
 import devple.gow.engine.scene.Scene;
 
@@ -14,6 +15,7 @@ import java.nio.file.Path;
  *   ./gradlew :engine:run
  *   ./gradlew :engine:run --args="--screenshot work/shot.png"   (몇 프레임 후 캡처하고 종료)
  *   ./gradlew :engine:run --args="--view gow-rom/R_HERO0.WAD [MDL이름]"   (모델 뷰어)
+ *   ./gradlew :engine:run --args="--hero [gow-rom]"   (평지에서 크레토스 조작: WASD 이동, 좌우 방향키 카메라)
  *   ./gradlew :engine:run --args="--anim gow-rom/R_HERO0.WAD MDL_hero hero ANM_hero [애니이름]"   (애니메이션 뷰어)
  * </pre>
  */
@@ -25,6 +27,9 @@ public final class GowMain {
 		for (int i = 0; i < args.length; i++) {
 			if (args[i].equals("--screenshot") && i + 1 < args.length) {
 				shot = args[++i];
+			} else if (args[i].equals("--hero")) {
+				String rom = i + 1 < args.length && !args[i + 1].startsWith("--") ? args[++i] : "gow-rom";
+				first = new HeroTestScene(Path.of(rom), shot != null || java.util.Arrays.asList(args).contains("--screenshot") ? 0.4f : 0);
 			} else if (args[i].equals("--anim") && i + 4 < args.length) {
 				Path wad = Path.of(args[++i]);
 				String mdl = args[++i], skel = args[++i], anm = args[++i];
