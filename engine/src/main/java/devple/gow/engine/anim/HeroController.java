@@ -281,6 +281,12 @@ public final class HeroController implements NavBody {
 	}
 
 	@Override
+	public float clipLength(String name) {
+		Animation a = name != null ? anim.find(name) : null;
+		return a != null ? a.duration : -1f;
+	}
+
+	@Override
 	public void locomotion(String walk, String idle, float scale) {
 		walkOverride = walk;
 		idleOverride = idle;

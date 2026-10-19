@@ -66,4 +66,47 @@ class TaskProgressTest {
 		TaskProgress.Event e = t.update(true, 0.001f);
 		assertEquals(99, e.percent(), "round(99.6) = 100 이지만 t < len 이면 99");
 	}
+
+	/** PushPull 레버 (0x2127B0): 끝에 닿으면 속도 0 으로 멈추고 0x2118E8(t, len, 0) → 1023 (100, id, 0). */
+	@Test
+	void leverStopsAtEndWithSpeedZero() {
+		TaskProgress t = new TaskProgress(111, 0.5f);
+		t.stopAtEnd = true;
+		List<TaskProgress.Event> ev = run(t, true, 1f);
+		assertTrue(t.done);
+		assertEquals(new TaskProgress.Event(100, 111, 0), ev.getLast());
+	}
+
+	/** IO_TandF (0x214400): 누를 때마다 속도 += Acc (최대), 위치 += 속도 · dt / 4, TF Time 뒤 −Dec · dt, 떨어지면 내려옴. */
+	@Test
+	void liftImpulsePerPressAndDecayAfterTfTime() {
+		TaskProgress t = new TaskProgress(200, 1);
+		TaskProgress.LiftParams p = new TaskProgress.LiftParams(1, 20, 1.5f, 20, 0.25f);
+		float dt = 1 / 60f;
+		t.lift(true, true, 0, p, dt);
+		assertEquals(1f, t.speed, 1e-6f);
+		t.lift(true, true, 0, p, dt);
+		assertEquals(1.5f, t.speed, 1e-6f, "최대 1.5");
+		float pos = t.time;
+		t.lift(true, false, 0.1f, p, dt);
+		assertEquals(pos + 1.5f * dt / 4, t.time, 1e-6f, "위치 += 속도 · dt / 4");
+		assertEquals(1.5f, t.speed, 1e-6f, "TF Time 안에서는 그대로");
+		t.lift(true, false, 0.3f, p, dt);
+		assertEquals(1.5f - 20 * dt, t.speed, 1e-5f, "TF Time 뒤 −Dec · dt");
+		for (int i = 0; i < 60; i++) {
+			t.lift(false, false, 0, p, dt);
+		}
+		assertEquals(0, t.time);
+		assertEquals(0, t.speed);
+		TaskProgress.Event last = null;
+		for (int i = 0; i < 600 && !t.done; i++) {
+			TaskProgress.Event e = t.lift(true, i % 6 == 0, (i % 6) * dt, p, dt);
+			if (e != null) {
+				last = e;
+			}
+		}
+		assertTrue(t.done);
+		assertEquals(100, last.percent());
+		assertEquals(200, last.taskId());
+	}
 }
