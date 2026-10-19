@@ -15,12 +15,13 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 | 07 | [UI(FLP) / 스크립트(SCR, ESC) / 텍스트·폰트](07-ui-script-text.md) | 완료 (구조·텍스트·바이트코드, 일부 필드 미상) |
 | 08 | [엔진 아키텍처 (Java + LWJGL)](08-engine-architecture.md) | 골격 + 모델 렌더 |
 | 09 | [오디오 포맷 (VAG / VPK)](09-audio-format.md) | 완료 |
+| 10 | [전투 시스템 (CombatFile 콤보 그래프 / 피해 / 신들의 분노 / 마법 / 적)](10-combat-system.md) | 1차 완료 (포맷 확정, 재구현 명세 §15) |
 | 11 | [성장(업그레이드 비용) / 픽업(오브·아이템) / 저장(세이브 구조) / 씬 흐름(상태 머신·레벨 그래프)](11-progression-save-flow.md) | 1차 완료 (미해결 §9) |
 | 20 | [구현: 성장 시스템](20-impl-progression.md) | 완료 (테스트 6) |
 | 22 | [구현: 씬 흐름 / 게임 상태 머신](22-impl-game-flow.md) | 로직 완료 (테스트 2) |
 | 24 | [구현: 이벤트 / 레벨 스크립트 VM](24-impl-script-events.md) | VM 완료 (전 레벨 실행 검증) |
 | 25 | [구현: 애니메이션 전환 / 크레토스 이동](25-impl-hero-locomotion.md) | 평지 이동 완료 |
-| 1x | 게임 시스템 재구현: 전투, 스킬/마법, 이벤트, UI | 진행 예정 |
+| 2x | 구현 예정: 전투(26), UI 런타임(21), 레벨(23) | 진행 중 |
 
 ## 빌드 / 도구 실행
 
@@ -35,4 +36,5 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 ./gradlew :tools:run --args="tweak:dump gow-rom/R_HERO0.WAD work/exe/twk_R_HERO0.txt"  # TWK 튜닝값 (키 이름 복원)
 ./gradlew :tools:run --args="progress:dump gow-rom"                                  # 업그레이드 비용·성장·오브·세이브 구조
 ./gradlew :tools:run --args="progress:levels gow-rom work/progression/levels.txt"    # 레벨 연결 그래프 (ESC 씬 이동 호출)
+./gradlew :tools:run --args="combat:tree gow-rom/R_PERMK.WAD ROOT 6 normal"              # 영웅 콤보 트리 (combat:dump / combat:enemies)
 ```
