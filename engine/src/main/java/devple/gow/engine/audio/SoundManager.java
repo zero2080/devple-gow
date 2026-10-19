@@ -1,0 +1,489 @@
+package devple.gow.engine.audio;
+
+import devple.gow.tools.audio.AdpcmClip;
+import devple.gow.tools.audio.SoundBank;
+import devple.gow.tools.audio.SoundEmitter;
+import devple.gow.tools.audio.VagPack;
+import devple.gow.tools.audio.WadSounds;
+import devple.gow.tools.tweak.TweakFile;
+import devple.gow.tools.wad.WadFile;
+import org.joml.Vector3f;
+import org.joml.Vector3fc;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.function.BiConsumer;
+
+/**
+ * 효과음·음악 런타임 (29 문서). WAD 의 SND 뱅크(SBlk)·VAG 팩·SEM 이미터를 등록하고, 이름/TWK 해시로 소리를 재생한다.
+ * <ul>
+ *   <li>{@link #play(String, Vector3fc, int...)} — SND_* 이름 (레지스터 0..3 초기값 선택, 예: 발소리 표면)</li>
+ *   <li>{@link #play(int, Vector3fc)} — 전투 이벤트 SOUND 해시 ({@code TweakFile.hash(name)})</li>
+ *   <li>{@link #music(String, float)} / {@link #stopMusic(float)} — 스크립트 MusicGroupStart/Stop (SND_M_* → DPMS VPK 스트림)</li>
+ *   <li>{@link #soundGroup(String, int, Vector3fc)} — ESC SoundController (그룹 → SEM 이미터 → 슬롯 Op)</li>
+ * </ul>
+ * {@link #update(float)} 를 매 프레임 호출 (240Hz 그레인 틱 + 백엔드 스트림 보충). 장치 없이도 동작한다 ({@link #headless}).
+ */
+public final class SoundManager implements AutoCloseable {
+
+	public static final int TICK_HZ = 240;
+
+	/** 989snd 볼륨 그룹 (exe 0x29D078 이름 표). */
+	public static final String[] GROUPS = {"SFX", "Music", "Mime Dialogue", "Ambient Streams", "IOP Streams", "Footsteps",
+			"Menu Sounds", "Interactives", "MPEG", "Music UW no mod", "SFX UW pitch", "SFX UW no mod", "Ambient UW nomod",
+			"IOP UW no mod", "Dry Effects", "Base Reverb"};
+
+	/** 뱅크 + 소리 번호. */
+	public record Ref(SoundBank bank, int index) {
+		public SoundBank.Sound sound() {
+			return bank.sounds().get(index);
+		}
+	}
+
+	private record ClipKey(SoundBank bank, int off, int size, int rate) {
+	}
+
+	final AudioBackend backend;
+	private final Path romDir;
+	final Random rng;
+	final byte[] globalRegs = new byte[32];
+	final Map<Long, Integer> picks = new HashMap<>();
+	private final Map<String, WadSounds> wads = new LinkedHashMap<>();
+	private final Map<String, Ref> byName = new HashMap<>();
+	private final Map<Integer, String> byHash = new HashMap<>();
+	private final Map<String, VagPack> packEntries = new HashMap<>();
+	private final Map<ClipKey, AdpcmClip> clips = new HashMap<>();
+	private final Map<String, AdpcmClip> vagFiles = new HashMap<>();
+	private final Map<Integer, SoundInstance> instances = new LinkedHashMap<>();
+	private final Map<String, int[]> groupHandles = new HashMap<>();
+	private final float[] groupVolume = new float[16];
+	private final Vector3f listener = new Vector3f();
+	private float master = 1;
+	private float tickAcc;
+	private int nextHandle = 1;
+	private int musicHandle;
+	private String musicName;
+	private BiConsumer<Integer, Integer> rumble = (motor, value) -> {
+	};
+
+	public SoundManager(AudioBackend backend, Path romDir, long seed) {
+		this.backend = backend;
+		this.romDir = romDir;
+		this.rng = new Random(seed);
+		Arrays.fill(groupVolume, 1);
+	}
+
+	/** 장치 없는 관리자 (테스트·서버). */
+	public static SoundManager headless(Path romDir) {
+		return new SoundManager(new NullAudioBackend(), romDir, 1);
+	}
+
+	/** OpenAL 장치로 열고, 실패하면 헤드리스로 대체. */
+	public static SoundManager open(Path romDir) {
+		try {
+			return new SoundManager(new OpenAlBackend(), romDir, System.nanoTime());
+		} catch (Throwable t) {
+			System.err.println("오디오 장치 없음 → 무음: " + t.getMessage());
+			return headless(romDir);
+		}
+	}
+
+	public AudioBackend backend() {
+		return backend;
+	}
+
+	// ---- 뱅크 등록 ----
+
+	/** WAD 의 뱅크/팩/이미터 등록 (R_PERMK → 영웅 → 레벨 → 적 순서, 같은 이름은 나중 것이 우선). */
+	public WadSounds load(WadFile wad) {
+		WadSounds ws = WadSounds.load(wad);
+		wads.put(wad.name(), ws);
+		index(ws);
+		return ws;
+	}
+
+	public void unload(String wadName) {
+		if (wads.remove(wadName) != null) {
+			byName.clear();
+			byHash.clear();
+			packEntries.clear();
+			clips.keySet().removeIf(k -> wads.values().stream().noneMatch(w -> w.banks().contains(k.bank())));
+			wads.values().forEach(this::index);
+		}
+	}
+
+	private void index(WadSounds ws) {
+		for (SoundBank b : ws.banks()) {
+			for (Map.Entry<String, Integer> e : b.names().entrySet()) {
+				if (e.getValue() >= 0 && e.getValue() < b.sounds().size()) {
+					byName.put(e.getKey(), new Ref(b, e.getValue()));
+					byHash.put(TweakFile.hash(e.getKey()), e.getKey());
+					byHash.putIfAbsent(TweakFile.hashUpper(e.getKey()), e.getKey());
+				}
+			}
+		}
+		for (VagPack p : ws.packs()) {
+			for (String e : p.entries().keySet()) {
+				packEntries.put(e, p);
+			}
+		}
+	}
+
+	public boolean has(String sndName) {
+		return byName.containsKey(sndName);
+	}
+
+	public Ref find(String sndName) {
+		return byName.get(sndName);
+	}
+
+	/** TWK 해시 → 이름 (없으면 null). */
+	public String nameOf(int hash) {
+		return byHash.get(hash);
+	}
+
+	public Map<String, WadSounds> loaded() {
+		return wads;
+	}
+
+	// ---- 재생 ----
+
+	/** 이름으로 재생. pos == null 이면 2D. regs = 로컬 레지스터 0..3 초기값. 반환 = 핸들 (0 = 없는 이름). */
+	public int play(String sndName, Vector3fc pos, int... regs) {
+		Ref r = byName.get(sndName);
+		if (r == null) {
+			return 0;
+		}
+		return start(r.bank(), r.sound(), pos, 127, regs).handle;
+	}
+
+	public int play(String sndName) {
+		return play(sndName, null);
+	}
+
+	/** 전투 이벤트 SOUND(3)/SCR_SOUND(40) 해시로 재생. */
+	public int play(int hash, Vector3fc pos) {
+		String n = byHash.get(hash);
+		return n != null ? play(n, pos) : 0;
+	}
+
+	private SoundInstance start(SoundBank bank, SoundBank.Sound s, Vector3fc pos, int vol, int[] regs) {
+		if (s.instanceLimit() > 0) {
+			// 인스턴스 제한: 같은 소리가 제한 이상이면 가장 오래된 것 정지
+			List<SoundInstance> same = instances.values().stream()
+					.filter(i -> i.bank == bank && i.sound.index() == s.index() && !i.killed).toList();
+			for (int k = 0; k <= same.size() - s.instanceLimit(); k++) {
+				same.get(k).kill();
+			}
+		}
+		SoundInstance in = new SoundInstance(this, nextHandle++, bank, s, null);
+		in.vol = vol;
+		in.pos = pos != null ? new Vector3f(pos) : null;
+		for (int i = 0; regs != null && i < Math.min(4, regs.length); i++) {
+			in.regs[i] = (byte) regs[i];
+		}
+		instances.put(in.handle, in);
+		// 첫 그레인 대기가 0 이면 즉시 실행 (원작은 다음 틱이지만 체감 차이 없음)
+		in.tick();
+		return in;
+	}
+
+	SoundInstance child(SoundInstance parent, SoundBank.Sound s, int vol) {
+		SoundInstance c = new SoundInstance(this, 0, parent.bank, s, parent);
+		c.vol = vol;
+		c.pos = parent.pos;
+		c.near = parent.near;
+		c.far = parent.far;
+		c.music = parent.music;
+		System.arraycopy(parent.regs, 0, c.regs, 0, 4);
+		c.tick();
+		return c;
+	}
+
+	public void stop(int handle) {
+		SoundInstance i = instances.get(handle);
+		if (i != null) {
+			i.stop();
+		}
+	}
+
+	public void kill(int handle) {
+		SoundInstance i = instances.get(handle);
+		if (i != null) {
+			i.kill();
+		}
+	}
+
+	public boolean playing(int handle) {
+		SoundInstance i = instances.get(handle);
+		return i != null && i.alive();
+	}
+
+	public void setPosition(int handle, Vector3fc pos) {
+		SoundInstance i = instances.get(handle);
+		if (i != null) {
+			i.setPosition(pos != null ? new Vector3f(pos) : null);
+		}
+	}
+
+	/** 3D 감쇠 거리 (기본 near 10, far 80 — SEM 이미터 값이 있으면 그것). */
+	public void setRange(int handle, float near, float far) {
+		SoundInstance i = instances.get(handle);
+		if (i != null) {
+			i.near = near;
+			i.far = far;
+			i.updateVoices();
+		}
+	}
+
+	public void setRegister(int handle, int reg, int value) {
+		SoundInstance i = instances.get(handle);
+		if (i != null) {
+			i.regs[reg & 3] = (byte) value;
+		}
+	}
+
+	/** 전역 레지스터 (그레인 레지스터 번호 -1-i). */
+	public void setGlobalRegister(int i, int value) {
+		globalRegs[i & 31] = (byte) value;
+	}
+
+	public int globalRegister(int i) {
+		return globalRegs[i & 31];
+	}
+
+	public void listener(Vector3fc pos, Vector3fc forward, Vector3fc up) {
+		listener.set(pos);
+		backend.listener(pos, forward, up);
+	}
+
+	public void setGroupVolume(int group, float v) {
+		groupVolume[group & 15] = v;
+	}
+
+	public void setMasterVolume(float v) {
+		master = v;
+	}
+
+	float groupGain(int group) {
+		return master * groupVolume[group & 15];
+	}
+
+	public void onRumble(BiConsumer<Integer, Integer> l) {
+		rumble = l;
+	}
+
+	// ---- 음악 / 사운드 그룹 ----
+
+	/** MusicGroupStart(name, fadeSec): 현재 음악을 멈추고 SND_M_* 소리를 음악 그룹으로 재생. */
+	public int music(String sndName, float fadeSec) {
+		if (sndName.equals(musicName) && playing(musicHandle)) {
+			return musicHandle;
+		}
+		stopMusic(fadeSec);
+		Ref r = byName.get(sndName);
+		if (r == null) {
+			return 0;
+		}
+		SoundInstance in = new SoundInstance(this, nextHandle++, r.bank(), r.sound(), null);
+		in.music = true;
+		instances.put(in.handle, in);
+		in.tick();
+		musicHandle = in.handle;
+		musicName = sndName;
+		return in.handle;
+	}
+
+	/** MusicGroupStop(fadeSec). 페이드는 미구현 (즉시 정지). */
+	public void stopMusic(float fadeSec) {
+		if (musicHandle != 0) {
+			kill(musicHandle);
+		}
+		musicHandle = 0;
+		musicName = null;
+	}
+
+	public String currentMusic() {
+		return playing(musicHandle) ? musicName : null;
+	}
+
+	/**
+	 * MusicGroupParam(a, b, sec) [의미 추정]: 4채널 음악의 층 볼륨으로 해석 — a = 층(0/1 외 값은 층 1), b = 0..127 볼륨.
+	 */
+	public void musicParam(int a, int b, float sec) {
+		SoundInstance in = instances.get(musicHandle);
+		if (in != null) {
+			layer(in, a == 0 ? 0 : 1, Math.max(0, Math.min(127, b)) / 127f);
+		}
+	}
+
+	private void layer(SoundInstance in, int layer, float gain) {
+		for (int[] v : in.voices) {
+			VpkStream s = streams.get(v[0]);
+			if (s != null) {
+				s.layerGain[layer] = gain;
+			}
+		}
+		in.children.forEach(c -> layer(c, layer, gain));
+	}
+
+	/**
+	 * ESC SoundController: group = 엔티티 이름 접두사 (예: SNDGrpAmbDeckofShip), op 0 = 끄기, 1..4 = 이미터 슬롯 소리 켜기.
+	 * 이미터 위치 = SEM 행렬 이동 성분 + origin (소유 오브젝트 위치, 모르면 null → 2D).
+	 */
+	public void soundGroup(String group, int op, Vector3fc origin) {
+		int[] old = groupHandles.remove(group);
+		if (old != null) {
+			for (int h : old) {
+				stop(h);
+			}
+		}
+		if (op <= 0) {
+			return;
+		}
+		List<Integer> hs = new ArrayList<>();
+		for (WadSounds ws : wads.values()) {
+			for (SoundEmitter e : ws.emittersOf(group)) {
+				String snd = e.sound(op);
+				if (snd == null) {
+					continue;
+				}
+				Vector3f p = origin != null ? new Vector3f(origin).add(e.matrix()[12], e.matrix()[13], e.matrix()[14]) : null;
+				int h = play(snd, p);
+				if (h != 0) {
+					setRange(h, e.near(), Math.max(e.near() + 1, e.far()));
+					hs.add(h);
+				}
+			}
+		}
+		if (!hs.isEmpty()) {
+			groupHandles.put(group, hs.stream().mapToInt(Integer::intValue).toArray());
+		}
+	}
+
+	// ---- 그레인 실행기 콜백 ----
+
+	AdpcmClip clip(SoundBank bank, SoundBank.Tone t) {
+		int rate = (int) Math.round(t.sampleRate());
+		return clips.computeIfAbsent(new ClipKey(bank, t.sampleOffset(), t.sampleSize(), rate), k -> bank.decode(t));
+	}
+
+	private final Map<Integer, VpkStream> streams = new HashMap<>();
+
+	/** DPMS 플러그인 메시지. */
+	int plugin(SoundInstance in, SoundBank.Plugin p) {
+		if (p == null) {
+			return 0;
+		}
+		if (p.command() == 0x16) {
+			rumble.accept(p.arg0(), p.arg1());
+			return 0;
+		}
+		if (p.command() != 0) {
+			return 0;
+		}
+		Voice v = in.baseVoice(127, 0);
+		v.label = in.name() + " dpms:" + p.name();
+		switch (p.kind()) {
+			case 0 -> {
+				VagPack pack = packEntries.get(p.name().toUpperCase());
+				AdpcmClip c = pack != null ? pack.clip(p.name()) : null;
+				if (c != null) {
+					in.addVoice(backend.play(c, v), c.looped());
+				}
+			}
+			case 1 -> {
+				AdpcmClip c = vagFile(p.name());
+				if (c != null) {
+					in.addVoice(backend.play(c, v), c.looped());
+				}
+			}
+			case 2, 3 -> {
+				Path f = romFile(p.name() + ".VPK");
+				if (f != null) {
+					VpkStream s = new VpkStream(f, p.loop());
+					int id = backend.stream(s, v);
+					if (id > 0) {
+						streams.put(id, s);
+						in.addVoice(id, p.loop());
+					}
+				}
+			}
+			default -> {
+			}
+		}
+		return 0;
+	}
+
+	private AdpcmClip vagFile(String name) {
+		return vagFiles.computeIfAbsent(name.toUpperCase(), k -> {
+			Path f = romFile(k + ".VAG");
+			if (f == null) {
+				return null;
+			}
+			try {
+				return VagPack.vagClip(k, Files.readAllBytes(f));
+			} catch (IOException e) {
+				return null;
+			}
+		});
+	}
+
+	private Path romFile(String file) {
+		if (romDir == null) {
+			return null;
+		}
+		Path f = romDir.resolve(file.toUpperCase());
+		return Files.exists(f) ? f : null;
+	}
+
+	// ---- 프레임 ----
+
+	/** 매 프레임: 240Hz 그레인 틱 + 백엔드 보충 + 끝난 인스턴스 정리. */
+	public void update(float dt) {
+		tickAcc += dt;
+		int n = 0;
+		while (tickAcc >= 1f / TICK_HZ && n++ < TICK_HZ) {
+			tickAcc -= 1f / TICK_HZ;
+			for (SoundInstance i : instances.values()) {
+				i.tick();
+			}
+		}
+		backend.tick(dt);
+		streams.keySet().removeIf(id -> !backend.playing(id));
+		Iterator<SoundInstance> it = instances.values().iterator();
+		while (it.hasNext()) {
+			if (!it.next().alive()) {
+				it.remove();
+			}
+		}
+	}
+
+	/** 활성 인스턴스 수. */
+	public int active() {
+		return instances.size();
+	}
+
+	public void stopAll() {
+		instances.values().forEach(SoundInstance::kill);
+		instances.clear();
+		groupHandles.clear();
+		musicHandle = 0;
+		musicName = null;
+	}
+
+	@Override
+	public void close() {
+		stopAll();
+		backend.close();
+	}
+}

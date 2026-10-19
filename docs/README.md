@@ -19,6 +19,7 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 | 11 | [성장(업그레이드 비용) / 픽업(오브·아이템) / 저장(세이브 구조) / 씬 흐름(상태 머신·레벨 그래프)](11-progression-save-flow.md) | 1차 완료 (미해결 §9) |
 | 12 | [레벨 구성: 배치(go/오브젝트) / 충돌(Sheet, BallHull) / 카메라(CAM, CMV)](12-level-format.md) | 1차 완료 (표면 속성 비트·레일 카메라 미상) |
 | 13 | [레벨 스크립트 엔티티 런타임: 타입별 슬롯 / 메시지·발동 순서 / Entity·Internal 함수 인자](13-script-entities.md) | 1차 완료 (이벤트 번호·Vis 속성 일부 미상) |
+| 14 | [사운드 뱅크 (SND / 989snd SBlk 그레인·톤 / DPMS 플러그인 / VAG 팩 / SEM 이미터 / 음악 선택)](14-sound-bank-format.md) | 1차 완료 (전 뱅크 디코딩, ADSR·LFO·그레인 10–12 미상) |
 | 20 | [구현: 성장 시스템](20-impl-progression.md) | 완료 (테스트 6) |
 | 22 | [구현: 씬 흐름 / 게임 상태 머신](22-impl-game-flow.md) | 로직 완료 (테스트 2) |
 | 24 | [구현: 이벤트 / 레벨 스크립트 VM](24-impl-script-events.md) | VM 완료 (전 레벨 실행 검증) |
@@ -28,6 +29,7 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 | 23 | [구현: 레벨 씬 / 충돌 질의](23-impl-level.md) | 렌더·충돌 질의 완료 (테스트 4) |
 | 27 | [구현: 통합 게임 씬](27-impl-game-scene.md) | 레벨+크레토스+HUD 동작 |
 | 28 | [구현: ESC 엔티티 런타임 (ScriptWorld)](28-impl-script-world.md) | 센서·발동·이벤트·스폰 완료 (테스트 8) |
+| 29 | [구현: 오디오 런타임 (SoundManager: 그레인 실행기, 3D, 음악 스트림)](29-impl-audio.md) | API 완료·GameScene 연결 대기 (테스트 9) |
 | 90 | [현황 / 로드맵](90-status-roadmap.md) | 수시 갱신 |
 | 2x | 구현 진행 중: 스크립트·적 스폰 통합, 잡기/QTE, 세이브, 연출 | 진행 중 |
 
@@ -58,5 +60,7 @@ Shift L3 + 오른쪽 Shift R3 = 신들의 분노, Enter = START(일시정지). �
 ./gradlew :tools:run --args="combat:tree gow-rom/R_PERMK.WAD ROOT 6 normal"              # 영웅 콤보 트리 (combat:dump / combat:enemies)
 ./gradlew :tools:run --args="level:info gow-rom/ATHN01A.WAD"                          # 레벨 배치/충돌/볼륨/카메라
 ./gradlew :tools:run --args="script:entities gow-rom/ATHN01A.WAD"                     # ESC 엔티티 슬롯 / 소유 GO / ENV
+./gradlew :tools:run --args="audio:sbk gow-rom/R_PERMK.WAD work/sound/R_PERMK"          # 사운드 뱅크 요약 + 톤/VAG 팩 WAV 추출
+./gradlew :tools:run --args="audio:music gow-rom"                                       # 음악 이름 → VPK 스트림 표
 ./gradlew :engine:run --args="--level gow-rom/ATHN01A.WAD --cam auto --col"           # 레벨 뷰어
 ```

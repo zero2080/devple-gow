@@ -47,7 +47,7 @@
 
 ## 4. 이름 규칙 (관찰)
 - `A01HL17` 등 `HL` = 대사(hero line?) 계열 음성, `*LP` = 루프 앰비언트 (`UWATH4LP` 수중 아테네, `WETRM1LP`)
-- WAD 내부 `SBK_*` 사운드뱅크와 `SND_*` 이름 리스트(PARAM 태그)가 레벨 효과음을 참조 — SBK(`SBlk`) 포맷은 미분석
+- WAD 내부 SND 리소스(`SBK_*`, `GENERAL`) = `SND_*` 이름 표 + 989snd `SBlk` 뱅크 → [14 문서](14-sound-bank-format.md). VAG/VPK 파일은 뱅크의 DPMS 플러그인 메시지가 이름으로 연다
 
-## 5. 엔진 연동 계획
-LWJGL OpenAL 로 재생. 짧은 VAG 는 메모리 버퍼, VPK 는 스트리밍 버퍼 큐(디코딩을 블록 단위로).
+## 5. 엔진 연동
+LWJGL OpenAL 로 재생. 짧은 VAG 는 메모리 버퍼, VPK 는 스트리밍 버퍼 큐(디코딩을 블록 단위로) → [29 문서](29-impl-audio.md) `SoundManager`.
