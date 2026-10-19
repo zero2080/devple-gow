@@ -232,7 +232,9 @@ public final class SceneNav {
 	public void animate(ScriptEntity source, List<String> objects, String anim) {
 		int[] mode = new int[1];
 		float[] speed = {1}, start = new float[1];
-		animatorArgs(world, source, mode, speed, start);
+		if (source != null) {
+			animatorArgs(world, source, mode, speed, start);
+		}
 		for (String o : objects) {
 			if (navWorld.platforms().play(o, anim, mode[0], speed[0], start[0])) {
 				System.out.println("오브젝트 애니: " + o + " " + anim + " 모드 0x" + Integer.toHexString(mode[0]) + " 속도 " + speed[0]);
@@ -290,6 +292,11 @@ public final class SceneNav {
 				world.linkEvents(null);
 			}
 		}
+	}
+
+	/** 스크립트 Animator 가 움직이는 발판·문 (렌더 자세용). */
+	public List<Platforms.Body> platformBodies() {
+		return navWorld.platforms().bodies();
 	}
 
 	/** 리스폰·Goto 뒤 내비게이터 상태 초기화. */

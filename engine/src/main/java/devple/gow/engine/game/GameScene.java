@@ -1102,6 +1102,11 @@ public final class GameScene implements Scene {
 		}
 		Vector3f p = hero.ctl.position;
 		nav.update(dt, p);
+		for (var b : nav.platformBodies()) {
+			if (b.anim() != null) {
+				level.poseInstance(b.owner, b.joints()); // 움직인 발판·문·회전방은 애니 자세로 그린다
+			}
+		}
 		breakables.update(hero.combat, world, this::onBreak);
 		cameraRig.update(dt, p, hero.ctl.yaw, !hero.ctl.grounded);
 		session.sound.setUnderwater(cameraRig.underwater()); // 수중 카메라 → 소리 수중 처리 (29 문서 §10)

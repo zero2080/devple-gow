@@ -24,7 +24,9 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 
 import static org.lwjgl.glfw.GLFW.*;
@@ -117,6 +119,18 @@ public final class LevelScene implements Scene {
 
 	/** 숨긴 인스턴스 (부서진 물체 등, 인스턴스 이름 소문자). */
 	private final java.util.Set<String> removed = new java.util.HashSet<>();
+	/** 스크립트 Animator 로 움직인 오브젝트 (이름 → 관절 월드) — 구운 메시 대신 스키닝 모델로 그린다. */
+	private final Map<String, float[][]> posed = new HashMap<>();
+	private final Map<String, devple.gow.engine.asset.AnimatedModel> posedModels = new HashMap<>();
+	private devple.gow.engine.render.Shader skinned;
+
+	/**
+	 * 오브젝트 자세 (관절 월드 = 애니 월드 × 인스턴스 행렬, {@code nav.Platforms.Body#joints}). 원작은 배치 오브젝트도 관절 애니로 그린다 —
+	 * 엔진은 불러올 때 정지 자세로 정점을 구워 두므로, 애니가 한 번이라도 돈 오브젝트만 스키닝 모델로 바꿔 그린다.
+	 */
+	public void poseInstance(String name, float[][] jointWorld) {
+		posed.put(name.toLowerCase(Locale.ROOT), jointWorld);
+	}
 
 	/** 인스턴스를 더 그리지 않는다 (부서지는 물체 파괴, 스크립트 Vis 숨김). */
 	public void hideInstance(String name) {
@@ -374,10 +388,12 @@ public final class LevelScene implements Scene {
 		fx.beginWorld(e, cam, false);
 		tmp.identity();
 		for (Instance i : instances) {
-			if (!i.sky() && !fx.hidden(i) && !removed.contains(i.name().toLowerCase(Locale.ROOT))) {
+			String key = i.name().toLowerCase(Locale.ROOT);
+			if (!i.sky() && !fx.hidden(i) && !removed.contains(key) && !posed.containsKey(key)) {
 				e.renderer().draw(i.model(), tmp);
 			}
 		}
+		renderPosed(e, cam);
 		if (!deferEffects) {
 			fx.renderEffects(e, cam);
 		}
@@ -393,6 +409,36 @@ public final class LevelScene implements Scene {
 			}
 			glEnable(GL_DEPTH_TEST);
 		}
+	}
+
+	private void renderPosed(Engine e, Camera cam) {
+		if (posed.isEmpty()) {
+			return;
+		}
+		if (skinned == null) {
+			skinned = new devple.gow.engine.render.Shader("skinned.vert", "basic.frag");
+		}
+		for (Map.Entry<String, float[][]> en : posed.entrySet()) {
+			if (removed.contains(en.getKey())) {
+				continue;
+			}
+			devple.gow.engine.asset.AnimatedModel m = posedModels.computeIfAbsent(en.getKey(), this::posedModel);
+			if (m != null) {
+				m.draw(cam, e.window().aspect(), tmp.identity(), en.getValue(), e.renderer().white(), -1f, 1f);
+			}
+		}
+	}
+
+	private devple.gow.engine.asset.AnimatedModel posedModel(String key) {
+		for (LevelLayout.Placement p : data.layout.placements()) {
+			if (p.instance().name().equalsIgnoreCase(key) && p.model() != null && p.object().skeleton() != null) {
+				GowModel gm = assets.gowModel(p.model());
+				if (gm != null && p.object().skeleton().size() <= devple.gow.engine.asset.AnimatedModel.MAX_JOINTS) {
+					return new devple.gow.engine.asset.AnimatedModel(assets, gm, p.object().skeleton(), skinned);
+				}
+			}
+		}
+		return null;
 	}
 
 	/**

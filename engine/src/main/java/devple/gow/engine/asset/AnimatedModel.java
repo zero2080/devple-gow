@@ -129,7 +129,11 @@ public final class AnimatedModel implements AutoCloseable {
 	 * 불투명도(hdr8 = p28)를 시간 fxTime 으로, alpha 는 전체 불투명도 배율 (페이드 아웃).
 	 */
 	public void draw(Camera cam, float aspect, Matrix4f world, Pose pose, Texture white, float fxTime, float alpha) {
-		float[][] w = pose.world(skeleton);
+		draw(cam, aspect, world, pose.world(skeleton), white, fxTime, alpha);
+	}
+
+	/** 관절 월드 행렬을 직접 받아 그린다 (레벨 오브젝트 Animator 애니: 관절 = 애니 월드 × 인스턴스 행렬, world = 단위). */
+	public void draw(Camera cam, float aspect, Matrix4f world, float[][] w, Texture white, float fxTime, float alpha) {
 		float[][] skin = skeleton.skin(w);
 		shader.use();
 		shader.set("uViewProj", cam.viewProj(aspect));
