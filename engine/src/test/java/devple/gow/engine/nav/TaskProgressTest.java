@@ -148,4 +148,27 @@ class TaskProgressTest {
 		assertEquals(-1f, TaskProgress.detent(0.4f, 0.03f));
 		assertEquals(0f, TaskProgress.detent(0.99f, 0.03f));
 	}
+
+	/** 기중기형 크랭크 (Push Type 3, 0x212998 모드 1): 양방향, [0, 길이] 에서 멈춤, 완료 없음, 놓으면 Dec 로 정지 (되감지 않음). */
+	@Test
+	void craneCrankIsTwoWayAndBounded() {
+		TaskProgress.RingParams p = new TaskProgress.RingParams(2, 1, 2, 1, 2, 0.03f, false);
+		TaskProgress t = new TaskProgress(244, 4);
+		float dt = 1 / 60f;
+		for (int i = 0; i < 600; i++) {
+			t.crane(true, 1, p, dt);
+		}
+		assertEquals(4f, t.time, 1e-4f, "끝에서 멈춤");
+		assertFalse(t.done);
+		for (int i = 0; i < 60; i++) {
+			t.crane(true, -1, p, dt);
+		}
+		assertTrue(t.time < 4f && t.speed < 0, "역방향");
+		float at = t.time;
+		for (int i = 0; i < 120; i++) {
+			t.crane(false, 0, p, dt);
+		}
+		assertEquals(0f, t.speed);
+		assertTrue(t.time < at && t.time > at - 0.6f, "놓으면 Dec 로 멈춤 (되감기 아님)");
+	}
 }

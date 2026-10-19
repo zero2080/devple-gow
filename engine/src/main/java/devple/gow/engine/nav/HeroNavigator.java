@@ -671,7 +671,7 @@ public final class HeroNavigator {
 				continue;
 			}
 			idle(it, dt);
-			if (it.pushType == 4 ? it.task().speed == 0 : it.task().time <= 0 || it.task().done) {
+			if (it.pushType == 4 || it.pushType == 3 ? it.task().speed == 0 : it.task().time <= 0 || it.task().done) {
 				i.remove();
 			}
 		}
@@ -684,6 +684,8 @@ public final class HeroNavigator {
 			send(it, t.lift(false, false, 0, it.liftParams(), dt));
 		} else if (it.pushType == 4) {
 			send(it, t.ring(false, 0, it.ringParams(), dt)); // 링 크랭크: 가장 가까운 멈춤 자리로 (0x2131FC)
+		} else if (it.pushType == 3) {
+			send(it, t.crane(false, 0, it.ringParams(), dt)); // 기중기형: Dec 로 멈춤 (0x212DAC)
 		} else if (it.crank) {
 			// 원작 0x212B08: t > 0 이면 속도 −= 되감기 가속 · dt, 최대 −최대 되감기
 			send(it, t.advance(t.time > 0 ? Math.max(t.speed - it.rewindAcc * dt, -it.maxBack) : 0, dt));
@@ -732,15 +734,13 @@ public final class HeroNavigator {
 						release(it);
 						return;
 					}
-					if (it.pushType == 4) {
-						// 링 크랭크: 스틱 앞 = 정회전, 뒤 = 역회전 (양방향일 때) [근사: 원작은 영웅 이동 방향 · 관절 축 0x2117E0]
-						int input = in.leftY() > 0.3f ? 1 : in.leftY() < -0.3f ? -1 : 0;
+					int input = crankInput(in, camYaw);
+					if (it.pushType == 4 || it.pushType == 3) {
 						body.play(input != 0 ? anims.get(input > 0 ? "ANICrankPush" : "ANICrankPull") : it.heroAnim, false);
-						send(it, t.ring(true, input, it.ringParams(), dt));
+						send(it, it.pushType == 4 ? t.ring(true, input, it.ringParams(), dt) : t.crane(true, input, it.ringParams(), dt));
 						return;
 					}
-					// 크랭크 입력 = 영웅 이동 방향 · 크랭크 관절 축 (0x2117E0) [근사: 축 대신 스틱 크기]
-					boolean turning = stickMag(in) > 0.3f;
+					boolean turning = input > 0;
 					float spd = turning ? Math.min(t.speed + it.acc * dt, it.maxSpeed)
 							: t.time > 0 ? Math.min(Math.max(t.speed - it.dec * dt, 0), it.maxSpeed) : 0;
 					body.play(turning ? anims.get("ANICrankPush") : it.heroAnim, false);
@@ -896,6 +896,20 @@ public final class HeroNavigator {
 			n.negate();
 		}
 		return n;
+	}
+
+	/**
+	 * 크랭크 입력 (원작 0x2117E0): 영웅 이동 방향(수평, 정규화) · 붙잡은 손잡이 관절의 −Z (비트 31 이면 +Z).
+	 * 붙잡기 조건 (0x1C3918) 이 "영웅이 관절 +Z 쪽에 서서 −Z 를 바라봄" 이므로 −Z = 영웅 정면 → 스틱 방향 · 영웅 정면 [근사: 관절 행렬 대신 영웅 방향].
+	 *
+	 * @return +1 (미는 쪽 &gt; 0.3) / −1 (당기는 쪽 &lt; −0.3) / 0
+	 */
+	private int crankInput(Input in, float camYaw) {
+		if (stickMag(in) < 0.3f) {
+			return 0;
+		}
+		float d = stickDir(in, camYaw).dot(forward(body.yaw()));
+		return d > 0.3f ? 1 : d < -0.3f ? -1 : 0;
 	}
 
 	public static Vector3f forward(float yaw) {

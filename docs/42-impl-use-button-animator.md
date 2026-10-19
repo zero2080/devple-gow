@@ -84,6 +84,10 @@
 - 템플릿 기본값 (`0x216788`): Acc 1, Dec 1, +0x34 2, +0x38 1, +0x3C 2, +0x40 0.03, +0x108 0. TWK 덤프는 `count` 개수까지만 유효하다 (Push/051 은 6 개 → 나머지 기본값).
 - 엔진 `TaskProgress.ring` / `detent`, `HeroNavigator` (스틱 앞/뒤 = ±입력 [근사: 원작은 영웅 이동 방향 · 크랭크 관절 축 `0x2117E0`]). 원작은 |목표 − f| < 1e-4 에서 붙이고, 엔진은 프레임 사이에 목표를 지나면 붙인다 [근사].
 
+**기중기형 크랭크** (Push Type 3 → 모드 1 = `0x212DE0`, PAND04C "Pand04CElevs"·PAND04G "Pand4GCrane") [확실]: 붙어 있음 — 입력 > 0 → +Acc·dt, < 0 → −Acc·dt (±최대), 없음 → Dec·dt 로 0 쪽. 놓음 — Dec 로 멈춤 (되감지 않음). 시간은 [0, 길이] 에서 멈추고 (`0x212EA0`) 완료가 없다. 엔진 `TaskProgress.crane`. (Type 2 = 대포·작살 AthnGun/AthensHarpoon 은 별개 장치.)
+
+**크랭크 입력** (`0x2117E0`) [확실]: 영웅 이동 방향 (수평, 정규화) · 붙잡은 손잡이 관절의 −Z (붙잡을 때 비트 31 이면 +Z). 붙잡기 조건 (`0x1C3918`): 관절 위치 − Z·오프셋·16 에서 영웅이 +Z 쪽 (내적 > 0), 수평 거리 < 반경·16, 높이 차 < +0x24·16, 영웅 정면 · Z < −cos — 즉 영웅이 손잡이를 바라본다. 그래서 −Z ≈ 영웅 정면이고, 엔진은 스틱 방향 · 영웅 정면 (> 0.3 밀기, < −0.3 당기기) 으로 계산한다 [근사: 관절 행렬 대신 영웅 방향]. Type 1 크랭크도 전에는 스틱 크기만 보던 것을 미는 방향으로 바꿨다.
+
 **오브젝트 자세 = 진행 시간**: R1 오브젝트(레버·크랭크·CSM 문·TAndF)의 관절 자세를 과제 진행 시간으로 정한다 (`Platforms.of(…, posed)` — 충돌 볼륨 없는 오브젝트도, `Platforms.poseAt`, `SceneNav.poseItems`). Marker 가 관절을 따라가고, 렌더도 애니 자세다 (CSM 문이 열리는 모습 등).
 - PAND00C: Marker 101 (`goring1crank` 관절 1) → `R1SouthVol` → LevelData 3, Marker 104 (`goring4`), Marker 103 (`goring3group4`).
 
@@ -106,6 +110,7 @@
 | `verify/TraversalTest.backtrackingNeedsNoForcedEvents` | 세 전환이 강제 없이 열리고, 강제 뒤에만 나온 전환이 하나도 없음 |
 | `game/QuestionMenuTest` | 질문 본문 → 줄·선택지·기본 선택·프레임 12 |
 | `nav/TaskProgressTest.ringCrankSnapsToQuarterDetents` | 링 크랭크 가속·멈춤 자리 복귀·자리 밖 정지·감기·단방향 |
+| `nav/TaskProgressTest.craneCrankIsTwoWayAndBounded` | 기중기형: 끝에서 멈춤·완료 없음·역방향·놓으면 Dec 정지 |
 | `verify/TraversalTest.hiddenObjectsAllRevealed` | 숨김 상태 상호작용 0, PAND00C 링 크랭크 풀이 |
 | `nav/AnimatorModeTest` | 회전방 정방향 → Marker 202 → LevelData:1 참 / 역방향(끝에서 시작) → 거짓 / 0x10 정지·0x11 이어서·0x8 시간 유지 / `$` 무시 |
 
@@ -115,4 +120,4 @@
 - ~~질문 메뉴 UI·아니오 값~~: 원작 HUD 메뉴 템플릿, 아니오 = 2 (§2).
 - Animator 재생 방식 4/1/2 이름과 0x100A60 내부. 재질 애니(`$…`, 모드 10/11/16)는 미구현.
 - ~~발판 애니 렌더 자세~~: 애니가 한 번이라도 돈 오브젝트는 `LevelScene.poseInstance` → 구운 메시 대신 `AnimatedModel`(관절 월드 = 애니 × 인스턴스)로 그린다 (PAND02AA 회전방 벽·레버 확인).
-- ~~PAND00C 고리 퍼즐 풀이(하네스)~~ (§5). 크랭크 입력 축(관절 축 대신 스틱 앞/뒤), 기중기 Type 3.
+- ~~PAND00C 고리 퍼즐 풀이(하네스)~~ (§5). 크랭크 입력은 영웅 정면 근사 (손잡이 관절 행렬·비트 31 쪽 미사용).

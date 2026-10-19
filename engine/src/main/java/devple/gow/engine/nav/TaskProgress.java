@@ -146,6 +146,33 @@ public final class TaskProgress {
 		return emit(time, length, speed, false);
 	}
 
+	/**
+	 * 기중기형 크랭크 (Push Type 3 → 0x212998 모드 1, PAND04C 엘리베이터 "Pand04CElevs"·PAND04G "Pand4GCrane") [확실: 디스어셈블]:
+	 * 붙어 있음 — 입력 &gt; 0 → +Acc·dt (최대 +0x38), &lt; 0 → −Acc·dt (−최대), 없음 → Dec·dt 로 0 쪽 (0x212D18 / 0x212DAC).
+	 * 놓음 — Dec·dt 로 0 쪽 (되감지 않음). 시간은 [0, 길이] 에서 멈춘다 (0x212EA0) — 완료가 없고 앞뒤로 움직인다.
+	 */
+	public Event crane(boolean attached, int input, RingParams p, float dt) {
+		if (length <= 0) {
+			return null;
+		}
+		if (attached && input > 0) {
+			speed = Math.min(speed + p.acc() * dt, p.max());
+		} else if (attached && input < 0) {
+			speed = Math.max(speed - p.acc() * dt, -p.max());
+		} else {
+			speed = speed > 0 ? Math.max(speed - p.dec() * dt, 0) : Math.min(speed + p.dec() * dt, 0);
+		}
+		time += speed * dt;
+		if (time >= length) {
+			time = length;
+			speed = Math.min(speed, 0);
+		} else if (time <= 0) {
+			time = 0;
+			speed = Math.max(speed, 0);
+		}
+		return emit(time, length, speed, false);
+	}
+
 	/** 멈춤 자리 (0x21302C): f &lt; tol 또는 f &gt; 1 − tol → 0, |f − ¼|·|f − ½|·|f − ¾| &lt; tol 중 하나 → 그 값, 아니면 −1. */
 	public static float detent(float f, float tol) {
 		if (f < tol || f > 1 - tol) {
