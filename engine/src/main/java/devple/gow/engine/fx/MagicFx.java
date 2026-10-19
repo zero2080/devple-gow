@@ -354,7 +354,8 @@ public final class MagicFx implements AutoCloseable {
 		});
 		c.addContactListener((a, victim, r) -> {
 			if (r == Hittable.Result.HIT && victim != null) {
-				hitBlood(a, c.owner().position(), victim, !hero);
+				// 0x2034CC: 공격자 +0x80 핸들 (주 대상 [추정]) 이 피격자면 배율 1, 아니면 0.125 + 바닥 피 자국 없음 [확실: 분기]
+				hitBlood(a, c.owner().position(), victim, !hero, c.target() == null || c.target() == victim);
 			}
 		});
 	}
@@ -499,7 +500,7 @@ public final class MagicFx implements AutoCloseable {
 	 * 바닥 피 자국 (sub_00221A50 → 0x1F9278). 영웅 기술의 520 "Hit Effect" 는 +0x28 이 비어 피는 ② 에서만 나온다.
 	 * 피격 구를 모르면 (히트박스 폴백) 피격자 몸 구의 SheetFX, 그것도 없으면 500 Flesh / 501 Hero Flesh [근사].
 	 */
-	private void hitBlood(CombatFile.Attack a, Vector3f from, Hittable victim, boolean victimHero) {
+	private void hitBlood(CombatFile.Attack a, Vector3f from, Hittable victim, boolean victimHero, boolean primary) {
 		int mfx = mfxOf(victim, victimHero);
 		if (tw.s(String.format("/TweakTemplates/MFX/%03d/", mfx), "Instance Name", null) == null) {
 			mfx = victimHero ? 501 : 500; // 템플릿이 든 WAD (510 Zombie Flesh 는 레벨 WAD) 가 없으면 기본 살 [근사]
@@ -514,19 +515,23 @@ public final class MagicFx implements AutoCloseable {
 		float yaw = (float) Math.atan2(-d.x, -d.z);
 		String node = String.format("/TweakTemplates/MFX/%03d/", mfx);
 		String go = tw.sHash(node, MFX_BLOOD, mfx == 500 || mfx == 501 ? "goSklBlood" : null);
-		if (go == null || fx.play(go, EffectSystem.Anchor.at(p, yaw)) == null) {
-			if (mfx >= 500) {
-				burst("blood", p);
-			}
+		// 재질 MFX 이펙트 생성률 배율 = 0x221810 f12 → GO 파티클 컴포넌트 +0xB4 (sub_00227D80): 주 대상 1, 그 외 0.125 [확실: 값·경로]
+		EffectSystem.Effect blood = go == null ? null : fx.play(go, EffectSystem.Anchor.at(p, yaw));
+		if (blood != null) {
+			blood.rateScale = primary ? 1f : 0.125f;
+		} else if (mfx >= 500) {
+			burst("blood", p);
 		}
+		lastHitScale = primary ? 1f : 0.125f;
 		lastHitMfx = mfx;
 		lastHitGo = go;
 		if (EffectSystem.LOG) {
-			System.out.printf("적중 MFX %d (%s) → %s%n", mfx, hv != null && hv.lastHitFx() > 0 ? "피격 구" : "기본", go);
+			System.out.printf("적중 MFX %d (%s) → %s ×%.3f%n", mfx, hv != null && hv.lastHitFx() > 0 ? "피격 구" : "기본", go, lastHitScale);
 		}
-		if (flag(node, "Drop Blood")) {
+		if (primary && flag(node, "Drop Blood")) {
 			bloodDrop(p, 1f);
 		}
+		// ① 공격 MFX 는 항상 배율 1 (0x203428 f12 = 1.0)
 		if (a != null && a.mfx() > 0 && (a.flags() & 2) != 0) {
 			String g2 = tw.sHash(String.format("/TweakTemplates/MFX/%03d/", a.mfx()), MFX_BLOOD, null);
 			if (g2 != null && !g2.equalsIgnoreCase(go)) {
@@ -537,6 +542,8 @@ public final class MagicFx implements AutoCloseable {
 
 	/** 마지막 적중의 MFX 번호·GO (테스트). */
 	public int lastHitMfx = -1;
+	/** 마지막 적중 재질 MFX 의 생성률 배율 (테스트). */
+	public float lastHitScale = 1;
 	public String lastHitGo;
 
 	/** 피격 재질 MFX: 맞은 구의 SheetFX → 몸 구 SheetFX → 500/501. */
@@ -562,12 +569,22 @@ public final class MagicFx implements AutoCloseable {
 		if (fl == null) {
 			return;
 		}
+		// 원작 0x1F8990: 충돌 레이 (0x11E190) 의 면 법선으로 피 자국 평면 축을 만든다 [확실]
+		float[] hit = surface.cast(new Vector3f(at).add(0, 4, 0), new Vector3f(at).add(0, -400, 0));
+		Vector3f nrm = hit != null && hit.length >= 6 ? new Vector3f(hit[3], hit[4], hit[5]) : new Vector3f(0, 1, 0);
+		if (nrm.lengthSquared() < 1e-6f || nrm.y < 0.2f) {
+			nrm.set(0, 1, 0);
+		}
+		nrm.normalize();
 		String n = "/GlobGame/BloodSpots/";
 		String go = tw.s(n, "Particle System 1 Light", "goBloodSpot");
 		float count = Math.min(tw.f(n, "Nominal Particles", 36f) * scale, 200);
-		Vector3f p = new Vector3f(at.x, fl[0] + tw.f(n, "Offset", 0.1f) * Magic.UNIT, at.z);
+		float off = tw.f(n, "Offset", 0.1f) * Magic.UNIT;
+		Vector3f p = hit != null && Math.abs(hit[1] - fl[0]) < 8 ? new Vector3f(hit[0], hit[1], hit[2]).fma(off, nrm)
+				: new Vector3f(at.x, fl[0] + off, at.z);
 		EffectSystem.Effect e = fx.play(go, EffectSystem.Anchor.of(new Matrix4f().translation(p)), 0.1f);
 		if (e != null) {
+			e.planeNormal.set(nrm);
 			e.rateOverride = count / 0.1f;
 			e.speedScale = 0.25f;
 			bloodSpots++;

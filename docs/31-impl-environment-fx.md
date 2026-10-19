@@ -37,9 +37,11 @@ render  fx.beforeRender(e, cam)                        // FarClip → cam.far, r
 - 안개: `uFogMode` (0/1/2), `uFogBlend`, `uFogColor/1/2`, `uFogStops`, `uFogDepth` (D0, near, far, BackPlane), `uFogScreen`, `uFogAdd` (가산 파트는 기여를 줄임).
   깊이 d 는 `gl_FragCoord.z` 와 near/far 로 선형화 (정점 셰이더 변경 없음). `alpha = keyA · A8(z')/128` (원작 GS 패스 해석식, 16 §1.2: z' = 16·C·n·(f−d)/((f−n)·d), z' ≥ 0x7FFF → 0, 아니면 (128 − ⌊z'/256⌋); ≈ 1 − D0/d, D0 = CentreZ·10/2048, `FxEnvironment.depthAlpha`), 층 안개 색 = 화면 y 그라디언트,
   배경 패스면 BackPlane_A/128. 텍스처 레이어 `uFogTex` (유닛 1) × 2, 화면 UV 스크롤·회전·배율.
+  층 안개 t = `mix(uFogBand.x, uFogBand.y, 화면 y)` — `FxEnvironment.band(cam)` 이 원작 0x1208C8 처럼 시선 고도각 눈금 (화면 위/아래 = 1 − (φ ± h)/π, 지평선 0.5) 을 준다 [확실].
+  Fog_A ≥ 1 ∧ 블렌드 0 단일 안개 = 원작 0x1275E0 경로: 알파 1 (Fog_A 곱 없음), BackPlane 없음 [확실]. 비교: `GOW_FOGBAND=off` (이전: t = 화면 높이 비율).
 - 알파: `uAlphaRef` (CUTOUT 0.75), `uAlphaMax` (가장자리 패스).
 `basic.vert` / `skinned.vert`: `uUvOffset` (UV 스크롤), `uEnvUv` (법선 구면 환경맵 UV, basic 만).
-`particle.vert/frag`: 신규.
+`particle.vert/frag`: 신규. `uScreen` = 열기 아지랑이 (VU 종류 5): 정점 셰이더가 화면 좌표(noperspective) + aUv 오프셋을 UV 로, 조각 셰이더가 프레임 복사본 `uFrame` (유닛 1) 을 DECAL 로 읽고 알파 = 정점 알파.
 
 ## 4. 머티리얼 (WadAssets / Renderer)
 - `WadAssets.classify`: 0x48 → ADD, 0x42 → SUB, 0x01 → INV, p28·p38 ≠ 1 · TXR bit18 → ALPHA, 텍스처 없는 0x44 → OPAQUE, 나머지 → **CUTOUT**.
@@ -57,7 +59,12 @@ render  fx.beforeRender(e, cam)                        // FarClip → cam.far, r
 - FXC 이미터: 서브타입 1 원뿔 / 2 전방향은 원작 식, 5–9 볼륨은 로컬 배율 상자 [추정], 3/4 표면·커브는 지오메트리 미해석으로 생략.
   **PTC VU 식** (`tools/fx/PtcVu`, `ParticleDef.ptc`): 파티클마다 레코드 {(생성 위치, 0), (생성 속도)} + 고정 난수 씨앗 + 나이(초) 로 식을 계산 →
   색 (0x80 = 1.0, 알파 최대 ≈ 2), 위치, 반폭, 회전, 종류별 모양 (사각형/원반/선/줄기/평면). 블렌드 = flags&3 (0x44 / 0x48 / 0x42), TCC/TFX = flags, `particle.frag uGs` 가 GS 규칙(미리 곱한 색, As/0x80)으로 출력 [확실].
-  `GOW_PTCVU=off` 면 이전 근사, `GOW_PTCVU_LOG=1` 이면 식 출력 로그.
+  `GOW_PTCVU=off` 면 이전 근사, `GOW_PTCVU_LOG=1` 이면 식 출력 로그 (+ 레벨의 열기 아지랑이 이미터 위치).
+  - **파티클 공간** (PTC 0x10/0x20, 16 §2.3) [확실]: `Emitter.space` = 소유자 월드 (이펙트 = 앵커·배율 제거, 레벨 = 관절 월드). 0x10 이면 회전, 0x20 이면 이동을
+    파티클 공간에 넣고, 생성 레코드는 그 역행렬로, VU 출력(위치·방향·축)은 매 프레임 현재 공간 행렬로 월드에 옮긴다 → 손·무기·투사체에 붙은 이펙트의 파티클이 소유자를 따라간다.
+  - **열기 아지랑이** (종류 5, 16 §2.4) [확실: 구조, 추정: UV 단위]: 다른 파티클을 다 그린 뒤 (원작 버킷 6) `glCopyTexSubImage2D` 로 화면 복사 → 원반 (부채꼴 2·꼬리+2 .z),
+    중심 UV 만 −굴절량(0x225.w)·화면 반지름 만큼 x 로 민다, 알파 중심 0x222.a → 테두리 0x223.a. 비교: `GOW_HEAT=off`.
+  - **피 자국** (종류 9): 축 = `Emitter.normal` (이펙트 `planeNormal`, 바닥 피는 충돌 레이 면 법선) 평면 안의 두 축 + 파티클별 임의 회전, 위치는 이미터를 지나는 평면에 투영 (원작 0x1F8990) [확실].
 - 물 (PAND01A 등): 격자 nx×nz, 60 Hz 고정 스텝, 물방울은 3×3 로 나눠 스파이크 방지, UV = 법선 + 위치 → REFLENVM, α 0.4.
 - 성능: 파티클 최대 12000, 정의별 1 드로우. PAND01A 이미터 86개, ATHN01A 비 1000개 — M4 에서 체감 저하 없음.
 
@@ -77,8 +84,14 @@ render  fx.beforeRender(e, cam)                        // FarClip → cam.far, r
   `fog_*_{old,new}`, `fogG_*_{old,new}` ATHN01A/ATHN07/HDES01A (HDES01A 기둥: 가까운 화소 안개 없음).
 - 디버그: `GOW_LEVEL_CAM=ex,ey,ez,tx,ty,tz` (LevelScene 카메라 고정, `print` = 레벨 카메라 출력).
 
+## 6.2 검증 (PTC 2차, 2026-10)
+- `PtcVuTest` +2: 평면 연산 9 (반사 1회) / 10 (반발 0.5 튕김·10회 뒤 정지·이전 프레임 값), 층 안개 t 눈금 (수평 = 0.5 중심, 화각 60° = 1/3).
+- 스크린샷 (스크래치 `ptc2/`, 커밋 안 함): `h3 / h3off` ATHN03D 복도 횃불 (`GOW_LEVEL_CAM=135,562,1250,105,556,1185`) — 아지랑이가 횃불 머리·벽 모서리를 휘게 함 (차이 5309 px),
+  `fogA / fogA_old` ATHN01A (고도각 눈금: 갑판 쪽 바다 안개가 화면 아래 전체로), `hdes / hdes_old` HDES01A (주황 키 c1 이 지평선 바로 위 띠로),
+  `a8b` ARENA08 전투 (적중 피·바닥 피 자국), `p3g` PAND03G 보스 데모, `med` 메두사 광선 (회귀 없음).
+
 ## 7. 남은 문제
-- ~~안개 거리 보정값~~ → 원작 패스 해석식 (16 §1.2). 남은 것: 층 안개 키 알파 결합(0x127240) 세부, TEXA 상태 가정, 층 안개 t 의 카메라 피치 의존성.
+- ~~안개 거리 보정값~~ → 원작 패스 해석식 (16 §1.2). ~~층 안개 키 알파·t 의 카메라 피치~~ (16 §1.3). 남은 것: TEXA 상태 가정, 텍스처 층 안개 0x127240 UV.
 - 여러 SCR_Fog 전환은 소유 GO 최근접으로 대체 (원작은 ESC 추정).
 - 비 볼륨 상자 판정, 눈/먼지/플랑크톤 모양, 표면·커브 이미터, 칼 궤적(0xB), 필드. (~~PTC 크기 단위~~ 16 §2.4)
 - SCR_Mirror (반사 바닥), LensFlare, GhostTrail, RopeSkinned, cloth 미구현. LGT 동적 조명 미구현 (캐릭터용).

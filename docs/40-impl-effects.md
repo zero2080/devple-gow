@@ -76,7 +76,7 @@ VU 3 (연기·불·피) 모양의 상수 qword 배치 (16 문서 §2.3 의 "색 
 
 **q9 = 그 이펙트 필드 합 × 16** (SKLgrav −7·(0,0,1) → −112, dustgrav −2 → −32, Fsgrave 9.8·(0,0,−1) → −156.8) — 필드 방향의 수직축이
 Z 라는 것의 확인이다 (`EffectLibrary.fieldAccel`: (x,y,z) ↦ (x, z, −y)·16). q10.w/q11.w = **월드 반폭** 상수·1차항 (t 는 초) [확실, 16 §2.4]. 이 표는 SKLpart 배치의 예일 뿐이고 실제 위치·크기는 블록의 표 T0..T7 이 정한다.
-이제 엔진은 모든 PTC 를 `PtcVu` 식 해석기로 그린다 (VU 종류 0–4, 7–9; 5 = 화면 굴절은 생략).
+이제 엔진은 모든 PTC 를 `PtcVu` 식 해석기로 그린다 (VU 종류 0–5, 7–9; 5 = 열기 아지랑이는 프레임 복사 굴절, 31 §5).
 
 ## 4. 이펙트 객체 런타임 (원작 0x227xxx–0x228xxx) [확실: 구조, 추정: 세부]
 `sub_002272C8(effect, goTemplate, matrix, owner, joint)`: GO 를 복제(sub_00132530)하고 월드 행렬을 넣는다. owner 와 joint ≥ 0 이면
@@ -94,7 +94,8 @@ Z 라는 것의 확인이다 (`EffectLibrary.fieldAccel`: (x,y,z) ↦ (x, z, −
 **수명** (0x228210 / 0x2282D0) [확실]: 1회성 객체는 GO 애니 컴포넌트(색인 0x3304E4)의 재생 핸들 최대 64개를 받아(sub_001007C8) 각 핸들 +0x40 에
 자기 콜백을 걸고 재생을 0초부터 시작(sub_00100578). 콜백마다 카운트 −1, 0 이 되면 +0x14 콜백 호출 후 플래그 bit0 (= 삭제). 즉
 **수명 = 오브젝트 애니 act 가 끝날 때** (반복 act 이면 끝나지 않으므로 지속형으로만 쓴다). 지울 때 0x227548 이 GO 를 제거(sub_00132768) — 이미 나온 파티클은 남는다.
-배율 sub_00227D80: GO 컴포넌트 중 종류 < 0xB 인 것(파티클 이미터) +0xB4 = 배율 (MFX 0x221810 은 영웅이 맞을 때 1, 아니면 0.125 [추정]).
+배율 sub_00227D80: GO 컴포넌트 중 종류 < 0xB 인 것(파티클 이미터) +0xB4 = **생성률** 배율 (0x122B00) [확실]. MFX 0x221810 의 값은 §6 (주 대상 1 / 그 외 0.125).
+엔진: `Effect.rateScale` (이미터 rate × rateScale).
 
 엔진 (`EffectSystem`):
 - `play(name, Anchor, life)` → `Effect`. `Anchor` = 매 프레임 기준 행렬(관절 부착이면 관절 월드, 아니면 고정). false 를 돌려주면 소유자 소멸 → 종료.
@@ -173,6 +174,8 @@ MFX 템플릿 0x48 바이트 (`/TweakTemplates/MFX/nnn/`):
 
 - **적중** (0x2032C0, 공격자 쪽 OnContact): ① 공격 MFX (Attack +0x16, flags 0x2) 와 ② 피격 부위 재질 MFX (표 0x3376FC) 각각
   `sub_00221810(mfx, 접촉점, 방향, …, 배율)` → +0x28 GO 를 0x228558 로 1회 재생 + `sub_00221A50` 이 Drop Blood 면 바닥 피 자국(0x1F9278, /GlobGame/BloodSpots).
+  **배율** (0x2034CC) [확실: 분기]: ① 공격 MFX 는 1.0, ② 재질 MFX 는 공격자 객체 +0x80 핸들이 피격자 루트(호출 인자 t1)와 같으면 1.0, 아니면 0.125 — 바닥 피도
+  같은 조건일 때만. +0x80 = 공격자의 주 대상 [추정]. 엔진: 공격 `Combatant.target()` 이 피격자(또는 없음)면 1, 아니면 `rateScale` 0.125 + 바닥 피 생략 (`MagicFx.lastHitScale`).
   영웅 기술의 520 "Hit Effect" 는 +0x28 이 비어 있어 피는 ② 에서만 나온다.
   - **0x3376FC 는 표가 아니라 속성 오프셋 변수**다: 0x1BECA0 가 충돌 재질 속성 스키마(0x29C978)에서 "bitfield0..3", "SheetFX", "PartType",
     "WallHangTimer", "Damage", "AIDamage" 의 오프셋을 찾아 0x3376EC.. 에 둔다 → SheetFX = 재질 엔트리 +0x2C, PartType = +0x30 [확실].
@@ -191,7 +194,9 @@ MFX 템플릿 0x48 바이트 (`/TweakTemplates/MFX/nnn/`):
 ### 6.1 바닥 피 자국 (/GlobGame/BloodSpots, 0x1F9550 등록, 0x1F9278 생성)
 키: Offset 0.1, Cone 25, Impulse 1, Gravity 18, Nominal Distance 8 / Particles 36 / Size 3, Fall Time / Emit Time (s16) 3, Clamp Spread Size 1.3 / Part Size 0.65 / Num Part 10,
 "Particle System 1 Light" = goBloodSpot (FXC_BloodSemit 상수 생성률 0, PTC_BloodSpart VU 9, 수명 3초) [확실: 키·값]. 원작은 전용 코드로 방울을 떨어뜨려 바닥에 붙인다.
-엔진: 접촉점 아래 바닥(충돌 질의) + Offset 에서 goBloodSpot 을 0.1초 동안 Nominal Particles 개 분출 (속력 ¼, `Effect.rateOverride`) [근사: 낙하·바닥 부착·Size 미반영].
+엔진: 접촉점 아래 바닥(충돌 질의) + Offset 에서 goBloodSpot 을 0.1초 동안 Nominal Particles 개 분출 (속력 ¼, `Effect.rateOverride`) [근사: 낙하·Size 미반영].
+원작 0x1F8990 [확실]: 충돌 레이 0x11E190 의 점·**면 법선** n 으로 A = norm(d × n), B = norm(A × n) 평면 축을 만들고 파티클마다 n 축 임의 회전 (0x183D00),
+위치 = 충돌점 + 평면 안 난수 + n·Offset. 엔진: 아래 레이캐스트 법선을 `Effect.planeNormal` → 종류 9 레코드 축 (평면 + 임의 회전), 위치를 그 평면에 투영.
 - **발소리 먼지** (0x221A90): 발 관절 아래 지면 MFX 의 +0x34. 엔진: `GameScene.footsteps` 의 달리기 걸음마다 발밑 SheetFX 의 Run Dust Name (Rock → goRunDust) 을 0.6초.
 
 ### 6.2 부서지는 물체 이펙트 → 41 문서 §2
@@ -240,12 +245,12 @@ MFX 템플릿 0x48 바이트 (`/TweakTemplates/MFX/nnn/`):
 
 ## 9. 남은 것
 - ~~PTC 크기 단위·VU 4/8/9 배치·블렌드~~ (16 §2.4: 반폭 = 출력 0x223.w, 블렌드 = flags&3, 0x8000 은 블렌드 무관; rslicepart 는 0x44 알파). PTC 로더 = def 생성자 0x15AD60 (호출 0x15D5A0).
-  남은 것: 종류 5 (열기 아지랑이), 바닥 반사 연산 9/10/13/14, 피 자국 레코드 축 (원작 0x1F9278 이 바닥 법선으로 채움 — 엔진은 수평면).
-- MFX 배율 0x221810 f12 (1 / 0.125) = 이미터 인스턴스 +0xB4 **생성률** 배율 (0x122B00) [확실]: 피격 오브젝트가 t1 인자와 같으면 1, 아니면 0.125. 엔진 미적용.
+  ~~종류 5 (열기 아지랑이)~~, ~~연산 9/10/13/14~~ (디스크에 쓰는 PTC 없음, 해석·구현만), ~~피 자국 레코드 축~~, ~~PTC 0x10/0x20 파티클 공간~~ (16 §2.3–2.4, 31 §5).
+- ~~MFX 배율 0x221810 f12~~ → `rateScale` (§6). 남은 것: +0x80 이 주 대상이라는 해석 확인.
 - 메두사 광선 방향: 원작은 rWeapIH 관절 행렬 그대로 (팔 조준 자세가 방향을 만든다) — 엔진은 조준 yaw [근사]. 머리 MHBemit 은 커브 이미터 (FXC 4, MHBcurve) + 링크 3 인데 On act 의 채널 그룹은 1개 — 링크 대응 미해석.
 - 표면/커브 이미터 (FXC 3/4), FXC 필드 소용돌이·뉴턴.
 - 바닥 피 자국의 원작 낙하·부착 (Cone/Impulse/Gravity/Fall Time), Particle System 1 Dark / 2.
-- MFX 배율 (0x221810 f12: 1 / 0.125) 미적용, MFX #33317a59/#da729778 (진동·소리 추정), Slice Hit 의 원작 접촉 조건.
+- MFX #33317a59/#da729778 (진동·소리 추정), Slice Hit 의 원작 접촉 조건.
 - 포세이돈 매시 미터 (연타 → 반경·빈도), goFlashGrp (0x1DAB08 사용처) 미연결.
 - Concussion No Orient/Link Duration, PlayFX #a4e61bc3 / #71bfa948 / #a6de59b7, Left/Right Weapon 의 정확한 부착 대상.
 - 적 템플릿 번호 충돌 (여러 적 WAD 의 같은 PlayFX 번호) — 마지막 WAD 가 덮음.

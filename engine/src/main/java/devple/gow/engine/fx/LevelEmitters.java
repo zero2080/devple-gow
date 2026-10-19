@@ -56,6 +56,11 @@ public final class LevelEmitters {
 				if (l > 1e-6f) {
 					e.dir.set(d[0] / l, d[1] / l, d[2] / l);
 				}
+				// PTC 시스템 행렬 = 소유 관절 월드 (0x10/0x20 이면 파티클이 그 회전/이동 공간에 산다, 0x15BE18) [확실: 코드, 관절 = FXC 관절로 근사]
+				e.space.set(pl.jointWorld()[j]);
+				if (sh.vu() != null && sh.vu().kind == 5 && System.getenv("GOW_PTCVU_LOG") != null) {
+					System.out.printf(Locale.ROOT, "  열기 아지랑이 %s @ (%.0f, %.0f, %.0f)%n", sh.name(), p[0], p[1], p[2]);
+				}
 				e.lodNear = em.lodNear();
 				e.lodFar = em.lodFar();
 				n++;

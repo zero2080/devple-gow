@@ -137,12 +137,18 @@ public final class FxEnvironment {
 			float[] st = layered.stops();
 			s.set("uFogStops", st[0], st[1], st[2]);
 			s.set("uFogDepth", 16f * layered.centreZ() * viewNear, cam.near, cam.far, back(layered.backPlane()));
+			float[] band = BAND_OFF ? new float[2] : band(cam);
+			s.set("uFogBand", band[0], band[1]);
 		} else {
 			float[] c = fog.color();
 			s.set("uFogMode", 1);
 			s.set("uFogBlend", fog.blend());
-			s.set("uFogColor", c[0], c[1], c[2], c[3]);
-			s.set("uFogDepth", 16f * fog.centreZ() * viewNear, cam.near, cam.far, back(fog.backPlane()));
+			// Fog_A ≥ 1 이고 블렌드 0 이면 0x1275E0 경로 (Z 바이트를 반전 없이 알파로, 안개색은 ALPHA 0x11 (Cd−Cs)·Ad + Cs):
+			// 결과 = 안개 계수 (128 − G)/128 (Fog_A 곱 없음 = 1), BackPlane 패스 0x127FF0 없음 [확실: 0x1281C8 분기]
+			boolean full = c[3] >= 1 && fog.blend() == 0;
+			s.set("uFogColor", c[0], c[1], c[2], full ? 1f : c[3]);
+			s.set("uFogDepth", 16f * fog.centreZ() * viewNear, cam.near, cam.far, full ? -1f : back(fog.backPlane()));
+			s.set("uFogBand", 0f, 0f);
 		}
 		s.set("uFogScreen", fbHeight, 0f);
 		s.set("uFogGs", params.farClips.isEmpty() ? viewFar : params.farClips.getFirst().farDistance(), viewNear);
@@ -185,6 +191,24 @@ public final class FxEnvironment {
 			String t = assets.materialTexture("MAT_" + m);
 			return t == null ? null : assets.texture(t);
 		});
+	}
+
+	/**
+	 * 층 안개 띠 좌표 (원작 0x1208C8) [확실: 코드]: 키 위치 t 는 화면 높이가 아니라 <b>시선 고도각</b> 눈금 — t = 1 − φ/π,
+	 * φ = acos(카메라 행렬 z 행 .y) (z 행 = 뒤쪽, 0x183F98 = acos), 화면 위 t = 1 − (φ + h)/π, 아래 = 1 − (φ − h)/π (h = 세로 반화각).
+	 * 수평으로 보면 지평선 = 0.5. 그 사이는 화면 y 선형 (Gouraud 띠 0x1262C8).
+	 *
+	 * @return {화면 위 t, 화면 아래 t}
+	 */
+	/** 비교용: GOW_FOGBAND=off 면 이전 해석 (t = 화면 높이 비율). */
+	private static final boolean BAND_OFF = "off".equals(System.getenv("GOW_FOGBAND"));
+
+	public static float[] band(Camera cam) {
+		float bx = cam.eye.x - cam.target.x, by = cam.eye.y - cam.target.y, bz = cam.eye.z - cam.target.z;
+		float l = (float) Math.sqrt(bx * bx + by * by + bz * bz);
+		float phi = (float) Math.acos(Math.clamp(l > 1e-6f ? by / l : 0f, -1f, 1f));
+		float h = (float) Math.toRadians(cam.fovDeg) / 2;
+		return new float[]{1 - (phi + h) / (float) Math.PI, 1 - (phi - h) / (float) Math.PI};
 	}
 
 	private static float back(int b) {
