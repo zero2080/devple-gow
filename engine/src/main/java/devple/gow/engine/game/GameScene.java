@@ -76,6 +76,8 @@ public final class GameScene implements Scene {
 	private boolean powerUp;
 	private float time;
 	private float messageTimer;
+	private float stepTimer;
+	private boolean wasAir;
 	private String pendingLevel;
 	private boolean leaving;
 	private final Map<String, EnemyFactory.Kind> kinds = new HashMap<>();
@@ -481,6 +483,7 @@ public final class GameScene implements Scene {
 		if (hero.player.hp <= 0) {
 			heroDied();
 		}
+		footsteps(dt);
 		Vector3f fwd = new Vector3f(cam.target).sub(cam.eye).normalize();
 		session.sound.listener(cam.eye, fwd, new Vector3f(0, 1, 0));
 		session.sound.update(dt);
@@ -532,6 +535,34 @@ public final class GameScene implements Scene {
 			}
 			return false;
 		});
+	}
+
+	/**
+	 * 발소리: 원작 SND_FOOTSTEP_&lt;표면&gt; 은 레지스터 0 으로 STEP/WALK/RUN/LAND 를 고른다 (14 문서).
+	 * 표면 = 충돌 Sheet 속성(미해석) → 현재 PLANK(나무 갑판 등) 고정. 주기 = 이동 클립 길이의 절반 (한 걸음).
+	 */
+	private void footsteps(float dt) {
+		var c = hero.ctl;
+		String surface = "SND_FOOTSTEP_PLANK";
+		if (!c.grounded) {
+			wasAir = true;
+			return;
+		}
+		if (wasAir) {
+			wasAir = false;
+			session.sound.play(surface, c.position, 3); // LAND
+		}
+		var cur = c.animator().current();
+		String n = cur != null ? cur.name : "";
+		boolean run = n.equals("walkBlend2"), walk = n.equals("walkBlend1");
+		if (hero.combat.active() || !(run || walk)) {
+			stepTimer = 0;
+			return;
+		}
+		if ((stepTimer -= dt) <= 0) {
+			stepTimer = cur.duration / 2;
+			session.sound.play(surface, c.position, run ? 2 : 1);
+		}
 	}
 
 	/** 지면 추종 + 중력 + 벽 밀어내기. */
