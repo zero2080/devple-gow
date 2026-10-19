@@ -10,6 +10,7 @@ public final class WadTagType {
 	public static final int GROUP_START = 0x28;
 	public static final int GROUP_END = 0x32;
 	public static final int MC_DATA = 0x6E;
+	/** 원시 파일 태그. MC_ICON(아이콘) 외에 메시지 테이블 msgsK.txt 도 이 태그로 들어 있다 (docs/07) */
 	public static final int MC_ICON = 0x6F;
 	/** 메시 부가 데이터 (MSH_, NCV_) */
 	public static final int MESH_EXTRA = 0x70;
