@@ -291,6 +291,13 @@ public final class GameScene implements Scene {
 			}
 
 			@Override
+			public void movie(String name, int op, int arg) {
+				if (op == 0 && pendingEngine != null) {
+					playMovie(pendingEngine, name);
+				}
+			}
+
+			@Override
 			public void music(String func, List<Object> args) {
 				var snd = session.sound;
 				switch (func) {
@@ -328,6 +335,21 @@ public final class GameScene implements Scene {
 				}
 			}
 		};
+	}
+
+	/**
+	 * 컷신 재생 (33 문서): 씬 스택에 MovieScene 을 올려 게임을 멈추고, 끝나면 음악을 다시 켜고
+	 * 스크립트에 종료 이벤트를 보낸다 (mpegDone 핸들러 — 이벤트 7 로 추정, 18 문서).
+	 */
+	private void playMovie(Engine e, String name) {
+		String music = session.sound.currentMusic();
+		session.sound.stopMusic(0);
+		devple.gow.engine.video.MovieScene.play(e, name, () -> {
+			if (music != null) {
+				session.sound.music(music, 0.5f);
+			}
+			world.postEvent(7, 0, 0, 0, null);
+		});
 	}
 
 	private static float num(Object o) {
@@ -447,6 +469,11 @@ public final class GameScene implements Scene {
 	@Override
 	public void update(Engine e, float dt) {
 		pendingEngine = e;
+		if (session.openingPending && levelName.equals(GameFlow.START_LEVEL)) {
+			session.openingPending = false;
+			playMovie(e, "Semo01"); // 새 게임 오프닝
+			return;
+		}
 		time += dt;
 		if (System.getProperty("gow.debug") != null && ((int) (time * 60)) % 60 == 0) {
 			Vector3f hp = hero.ctl.position;

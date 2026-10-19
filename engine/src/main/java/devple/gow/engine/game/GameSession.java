@@ -32,6 +32,8 @@ public final class GameSession {
 	/** 오디오 (R_PERMK 의 GENERAL/GENERAL2/Hero 뱅크 상주). 메뉴와 게임 씬이 같은 인스턴스를 쓴다. */
 	public final SoundManager sound;
 	public int difficulty = 1;
+	/** 새 게임 첫 ATHN01A 진입 시 오프닝(Semo01) 재생 여부 (원작 sub_0021efd8). */
+	public boolean openingPending;
 
 	public GameSession(Path rom) throws IOException {
 		this.rom = rom;

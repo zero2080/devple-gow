@@ -63,6 +63,7 @@ public final class ShellScene implements Scene {
 		try {
 			GameSession s = new GameSession(rom);
 			s.difficulty = Math.max(0, Math.min(3, difficulty));
+			s.openingPending = true;
 			System.out.println("새 게임: 난이도 " + s.difficulty + " (" + devple.gow.engine.combat.DamageRules.DIFFICULTY[s.difficulty] + ")");
 			e.scenes().transitionTo(new GameScene(s, GameFlow.START_LEVEL, null, 0));
 		} catch (IOException ex) {

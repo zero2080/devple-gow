@@ -76,3 +76,8 @@
 ## 9. 렌더 순서 (환경 연출 통합)
 레벨(하늘 → 지오메트리, 안개) → 적·크레토스(같은 안개 유니폼 적용) → **이펙트 패스**(비·파티클·물, `LevelScene.renderEffects`) → HUD.
 이펙트를 캐릭터 뒤에 그려야 반투명 비가 캐릭터를 올바르게 덮는다 (`setDeferEffects(true)`). 스크린샷 `work/game5.png`.
+
+## 10. 컷신 연결 (33 문서)
+- 스크립트 `PlayMovie`(Entity 함수 13) → `ScriptListener.movie(op 0)` → `MovieScene.play` (씬 스택 위에 올라가 게임 정지, START/× 건너뛰기)
+- 재생 중 음악 정지 → 끝나면 이전 음악 재개 + 스크립트에 이벤트 7 (mpegDone 핸들러, 추정)
+- 새 게임으로 ATHN01A 첫 진입 시 오프닝 `Semo01` (원작 sub_0021efd8)
