@@ -303,7 +303,7 @@ class HeroNavigatorTest {
 		List<LevelCollision.Tri> t = new ArrayList<>();
 		floor(t, -400, -400, 400, 400, 0, SurfaceAttr.GROUND);
 		NavWorld w = new NavWorld(LevelCollision.of(t));
-		w.ropes().add(new NavRope("rope", RopeDef.Type.HANG, 0, 40, v(0, 300, 0), v(0, 20, 0)));
+		w.ropes().add(new NavRope("rope", RopeDef.Type.HANG, 0, 17.5f, v(0, 300, 0), v(0, 20, 0)));
 		Body b = new Body();
 		HeroNavigator nav = new HeroNavigator(b, w, null);
 		Pad in = new Pad();
@@ -320,10 +320,26 @@ class HeroNavigatorTest {
 		assertTrue(b.pos.y > y0 + 25, "줄 오르기 " + y0 + " → " + b.pos.y);
 		assertEquals("ropeUp", b.anim);
 		in.ly = 0;
-		// 흔들기 = ○ 누르고 있기 (+0x310 0x10) + 정면 (스틱 +x): 움직이는 쪽으로, 아래쪽 반에서만 500 × 거리 (0x1C6DD4)
+		// 잡을 때 몸 방향 = 줄 축 (+z) 4 방향 중 뒤에 가장 가까운 것: 정면 −z (번호 2)
+		assertEquals(2, nav.ropeDir());
+		// 스틱 오른쪽 (x · w &gt; 0.5) = 번호 + 1 → 몸 오른쪽 (+x) 으로 90° (0x1C6A7C), 보간이 끝나기 전엔 다음 회전 없음
+		in.lx = 1;
+		tick(nav, b, w, in);
+		assertEquals(3, nav.ropeDir());
+		for (int i = 0; i < 20; i++) {
+			in.lx = 1;
+			tick(nav, b, w, in);
+		}
+		assertEquals(3, nav.ropeDir(), "0.1 × 1.1111^k 가 1 에 닿는 22 프레임 전에는 돌지 않음");
+		in.lx = 0;
+		for (int i = 0; i < 3; i++) {
+			tick(nav, b, w, in);
+		}
+		assertEquals(1f, nav.turnBlend(), 1e-6f);
+		assertEquals(1, HeroNavigator.forward(b.yaw).x, 1e-3f, "보이는 몸도 +x");
+		// 흔들기 = ○ 누르고 있기 (+0x310 0x10): 몸 정면 (+x) 면에서 움직이는 쪽으로, 아래쪽 반에서만 500 × 거리 (0x1C6DD4)
 		float maxX = 0;
 		for (int i = 0; i < 300; i++) {
-			in.lx = 1;
 			in.down.add(PadButton.CIRCLE);
 			tick(nav, b, w, in);
 			maxX = Math.max(maxX, Math.abs(b.pos.x));
@@ -341,10 +357,53 @@ class HeroNavigatorTest {
 			late = Math.max(late, Math.abs(b.pos.x));
 		}
 		assertTrue(late < maxX * 0.5f, "놓으면 줄어듦 " + late + " / " + maxX);
+		// × 뛰어내리기 (0x1C5488): 스틱 없으면 정면 (+x) 축으로 앞 Sold+0x144 · 위 +0x140 (14 m/s = 224), 줄 점 속도는 더하지 않음
 		in.lx = 0;
 		in.down.add(PadButton.CROSS);
 		tick(nav, b, w, in);
 		assertEquals(NavState.AIR, nav.state(), "뛰어내림");
+		assertEquals(224f, HeroNavigator.ROPE_JUMP_OUT, 1e-3f);
+		assertEquals(224f, b.launch.x, 1e-3f);
+		assertEquals(0f, b.launch.z, 1e-3f);
+		assertEquals(224f, b.vy, 1e-3f);
+		assertEquals("jumpAir", b.anim);
+	}
+
+	/** 줄 × 는 잡은 뒤 0.5 초 (0x29DBF8) 가 지나야 먹고, 스틱 쪽 줄 축 방향으로 뛴다. 2 방향 줄 (RopeEastWest = ±(z × 위)) 은 스틱 쪽으로 몸이 돈다. */
+	@Test
+	void ropeJumpWaitsHalfSecondAndSnapsToRopeAxis() {
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -400, -400, 400, 400, 0, SurfaceAttr.GROUND);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		// 축 = (1, 0, 1)/√2, 2 방향 (EastWest): 뒤 후보 = ∓(z × 위)
+		Vector3f axis = v(1, 0, 1).normalize();
+		NavRope r = new NavRope("rope", RopeDef.Type.HANG, 2, 17.5f, v(0, 300, 0), v(0, 20, 0), 9, axis, 2);
+		w.ropes().add(r);
+		Body b = new Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		Pad in = new Pad();
+		b.pos.set(4, 0, 0);
+		in.down.add(PadButton.CROSS);
+		tick(nav, b, w, in);
+		assertEquals(NavState.ROPE, nav.state());
+		in.down.add(PadButton.CROSS);
+		tick(nav, b, w, in);
+		assertEquals(NavState.ROPE, nav.state(), "0.5 초 전 × 는 무시");
+		Vector3f x = new Vector3f(axis).cross(0, 1, 0);
+		for (int i = 0; i < 40; i++) {
+			// 스틱 = 카메라 정면 −z 쪽 위 → 정면에 가장 가까운 후보 쪽으로 돈다
+			in.ly = 0.3f;
+			tick(nav, b, w, in);
+		}
+		Vector3f face = HeroNavigator.forward(b.yaw);
+		assertEquals(1f, Math.abs(face.dot(x)), 1e-3f, "2 방향 줄: 몸 = ±(z × 위)");
+		in.ly = 0.3f;
+		in.down.add(PadButton.CROSS);
+		tick(nav, b, w, in);
+		assertEquals(NavState.AIR, nav.state());
+		Vector3f l = new Vector3f(b.launch).normalize();
+		assertEquals(1f, Math.abs(l.dot(x)), 1e-3f, "뛰는 방향 = 줄 축 후보");
+		assertTrue(l.z < 0, "스틱 (−z) 쪽 후보 " + l);
 	}
 
 	@Test
@@ -375,9 +434,10 @@ class HeroNavigatorTest {
 
 	@Test
 	void waterSwimsToShore() {
+		// 물가 (0x1CA198): 바닥 질의 창 (내비 위치 → 발 − d) 의 마른 바닥이 수면 − 28.16 보다 높으면 착지 — 수면 아래 24 의 턱
 		List<LevelCollision.Tri> t = new ArrayList<>();
 		floor(t, -200, -200, 100, 200, 0, SurfaceAttr.WATER);
-		floor(t, 100, -200, 300, 200, -2, SurfaceAttr.GROUND);
+		floor(t, 100, -200, 300, 200, -24, SurfaceAttr.GROUND);
 		NavWorld w = new NavWorld(LevelCollision.of(t));
 		Body b = new Body();
 		HeroNavigator nav = new HeroNavigator(b, w, null);
@@ -391,8 +451,29 @@ class HeroNavigatorTest {
 			tick(nav, b, w, in);
 		}
 		assertEquals(NavState.GROUND, nav.state(), "물가로 올라섬");
-		assertEquals(-2, b.pos.y, 0.01f);
+		assertEquals(-24, b.pos.y, 0.01f);
 		assertTrue(b.played.contains("treadswim"), b.played.toString());
+	}
+
+	/** 떠 있는 발보다 6.4 넘게 높은 물가 (수직 벽 + 수면 아래 2 의 바닥) 는 못 오른다 (0x1E2100 몸 충돌에 계단 오르기 없음). */
+	@Test
+	void highBankBlocksSwimmer() {
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -200, -200, 100, 200, 0, SurfaceAttr.WATER);
+		floor(t, 100, -200, 300, 200, -2, SurfaceAttr.GROUND);
+		// x = 100 의 물가 벽 (법선 −x)
+		quad(t, v(100, -300, -200), v(100, -300, 200), v(100, -2, 200), v(100, -2, -200), SurfaceAttr.GROUND);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		Body b = new Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		Pad in = new Pad();
+		tick(nav, b, w, in);
+		for (int i = 0; i < 300; i++) {
+			in.lx = 1;
+			tick(nav, b, w, in);
+		}
+		assertEquals(NavState.SWIM, nav.state(), "물가 벽에 막힘 " + b.pos);
+		assertTrue(b.pos.x < 100, "벽 앞 " + b.pos);
 	}
 
 	/** 좁은 턱 (Narrow 벽): 앞으로 걸어 들어가면 벽 보고 걷기 (0x1C7DE8 → 0x1C7280 0x100000), 좌우 Sold+0x168 1.25 m/s, 턱 끝에서 떨어짐. */
@@ -504,6 +585,176 @@ class HeroNavigatorTest {
 		assertEquals(-HeroNavigator.EDGE_JUMP_OUT, b.launch.x, 1e-3f, "막힌 쪽 (−x) 으로 160");
 		assertEquals(0, b.launch.z, 1e-3f);
 		assertEquals(-1, HeroNavigator.forward(b.yaw).x, 1e-4f);
+	}
+
+	/**
+	 * 벽 옆 끝 점프 뒤 옆 벽 잡기 (0x1E53F0): 공중 0.2 초 뒤 o → o − 뛴 방향 × 9.6 − 옛 법선 × 14.4 선분 (발·머리 높이) 이 Climbable 면 (|법선 · 뛴 방향| &lt; 0.25)
+	 * 에 맞으면 그 벽을 잡는다 (ANIClimbCL). 틈 10 건너 같은 쪽을 향한 다음 벽.
+	 */
+	@Test
+	void sideJumpCatchesNextWallAcrossGap() {
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -300, -20, 300, 200, -400, SurfaceAttr.GROUND);
+		wallZ(t, -20, -50, 50, -400, 200, SurfaceAttr.CLIMBABLE);
+		wallZ(t, -20, -130, -60, -400, 200, SurfaceAttr.CLIMBABLE);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		Body b = new Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		Pad in = new Pad();
+		b.grounded = false;
+		b.yaw = 0; // 정면 −z (벽 쪽)
+		b.pos.set(0, 0, -8);
+		tick(nav, b, w, in);
+		assertEquals(NavState.WALL_CLIMB, nav.state(), "공중에서 정면 벽");
+		for (int i = 0; i < 300 && nav.wallEdge() == 0; i++) {
+			in.lx = -1;
+			tick(nav, b, w, in);
+		}
+		assertEquals(-1, nav.wallEdge());
+		in.lx = 0;
+		in.down.add(PadButton.CROSS);
+		tick(nav, b, w, in);
+		assertEquals(NavState.AIR, nav.state());
+		assertEquals(-1, nav.edgeJumpSide());
+		int ticks = 0;
+		while (nav.state() == NavState.AIR && ticks < 60) {
+			tick(nav, b, w, in);
+			ticks++;
+		}
+		assertEquals(NavState.WALL_CLIMB, nav.state(), "옆 벽 잡음 " + b.pos);
+		assertTrue(ticks * DT > HeroNavigator.EDGE_CATCH_TIME, "공중 0.2 초 뒤 " + ticks);
+		assertTrue(b.pos.x < -60, "건너편 벽 " + b.pos);
+		assertEquals(-20 + HeroNavigator.WALL_OFF, b.pos.z, 1e-3f);
+		assertEquals("wallClimbCL", b.anim);
+		assertEquals(0, nav.edgeJumpSide());
+	}
+
+	/** 옆 끝 점프 뒤 공중에서는 일반 벽 잡기 (0x1C7D20) 가 없고, 건너편에 같은 쪽 벽이 없으면 떨어진다. */
+	@Test
+	void sideJumpWithoutNextWallFalls() {
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -300, -20, 300, 200, -100, SurfaceAttr.GROUND);
+		wallZ(t, -20, -50, 50, -100, 200, SurfaceAttr.CLIMBABLE);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		Body b = new Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		Pad in = new Pad();
+		b.grounded = false;
+		b.pos.set(0, 0, -8);
+		tick(nav, b, w, in);
+		for (int i = 0; i < 300 && nav.wallEdge() == 0; i++) {
+			in.lx = -1;
+			tick(nav, b, w, in);
+		}
+		in.lx = 0;
+		in.down.add(PadButton.CROSS);
+		tick(nav, b, w, in);
+		for (int i = 0; i < 300 && !b.grounded; i++) {
+			tick(nav, b, w, in);
+			assertNotEquals(NavState.WALL_CLIMB, nav.state());
+		}
+		assertTrue(b.grounded, "떨어짐");
+	}
+
+	/**
+	 * 위에서 아래 사다리로 (0x1E5638): 위층 끝 (z = 0, 위층 z &gt; 0) 으로 걸어가면 o − 35.2 높이의 앞 35.2 → 뒤 9.6 선분이
+	 * 사다리 면 (법선 −z) 에 맞고, 적중점 + 법선 × 9.6 에 붙는다.
+	 */
+	@Test
+	void walkOffTopOntoLadderBelow() {
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -100, 0, 100, 200, 100, SurfaceAttr.GROUND);
+		floor(t, -100, -200, 100, 0, 0, SurfaceAttr.GROUND);
+		// z = 0 의 사다리 (법선 −z: 아래층 쪽)
+		quad(t, v(100, 0, 0), v(-100, 0, 0), v(-100, 100, 0), v(100, 100, 0), SurfaceAttr.LADDER);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		assertTrue(w.segment(v(0, 50, -10), v(0, 50, 10)).tri().n().z < 0, "사다리 법선 −z");
+		Body b = new Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		Pad in = new Pad();
+		b.pos.set(0, 100, 30);
+		for (int i = 0; i < 120 && nav.state() == NavState.GROUND; i++) {
+			in.ly = 1; // 정면 −z
+			tick(nav, b, w, in);
+		}
+		assertEquals(NavState.LADDER, nav.state(), "사다리 " + b.pos);
+		assertEquals(-HeroNavigator.WALL_OFF, b.pos.z, 1e-3f);
+		assertEquals(100 + HeroNavigator.FOOT - HeroNavigator.HANG - HeroNavigator.FOOT, b.pos.y, 3f, "발 ≈ 위층 − 35.2");
+		assertEquals(1, HeroNavigator.forward(b.yaw).z, 1e-3f, "사다리 쪽 (+z) 을 봄");
+		for (int i = 0; i < 400 && nav.state() == NavState.LADDER; i++) {
+			in.ly = -0.5f;
+			tick(nav, b, w, in);
+		}
+		assertEquals(NavState.GROUND, nav.state(), "아래층까지 내려감");
+		assertEquals(0, b.pos.y, 0.01f);
+	}
+
+	/** 턱 한쪽만 맞음 (반환 8, 0x1E4528): 매달리지 않고 벽 수평 법선을 돌려준다 → 공중에서 몸을 벽 쪽으로 돌림 (0x1C83F0). */
+	@Test
+	void ledgeCornerTurnsTowardWall() {
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, 0, 0, 100, 100, 100, SurfaceAttr.GROUND);
+		quad(t, v(100, 0, 0), v(0, 0, 0), v(0, 100, 0), v(100, 100, 0), SurfaceAttr.GROUND);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		Body b = new Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		Vector3f feet = v(2, 100 - HeroNavigator.HANG, -HeroNavigator.WALL_OFF);
+		Vector3f fwd = v(0, 0, 1);
+		assertNull(nav.probeLedge(feet, null, fwd, null), "한쪽만 맞으면 매달리지 않음");
+		Vector3f n = nav.probeLedgeCorner(feet, null, fwd);
+		assertNotNull(n);
+		assertEquals(-1, n.z, 1e-4f);
+		// 정면이 비스듬해도 (+x 쪽 30°) 벽 쪽으로 돈다
+		Pad in = new Pad();
+		b.grounded = false;
+		b.vy = -10;
+		b.pos.set(feet);
+		b.yaw = HeroNavigator.yawOf(v((float) Math.sin(0.5), 0, (float) Math.cos(0.5)));
+		nav.update(in, 0, DT);
+		assertEquals(1, HeroNavigator.forward(b.yaw).z, 1e-3f, "벽 쪽 (+z) 으로 돌림");
+	}
+
+	/** 수평 줄 × = 잡은 뒤 0.5 초 지나야 놓음 (0x1C552C), 짚라인 × 는 아무것도 안 함 (0x1C551C). 양끝 고정 줄은 영웅 무게로 처진다. */
+	@Test
+	void traverseCrossNeedsHalfSecondAndZiplineIgnoresCross() {
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -100, -100, 600, 100, -200, SurfaceAttr.GROUND);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		NavRope tr = new NavRope("tr", RopeDef.Type.TRAVERSE, 0, 20, v(0, 200, 0), v(320, 200, 0));
+		w.ropes().add(tr);
+		Body b = new Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		Pad in = new Pad();
+		b.grounded = false;
+		b.pos.set(160, 200 - HeroNavigator.ROPE_HAND, 0);
+		tick(nav, b, w, in);
+		assertEquals(NavState.ROPE_TRAVERSE, nav.state());
+		in.down.add(PadButton.CROSS);
+		tick(nav, b, w, in);
+		assertEquals(NavState.ROPE_TRAVERSE, nav.state(), "0.5 초 전 × 무시");
+		for (int i = 0; i < 120; i++) {
+			tick(nav, b, w, in);
+		}
+		float hand = b.pos.y + HeroNavigator.ROPE_HAND;
+		assertTrue(hand < 200 - 0.5f, "양끝 고정 줄이 처짐 " + hand);
+		assertEquals(RopeSim.WEIGHT_FIXED, nav.sim(tr).weight(), 1e-3f);
+		in.down.add(PadButton.CROSS);
+		tick(nav, b, w, in);
+		assertEquals(NavState.AIR, nav.state(), "0.5 초 뒤 × = 놓기");
+
+		NavWorld w2 = new NavWorld(LevelCollision.of(t));
+		w2.ropes().add(new NavRope("zip", RopeDef.Type.ZIPLINE, 3, 90, v(0, 200, 0), v(500, 40, 0)));
+		Body b2 = new Body();
+		HeroNavigator nav2 = new HeroNavigator(b2, w2, null);
+		b2.grounded = false;
+		b2.pos.set(2, 200 - HeroNavigator.ROPE_HAND, 0);
+		tick(nav2, b2, w2, in);
+		assertEquals(NavState.ZIPLINE, nav2.state());
+		for (int i = 0; i < 60; i++) {
+			in.down.add(PadButton.CROSS);
+			tick(nav2, b2, w2, in);
+		}
+		assertEquals(NavState.ZIPLINE, nav2.state(), "짚라인 × 무시");
 	}
 
 	/** 깊은 물 (수면 0, 바닥 −300) + 동쪽 물가 없음. */

@@ -20,6 +20,11 @@ import org.joml.Vector3f;
  *   하위 단계 수 = int(8 · dt · 60 + 0.99). 감쇠 = clamp(감쇠 − 0.05 · dt, Global Damping, 1), 처음 0.2 (0x216D54).
  * </pre>
  * 노드 수는 원작에선 줄 모델의 사슬 관절 수 (0x216FC8), 엔진은 줄 오브젝트 관절 수 [추정].
+ * <p>
+ * <b>양끝 고정 줄</b> (SCR f1 = 수평 줄·짚라인, {@link #fixed}) [확실: 0x216FC8 / 0x218488 / 0x217748]: 같은 시뮬레이션에
+ * 길이 = |끝점 − 매단 점|, 초기 자세 = 매단 점 → 끝점 곧은 선 (0x217174), 끝 노드 번호 +0x40 = int(길이 / 칸) (= n − 1) 를 끝점 +0x10 (미터) 에
+ * 고정 (+0x374 비트 1, 0x218488). 매 단계 적분 뒤 그 노드 위치 = 끝점·속도 0 (0x217758). 매달림은 힘만 나누고 매단 점 스프링은 없음
+ * (0x217828 / 0x217944 비트 1 이면 건너뜀). 최대 무게 10 (0x216D84).
  */
 public final class RopeSim {
 
@@ -27,7 +32,7 @@ public final class RopeSim {
 			GLOBAL_DAMPING = 0.003f, GRAVITY = 9.82f, START_DAMPING = 0.2f, DAMPING_DECAY = 0.05f, SLEEP_TIME = 0.2f, WAKE_V2 = 0.0004f;
 	public static final int SUBSTEPS = 8;
 	/** 매달림 최대 무게 (+0x14): 매단 줄 100, 양끝 고정 10 (0x216D84) [확실]. */
-	public static final float WEIGHT_HANG = 100f;
+	public static final float WEIGHT_HANG = 100f, WEIGHT_FIXED = 10f;
 
 	private final int n;
 	private final Vector3f anchor = new Vector3f();
@@ -39,8 +44,11 @@ public final class RopeSim {
 	/** 영웅 매달림 하나 (원작 슬롯 16 개 중 영웅 몫). */
 	private boolean attached;
 	private float dist, weight;
-	private final float maxWeight = WEIGHT_HANG;
+	private final float maxWeight;
 	private final Vector3f force = new Vector3f();
+	/** 양끝 고정: 끝 노드 번호 (+0x40) 와 끝점 (+0x10, 미터). −1 = 매단 줄. */
+	private final int endNode;
+	private final Vector3f endAnchor = new Vector3f();
 
 	/**
 	 * @param top    매단 점 (월드 유닛)
@@ -48,6 +56,10 @@ public final class RopeSim {
 	 * @param nodes  노드 수 (≥ 2)
 	 */
 	public RopeSim(Vector3f top, float length, int nodes) {
+		this(top, null, length, nodes);
+	}
+
+	private RopeSim(Vector3f top, Vector3f end, float length, int nodes) {
 		n = Math.max(3, nodes);
 		this.length = length / NavTuning.UNITS_PER_METER;
 		seg = this.length / (n - 1);
@@ -56,13 +68,38 @@ public final class RopeSim {
 		v = new Vector3f[n];
 		f = new Vector3f[n];
 		m = new float[n];
+		Vector3f step = end == null ? new Vector3f(0, -seg, 0) : new Vector3f(end).div(NavTuning.UNITS_PER_METER).sub(anchor).div(n - 1);
 		for (int i = 0; i < n; i++) {
-			// 매단 줄 초기 자세 = 매단 점에서 곧게 아래로 (0x217200)
-			p[i] = new Vector3f(anchor).sub(0, seg * i, 0);
+			// 초기 자세: 매단 줄 = 매단 점에서 곧게 아래로 (0x217200), 양끝 고정 = 매단 점 → 끝점 곧은 선 (0x217174)
+			p[i] = new Vector3f(anchor).fma(i, step);
 			v[i] = new Vector3f();
 			f[i] = new Vector3f();
 			m[i] = SEG_MASS;
 		}
+		if (end != null) {
+			// 0x218488: +0x40 = int(길이 / 칸) — 곧은 선이면 n − 1 (부동소수 반올림으로 n − 2 가 되지 않게 자름) [추정: 반올림]
+			endNode = n - 1;
+			endAnchor.set(end).div(NavTuning.UNITS_PER_METER);
+			maxWeight = WEIGHT_FIXED;
+		} else {
+			endNode = -1;
+			maxWeight = WEIGHT_HANG;
+		}
+	}
+
+	/** 양끝 고정 줄 (수평 줄·짚라인): 길이 = |끝 − 매단 점| (0x2171C8). */
+	public static RopeSim fixed(Vector3f top, Vector3f end, int nodes) {
+		return new RopeSim(top, end, top.distance(end), nodes);
+	}
+
+	/** 양끝 고정인지. */
+	public boolean isFixed() {
+		return endNode >= 0;
+	}
+
+	/** 매달림 최대 무게. */
+	public float maxWeight() {
+		return maxWeight;
 	}
 
 	/** 줄 길이 (m). */
@@ -191,17 +228,24 @@ public final class RopeSim {
 			p[i].fma(h, v[i]);
 			v[i].mul(1 - damping);
 		}
+		if (endNode >= 0) {
+			// 0x217748: 고정 끝 노드 = 끝점, 속도 0
+			p[endNode].set(endAnchor);
+			v[endNode].zero();
+		}
 		// 매달림 (0x217790): 힘 분배 + 매단 점 스프링 (무게 비율)
 		if (weight > 0 || force.lengthSquared() > 0) {
 			int j = Math.min(n - 1, (int) (dist / seg));
 			float frac = (dist - j * seg) / seg;
 			f[j].fma(1 - frac, force);
-			float wf = weight / maxWeight;
-			if (j > 0) {
+			float wf = endNode >= 0 ? 0 : weight / maxWeight;
+			if (j > 0 && wf > 0) {
 				spring(0, j, 1.1f * j * seg, wf * (1 - frac) * K_ANCHOR, wf * (1 - frac) * C_ANCHOR);
 			}
 			if (j + 1 < n) {
 				f[j + 1].fma(frac, force);
+			}
+			if (j + 1 < n && wf > 0) {
 				spring(0, j + 1, 1.1f * (j + 1) * seg, wf * frac * K_ANCHOR, wf * frac * C_ANCHOR);
 			}
 		}

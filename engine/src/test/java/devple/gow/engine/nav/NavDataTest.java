@@ -542,4 +542,138 @@ class NavDataTest {
 		}
 		return new int[] {entered, walked};
 	}
+
+	/**
+	 * 줄 SCR +0x28 = 길이 (미터, 0x2170C0 → +0x60) — 전 레벨 매단 줄 관절 길이와 같음. 방향 제한 = 템플릿 #b38919fb (0x216AB8):
+	 * RopeNorthSouth (4) = 1 (±z), RopeEastWest (2) = 2 (±(z × 위)), Rope (0) = 0 (4 방향) (38 문서 §15.2).
+	 */
+	@Test
+	void ropeLengthFieldAndJumpDirections() throws Exception {
+		NavRope a = byOwner(NavRope.of(level("ATHN03C")), "gorope");
+		assertEquals(RopeDef.Type.HANG, a.type());
+		assertEquals(15f, a.lengthM(), 1e-4f);
+		assertEquals(a.length(), a.simLength(), 0.5f, "SCR +0x28 × 16 = 관절 길이");
+		assertEquals(0, a.dirs());
+		NavRope ns = byOwner(NavRope.of(level("ATHN03C")), "gorope12");
+		assertEquals(4, ns.template());
+		assertEquals(1, ns.dirs(), "RopeNorthSouth");
+		assertEquals(160f, ns.simLength(), 1e-3f);
+		for (NavRope r : NavRope.of(level("ATHN06C"))) {
+			assertEquals(2, r.template());
+			assertEquals(2, r.dirs(), "RopeEastWest " + r.owner());
+			assertEquals(1, r.dirFirst());
+			assertEquals(2, r.dirStep());
+		}
+		for (NavRope r : NavRope.of(level("PAND04E"))) {
+			if (r.type() == RopeDef.Type.HANG) {
+				assertEquals(1, r.dirs(), r.owner());
+			}
+		}
+		// 줄 오브젝트 행렬 z 축 (원작 줄 +0x20): HDES01E gorope3 는 45° 돌아 있음
+		NavRope h = byOwner(NavRope.of(level("HDES01E")), "gorope3");
+		assertEquals(Math.abs(h.axis().x), Math.abs(h.axis().z), 0.02f);
+		assertTrue(Math.abs(h.axis().x) > 0.6f);
+	}
+
+	static NavRope byOwner(List<NavRope> l, String owner) {
+		return l.stream().filter(r -> r.owner().equals(owner)).findFirst().orElseThrow();
+	}
+
+	/**
+	 * 위에서 아래 사다리로 (0x1E5638): ATHN02B 사다리 면 꼭대기 (위층 바닥이 있는 것) 모두 위층에서 바깥쪽으로 걸어가면 사다리에 붙는다 (LADDER, 7 곳).
+	 */
+	@Test
+	void athn02bLaddersMountFromAbove() throws Exception {
+		LevelData d = level("ATHN02B");
+		LevelCollision lc = new LevelCollision(d.sheets);
+		NavWorld w = new NavWorld(lc);
+		int tops = 0, mounted = 0;
+		for (LevelCollision.Tri t : lc.triangles()) {
+			if (!t.has(SurfaceAttr.LADDER) || Math.abs(t.n().y) > 0.3f) {
+				continue;
+			}
+			Vector3f n = new Vector3f(t.n().x, 0, t.n().z).normalize();
+			Vector3f top = t.a().y >= t.b().y && t.a().y >= t.c().y ? t.a() : t.b().y >= t.c().y ? t.b() : t.c();
+			// 꼭대기 꼭짓점 → 사다리 면 가운데 쪽으로 (옆 끝 꼭짓점 대신)
+			Vector3f mid = new Vector3f(t.a()).add(t.b()).add(t.c()).div(3);
+			Vector3f along = new Vector3f(mid.x - top.x, 0, mid.z - top.z);
+			Vector3f start = new Vector3f(top).add(along);
+			NavWorld.Floor fl = w.floor(start.x - n.x * 4, top.y + 8, start.z - n.z * 4, 12);
+			if (fl == null) {
+				continue;
+			}
+			tops++;
+			HeroNavigatorTest.Body b = new HeroNavigatorTest.Body();
+			HeroNavigator nav = new HeroNavigator(b, w, null);
+			b.pos.set(start.x - n.x * 20, fl.y(), start.z - n.z * 20);
+			for (int i = 0; i < 90 && nav.state() == NavState.GROUND; i++) {
+				// 스틱 = 바깥 (법선) 쪽: camYaw 로 맞춤
+				float yaw = HeroNavigator.yawOf(n);
+				HeroNavigatorTest.Pad in = new HeroNavigatorTest.Pad();
+				in.ly = 1;
+				if (!nav.update(in, yaw, HeroNavigatorTest.DT) && !nav.active()) {
+					b.yaw = yaw;
+					b.pos.add(HeroNavigator.forward(yaw).mul(60 * HeroNavigatorTest.DT));
+					float g = w.groundHeight(b.pos.x, b.pos.y + 14, b.pos.z, 16);
+					if (Float.isNaN(g)) {
+						break;
+					}
+					b.pos.y = g;
+				}
+			}
+			if (nav.state() == NavState.LADDER) {
+				mounted++;
+			}
+		}
+		assertTrue(tops >= 5, "ATHN02B 사다리 꼭대기 " + tops);
+		assertEquals(tops, mounted, "위에서 사다리로 붙음 " + mounted + " / " + tops);
+	}
+
+	/** 물가 (0x1CA198): PAND04E 의 수면 아래 얕은 턱 (떠 있는 발 위 6.4 안) 으로 헤엄쳐 가면 올라선다. ATHN02A 수로 벽은 못 오른다 (사다리·점프로 나감). */
+	@Test
+	void pand04eShelfExitsWater() throws Exception {
+		NavWorld w = new NavWorld(new LevelCollision(level("PAND04E").sheets));
+		Vector3f start = null, toward = null;
+		float surface = 0;
+		search:
+		for (float x = -4000; x <= 4000; x += 16) {
+			for (float z = -4000; z <= 4000; z += 16) {
+				NavWorld.Floor wf = w.floor(x, 3000, z, 6000);
+				if (wf == null || !wf.has(SurfaceAttr.WATER)) {
+					continue;
+				}
+				NavWorld.Floor bed = w.floor(x, wf.y() - 0.5f, z, HeroNavigator.SWIM_DEPTH + 16);
+				if (bed != null && !bed.has(SurfaceAttr.WATER)) {
+					continue;
+				}
+				float feet = wf.y() - HeroNavigator.SWIM_DEPTH;
+				for (int d = 0; d < 4; d++) {
+					float nx = x + (d == 0 ? 16 : d == 1 ? -16 : 0), nz = z + (d == 2 ? 16 : d == 3 ? -16 : 0);
+					NavWorld.Floor a = w.floor(nx, feet + HeroNavigator.FOOT, nz, HeroNavigator.FOOT + 3.2f);
+					if (a != null && !a.has(SurfaceAttr.WATER) && a.y() > feet) {
+						start = new Vector3f(x, wf.y() + 4, z);
+						toward = new Vector3f(nx - x, 0, nz - z).normalize();
+						surface = wf.y();
+						break search;
+					}
+				}
+			}
+		}
+		assertNotNull(start, "PAND04E 물속 턱");
+		HeroNavigatorTest.Body b = new HeroNavigatorTest.Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		b.grounded = false;
+		b.pos.set(start);
+		HeroNavigatorTest.Pad in = new HeroNavigatorTest.Pad();
+		float yaw = HeroNavigator.yawOf(toward);
+		for (int i = 0; i < 300 && nav.state() != NavState.GROUND; i++) {
+			in.ly = nav.state() == NavState.SWIM ? 1 : 0;
+			if (!nav.update(in, yaw, HeroNavigatorTest.DT) && !nav.active()) {
+				b.vy -= HeroNavigator.GRAVITY * HeroNavigatorTest.DT;
+				b.pos.y += b.vy * HeroNavigatorTest.DT;
+			}
+		}
+		assertEquals(NavState.GROUND, nav.state(), "턱으로 올라섬 " + b.pos);
+		assertTrue(b.pos.y > surface - HeroNavigator.SWIM_DEPTH, "바닥 > 수면 − 28.16");
+	}
 }

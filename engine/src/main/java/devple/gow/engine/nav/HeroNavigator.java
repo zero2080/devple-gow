@@ -174,6 +174,16 @@ public final class HeroNavigator {
 	/** 지난 틱 공중이었음 (착지 프레임 = 원작 +0x2D8 0x80), 등 대고 걷기 (+0x174 0x200000), 벽 옆 끝 (+0x2D8 0x100 왼쪽 −1 / 0x200 오른쪽 +1). */
 	private boolean airborne, wallBack;
 	private int wallEdge;
+	/**
+	 * 벽 옆 끝 점프 뒤 공중 (+0x2D8 0x100/0x200 이 남은 채 공중, 0x1E9C9C): 뛴 쪽 (−1/+1, 0 = 아님), 공중 시간 (+0x2B8, 0x1C8180),
+	 * 옆 벽 잡기 질의 0x1E53F0 의 마지막 결과 (시험·디버그용).
+	 */
+	private int edgeJumpSide;
+	private float edgeAirTime;
+	private final Vector3f edgeJumpDir = new Vector3f(), edgeWallN = new Vector3f();
+	/** 매단 줄 위 몸 방향 번호 ({@link NavRope#backDirs()}) 와 몸 방향 보간 가중치 (+0x150, 0.1 → ×1.1111/프레임 → 1, 0x1E0DC0). */
+	private int ropeDir;
+	private float turnBlend = 1;
 	private float ledgeY;
 	private NavRope rope;
 	private float ropeT, zipSpeed, zipDir;
@@ -276,6 +286,9 @@ public final class HeroNavigator {
 	public boolean update(Input in, float camYaw, float dt) {
 		stateTime += dt;
 		cooldown -= dt;
+		if (state != NavState.AIR) {
+			edgeJumpSide = 0;
+		}
 		boolean justLanded = body.grounded() && airborne;
 		airborne = !body.grounded() && !active();
 		prevFeet = hasLast ? new Vector3f(lastFeet) : null;
@@ -371,6 +384,9 @@ public final class HeroNavigator {
 			}
 			airDive(p);
 		}
+		if (body.grounded()) {
+			edgeJumpSide = 0;
+		}
 		if (cooldown > 0) {
 			return false;
 		}
@@ -387,6 +403,30 @@ public final class HeroNavigator {
 				enterHang(l);
 				return true;
 			}
+			// 턱 한쪽만 맞음 (반환 8, 0x1E4528) → 공중 갱신 0x1C83F0: 벽 수평 법선 · 스틱 (없으면 정면) &lt; 0 이면 몸을 벽 쪽으로 돌림 [확실]
+			Vector3f cn = probeLedgeCorner(p, prevFeet, fwd);
+			if (cn != null && cn.dot(mag > 0.2f ? stick : fwd) < 0) {
+				body.setYaw(yawOf(new Vector3f(cn).negate()));
+			}
+		}
+		// 벽 옆 끝 점프 뒤 공중 (+0x2D8 0x300 이 남음): 일반 벽 잡기 없음 (0x1C7D20), 공중 0.2 초 (+0x2B8, 0x1C8180) 가 지나면 매 프레임
+		// 옆 벽 질의 0x1E53F0 → 맞으면 몸을 새 벽 법선으로 돌려 벽 질의 → 벽 오르기 (ANIClimbCL/CR) [확실]
+		if (!body.grounded() && edgeJumpSide != 0) {
+			edgeAirTime += dt;
+			if (edgeAirTime > EDGE_CATCH_TIME) {
+				WallProbe w = sideCatch(p);
+				if (w != null) {
+					int side = edgeJumpSide;
+					edgeJumpSide = 0;
+					body.position().set(w.feet());
+					enterWall(w, false);
+					if (state == NavState.WALL_CLIMB) {
+						body.play(anims.get(side < 0 ? "ANIClimbCL" : "ANIClimbCR"), true);
+					}
+					return true;
+				}
+			}
+			return false;
 		}
 		// 벽: 정면 (공중, 0x1C7D40) 또는 스틱 방향 (지상 [근사: 원작 지상 진입 0x1C7E1C 조건 +0x2D8 0x80 / 국소 속도 미해석])
 		// 벽: 공중 = 정면 (0x1C7D40), 지상 = 앞으로 움직이면 (지역 앞 속도 &gt; 0) 그 방향 (0x1C7DE8 → 0x1E47E0 a3 = 0, 마스크 0x1008001C) [확실].
@@ -407,8 +447,92 @@ public final class HeroNavigator {
 				enterWall(w, true);
 				return true;
 			}
+		} else if (moving) {
+			// 위에서 아래 벽/사다리로 내려가 붙기 (0x1C7F70 → 0x1E5638, 지상·앞으로 움직임·앞 벽 질의 실패·착지 프레임 아님) [확실]
+			WallProbe w = probeClimbDown(p, dir);
+			if (w != null) {
+				body.position().set(w.feet());
+				enterClimb(w, w.tri().has(SurfaceAttr.LADDER));
+				return true;
+			}
 		}
 		return false;
+	}
+
+	/** 벽 옆 끝 점프 뒤 옆 벽 질의까지의 공중 시간 0.2 초 (0x1C8164) [확실]. */
+	public static final float EDGE_CATCH_TIME = 0.2f;
+	/** 옆 벽 질의 법선 조건 |n · 새 뒤| &lt; 0.25 (0x1E55BC) [확실]. */
+	public static final float SIDE_CATCH_PERP = 0.25f;
+
+	/**
+	 * 옆 벽 질의 (원작 0x1E53F0, 벽 옆 끝 점프 뒤 공중) [확실: 디스어셈블].
+	 * <pre>
+	 * 점프로 몸 축이 90° 돈 뒤: 새 뒤 = −뛴 방향 s, 새 +0x50 = −옛 벽 법선 n.
+	 * o (내비 위치) → o + 새 뒤 × 9.6 (+0x234 × 16) ± 새 +0x50 × 14.4 (폭 × 0.75) = o − s × 9.6 − n × 14.4 (0x100·0x200 모두 같은 식),
+	 * 그리고 같은 선분을 위 × 27.8 (+0x140 − 1) 에서. 처음 맞은 면이 Climbable·Ladder (0x18) 이고 |법선 · 새 뒤| &lt; 0.25 면 반환 비트 8,
+	 * 법선 → +0x220. 부르는 쪽 (0x1C81B4): 몸 뒤 = 그 법선 (수평), 벽 질의 0x1E47E0 (a3 = 1) 이 맞으면 0x300 끄고 0x1C7280 (+0x2D8 0x800 / 0x1000
+	 * → ANIClimbCL / CR), 아니면 몸 축을 되돌림.
+	 * </pre>
+	 * 즉 벽 옆 끝에서 옆으로 뛰어 <b>같은 쪽을 향한 다음 벽 (틈 건너편)</b> 을 잡는다 — 바깥 모서리 돌기가 아니다 (전 문서 §13.3 정정).
+	 */
+	WallProbe sideCatch(Vector3f feet) {
+		Vector3f o = new Vector3f(feet).add(0, FOOT, 0);
+		Vector3f s = new Vector3f(edgeJumpDir.x, 0, edgeJumpDir.z).normalize();
+		for (int k = 0; k < 2; k++) {
+			Vector3f a = new Vector3f(o).add(0, k == 0 ? 0 : REACH - 1, 0);
+			Vector3f b = new Vector3f(a).fma(-WALL_OFF, s).fma(-WALL_PROBE, edgeWallN);
+			LevelCollision.Hit h = world.segment(a, b);
+			if (h == null || !(h.tri().has(SurfaceAttr.CLIMBABLE) || h.tri().has(SurfaceAttr.LADDER))) {
+				continue;
+			}
+			Vector3f n = facing(h, a);
+			if (Math.abs(n.dot(s)) >= SIDE_CATCH_PERP) {
+				continue;
+			}
+			Vector3f nh = new Vector3f(n.x, 0, n.z);
+			if (nh.lengthSquared() < 1e-6f) {
+				return null;
+			}
+			nh.normalize();
+			return probeWall(feet, nh.negate(), null);
+		}
+		return null;
+	}
+
+	/**
+	 * 위에서 아래 벽/사다리로 내려가 붙기 (원작 0x1E5638, 지상) [확실: 디스어셈블].
+	 * <pre>
+	 * o = 내비 위치. a = o − 위 × 35.2 (+0x120.y) + 정면 × 35.2 → b = a + 뒤 × (0.5 × 폭 + 키 = 44.8) = o − 위 × 35.2 − 정면 × 9.6.
+	 * 처음 맞은 면이 Climbable·Ladder (0x18) 면 P = 적중점 + 법선 × 9.6 (0.5 × 깊이), o → P 선분이 막히지 않으면 위치 = P, +0x220 = 법선, 반환 9 → 0x1C7280.
+	 * </pre>
+	 * 엔진 충돌은 양면이라 앞면 (법선 · (b − a) &lt; 0) 만 받는다 [근사].
+	 */
+	WallProbe probeClimbDown(Vector3f feet, Vector3f fwd) {
+		Vector3f f = new Vector3f(fwd.x, 0, fwd.z);
+		if (f.lengthSquared() < 1e-6f) {
+			return null;
+		}
+		f.normalize();
+		Vector3f o = new Vector3f(feet).add(0, FOOT, 0);
+		Vector3f a = new Vector3f(o).sub(0, HANG, 0).fma(HANG, f);
+		Vector3f b = new Vector3f(o).sub(0, HANG, 0).fma(-WALL_OFF, f);
+		LevelCollision.Hit h = world.segment(a, b);
+		if (h == null || !(h.tri().has(SurfaceAttr.CLIMBABLE) || h.tri().has(SurfaceAttr.LADDER))) {
+			return null;
+		}
+		Vector3f n = new Vector3f(h.tri().n());
+		if (n.dot(f) <= 0) {
+			return null; // 뒷면 (선분은 앞에서 뒤로 간다: 앞면 법선은 정면 쪽)
+		}
+		Vector3f pos = new Vector3f(h.point()).fma(WALL_OFF, n);
+		if (world.segment(o, pos) != null) {
+			return null;
+		}
+		Vector3f nh = new Vector3f(n.x, 0, n.z);
+		if (nh.lengthSquared() < 1e-6f) {
+			return null;
+		}
+		return new WallProbe(pos.sub(0, FOOT, 0), nh.normalize(), h.tri());
 	}
 
 	// ---- 벽·턱 판정 (원작 0x1E47E0 / 0x1E3A80) ----
@@ -580,6 +704,46 @@ public final class HeroNavigator {
 		Vector3f pos = new Vector3f(wall[0].point()).add(wall[1].point()).mul(0.5f).fma(WALL_OFF, np);
 		pos.y = ledge.y - HANG;
 		return new Ledge(ledge.y, ledge, pos, np, topTri);
+	}
+
+	/**
+	 * 턱 한쪽만 맞음 (원작 0x1E3A80 의 0x1E4528 경로, 반환 8) [확실: 디스어셈블]: 두 수직 선분 중 하나만 바닥 (조건은 일반 턱과 같음) 에 맞으면
+	 * 그 적중점 + (0, 1, 0) ← 머리 (o + 28.8 + d) 선분이 막히지 않고, o 에서 그 선분 아래 끝의 (x, z) 높이 o.y 점까지 수평 선분이 맞아야 한다.
+	 * 맞은 면 법선 (y = 0, 정규화) → +0x220, 표면 → +0x238. 매달리지는 않고, 공중 갱신이 몸을 벽 쪽으로 돌린다 (0x1C83F0).
+	 *
+	 * @return 벽 수평 법선 (영웅 쪽), 없으면 null
+	 */
+	Vector3f probeLedgeCorner(Vector3f feet, Vector3f prev, Vector3f fwd) {
+		Vector3f f = new Vector3f(fwd.x, 0, fwd.z).normalize();
+		Vector3f right = rightOf(f);
+		Vector3f o = new Vector3f(feet).add(0, FOOT, 0);
+		float d = Math.max(prev != null ? feet.distance(prev) : 0, LEDGE_WINDOW);
+		Vector3f c = new Vector3f(o).fma(LEDGE_AHEAD + BODY_W / 2, f);
+		Vector3f hit = null, bottom = null;
+		int hits = 0;
+		for (int i = 0; i < 2; i++) {
+			Vector3f s = new Vector3f(c).fma(i == 0 ? -BODY_W / 4 : BODY_W / 4, right).add(0, REACH + d, 0);
+			Vector3f e = new Vector3f(s).sub(0, 2 * d, 0);
+			LevelCollision.Hit h = world.segment(s, e);
+			if (h != null && Math.abs(h.tri().n().y) > LEDGE_NY && !h.tri().has(SurfaceAttr.SLIDE) && !h.tri().has(SurfaceAttr.NO_WALL_HANG)) {
+				hits++;
+				hit = h.point();
+				bottom = e;
+			}
+		}
+		if (hits != 1) {
+			return null;
+		}
+		if (world.segment(new Vector3f(o).add(0, REACH + d, 0), new Vector3f(hit).add(0, 1, 0)) != null) {
+			return null;
+		}
+		LevelCollision.Hit w = world.segment(o, new Vector3f(bottom.x, o.y, bottom.z));
+		if (w == null) {
+			return null;
+		}
+		Vector3f n = facing(w, o);
+		n.y = 0;
+		return n.lengthSquared() < 1e-6f ? null : n.normalize();
 	}
 
 	/** 턱 아래 벽 두 선분 (b → b + 정면 × 19.2 ± 오른쪽 × 9.6). 둘 다 맞아야 한다. */
@@ -795,8 +959,20 @@ public final class HeroNavigator {
 		Vector3f face = state == NavState.WALL_WALK && wallBack ? new Vector3f(wallN) : new Vector3f(wallN).negate();
 		Vector3f dir = rightOf(face).mul(wallEdge);
 		body.setYaw(yawOf(dir));
+		int side = wallEdge;
 		wallEdge = 0;
+		edgeWallN.set(wallN);
 		leave(new Vector3f(dir).mul(EDGE_JUMP_OUT), EDGE_JUMP_UP, "ANIJump");
+		// +0x2D8 0x300 은 공중에서도 남고 (옆 벽 질의 0x1E53F0 의 방향), 0x20 (다시 붙지 않음) 은 +0x2A0 0.1 초 [추정: 0x20 이 풀리는 시간]
+		edgeJumpSide = side;
+		edgeJumpDir.set(dir);
+		edgeAirTime = 0;
+		cooldown = 0.1f;
+	}
+
+	/** 벽 옆 끝 점프 뒤 공중인지 (뛴 쪽 −1/+1, 0 = 아님). */
+	public int edgeJumpSide() {
+		return edgeJumpSide;
 	}
 
 	// ---- 좁은 턱 벽 따라 걷기 (+0x174 0x100000 벽 보고 / 0x200000 등 대고) ----
@@ -957,10 +1133,12 @@ public final class HeroNavigator {
 				zipDir = r.end().y <= r.top().y ? 1 : -1;
 				zipSpeed = 0; // [추정: 잡을 때 줄 방향 속도 0 에서 가속]
 				body.setYaw(yawOf(new Vector3f(d).mul(zipDir)));
+				sim(r).attach(ropeT * sim(r).length());
 				body.play(anims.get("ANIZipLine"), true);
 			}
 			case TRAVERSE -> {
 				state = NavState.ROPE_TRAVERSE;
+				sim(r).attach(ropeT * sim(r).length());
 				body.play(anims.get("ANIBRope"), true);
 			}
 			default -> {
@@ -974,42 +1152,71 @@ public final class HeroNavigator {
 				swingBack.set(face).negate();
 				pumpTimer = SWING_WINDOW;
 				swingForce = 0;
+				// 몸 방향 = 줄 축 4 (또는 2) 방향 중 지금 뒤에 가장 가까운 것 (0x1C6918), 보이는 몸은 보간 [추정: 잡을 때 +0x150 = 0.1]
+				ropeDir = r.bestDir(new Vector3f(face).negate());
+				turnBlend = TURN_BLEND_START;
 				body.play(anims.get("ANIRope"), true);
 			}
 		}
 		placeOnRope();
 	}
 
-	/** 매단 줄 시뮬레이션 (없으면 만든다). */
+	/** 줄 시뮬레이션 (없으면 만든다): 매단 줄 = 매단 점에서 아래로, 양끝 고정 줄 (수평 줄·짚라인) = 두 끝 고정 (0x218488). */
 	RopeSim sim(NavRope r) {
-		return sims.computeIfAbsent(r, k -> new RopeSim(k.top(), k.length(), k.joints()));
+		return sims.computeIfAbsent(r, k -> k.type() == devple.gow.tools.level.RopeDef.Type.HANG ? new RopeSim(k.top(), k.simLength(), k.joints())
+				: RopeSim.fixed(k.top(), k.end(), k.joints()));
 	}
 
-	/** 줄 위 손 위치 → 몸 위치 (0x1C66E4: 몸 = 줄 점 − 키). 매단 줄은 시뮬레이션 줄 위 붙은 거리의 점. */
+	/** 줄 위 손 위치 → 몸 위치 (0x1C66E4: 몸 = 줄 점 − 키). 손 = 시뮬레이션 줄 위 붙은 거리의 점 (0x2184E8). */
 	private void placeOnRope() {
-		Vector3f hand = state == NavState.ROPE ? sim(rope).pointAt(sim(rope).dist(), new Vector3f()) : rope.point(ropeT, new Vector3f());
+		RopeSim sim = sim(rope);
+		if (state != NavState.ROPE) {
+			sim.moveAttach(ropeT * sim.length());
+		}
+		Vector3f hand = sim.pointAt(sim.dist(), new Vector3f());
 		body.position().set(hand.x, hand.y - ROPE_HAND, hand.z);
 	}
 
-	/** 매단 줄에서 떨어짐: 매달림 해제 (0x218270, 무게는 줄어들며 줄은 계속 흔들림). */
+	/** 줄에서 떨어짐: 매달림 해제 (0x218270, 무게는 줄어들며 줄은 계속 흔들림). */
 	private void releaseRope() {
-		if (rope != null && state == NavState.ROPE) {
+		if (rope != null && (state == NavState.ROPE || state == NavState.ROPE_TRAVERSE || state == NavState.ZIPLINE)) {
 			sim(rope).detach();
 		}
 	}
 
+	/** 줄에서 × 가 먹기 시작하는 시간 0.5 초 (0x1C5544 / 0x1C55A4, 잡을 때 0 인 0x29DBF8) [확실]. */
+	public static final float ROPE_JUMP_DELAY = 0.5f;
+	/** 매단 줄 × 뛰어내리기: 위 Sold+0x140 14 → 224, 앞 Sold+0x144 14 → 224 (0x1C55F4 / 0x1C561C) [확실]. */
+	public static final float ROPE_JUMP_UP = K.units(NavTuning.ROPE_JUMP_UP), ROPE_JUMP_OUT = K.units(NavTuning.ROPE_JUMP_OUT);
+	/** 뛰어내릴 때 줄에 주는 반작용 = −속도 × 5 × min(1, 붙은 거리 m × 0.25) (0x1C57A8 → 0x218470) [확실]. */
+	public static final float ROPE_KICK = 5f;
+	/** 매단 줄 위 회전: 스틱 좌우 문턱 0.5 (0x1C6A7C), 보간 가중치 0.1 에서 프레임마다 ×1.1111 (+0x150 / +0x154, 0x1E0DC0) [확실]. */
+	public static final float TURN_STICK = 0.5f, TURN_BLEND_START = 0.1f, TURN_BLEND_GROW = 1.1111f;
+
+	/** 매단 줄 위 몸 방향 번호 (0..3, {@link NavRope#backDirs()} 의 뒤쪽). */
+	public int ropeDir() {
+		return ropeDir;
+	}
+
+	/** 몸 방향 보간 가중치 (1 = 다 돎, 그때만 다음 회전 입력을 받음). */
+	public float turnBlend() {
+		return turnBlend;
+	}
+
 	private void hangRope(Input in, float camYaw, float dt) {
 		RopeSim sim = sim(rope);
-		if (in.pressed(PadButton.CROSS)) {
-			// 줄 점 속도 + 정면 40 + 점프 초속으로 뛰어내림 [근사: 원작 줄 이탈 0x1C5848 미해석]
-			Vector3f v = sim.velocityAt(sim.dist(), new Vector3f());
-			leave(new Vector3f(v.x, 0, v.z).add(new Vector3f(forward(body.yaw())).mul(40)), JUMP + Math.max(0, v.y), "ANIFall");
+		float sy = in.leftY(), sx = in.leftX();
+		boolean hasStick = stickMag(in) > 0.2f;
+		// 원작 +0x2E0: 스틱 월드 방향, 스틱이 없으면 −뒤 (= 정면) (0x1D6DE4)
+		Vector3f ref = hasStick ? stickDir(in, camYaw) : forward(body.yaw());
+		if (in.pressed(PadButton.CROSS) && stateTime > ROPE_JUMP_DELAY) {
+			ropeJump(sim, ref);
 			return;
 		}
-		float sy = in.leftY(), sx = in.leftX();
 		String a = anims.get("ANIRope");
 		// 흔들기 버튼 (+0x310 0x10 ← 논리 0x40000 ← 패드 비트 5 = ○, 0x1D8108) 을 누르고 있으면 오르내리기 대신 흔들기 (0x1C61FC) [확실: 비트 / 추정: ○]
 		boolean swing = in.held(PadButton.CIRCLE);
+		ropeTurn(sx, ref, swing, dt);
 		ropeVel = swing ? 0 : ropeVelocity(sy, dt);
 		if (ropeVel != 0) {
 			// 줄 위치 (m) += 속도 / 16 · dt, [0.25, 길이 − 0.25] (0x1C6578 → 0x2183B0)
@@ -1029,15 +1236,66 @@ public final class HeroNavigator {
 			}
 		}
 		if (swing) {
-			if (Math.hypot(sx, sy) > 0.3f) {
-				body.setYaw(yawOf(stickDir(in, camYaw))); // 흔드는 면 = 몸 정면 [근사: 원작 줄 위 회전 미해석]
-			}
 			a = anims.get("ANIRopeIdle");
 		}
 		// 매 프레임 매달림 힘을 준다 (0x1C71A8 → 0x218470, 줄이 잠들지 않음)
 		sim.setForce(swingForce(sim, swing, dt));
 		placeOnRope();
 		body.play(a, false);
+	}
+
+	/**
+	 * 매단 줄 × 뛰어내리기 (원작 0x1C5488, 줄 갱신 0x1C6B58 에서) [확실: 디스어셈블].
+	 * <pre>
+	 * 잡은 뒤 0.5 초 (0x29DBF8 &gt; 0.5) 가 지나야 한다. 뒤 후보 = 줄 축 방향 ({@link NavRope#backDirs()}, 템플릿 방향 제한) 중
+	 * −(스틱 월드 방향, 없으면 정면) 과 내적이 가장 큰 것 → +0x70, 그 이전 번호 → +0x50.
+	 * 지역 속도 (0, Sold+0x140, Sold+0x144) → 월드 속도 = 위 × 224 + 정면 × 224 (줄 점 속도는 더하지 않음 — +0xE0 를 덮어씀).
+	 * 줄에 반작용 −속도 × 5 × min(1, 붙은 거리 m × 0.25) (0x218470), 애니 = 0x1E98B8 (앞 속도 ≥ 1 m/s → ANIJump).
+	 * </pre>
+	 */
+	private void ropeJump(RopeSim sim, Vector3f ref) {
+		int i = rope.bestDir(new Vector3f(ref.x, 0, ref.z).negate());
+		Vector3f face = new Vector3f(rope.backDirs()[i]).negate();
+		Vector3f v = new Vector3f(face).mul(ROPE_JUMP_OUT).add(0, ROPE_JUMP_UP, 0);
+		sim.setForce(new Vector3f(v).mul(-ROPE_KICK * Math.min(1, sim.dist() * 0.25f) / NavTuning.UNITS_PER_METER));
+		body.setYaw(yawOf(face));
+		leave(new Vector3f(face).mul(ROPE_JUMP_OUT), ROPE_JUMP_UP, ROPE_JUMP_OUT < NavTuning.UNITS_PER_METER ? "ANIVJump" : "ANIJump");
+	}
+
+	/**
+	 * 매단 줄 위 몸 방향 (원작 0x1C6858 – 0x1C6B18, 흔들기 버튼·줄 미끄럼 아닐 때) [확실: 디스어셈블].
+	 * <pre>
+	 * 지금 번호 = 줄 축 후보 중 몸 뒤 (+0x70) 에 가장 가까운 것. +0x2D8 0x2000000 이 아니고 몸 보간 +0x150 이 1 (이전 회전이 끝남) 일 때만:
+	 *   방향 제한 (2 방향 줄): 후보 중 −(+0x2E0 스틱 월드 방향 / 없으면 정면) 에 가장 가까운 것으로 (바뀌면 회전).
+	 *   4 방향 줄: +0x2F0 (패드 스틱) 의 x · w &gt; 0.5 면 번호 + 1, &lt; −0.5 면 − 1 (90° 씩).
+	 *   회전하면 +0x174 0x20000000, +0x150 = 0.1, +0x154 = 1.1111.
+	 * 몸 축 = 후보[번호] (뒤), 후보[번호 − 1] (+0x50). 보이는 몸 (+0x90 행렬, 0x1E0C60) 은 매 프레임 slerp(보이는 몸, 몸 축, +0x150 × f),
+	 * 그 뒤 +0x150 ×= 1 + (+0x154 − 1) × f (f = 60 Hz 프레임 수, 1 에서 멈춤) → 0.1 × 1.1111^k 가 1 에 닿는 22 프레임 (0.37 초) 에 한 번 돈다.
+	 * </pre>
+	 * 엔진: 번호 + 1 = 몸 오른쪽 (엔진 rightOf) 으로 90° — 스틱 오른쪽이 오른쪽으로 돈다 [추정: 좌우 대응, w = 1 로 봄].
+	 */
+	private void ropeTurn(float sx, Vector3f ref, boolean swing, float dt) {
+		Vector3f[] dirs = rope.backDirs();
+		float f = dt * 60f;
+		if (!swing && !ropeSlide && turnBlend >= 1) {
+			int next = ropeDir;
+			if (rope.dirStep() == 2) {
+				next = rope.bestDir(new Vector3f(ref.x, 0, ref.z).negate());
+			} else if (sx > TURN_STICK) {
+				next = (ropeDir + 1) & 3;
+			} else if (sx < -TURN_STICK) {
+				next = (ropeDir + 3) & 3;
+			}
+			if (next != ropeDir) {
+				ropeDir = next;
+				turnBlend = TURN_BLEND_START;
+			}
+		}
+		// 보이는 몸 = 몸 축 쪽으로 slerp (yaw 보간)
+		float want = yawOf(new Vector3f(dirs[ropeDir]).negate());
+		float diff = (float) Math.IEEEremainder(want - body.yaw(), 2 * Math.PI);
+		body.setYaw(body.yaw() + diff * Math.min(1, turnBlend * f));
+		turnBlend = Math.min(1, turnBlend * (1 + (TURN_BLEND_GROW - 1) * f));
 	}
 
 	/**
@@ -1066,8 +1324,10 @@ public final class HeroNavigator {
 			f = side > 0 ? (d <= 0.1f ? big * 2 * pumpTimer : 0) : (d >= -0.1f ? -big * 2 * pumpTimer : 0);
 			pumpTimer = Math.max(0, pumpTimer - dt);
 		} else {
-			Vector3f face = forward(body.yaw());
-			Vector3f right = rightOf(face), back = new Vector3f(face).negate();
+			// 지금 몸 축 (+0x50 / +0x70) = 줄 위 몸 방향 번호 (보이는 몸이 아니라 논리 축)
+			Vector3f back = new Vector3f(rope.backDirs()[ropeDir]);
+			Vector3f face = new Vector3f(back).negate();
+			Vector3f right = rightOf(face);
 			t = new Vector3f(u).cross(right);
 			if (swing && !ropeSlide) {
 				Vector3f v = sim.velocityAt(sim.dist(), new Vector3f());
@@ -1108,7 +1368,8 @@ public final class HeroNavigator {
 	}
 
 	private void traverse(Input in, float camYaw, float dt) {
-		if (in.pressed(PadButton.CROSS) || in.pressed(PadButton.CIRCLE)) {
+		// × = 잡은 뒤 0.5 초가 지나면 놓기 (0x1C552C: 수평 줄 0x20000 → 0x1E9030 모드 2) [확실], ○ 놓기 [엔진]
+		if (in.pressed(PadButton.CROSS) && stateTime > ROPE_JUMP_DELAY || in.pressed(PadButton.CIRCLE)) {
 			leave(new Vector3f(), 0, "ANIFall");
 			return;
 		}
@@ -1139,10 +1400,7 @@ public final class HeroNavigator {
 		Vector3f d = new Vector3f(rope.end()).sub(rope.top());
 		float len = Math.max(1, d.length());
 		d.div(len).mul(zipDir);
-		if (in.pressed(PadButton.CROSS)) {
-			leave(new Vector3f(d.x, 0, d.z).mul(zipSpeed * 0.5f), JUMP * 0.4f, "ANIFall"); // [근사]
-			return;
-		}
+		// × 는 짚라인 (0x40000) 에서 아무것도 하지 않는다 (0x1C551C 에서 바로 돌아감) [확실] — 끝까지 타야 놓는다
 		// 원작 0x1C60F8: 목표 Sold+0x160 으로 가속 +0x164 (줄 기울기 무관), 줄 위치 (m) += 속도 / 16 · dt
 		zipSpeed = Math.min(ZIP_SPEED, zipSpeed + ZIP_ACCEL * dt);
 		float endGap = ROPE_TOP_GAP / len;
@@ -1193,6 +1451,24 @@ public final class HeroNavigator {
 	private float waterVy, diveVy;
 	/** 아직 떠 있는 높이 위에서 떨어지는 중 (공중 물리), 다이빙 (+0x2D8 0x100000), 이번 낙하는 다이빙 안 함 (0x200000), 수면이 NoDiving. */
 	private boolean plunging, divingIn, noDiveFall, waterNoDiving;
+	/** 물가 바닥 (0x1CA198 / 0x1E3298): 창 안의 마른 바닥이 수면 − 28.16 보다 높으면 그 바닥. */
+	NavWorld.Floor bankFloor(Vector3f p, Vector3f cand) {
+		float d = Math.max(p.distance(cand), LEDGE_WINDOW);
+		float top = cand.y + FOOT + Math.max(d - FOOT, 0);
+		float bottom = cand.y - d;
+		Vector3f f = forward(body.yaw());
+		NavWorld.Floor best = null;
+		for (int i = 0; i < 2; i++) {
+			float x = cand.x + (i == 0 ? 0 : f.x * BODY), z = cand.z + (i == 0 ? 0 : f.z * BODY);
+			NavWorld.Floor fl = world.floor(x, top, z, top - bottom);
+			if (fl != null && !fl.has(SurfaceAttr.WATER) && !fl.has(SurfaceAttr.NO_DIVING) && fl.y() > waterY - SWIM_DEPTH
+					&& (best == null || fl.y() > best.y())) {
+				best = fl;
+			}
+		}
+		return best;
+	}
+
 	/** 잠수 돌진: 충전 중 (+0x2D8 0x40000), 돌진 중 (0x80000), 충전 시간·조종 시간 (+0x2B8), 속도 (+0x2C4). */
 	private boolean dashCharging, dashing;
 	private float dashCharge, dashTime, dashSpeed;
@@ -1310,14 +1586,17 @@ public final class HeroNavigator {
 		}
 		Vector3f fwd = forward(body.yaw());
 		Vector3f cand = new Vector3f(p).fma(swimSpeed * dt, fwd).add(0, waterVy * dt, 0);
+		// 물가 (0x1EA5F0 → 물 상태 이동 뒤 0x1CA198) [확실]: 바닥 질의 0x1E3298 (Water·NoDiving 제외 마스크 0x8020000) 의 창 =
+		// 내비 위치 (+ max(d − 6.4, 0)) 에서 발 − d 까지 (d = max(이동, 3.2)). 바닥이 맞고 그 위 내비 위치가 수면 − 21.76 (떠 있는 높이) 보다
+		// 높으면 = 바닥 &gt; 수면 − 28.16 이면 착지 (0x1E9470). 몸 충돌 0x1E2100 에 계단 오르기는 없으므로 떠 있는 발보다 6.4 넘게 높은 물가는
+		// 못 오른다 — 비탈·얕은 턱·사다리/Climbable 벽으로 나온다. 엔진 표본 = 몸 가운데 + 정면 9.6 [근사: 원작 4–5 점]
+		NavWorld.Floor bank = bankFloor(p, cand);
+		if (bank != null) {
+			p.set(cand.x, bank.y(), cand.z);
+			land(null);
+			return;
+		}
 		if (water != Water.DIVE && swimSpeed > 0) {
-			// 물가: 수면 − 32 이상 마른 바닥에 닿으면 올라선다 [근사: 원작 0x1EA5F0 지상 판정 미해석]
-			NavWorld.Floor f = world.floor(cand.x, waterY + 24, cand.z, 200);
-			if (f != null && !f.has(SurfaceAttr.WATER) && f.y() >= waterY - SWIM_DEPTH - 4) {
-				p.set(cand.x, f.y(), cand.z);
-				land(null);
-				return;
-			}
 			// 물 위에서 벽 오르기 (0x1C7DA8: +0x174 0x80 이고 앞으로 가면 0x1E47E0 → 0x1C7280) [확실]
 			if (water == Water.TREAD) {
 				WallProbe w = probeWall(p, fwd, null);
