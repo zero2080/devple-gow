@@ -153,6 +153,7 @@ src     = block + column + byte
 | 0x3C | u32 | — | 0 |
 
 GS ALPHA 블렌드 식 `((A - B) * C >> 7) + D` (A,B,D: 0=Cs 1=Cd 2=0, C: 0=As 1=Ad 2=FIX)
+
 | 상위 바이트 | A B C D | 식 | 의미 |
 |-----------|---------|----|------|
 | 0x44 | Cs Cd As Cd | (Cs-Cd)·As + Cd | 일반 알파 블렌드 (가장 흔함) |

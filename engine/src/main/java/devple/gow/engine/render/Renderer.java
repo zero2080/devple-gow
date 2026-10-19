@@ -1,5 +1,6 @@
 package devple.gow.engine.render;
 
+import devple.gow.engine.asset.RenderModel;
 import devple.gow.engine.core.Engine;
 import org.joml.Matrix4f;
 import org.joml.Vector4f;
@@ -54,6 +55,54 @@ public final class Renderer implements AutoCloseable {
 		basic.set("uModel", model);
 		basic.set("uLit", lit ? 1 : 0);
 		m.draw();
+	}
+
+	/** 원작 머티리얼 블렌드 재현: 불투명 → 반투명/가산/감산(깊이 쓰기 끔) 순서. */
+	public void draw(RenderModel model, Matrix4f world) {
+		basic.set("uModel", world);
+		for (int pass = 0; pass < 2; pass++) {
+			for (RenderModel.Part p : model.parts()) {
+				boolean opaque = p.blend() == RenderModel.Blend.OPAQUE;
+				if (opaque != (pass == 0)) {
+					continue;
+				}
+				if (!opaque) {
+					glEnable(GL_BLEND);
+					glDepthMask(false);
+					switch (p.blend()) {
+						case ADD -> {
+							glBlendEquation(GL_FUNC_ADD);
+							glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+						}
+						case SUB -> {
+							glBlendEquation(GL_FUNC_REVERSE_SUBTRACT);
+							glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+						}
+						default -> {
+							glBlendEquation(GL_FUNC_ADD);
+							glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+						}
+					}
+				}
+				if (p.texture() != null) {
+					p.texture().bind(0);
+					basic.set("uUseTex", 1);
+				} else {
+					white.bind(0);
+					basic.set("uUseTex", 0);
+				}
+				float[] t = p.tint();
+				basic.set("uTint", new Vector4f(t[0], t[1], t[2], t[3]));
+				basic.set("uLit", p.lit() ? 1 : 0);
+				p.mesh().draw();
+				if (!opaque) {
+					glDisable(GL_BLEND);
+					glDepthMask(true);
+					glBlendEquation(GL_FUNC_ADD);
+				}
+			}
+		}
+		basic.set("uTint", new Vector4f(1, 1, 1, 1));
 	}
 
 	public void endFrame(float fade) {
