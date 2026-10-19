@@ -32,7 +32,8 @@ public final class CombatScriptBridge {
 	private final Map<EnemyFighter, Float> lastHp = new HashMap<>();
 	private final Map<EnemyFighter, ScriptActor> actorOf = new HashMap<>();
 	private int playerVar88, playerVar64;
-	private ScriptActor meter;
+	/** 체력 미터를 켠 적 → 미터 슬롯 1..3 (레벨 FLP 의 EnemyMeter_*1..3, 1055 순서대로 배정). */
+	private final java.util.Map<ScriptActor, Integer> meters = new java.util.LinkedHashMap<>();
 	/** 1019 EvtForce 를 기술 요청으로 받는 적 (보스만 — 일반 적의 PatrolChange 0 은 순찰 변경이라 제외). */
 	private final java.util.Set<EnemyFighter> forceable = new java.util.HashSet<>();
 	/** 디버그·테스트 기록: "1035 250 54" 처럼 (이벤트, 그룹, 인자). */
@@ -117,13 +118,18 @@ public final class CombatScriptBridge {
 				return true;
 			}
 			case METER_ON -> {
-				meter = a;
+				if (!meters.containsKey(a)) {
+					for (int slot = 1; slot <= 3; slot++) {
+						if (!meters.containsValue(slot)) {
+							meters.put(a, slot);
+							break;
+						}
+					}
+				}
 				return true;
 			}
 			case METER_OFF -> {
-				if (meter == a) {
-					meter = null;
-				}
+				meters.remove(a);
 				return true;
 			}
 			default -> {
@@ -147,6 +153,18 @@ public final class CombatScriptBridge {
 
 	/** 체력 표시 대상 적 (스크립트 1055 이후, 없으면 null). */
 	public EnemyFighter meterTarget() {
-		return meter != null ? byActor.get(meter) : null;
+		return meters.isEmpty() ? null : byActor.get(meters.keySet().iterator().next());
+	}
+
+	/** 미터 슬롯(1..3) → 적 (표시 중인 것만). */
+	public java.util.Map<Integer, EnemyFighter> meterTargets() {
+		java.util.Map<Integer, EnemyFighter> out = new java.util.TreeMap<>();
+		meters.forEach((a, slot) -> {
+			EnemyFighter f = byActor.get(a);
+			if (f != null) {
+				out.put(slot, f);
+			}
+		});
+		return out;
 	}
 }

@@ -19,6 +19,7 @@ import java.nio.file.Path;
  *   <li>hud: 데모 PlayerState 를 {@link HudBinding} 으로 연결 (체력/마법 바, 오브 미터)</li>
  *   <li>pause / powerup: hud + PS2_PauseMenu_Event / PS2_PSMMenu_Event = 1</li>
  *   <li>icon:&lt;이름&gt;: hud + 미니게임 아이콘 심볼 ({@link MinigameIcon#CLIPS}, 예 icon:CircleButtonGreek)</li>
+ *   <li>meter: 레벨 FLP (예 ATHN01E FLP_Athn01E) 보스 체력 미터 1 을 켜고 60 으로</li>
  *   <li>memcard: 메인 메뉴 + 불러오기 메모리카드 화면 ({@link devple.gow.engine.game.MemoryCardFlow}) — 견본 세이브 2개가 든
  *       임시 카드로 파일 선택 화면(23)까지 진행</li>
  *   <li>bonus: 메인 메뉴 → 귀중품 화면 ({@link devple.gow.engine.game.BonusMenu}, 전부 해금) 에서 커서를 3칸 내린 상태 (--ui-warm 400 이상)
@@ -87,6 +88,14 @@ public final class UiScene implements Scene {
 				card.start();
 			} else if (card != null && i == 50) {
 				card.command("PS2_MemoryCard_Select", "1");
+			}
+			if (mode.equals("meter")) {
+				if (i == 20) {
+					ui.variables().event("PS2_EnemyMeter_Event1", 1);
+				} else if (i == 60) {
+					ui.variables().set("PS2_EnemyMeter_Value1", Integer.getInteger("gow.meter", 60));
+					ui.variables().event("PS2_EnemyMeter_Event1", 2);
+				}
 			}
 			if (i == 20 && mode.startsWith("icon:")) {
 				ui.player().attach(mode.substring(5));

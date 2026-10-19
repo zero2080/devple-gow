@@ -157,3 +157,12 @@ HP ≤ 9800 → 잡기 원 → ○ GRAB → 260 MAIMEWGRAB (일반 GrabSync, 같
 | ATHN08B 분신 크레토스·가족 (EVIGRAB 860 등), 판도라 수호자 BMI (`/GlobGame/BMI` 판정, BMIRIDEMOUNT 450) | 리소스만 등록 (일반 AI), 전용 연출 미구현 |
 | ATHN02D 메두사 방 바닥 충돌이 없음 (충돌 삼각형 138) | 레벨 쪽 문제 — 잡기 뒤 영웅이 떨어짐 |
 | 0x800 차지 분기 일반 지원, 조건 25(스크립트 변수 해시), 27(+0x64 쓰는 곳) | 미구현 |
+
+## 보스 체력 미터 (HUD)
+- 미터는 FLP_HUDK 가 아니라 **레벨 WAD 의 FLP_&lt;레벨&gt;** (ATHN01B/C/E, ATHN08A/B/C, PAND03G) 에 있다. `GameScene` 이 이 FLP 를 HUD 와 변수를 공유하는
+  오버레이(`levelHud`, 입력 없음)로 띄운다.
+- 스크립트 `*-HealthMeterOn/Off` EventTransmitter (EventId 1055/1056, Filter = 대상 그룹) → `CombatScriptBridge` 가 대상 적에 슬롯 1..3 배정.
+- `EnemyMeterBinding`: `PS2_EnemyMeter_Event{n}` 1 켬 / 0 끔 / 2 갱신, `PS2_EnemyMeter_Value{n}` = HP/최대 × 99 → `HydraMeterMain` 프레임 2 + 값
+  (102 프레임 클립에서 녹색 막대 길이가 프레임마다 늘어남) [추정: 백분율 환산], `PS2_EnemyState_{Event,Value}{n}` = 잡기 가능 시 2(BarFlash) [추정].
+- 검증 `BossMeterTest`: 아기 히드라 2마리 → 슬롯 1·2, HP 50% → 프레임 50 (= 2 + 49 − 1), 사망 → Off. 화면 `--ui gow-rom/ATHN01E.WAD FLP_Athn01E meter`
+  (`work/uirt/meter.png`, 원작 히드라 미터 60%).

@@ -25,13 +25,19 @@ public final class Texture implements AutoCloseable {
 		glGenerateMipmap(GL_TEXTURE_2D);
 	}
 
+	/**
+	 * GS 텍스처는 TEX0 TW/TH = 2 의 거듭제곱 크기로 샘플링되고 UV 도 그 크기 기준이다. 데이터가 그보다 작으면(예 FLP_Athn01E 의
+	 * 히드라 미터 그림 TXR_Athn01E003 512×72 → 512×128) 오른쪽·아래를 투명으로 채워 같은 UV 가 같은 텍셀을 가리키게 한다.
+	 */
 	public static Texture of(BufferedImage img, boolean repeat) {
-		int w = img.getWidth();
-		int h = img.getHeight();
+		int iw = img.getWidth();
+		int ih = img.getHeight();
+		int w = Integer.bitCount(iw) == 1 ? iw : Integer.highestOneBit(iw) << 1;
+		int h = Integer.bitCount(ih) == 1 ? ih : Integer.highestOneBit(ih) << 1;
 		ByteBuffer buf = MemoryUtil.memAlloc(w * h * 4);
 		for (int y = 0; y < h; y++) {
 			for (int x = 0; x < w; x++) {
-				int argb = img.getRGB(x, y);
+				int argb = x < iw && y < ih ? img.getRGB(x, y) : 0;
 				buf.put((byte) (argb >> 16)).put((byte) (argb >> 8)).put((byte) argb).put((byte) (argb >>> 24));
 			}
 		}

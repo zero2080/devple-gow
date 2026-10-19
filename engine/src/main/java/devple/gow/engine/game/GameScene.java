@@ -113,6 +113,9 @@ public final class GameScene implements Scene {
 	private devple.gow.engine.boss.BossFight boss;
 	private devple.gow.engine.boss.CombatScriptBridge bridge;
 	private devple.gow.engine.boss.BossArena arena;
+	/** 레벨 WAD 의 FLP_&lt;레벨&gt; (보스 체력 미터 등, 없으면 null) — HUD 와 변수 공유. */
+	private UiLayer levelHud;
+	private final devple.gow.engine.ui.EnemyMeterBinding enemyMeters = new devple.gow.engine.ui.EnemyMeterBinding();
 
 	/** 불러오기 시 시작 위치 (null 이면 진입점/시작 인스턴스). */
 	private float[] loadPos;
@@ -152,6 +155,7 @@ public final class GameScene implements Scene {
 			session.player = hero.player;
 			UiVariables vars = new UiVariables();
 			hud = new UiLayer(new WadAssets(session.rom.resolve("R_PERMK.WAD")), true, "FLP_HUDK", session.messages, vars);
+			levelHud = loadLevelHud(vars);
 			session.sound.load(level.data().wad);
 			hero.combat.onSound((h, p) -> session.sound.play(h, p));
 			vars.addListener((name, value) -> {
@@ -269,6 +273,23 @@ public final class GameScene implements Scene {
 				}
 			}
 		}
+	}
+
+	/** 레벨 WAD 의 FLP 오버레이 (예 FLP_Athn01E 히드라 체력 미터). 없으면 null. */
+	private UiLayer loadLevelHud(UiVariables vars) {
+		for (devple.gow.tools.wad.WadTag t : level.data().wad.tags()) {
+			if (t.hasData() && t.name().startsWith("FLP_") && t.magic() == devple.gow.tools.ui.FlpFile.MAGIC) {
+				try {
+					UiLayer u = new UiLayer(new WadAssets(session.rom.resolve(levelName + ".WAD")), true, t.name(), session.messages, vars);
+					u.acceptInput = false;
+					System.out.println("레벨 HUD: " + t.name());
+					return u;
+				} catch (RuntimeException | IOException ex) {
+					System.out.println("레벨 HUD 실패 " + t.name() + ": " + ex.getMessage());
+				}
+			}
+		}
+		return null;
 	}
 
 	/** 레벨 WAD 안의 보스 리소스 (BossDirector). 영웅 쪽 동기 애니·소리 뱅크도 붙인다. */
@@ -878,6 +899,12 @@ public final class GameScene implements Scene {
 			hudBinding.update(hero.player, hud.variables());
 		}
 		hud.update(e);
+		if (levelHud != null) {
+			if (bridge != null) {
+				enemyMeters.update(hud.variables(), bridge.meterTargets());
+			}
+			levelHud.update(e);
+		}
 		if (messageTimer > 0 && (messageTimer -= dt) <= 0) {
 			hud.variables().event("PS2_MessageTemplate_Event", 0);
 		}
@@ -1122,6 +1149,9 @@ public final class GameScene implements Scene {
 			level.renderEffects(e, cam); // 비·파티클·물은 캐릭터 뒤에 (--no-fx 로 끔: 스크린샷용)
 		}
 		magicFx.render(cam, e.window().aspect());
+		if (levelHud != null) {
+			levelHud.render(e);
+		}
 		hud.render(e);
 	}
 
@@ -1136,6 +1166,9 @@ public final class GameScene implements Scene {
 		magicFx.close();
 		hero.close();
 		hud.close();
+		if (levelHud != null) {
+			levelHud.close();
+		}
 		level.exit(e);
 	}
 }
