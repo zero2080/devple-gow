@@ -13,7 +13,7 @@
 | 부트 실행 파일 | `SYSTEM.CNF`: `BOOT2 = cdrom0:\SCKA_300.02;1`, `VER = 1.01`, NTSC |
 | 메모리카드 데이터 | `R_PERMK.WAD` 의 `MC_DATA` 태그: `BKSCKA-30002GodOfWar` |
 | 레벨 이름 | `ATHN`(아테네), `PAND`(판도라 신전), `DEST`(사막), `HDES`(하데스), `ARENA`(신들의 도전) |
-| 마법 리소스 | `R_MEDHD`(메두사의 시선), `R_LGHTN`(포세이돈의 분노), `R_THBLT`(제우스의 분노), `R_RDEAD`(하데스의 군대), `R_BRSRK`(신들의 분노) — 모두 1편 마법 |
+| 마법/무기 리소스 | `R_MEDHD`(메두사의 시선), `R_LGHTN`(포세이돈의 분노), `R_THBLT`(제우스의 분노), `R_RDEAD`(하데스의 군대), `R_BRSRK`(아르테미스의 검 — 코드명 BerserkBlade, 06 문서에서 정정) — 모두 1편 |
 | 실행 파일 문자열 | `AresCamera1`, `SCR_AresSky`, `/Player/MedusaHead` (2편 고유 명칭 Colossus, Typhon 등 없음) |
 
 분석 방법과 산출물 구조는 1편/2편 모두 동일 엔진 계열이라 그대로 유효하다.
