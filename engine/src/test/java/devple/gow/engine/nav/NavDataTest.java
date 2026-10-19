@@ -39,6 +39,34 @@ class NavDataTest {
 		return new LevelData(WadFile.load(rom().resolve(name + ".WAD")));
 	}
 
+	/** 내비게이션 수치 = 크라토스 TWK_Sold_000 필드, 중력 = /GlobGame/ Gravity (38 문서 §2.2). */
+	@Test
+	void heroNavigationTuningIsSold000() throws Exception {
+		WadFile perm = WadFile.load(rom().resolve("R_PERMK.WAD"));
+		NavTuning sold = NavTuning.fromWad(perm, 0);
+		assertNotNull(sold, "R_PERMK TWK_Sold_000");
+		for (int off : NavTuning.KRATOS.offsets()) {
+			assertEquals(NavTuning.KRATOS.get(off), sold.get(off), 1e-3, String.format("Sold_000 +0x%X", off));
+		}
+		Tweaks tw = new Tweaks();
+		tw.load(perm);
+		assertEquals(NavTuning.GLOBAL_GRAVITY, tw.f("/GlobGame/", "Gravity", 0), 1e-4, "/GlobGame/ Gravity");
+		// 유닛 환산: 점프 244 → 정점 ≈ 37 (키 35.2 바로 위), 줄 손 = 키 35.2, 짚라인 320, 벽 32/24, 사다리 32, 수영 120
+		assertEquals(244f, HeroNavigator.JUMP, 0.01f);
+		assertEquals(37.2f, HeroNavigator.JUMP * HeroNavigator.JUMP / (2 * HeroNavigator.GRAVITY), 0.1f);
+		assertEquals(35.2f, HeroNavigator.ROPE_HAND, 1e-3);
+		assertEquals(320f, HeroNavigator.ZIP_SPEED, 1e-3);
+		assertEquals(32f, HeroNavigator.CLIMB_SPEED, 1e-3);
+		assertEquals(24f, HeroNavigator.CLIMB_SIDE, 1e-3);
+		assertEquals(32f, HeroNavigator.LADDER_SPEED, 1e-3);
+		assertEquals(120f, HeroNavigator.SWIM_SPEED, 1e-3);
+		// 적 Sold 도 같은 배치: 해골 -C Sold_020 은 수평 줄 2 m/s, 벽 상하 3.7
+		NavTuning sk = NavTuning.fromWad(WadFile.load(rom().resolve("R_SKS.WAD")), 20);
+		assertNotNull(sk, "R_SKS TWK_Sold_020");
+		assertEquals(2f, sk.get(NavTuning.TRAVERSE), 1e-3);
+		assertEquals(3.7f, sk.get(NavTuning.WALL_UP), 1e-2);
+	}
+
 	@Test
 	void sheetSurfaceAttributesDecode() throws Exception {
 		LevelData lv = level("ATHN01D");

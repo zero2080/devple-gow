@@ -69,9 +69,9 @@ class JumpAirComboTest {
 			} else {
 				ctl.update(in, 0, dt);
 			}
-			// 평지 물리 (게임 씬과 같은 중력)
+			// 평지 물리 (게임 씬과 같은 중력: /GlobGame/ Gravity 50 m/s², 38 문서 §2.2)
 			if (!ctl.grounded || ctl.vy > 0) {
-				ctl.vy -= 9.82f * 16 * dt;
+				ctl.vy -= devple.gow.engine.nav.HeroNavigator.GRAVITY * dt;
 				ctl.position.y += ctl.vy * dt;
 				if (ctl.position.y <= 0) {
 					ctl.position.y = 0;
