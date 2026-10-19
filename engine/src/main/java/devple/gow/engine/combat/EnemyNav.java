@@ -34,8 +34,8 @@ public final class EnemyNav {
 	public static final float HAND = 30f;
 	/** 벽에서 몸 중심까지 / 가슴 높이 / 벽 탐색 거리 (영웅 HeroNavigator 와 같은 값) [근사]. */
 	public static final float WALL_OFF = 10f, CHEST = 20f, WALL_REACH = 34f;
-	/** 계단 높이 / 중력 (GameScene 과 같은 값). */
-	public static final float STEP = 14f, GRAVITY = 9.82f * 16f;
+	/** 중력 = 원작 전역 /GlobGame/ "Gravity" 50 m/s² (영웅과 같은 값, 0x1EBC0C, 38 §2.2). */
+	public static final float STEP = 14f, GRAVITY = devple.gow.engine.nav.NavTuning.GLOBAL_GRAVITY * devple.gow.engine.nav.NavTuning.UNITS_PER_METER;
 	/** 줄에서 놓는 거리 (0x1CFED0 lui 0x4180 = 16) [확실: 값]. */
 	public static final float ROPE_DROP = 16f;
 	/** 같은 벽·줄 위 목표(영웅) 앞에서 멈추는 거리 — 벽·줄 공격 거리(DTre 0..56 / 16..48) 안 [근사]. */
