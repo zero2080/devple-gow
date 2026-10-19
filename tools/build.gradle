@@ -10,3 +10,8 @@ run {
 	workingDir = rootProject.projectDir
 	standardInput = System.in
 }
+
+dependencies {
+	// MPEG-2 비디오 디코더 (순수 Java, 컷신 PSS/PSW) — docs/33
+	implementation 'org.jcodec:jcodec:0.2.5'
+}

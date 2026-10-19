@@ -53,6 +53,11 @@ public final class GowDisc implements AutoCloseable {
 		return iso.read(partOf(e), e.sector() * IsoImage.SECTOR, Math.toIntExact(e.size()));
 	}
 
+	/** 파일 내 오프셋에서 일부만 읽는다 (동영상 스트리밍). FileChannel 위치 지정 읽기라 스레드 안전. */
+	public ByteBuffer read(TocEntry e, long offset, int length) throws IOException {
+		return iso.read(partOf(e), e.sector() * IsoImage.SECTOR + offset, length);
+	}
+
 	public void copyTo(TocEntry e, OutputStream os) throws IOException {
 		IsoEntry part = partOf(e);
 		final int chunk = 1 << 20;

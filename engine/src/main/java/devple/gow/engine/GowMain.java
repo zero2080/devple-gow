@@ -22,6 +22,7 @@ import java.nio.file.Path;
  *   ./gradlew :engine:run --args="--ui gow-rom/R_SHELLK.WAD FLP_ShellK [menu|hud|pause|powerup] [--ui-warm n]"   (FLP UI)
  *   ./gradlew :engine:run --args="--level gow-rom/ATHN01A.WAD [--cam N|auto] [--col]"   (레벨 배치 뷰어, 23 문서)
  *   ./gradlew :engine:run --args="--game [ATHN01A] [--auto-run s] [--entry 인스턴스]"   (통합 게임: 레벨 + 크레토스 + 전투 + HUD)
+ *   ./gradlew :engine:run --args="--movie SEMO01 [--wide] [--movie-start 초] [--mute]"   (컷신 재생, 33 문서)
  * </pre>
  */
 public final class GowMain {
@@ -69,6 +70,8 @@ public final class GowMain {
 				String flp = args[++i];
 				String mode = i + 1 < args.length && !args[i + 1].startsWith("--") ? args[++i] : null;
 				first = new UiScene(wad, flp, mode, uiWarm(args));
+			} else if (args[i].equals("--movie") && i + 1 < args.length) {
+				first = movieScene(args[++i], args);
 			} else if (args[i].equals("--level") && i + 1 < args.length) {
 				level = Path.of(args[++i]);
 			} else if (args[i].equals("--cam") && i + 1 < args.length) {
@@ -87,6 +90,26 @@ public final class GowMain {
 				engine.captureAfter(fi >= 0 ? Long.parseLong(args[fi + 1]) : 30, Path.of(shot));
 			}
 			engine.run(first);
+		}
+	}
+
+	/** --movie NAME [--wide] [--movie-start s] [--mute]: 단독 재생 후 창을 닫는다. */
+	private static Scene movieScene(String name, String[] args) {
+		java.util.List<String> al = java.util.Arrays.asList(args);
+		boolean wide = al.contains("--wide");
+		int si = al.indexOf("--movie-start");
+		Path rom = Path.of("gow-rom");
+		try {
+			devple.gow.tools.video.MovieSource src = devple.gow.tools.video.MovieSource.open(name, rom,
+					devple.gow.engine.video.MoviePlayer.isoPath(rom), wide);
+			if (src == null) {
+				throw new IllegalArgumentException("동영상 없음: " + name);
+			}
+			System.setProperty("gow.movie.stats", "1");
+			return new devple.gow.engine.video.MovieScene(new devple.gow.engine.video.MoviePlayer(src, src.name().endsWith(".PSW"),
+					si >= 0 ? Double.parseDouble(args[si + 1]) : 0, 1f, al.contains("--mute")), false, null);
+		} catch (java.io.IOException ex) {
+			throw new java.io.UncheckedIOException(ex);
 		}
 	}
 

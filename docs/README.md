@@ -21,6 +21,7 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 | 13 | [레벨 스크립트 엔티티 런타임: 타입별 슬롯 / 메시지·발동 순서 / Entity·Internal 함수 인자](13-script-entities.md) | 1차 완료 (이벤트 번호·Vis 속성 일부 미상) |
 | 14 | [사운드 뱅크 (SND / 989snd SBlk 그레인·톤 / DPMS 플러그인 / VAG 팩 / SEM 이미터 / 음악 선택)](14-sound-bank-format.md) | 1차 완료 (전 뱅크 디코딩, ADSR·LFO·그레인 10–12 미상) |
 | 16 | [환경 / 이펙트 포맷 (SCR_Fog·LayeredFog·FarClip·Sky·Weather·Water·Mirror, 머티리얼 ANM, FXC_/PTC_ 파티클)](16-environment-fx-format.md) | 1차 완료 (안개 램프 기준·VU 상수 미상) |
+| 18 | [동영상 포맷 (PSS/PSW: MPEG-2 PS, SShd/SSbd PCM 오디오, 이름 매핑)](18-video-format.md) | 완료 (전 120개 조사) |
 | 20 | [구현: 성장 시스템](20-impl-progression.md) | 완료 (테스트 6) |
 | 22 | [구현: 씬 흐름 / 게임 상태 머신](22-impl-game-flow.md) | 로직 완료 (테스트 2) |
 | 24 | [구현: 이벤트 / 레벨 스크립트 VM](24-impl-script-events.md) | VM 완료 (전 레벨 실행 검증) |
@@ -33,6 +34,7 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 | 29 | [구현: 오디오 런타임 (SoundManager: 그레인 실행기, 3D, 음악 스트림)](29-impl-audio.md) | 완료·게임 연결 (테스트 9) |
 | 30 | [구현: 레벨 카메라 시스템 (CameraRig)](30-impl-camera.md) | 선택·레일·전환 완료 (테스트 5) |
 | 31 | [구현: 환경 / 이펙트 (안개, 하늘, 비, 물, 파티클, 머티리얼 애니메이션)](31-impl-environment-fx.md) | 1차 완료 (테스트 5, 스크린샷 4레벨) |
+| 33 | [구현: 컷신 재생 (MoviePlayer / MovieScene, JCodec MPEG-2)](33-impl-video.md) | 재생기 완료 (테스트 3, 스크린샷 3) |
 | 90 | [현황 / 로드맵](90-status-roadmap.md) | 수시 갱신 |
 
 ## 게임 실행
@@ -42,6 +44,7 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 ./gradlew :engine:run --args="--game ATHN01A"          # 레벨 바로 시작
 ./gradlew :engine:run --args="--game PAND01A --entry gomusicgrppan1c1start --auto-run 3"   # 진입점 지정 + 자동 달리기
 ./gradlew :engine:run --args="--hero --enemy R_MIN"    # 평지 전투 연습
+./gradlew :engine:run --args="--movie SEMO01"          # 컷신 재생 (ISO 직접 읽기, --wide = PSW, START/× 건너뛰기)
 ```
 조작: WASD 이동, J □(약공) / I △(강공) / L ○(잡기) / K ×(점프) / Q L1(방어) / E R1, C R2(마법), 방향키 = 오른쪽 스틱(회피),
 Shift L3 + 오른쪽 Shift R3 = 신들의 분노, Enter = START(일시정지). 게임패드 자동 인식.
@@ -67,5 +70,6 @@ Shift L3 + 오른쪽 Shift R3 = 신들의 분노, Enter = START(일시정지). �
 ./gradlew :tools:run --args="audio:music gow-rom"                                       # 음악 이름 → VPK 스트림 표
 ./gradlew :engine:run --args="--level gow-rom/ATHN01A.WAD --cam auto --col"           # 레벨 뷰어
 ./gradlew :engine:run --args="--level gow-rom/ATHN01A.WAD --cam auto --col"           # 레벨 뷰어 (4 = 환경 효과 토글)
+./gradlew :tools:run --args="video:survey P2_gow_kor.iso"                             # 동영상 헤더 요약 (video:info / frames / bench / wav / names)
 ./gradlew :tools:run --args="fx:env gow-rom/ATHN01A.WAD"                              # 환경 스크립트 (fx:survey / fx:matanim / fx:ptc / fx:parts)
 ```
