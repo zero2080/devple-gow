@@ -138,6 +138,26 @@ public final class LevelScene implements Scene {
 	private final List<Mirrors.Mirror> mirrors = new ArrayList<>();
 	private int mirrorQuery;
 	private final java.util.Set<String> mirrorKeys = new java.util.HashSet<>();
+	/**
+	 * 인스턴스 뷰 마스크 (원작 모델 +0xD8, {@link Mirrors#modelMask}): 일반 뷰 0x41 / 거울 뷰 0x82 (값 [4] ≠ 0 이면 0x02) 와 겹칠 때만 그 뷰에 그린다.
+	 * 없으면 레벨 기본 0x01 (일반만).
+	 */
+	private final Map<String, Integer> viewMasks = new HashMap<>();
+	/** 반사 패스에 영웅 무리 (영웅·블레이드) 를 그리는 콜백 — GameScene 이 건다 (원작 0x1DAEC0 bit 61, 마스크 0x40). */
+	private java.util.function.Consumer<Camera> mirrorActors;
+	private final Camera mirrorCam = new Camera();
+	/** 0x1DF1E0 으로 bit 61 + 마스크 0x40 을 받는 비헤이비어 (PushPull 0x20FB98, IO_TandF 0x213C08, IO_CSM 0x2154F8). */
+	private static final java.util.Set<String> HERO_GROUP_BEHAVIORS = java.util.Set.of("PushPull", "IO_TandF", "IO_CSM");
+
+	/** 반사 패스에서 영웅 (값 [4] = 0 인 거울) 을 그릴 콜백: 인자 = 반사 카메라 ({@link Camera#mirror}, {@link Camera#clipPlane}). */
+	public void setMirrorActors(java.util.function.Consumer<Camera> f) {
+		mirrorActors = f;
+	}
+
+	/** 일반 뷰에 그리는가 (반사 전용 대리 메시 bit 57 은 아님). GOW_MIRROR=off 면 전부 (이전 동작). */
+	private boolean inMainView(String key) {
+		return !MIRRORS || (viewMasks.getOrDefault(key, Mirrors.LEVEL_MODEL) & Mirrors.MAIN_VIEW) != 0;
+	}
 
 	/** SCR_Mirror 반사 평면 수 (테스트·로그). */
 	public int mirrorCount() {
@@ -241,11 +261,32 @@ public final class LevelScene implements Scene {
 			}
 			instances.add(new Instance(p.instance().name(), assets.build(p.instance().name(), tm), sky, off));
 			int[] mab = mirrorOwners.get(p.instance().name().toLowerCase(Locale.ROOT));
+			// 뷰 마스크 (0x156820 → 0x1508D0): MDL +0x28 렌더 플래그. 거울 소유자는 bit 61 을 지운다 (0x129820 — 자기 반사 없음)
+			long rf = gm.renderFlags;
+			int base = Mirrors.LEVEL_MODEL;
+			devple.gow.tools.level.GoBehavior bh = data.behaviors.get(p.instance().name());
+			if (bh != null && HERO_GROUP_BEHAVIORS.contains(bh.type())) {
+				rf |= GowModel.REFLECTED;
+				base = Mirrors.HERO_GROUP;
+			}
+			if (mab != null) {
+				rf &= ~GowModel.REFLECTED;
+			}
+			int vmask = Mirrors.modelMask(rf, base);
+			if (vmask != Mirrors.LEVEL_MODEL) {
+				viewMasks.put(p.instance().name().toLowerCase(Locale.ROOT), vmask);
+			}
 			if (mab != null && !sky) {
 				Mirrors.Mirror m = Mirrors.fit(p.instance().name().toLowerCase(Locale.ROOT), tm, mab);
-				// 평면이 아닌 거울 (칼·조각상 등 — ATHN07 sword1) 은 평면 반사로 흉내 낼 수 없다 → 건너뜀 (메시는 평소대로)
+				// 평면이 아닌 거울 메시 (ATHN01E goreflfloor, PAND05B oorMirrorGRP) 는 원작 0x12A330 처럼 모델 Y 축 평면으로
 				float ext = Math.max(b[3] - b[0], Math.max(b[4] - b[1], b[5] - b[2]));
-				if (m != null && m.maxDev() <= Math.max(0.5f, ext * 0.01f)) {
+				if (m != null && m.maxDev() > Math.max(0.5f, ext * 0.01f)) {
+					if (Boolean.getBoolean("gow.debug")) {
+						System.out.printf(Locale.ROOT, "SCR_Mirror %s: 메시 평면 아님 (이탈 %.2f / 크기 %.1f) → 모델 Y 축 평면%n", p.instance().name(), m.maxDev(), ext);
+					}
+					m = Mirrors.axisPlane(m, p.jointWorld()[0]);
+				}
+				if (m != null) {
 					mirrors.add(m);
 					mirrorKeys.add(m.key());
 					if (Boolean.getBoolean("gow.debug")) {
@@ -253,8 +294,7 @@ public final class LevelScene implements Scene {
 								m.normal().x, m.normal().y, m.normal().z, m.d(), m.maxDev(), java.util.Arrays.toString(b));
 					}
 				} else if (Boolean.getBoolean("gow.debug")) {
-					System.out.printf(Locale.ROOT, "SCR_Mirror %s: 평면 아님 (이탈 %.2f / 크기 %.1f) — 반사 생략%n", p.instance().name(),
-							m == null ? -1f : m.maxDev(), ext);
+					System.out.printf(Locale.ROOT, "SCR_Mirror %s: 면적 0 — 반사 생략%n", p.instance().name());
 				}
 			}
 		}
@@ -525,7 +565,7 @@ public final class LevelScene implements Scene {
 			for (Instance i : instances) {
 				String key = i.name().toLowerCase(Locale.ROOT);
 				if (!i.sky() && !fx.hidden(i) && !removed.contains(key) && !posed.containsKey(key) && !ambientKeys.contains(key)
-						&& !dbgHidden(key) && !(MIRRORS && !MODEL_PASSES && mirrorKeys.contains(key))) {
+						&& !dbgHidden(key) && !(MIRRORS && !MODEL_PASSES && mirrorKeys.contains(key)) && inMainView(key)) {
 					if (MODEL_PASSES) {
 						e.renderer().draw(i.model(), tmp);
 					} else {
@@ -534,7 +574,7 @@ public final class LevelScene implements Scene {
 				}
 			}
 		}
-		renderPosed(e, cam);
+		renderPosed(e, cam, 0);
 		if (!deferEffects) {
 			fx.renderEffects(e, cam);
 		}
@@ -554,10 +594,13 @@ public final class LevelScene implements Scene {
 
 	/** 비교용: GOW_MIRROR=off 이면 SCR_Mirror 반사를 그리지 않는다 (이전 동작). */
 	private static final boolean MIRRORS = !"off".equals(System.getenv("GOW_MIRROR"));
+	/** 디버그: GOW_MIRROR=raw 면 거울 모델을 반사 위에 그리지 않는다 (반사 장면만 확인). */
+	private static final boolean MIRROR_RAW = "raw".equals(System.getenv("GOW_MIRROR"));
 
 	/**
-	 * SCR_Mirror 반사 (Mirrors 주석): 거울 화소 스텐실 → 그 화소 깊이를 먼 값으로 → VP·R 로 하늘·레벨 인스턴스 (평면 뒤 자름) →
-	 * 거울 깊이 복원. 거울 화소가 하나도 안 보이면 조건부 렌더로 반사 장면을 건너뛴다.
+	 * SCR_Mirror 반사 (Mirrors 주석, 43 문서 §9): 가장 가까운 거울 하나 (0x12A6C8) 만 반사 — 거울 화소 스텐실 → 그 화소 깊이를 먼 값으로 →
+	 * VP·R 로 거울 뷰 마스크에 맞는 것만 (반사 전용 대리 메시 bit 57, bit 61 모델, 값 [4] = 0 이면 영웅) 평면 뒤 자르고 감김 반전해 그림 →
+	 * 거울 깊이 복원 → 거울 모델. 거울 화소가 하나도 안 보이면 조건부 렌더로 반사 장면을 건너뛴다. 나머지 거울은 모델만 그린다.
 	 */
 	private void renderMirrors(Engine e, Camera cam) {
 		if (mirrors.isEmpty() || !MIRRORS) {
@@ -572,6 +615,9 @@ public final class LevelScene implements Scene {
 						GL_FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE));
 			}
 		}
+		// 0x12A6C8: 렌더러 중 0x12A330 거리가 가장 작은 거울 하나만 거울 뷰를 켠다
+		List<Mirrors.Mirror> live = new ArrayList<>();
+		Map<Mirrors.Mirror, Instance> owner = new HashMap<>();
 		for (Mirrors.Mirror m : mirrors) {
 			Instance mi = null;
 			for (Instance i : instances) {
@@ -581,6 +627,18 @@ public final class LevelScene implements Scene {
 				}
 			}
 			if (mi == null || removed.contains(m.key()) || fx.hidden(mi) || dbgHidden(m.key())) {
+				continue;
+			}
+			live.add(m);
+			owner.put(m, mi);
+		}
+		Mirrors.Mirror chosen = Mirrors.nearest(live, cam.eye);
+		for (Mirrors.Mirror m : live) {
+			Instance mi = owner.get(m);
+			if (m != chosen) {
+				// 거울 뷰가 고르지 않은 거울: 모델만 (원작도 일반 뷰에는 그대로 그린다, bit 61 만 꺼짐)
+				e.renderer().drawPass(mi.model(), tmp.identity(), 0);
+				e.renderer().drawPass(mi.model(), tmp.identity(), 1);
 				continue;
 			}
 			basic.use();
@@ -608,21 +666,13 @@ public final class LevelScene implements Scene {
 			glDepthRange(0, 1);
 			glDepthFunc(GL_LESS);
 			glColorMask(true, true, true, true);
-			// 3) 반사 장면 (원작 0x12A4E8: 카메라를 평면에 대해 반사)
+			// 3) 반사 장면 (원작 0x12A4E8: 카메라를 평면에 대해 반사) — 거울 뷰 마스크에 맞는 모델만 (정적 월드는 다시 그리지 않음)
 			glBeginConditionalRender(mirrorQuery, GL_QUERY_WAIT);
-			Matrix4f rvp = new Matrix4f(vp).mul(m.reflection());
+			int vm = m.viewMask();
+			Matrix4f refl = m.reflection();
+			Matrix4f rvp = new Matrix4f(vp).mul(refl);
 			float[] cp = m.clipPlane(cam.eye);
-			Vector3f reye = m.reflect(cam.eye);
-			fx.beginWorld(e, cam, true);
-			basic.set("uViewProj", rvp);
-			glDepthMask(false);
-			for (Instance i : instances) {
-				if (i.sky() && !dbgHidden("sky")) {
-					tmp.translation(reye.x - i.offset().x, reye.y - i.offset().y, reye.z - i.offset().z);
-					e.renderer().draw(i.model(), tmp);
-				}
-			}
-			glDepthMask(true);
+			glFrontFace(GL_CW); // 반사 = 행렬식 −1 → 감김 반전 (면 컬링을 켠 패스도 같은 면을 남긴다)
 			fx.beginWorld(e, cam, false);
 			basic.set("uViewProj", rvp);
 			basic.set("uClipPlane", cp[0], cp[1], cp[2], cp[3]);
@@ -631,28 +681,46 @@ public final class LevelScene implements Scene {
 			for (int pass = 0; pass < 2; pass++) {
 				for (Instance i : instances) {
 					String key = i.name().toLowerCase(Locale.ROOT);
-					if (!i.sky() && i != mi && !fx.hidden(i) && !removed.contains(key) && !dbgHidden(key)) {
+					if ((viewMasks.getOrDefault(key, Mirrors.LEVEL_MODEL) & vm) != 0 && i != mi && !fx.hidden(i) && !removed.contains(key)
+							&& !posed.containsKey(key) && !ambientKeys.contains(key) && !dbgHidden(key)) {
 						e.renderer().drawPass(i.model(), tmp, pass);
 					}
 				}
 			}
+			mirrorCam.eye.set(cam.eye);
+			mirrorCam.target.set(cam.target);
+			mirrorCam.fovDeg = cam.fovDeg;
+			mirrorCam.near = cam.near;
+			mirrorCam.far = cam.far;
+			mirrorCam.mirror = refl;
+			mirrorCam.clipPlane = cp;
+			renderPosed(e, mirrorCam, vm); // 애니·자세 인스턴스 (bit 61 문·항아리, PushPull 크랭크 …)
+			if ((vm & 0x80) != 0 && mirrorActors != null) {
+				mirrorActors.accept(mirrorCam); // 영웅·블레이드 (마스크 0xC0)
+			}
 			glDisable(GL_CLIP_DISTANCE0);
+			glFrontFace(GL_CCW);
+			basic.use();
 			basic.set("uClipPlane", 0f, 0f, 0f, 0f);
 			glEndConditionalRender();
 			// 4) 거울 깊이 복원 (뒤에 그리는 캐릭터·이펙트가 거울 면에 가려지도록)
+			e.renderer().begin3d(cam);
+			fx.beginWorld(e, cam, false);
 			basic.set("uViewProj", vp);
 			glColorMask(false, false, false, false);
 			glDepthFunc(GL_ALWAYS);
 			e.renderer().drawShape(mi.model(), tmp.identity());
 			glColorMask(true, true, true, true);
 			glDisable(GL_STENCIL_TEST);
-			// 5) 거울 모델 자체 (원작은 일반 그리기에서 빼고 거울 렌더러가 그림, 0x129820 bit 61): 반사 위에 두 패스 —
-			//    불투명 파트는 반사를 덮고 (ATHN04B 대리석 타일), 반투명 파트 (OLYMP02 대리석 알파) 는 그 위에 블렌드
-			glDepthFunc(GL_LEQUAL);
-			e.renderer().drawPass(mi.model(), tmp.identity(), 0);
-			e.renderer().drawPass(mi.model(), tmp.identity(), 1);
-			glDepthFunc(GL_LESS);
+			// 5) 거울 모델 자체: 반사 위에 두 패스 — 불투명 파트는 반사를 덮고 (ATHN04B 대리석 타일), 반투명 파트 (OLYMP02 대리석 알파) 는 그 위에 블렌드
+			if (!MIRROR_RAW) {
+				glDepthFunc(GL_LEQUAL);
+				e.renderer().drawPass(mi.model(), tmp.identity(), 0);
+				e.renderer().drawPass(mi.model(), tmp.identity(), 1);
+				glDepthFunc(GL_LESS);
+			}
 		}
+		basic.use();
 		basic.set("uViewProj", vp);
 	}
 
@@ -672,11 +740,17 @@ public final class LevelScene implements Scene {
 
 	private java.util.Set<String> ambientKeys = java.util.Set.of();
 
-	private void renderPosed(Engine e, Camera cam) {
+	/** @param mirrorView 0 = 일반 뷰 (반사 전용 제외), 아니면 거울 뷰 마스크 — 그 마스크와 겹치는 것만 (반사 패스) */
+	private void renderPosed(Engine e, Camera cam, int mirrorView) {
 		if (ambientKeys.size() != ambient.size()) {
 			ambientKeys = new java.util.HashSet<>(ambientNames());
 		}
 		if (posed.isEmpty() && ambient.isEmpty()) {
+			return;
+		}
+		java.util.function.Predicate<String> view = mirrorView == 0 ? this::inMainView
+				: k -> (viewMasks.getOrDefault(k, Mirrors.LEVEL_MODEL) & mirrorView) != 0;
+		if (mirrorView != 0 && posed.keySet().stream().noneMatch(view) && ambient.stream().noneMatch(a -> view.test(a.key()))) {
 			return;
 		}
 		if (skinned == null) {
@@ -684,7 +758,7 @@ public final class LevelScene implements Scene {
 		}
 		fx.env().applyFog(skinned, cam, e.window().height()); // 구운 메시와 같은 안개 (basic.frag 공유)
 		for (Map.Entry<String, float[][]> en : posed.entrySet()) {
-			if (removed.contains(en.getKey()) || dbgHidden(en.getKey())) {
+			if (removed.contains(en.getKey()) || dbgHidden(en.getKey()) || !view.test(en.getKey())) {
 				continue;
 			}
 			drawPosed(e, cam, en.getKey(), en.getValue(), posedHidden.get(en.getKey()));
@@ -692,7 +766,7 @@ public final class LevelScene implements Scene {
 		// 반복 act 배치: 시작 시간 + 레벨 시간 (스크립트 Animator 가 잡으면 posed 가 우선)
 		float now = fx.env().time();
 		for (Ambient a : ambient) {
-			if (posed.containsKey(a.key()) || removed.contains(a.key()) || dbgHidden(a.key()) || fxHidden(a.key())) {
+			if (posed.containsKey(a.key()) || removed.contains(a.key()) || dbgHidden(a.key()) || fxHidden(a.key()) || !view.test(a.key())) {
 				continue;
 			}
 			float t = a.start() + now;
@@ -747,7 +821,7 @@ public final class LevelScene implements Scene {
 		tmp.identity();
 		for (int pass = 0; pass < 2; pass++) {
 			for (Instance i : instances) {
-				if (!i.sky() && !fx.hidden(i) && !dbgHidden(i.name().toLowerCase(Locale.ROOT))) {
+				if (!i.sky() && !fx.hidden(i) && !dbgHidden(i.name().toLowerCase(Locale.ROOT)) && inMainView(i.name().toLowerCase(Locale.ROOT))) {
 					e.renderer().drawPass(i.model(), tmp, pass);
 				}
 			}

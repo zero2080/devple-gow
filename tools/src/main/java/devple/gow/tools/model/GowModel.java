@@ -21,7 +21,10 @@ import java.util.List;
  *   0x18 u32 meshCount       = 그룹 안 0x1000F 메시 수
  *   0x1C u32 jointCount      (메시 헤더 0x28 과 동일)
  *   0x20 u32 ?               (히어로 0x58, 소품 0/8)
- *   0x24~0x47                미확정 (float 값 + 쓰레기 값 혼재)
+ *   0x28 u64 렌더 플래그     (0x156820 이 모델 인스턴스 +0xC0 으로 복사, 43 문서 §9) — bit 57 = 반사 전용 (거울 뷰에서만),
+ *                            bit 61 = 거울에도 비침 (0x1508D0 뷰 마스크), bit 56 = 글로우/플레어 계열 [추정]
+ *   0x30 u64 플래그 마스크?  (대부분 0xFFFFFFFF_FFFFE7FB, bit 56/57 을 켠 모델은 그 비트를 뺀 값) [추정]
+ *   0x24, 0x38~0x47          미확정 (float 값 + 쓰레기 값 혼재)
  * </pre>
  * 메시 오브젝트의 materialIndex 는 그룹 안 MAT_ 참조 순서를 가리킨다.
  */
@@ -33,6 +36,12 @@ public final class GowModel {
 	public final int materialCount;
 	public final int meshCount;
 	public final int jointCount;
+	/** 렌더 플래그 (MDL +0x28 u64): {@link #REFLECT_ONLY} bit 57, {@link #REFLECTED} bit 61 (43 문서 §9). */
+	public final long renderFlags;
+	/** bit 57: 거울 뷰에서만 그린다 (가짜 반사 대리 메시 fakeReflections·refkect·…ReflectONLY) [확실: 0x1508D0]. */
+	public static final long REFLECT_ONLY = 1L << 57;
+	/** bit 61: 일반 뷰 + 거울 뷰 (반사에도 비침) [확실: 0x1508D0]. */
+	public static final long REFLECTED = 1L << 61;
 	public final List<String> materials = new ArrayList<>();
 	public final List<GowMesh> meshes = new ArrayList<>();
 	public final List<String> errors = new ArrayList<>();
@@ -42,6 +51,7 @@ public final class GowModel {
 		materialCount = d.getInt(0x14);
 		meshCount = d.getInt(0x18);
 		jointCount = d.getInt(0x1C);
+		renderFlags = d.limit() >= 0x30 ? d.getLong(0x28) : 0;
 	}
 
 	/** WAD 안의 모든 MDL_ 을 찾아 같은 그룹의 MAT 참조와 메시를 묶는다. */

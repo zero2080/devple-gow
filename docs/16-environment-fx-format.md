@@ -186,12 +186,14 @@ ATHN02B·PAND04AA·PAND04C 는 하늘 2개 (본 + FX). 이름에 sky 가 없는 
 PAND01A gowaterholeloc1: 11×15, cell .5 (23×31), REFLENVM, 물방울 20×15 영역 30/s 세기 .2.
 
 ### 1.7 SCR_Mirror / SCR_AresSky
-- SCR_Mirror: `[0] u32, [4] u32` = (1,0)/(0,1)/(0,0). 소유 GO 모델의 렌더 플래그 bit 61 을 지우고(일반 그리기 숨김) 뷰 슬롯 2개(표 0x29CD48)마다
-  거울 렌더러 0x12AA18(model, a, b) 생성 → 반사 바닥/평면 거울. a, b 의미 미상 (캐릭터/월드 반사 플래그 추정).
+- SCR_Mirror: `[0] u32, [4] u32` = (1,0)/(0,1)/(0,0). 소유 GO 모델의 렌더 플래그 bit 61 (= 거울 뷰에도 비침) 을 지우고 (자기 반사 없음, 일반 뷰엔 그대로)
+  거울 관리자 2개(표 0x29CD48)마다 거울 렌더러 0x12AA18(model, a, b) 생성 → 반사 바닥/평면 거울.
+  **a = [0] ≠ 0: 거울 뷰 후처리 목록 (0x120498) 켬 [추정: 흐림], b = [4] ≠ 0: 거울 뷰 마스크에서 0x80 (영웅 무리) 뺌** — 43 §9 [확실: 0x12A6C8].
   - 0x12AA18: 0x30 바이트 객체 {+0x20 모델 GO, +0x24 a, +0x28 b, +0x2C vtable 0x2BDBF8} 를 뷰 목록 (+0x1C) 에 연결 [확실].
   - vtable 1 = **0x12A4E8 카메라 반사** [확실: VU0 디코드]: 평면 (n, d) 에 대해 카메라 행렬 각 행을 v' = v − 2(n·v − d)·n
     (위치 행 = 점 반사, 축 행 = 원점·위치 차로 반사 후 rsqrt 정규화), X 축 부호 반전 (손잡이 보정).
-  - vtable 5 = 0x12ABA0: GS 패킷 (FRAME/ZBUF/TEST/ALPHA 레지스터, 0x5353 스프라이트) 으로 반사 장면을 거울 영역에 합성 — 레지스터 순서 미해석.
+  - ~~vtable 5~~ 0x12ABA0 = 관리자 목록 +0x18 (vtable 0x2BDC10) 의 그리기: GS 패킷 (ZBUF_2/TEST_2/ALPHA_2/TEX0_2/FRAME_2, 0x5353 스프라이트 띠) 으로 뷰 사각형 복사 — 합성 순서 미해석.
+  - 무엇을 그리나: 모델 뷰 마스크 (0x1508D0, MDL +0x28 bit 57 = 거울 전용 / bit 61 = 둘 다) & 거울 뷰 0x82 — 정적 월드 없음, 43 §9.
   - 데이터 (인스턴스 37 개, 값 (1,0)/(0,1)/(0,0)): 거울 모델 = 반사 바닥 자체 — OLYMP02 `gomirror` (MAT_tnMarblePlainNew00b 알파 블렌드 대리석,
     수평, 가장자리 조각 이탈 1.04), ATHN06B/ATRET01B/OLYMP01 floorReflect, ATHN04A puddle00, PAND01BB/PAND03H mirrorFloor, ATHN03A group2839–2841 (0,1) …
     ATHN07 `sword1` 처럼 평면이 아닌 거울도 있다. 엔진 구현은 31 문서 §8.

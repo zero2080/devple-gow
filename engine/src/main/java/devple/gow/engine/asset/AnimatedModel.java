@@ -176,6 +176,8 @@ public final class AnimatedModel implements AutoCloseable {
 		float[][] skin = skeleton.skin(w);
 		shader.use();
 		shader.set("uViewProj", cam.viewProj(aspect));
+		float[] cp = cam.clipPlane;
+		shader.set("uClipPlane", cp != null ? cp[0] : 0f, cp != null ? cp[1] : 0f, cp != null ? cp[2] : 0f, cp != null ? cp[3] : 0f);
 		shader.set("uModel", world);
 		shader.set("uTex", 0);
 		// 패스 0 = OPAQUE + CUTOUT(알파 ≥ 0.75, 깊이 쓰기), 패스 1 = CUTOUT 가장자리 + ALPHA/ADD/SUB (깊이 쓰기 끔) — Renderer.draw 와 동일
