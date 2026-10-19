@@ -132,7 +132,8 @@ public final class VifParser {
 				data[i * comps + c] = v;
 			}
 		}
-		cur.add(new VifUnpack(vn, vl, imm & 0x3FF, usn, (imm & 0x8000) != 0, cl, wl, n, comps, data, at));
+		cur.add(new VifUnpack(vn, vl, imm & 0x3FF, usn, (imm & 0x8000) != 0, cl, wl, n, comps, data, at,
+				mode == 1 ? row.clone() : null));
 		return o + size;
 	}
 }

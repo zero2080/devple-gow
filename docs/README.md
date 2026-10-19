@@ -17,13 +17,15 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 | 09 | [오디오 포맷 (VAG / VPK)](09-audio-format.md) | 완료 |
 | 10 | [전투 시스템 (CombatFile 콤보 그래프 / 피해 / 신들의 분노 / 마법 / 적)](10-combat-system.md) | 1차 완료 (포맷 확정, 재구현 명세 §15) |
 | 11 | [성장(업그레이드 비용) / 픽업(오브·아이템) / 저장(세이브 구조) / 씬 흐름(상태 머신·레벨 그래프)](11-progression-save-flow.md) | 1차 완료 (미해결 §9) |
+| 12 | [레벨 구성: 배치(go/오브젝트) / 충돌(Sheet, BallHull) / 카메라(CAM, CMV)](12-level-format.md) | 1차 완료 (표면 속성 비트·레일 카메라 미상) |
 | 20 | [구현: 성장 시스템](20-impl-progression.md) | 완료 (테스트 6) |
 | 22 | [구현: 씬 흐름 / 게임 상태 머신](22-impl-game-flow.md) | 로직 완료 (테스트 2) |
 | 24 | [구현: 이벤트 / 레벨 스크립트 VM](24-impl-script-events.md) | VM 완료 (전 레벨 실행 검증) |
 | 25 | [구현: 애니메이션 전환 / 크레토스 이동](25-impl-hero-locomotion.md) | 평지 이동 완료 |
 | 26 | [구현: 전투 시스템 1·2단계](26-impl-combat.md) | 콤보·피해 검증 (테스트 3) |
 | 21 | [구현: FLP UI 런타임 (메인 메뉴 / HUD / 일시정지 / 파워업)](21-impl-ui-runtime.md) | 1차 완료 (테스트 2, 스크린샷 4) |
-| 2x | 구현 진행 중: 레벨(23), 적 AI, 통합 게임 | 진행 중 |
+| 23 | [구현: 레벨 씬 / 충돌 질의](23-impl-level.md) | 렌더·충돌 질의 완료 (테스트 4) |
+| 2x | 구현 진행 중: 통합 게임 씬(27), 마법, 잡기/QTE, 세이브 | 진행 중 |
 
 ## 빌드 / 도구 실행
 
@@ -40,4 +42,6 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 ./gradlew :engine:run --args="--ui gow-rom/R_SHELLK.WAD FLP_ShellK"                    # FLP UI 런타임 (hud|pause|powerup 모드)
 ./gradlew :tools:run --args="progress:levels gow-rom work/progression/levels.txt"    # 레벨 연결 그래프 (ESC 씬 이동 호출)
 ./gradlew :tools:run --args="combat:tree gow-rom/R_PERMK.WAD ROOT 6 normal"              # 영웅 콤보 트리 (combat:dump / combat:enemies)
+./gradlew :tools:run --args="level:info gow-rom/ATHN01A.WAD"                          # 레벨 배치/충돌/볼륨/카메라
+./gradlew :engine:run --args="--level gow-rom/ATHN01A.WAD --cam auto --col"           # 레벨 뷰어
 ```
