@@ -822,6 +822,9 @@ public final class GameScene implements Scene {
 			f.yaw = (float) Math.atan2(w[8], w[10]);
 		}
 		f.setDifficulty(session.difficulty);
+		if (bossKind == null && f.brain().tree != null && nav != null) {
+			f.setNavWorld(devple.gow.engine.combat.EnemyNav.of(nav.navWorld)); // 바닥·중력·벽·줄 이동 (32 문서 §적 자신의 벽·줄 이동)
+		}
 		f.setFoe(hero.hittable());
 		f.brain().setSightBlocked((eye, to) -> { // 인지 시선 가림 (17 문서 §인지)
 			Vector3f d = new Vector3f(to).sub(eye);
@@ -1144,7 +1147,7 @@ public final class GameScene implements Scene {
 			boolean wasDead = f.dead();
 			f.update(dt);
 			// 바닥: 계단 높이 안이면 붙이고, 더 아래면 중력으로 떨어진다 (높은 스폰 지점 — ATHN08B 분신 파도 등) [근사: 원작 적 낙하 물리]
-			float g = ground(f.pos.x, f.pos.y + STEP, f.pos.z, 4000);
+			float g = f.nav().world() != null ? Float.NaN : ground(f.pos.x, f.pos.y + STEP, f.pos.z, 4000); // EnemyNav 가 직접 처리
 			float vy = enemyFall.getOrDefault(f, 0f);
 			if (!Float.isNaN(g) && f.pos.y - g <= STEP && vy >= 0) {
 				f.pos.y = g;

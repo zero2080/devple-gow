@@ -220,7 +220,8 @@ class AiBrainTest {
 		for (int diff : new int[]{0, 3}) {
 			EnemyFighter f = k.spawn();
 			f.pos.set(0, 0, -300);
-			Run r = run(f, new Vector3f(), 40f, diff);
+			// 80 초: Sold 속도(128 유닛/s)로 칸 이동이 빨라져 Impossible 간격은 칸 대기(2 초)에 묶임 — 40 초면 칸 재선택 난수에 따라 같아질 수 있음
+			Run r = run(f, new Vector3f(), 80f, diff);
 			n[i++] = (int) r.attacks().stream().filter(a -> a[2] == 11 || a[2] == 12).count();
 		}
 		assertTrue(n[0] < n[1], "Easy " + n[0] + " < Impossible " + n[1]);

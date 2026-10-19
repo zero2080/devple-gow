@@ -562,7 +562,7 @@ public final class Combatant {
 	/** Match (0x208578). 통과 못하면 -1, 통과하면 와일드카드 점수 (낮을수록 구체적). */
 	private int score(Branch b, Other o) {
 		int f = b.flags();
-		int state = owner.onGround() ? 0x2 : 0x4;
+		int state = owner.stateMask();
 		if ((f & 0x100A6) != 0 && (f & state) == 0) {
 			return -1;
 		}

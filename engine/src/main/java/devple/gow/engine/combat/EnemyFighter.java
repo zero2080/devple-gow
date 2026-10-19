@@ -40,9 +40,16 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 	private final String walkClip;
 	private final String idleClip;
 	private final float walkSpeed;
-	/** 달리기 클립 (없으면 null) / 초당 이동량. 원거리 접근에 사용. */
+	/** 달리기 클립 (없으면 null) / 초당 이동량. 결정 트리 없는 적의 예전 규칙용. */
 	private final String runClip;
 	private final float runSpeed;
+	/** 자신의 이동 상태 (지상/공중/벽/줄) — 결정 트리 조건 4, 분기 상태 마스크, Sold 속도 (32 문서). */
+	private final EnemyNav nav;
+	/** 지상 이동 클립 후보와 블렌드 축 값 (m/s, TWK &lt;클립&gt;_Cycle = ANM act +0x14). 속도에 가장 가까운 클립을 고른다 [추정]. */
+	private final List<String> locoClips = new java.util.ArrayList<>();
+	private final List<Float> locoParams = new java.util.ArrayList<>();
+	/** Navigation 표 노드 (예 /Animation/goSKS/Navigation/) — 벽·줄 애니 이름. */
+	private final String navNode;
 	/** 모델 크기 = ScaleCenter/100 + ScaleRange/100 × (0.5 − rand) (0x1CEE00). */
 	public final float scale;
 	private final Random rnd;
@@ -114,6 +121,7 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 		this.idleClip = idleClip;
 		this.walkClip = walkClip;
 		this.anim = new Animator(sk, set, tw, animNode);
+		this.navNode = animNode + "Navigation/";
 		// 이동 속도: 루프 이동 클립의 zeroJoint Z × 15fps (25 문서, 크라토스와 같은 규칙). 없으면 주어진 값
 		float ws = clipSpeed(anim, walkClip);
 		this.walkSpeed = ws > 1f ? ws : walkSpeed;
@@ -134,6 +142,8 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 		this.rnd = new Random(seed);
 		this.scale = tmpl.scaleCenter / 100f + tmpl.scaleRange / 100f * (0.5f - rnd.nextFloat());
 		this.combat = new Combatant(new CombatData(wad, combatFiles, set), anim, this);
+		this.nav = new EnemyNav(tmpl.moveCaps, ai != null ? ai.motion(tmpl.soldier) : null, tmpl.pauseMoveMs);
+		collectLocoClips(set);
 		DecisionTree tree = ai != null ? ai.tree(tmpl.decisionTree) : null;
 		AiData.Soldier sold = ai != null ? ai.soldier(tmpl.soldier) : null;
 		this.brain = new AiBrain(this, tmpl, tree, AiData.blockMod(tw, tmpl.blockMod), sold, seed);
@@ -204,6 +214,9 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 				stone = false;
 				freezeMeter = freezeMax;
 			}
+			if (nav.world() != null) {
+				nav.update(pos, ZERO, null, true, dt); // 돌도 떨어진다 (벽·줄이면 붙은 채)
+			}
 			return;
 		}
 		if (!freezeHit && freezeMeter > 0 && freezeMeter < freezeMax) {
@@ -214,24 +227,31 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 		if (hp <= 0) {
 			deadTime += dt;
 			brain.update(dt);
+			nav.drop(); // 죽으면 벽·줄에서 떨어진다
+			if (nav.world() != null) {
+				nav.update(pos, ZERO, null, true, dt);
+			}
 			anim.update(dt);
 			return;
 		}
 		if (brain.tree != null) {
 			brain.update(dt);
-			if (!combat.active()) {
-				if (!Float.isNaN(brain.face)) {
-					yaw = turn(yaw, brain.face, TURN_RATE * dt);
-				}
-				float sp = brain.move.length();
-				if (sp > 0.01f) {
-					boolean run = runClip != null && brain.wantsRun();
-					anim.play(run ? runClip : walkClip, false);
-					float v = run ? runSpeed : walkSpeed;
-					pos.add(brain.move.x * v * dt, 0, brain.move.z * v * dt);
-				} else {
-					anim.play(idleClip, false);
-				}
+			boolean busy = combat.active();
+			// 이동 = 공용 내비게이션 (지상 Sold 속도 / 벽 / 줄, EnemyNav). AI 는 스틱(brain.move)과 목표 점만 준다 (0x1CF9D0)
+			// 벽·줄 위에서는 전투 중이면 목표 = 대상 자신 (DTre "get the hero!" / "rope attack!") [근사: 원작은 포위 칸을 투영]
+			Hittable tg = brain.target();
+			boolean clinging = nav.mode() == EnemyNav.Mode.WALL || nav.mode() == EnemyNav.Mode.ROPE;
+			Vector3f goal = clinging && tg != null && brain.state() == AiBrain.State.COMBAT ? tg.position()
+					: brain.hasGoal ? brain.goal : null;
+			Boolean goalClinging = clinging && tg != null ? tg.locomotionState() == nav.conditionState() : null;
+			nav.update(pos, brain.move, goal, goalClinging, busy, dt);
+			if (!Float.isNaN(nav.faceYaw())) {
+				yaw = nav.faceYaw();
+			} else if (!busy && !Float.isNaN(brain.face)) {
+				yaw = turn(yaw, brain.face, TURN_RATE * dt);
+			}
+			if (!busy) {
+				locomotionAnim();
 			}
 		} else if (!combat.active() && foe != null && attackMoves.length > 0) {
 			// 결정 트리 없는 적: 예전 단순 규칙 (접근 → 무작위 공격)
@@ -309,6 +329,86 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 
 	public float walkSpeed() {
 		return walkSpeed;
+	}
+
+	private static final Vector3f ZERO = new Vector3f();
+
+	/** 자신의 이동 상태 (지상/공중/벽/줄). */
+	public EnemyNav nav() {
+		return nav;
+	}
+
+	/** 충돌 세계 연결 (GameScene). 연결하면 바닥·중력·벽·줄을 적 스스로 처리한다 (스폰 직후 공중 → 벽·줄 잡기). */
+	public void setNavWorld(EnemyNav.World w) {
+		nav.setWorld(w);
+	}
+
+	/** 지상 이동 클립 후보 수집: 이름이 앞으로 걷기/달리기인 루프 클립과 그 블렌드 축 값 (TWK _Cycle, 없으면 ANM +0x14). */
+	private void collectLocoClips(AnimationSet set) {
+		java.util.Set<String> names = java.util.Set.of("front", "forward", "walk", "walkfront", "walkforward", "runfront", "runforward", "run");
+		for (AnimationSet.Group g : set.groups) {
+			for (devple.gow.tools.anim.Animation a : g.acts) {
+				String n = a.name.toLowerCase(java.util.Locale.ROOT);
+				if (a.hasSkeletalData() && (names.contains(n) || a.name.equals(walkClip) || a.name.equals(runClip)) && !locoClips.contains(a.name)) {
+					locoClips.add(a.name);
+					locoParams.add(tw.f(navNode.substring(0, navNode.length() - "Navigation/".length()), a.name + "_Cycle", a.blendParam));
+				}
+			}
+		}
+	}
+
+	/** 속도 (m/s) 에 블렌드 축 값이 가장 가까운 지상 이동 클립 [추정: 원작 블렌드 그룹(ANIWalk) 축 = 속도]. */
+	String locoClip(float mps) {
+		String best = walkClip;
+		float bd = Float.MAX_VALUE;
+		for (int i = 0; i < locoClips.size(); i++) {
+			float p = locoParams.get(i);
+			if (p > 0 && Math.abs(p - mps) < bd) {
+				bd = Math.abs(p - mps);
+				best = locoClips.get(i);
+			}
+		}
+		return best;
+	}
+
+	/** 이동 상태 애니: 지상 = 속도별 클립, 공중 = ANIFall, 벽 = ANIClimbIdle / 방향별 wClimbBlend, 줄 = ANIBRope(F) / ANIRope(U/D). */
+	private void locomotionAnim() {
+		anim.setRate(1f);
+		switch (nav.mode()) {
+			case GROUND -> {
+				float v = nav.speed();
+				anim.play(v > 4f ? locoClip(v / 16f) : idleClip, false);
+			}
+			case AIR -> playNav("ANIFall", null);
+			case WALL -> {
+				float mx = nav.moveX(), my = nav.moveY();
+				if (mx == 0 && my == 0) {
+					playNav("ANIClimbIdle", "wallClimbIdle");
+				} else if (Math.abs(my) >= Math.abs(mx)) {
+					playNav(null, devple.gow.engine.nav.NavAnims.CLIMB[my > 0 ? 0 : 2]);
+				} else {
+					playNav(null, devple.gow.engine.nav.NavAnims.CLIMB[mx > 0 ? 1 : 3]);
+				}
+			}
+			case ROPE -> {
+				boolean moving = nav.moveX() != 0;
+				if (nav.rope() != null && nav.rope().horizontal()) {
+					playNav(moving ? "ANIBRopeF" : "ANIBRope", moving ? "ropeHOH" : "ropeHOHI");
+				} else {
+					playNav(moving ? "ANIRopeU" : "ANIRope", moving ? "ropeHOH" : "ropeHOHI");
+				}
+			}
+		}
+	}
+
+	/** Navigation 표 키의 애니 (없으면 기본 이름, 그것도 없으면 그대로). */
+	private void playNav(String key, String def) {
+		String n = key != null ? tw.s(navNode, key, def) : def;
+		if (n != null && anim.find(n) != null) {
+			anim.play(n, false);
+		} else if (def != null && anim.find(def) != null) {
+			anim.play(def, false);
+		}
 	}
 
 	private static float turn(float from, float to, float max) {
@@ -436,7 +536,7 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 			brain.tryBlock(attacker != null && attacker.move() != null ? attacker.move().id() : -1, fromFoe);
 		}
 		Result r = combat.takeHit(attack, attacker, damage);
-		if (r == Result.HIT) {
+		if (r == Result.HIT && nav.grounded()) {
 			pos.add(knock.x / 400f, 0, knock.z / 400f);
 		}
 		return r;
@@ -446,7 +546,17 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 
 	@Override
 	public boolean onGround() {
-		return true;
+		return nav.grounded();
+	}
+
+	@Override
+	public int stateMask() {
+		return nav.combatMask();
+	}
+
+	@Override
+	public int locomotionState() {
+		return nav.conditionState();
 	}
 
 	@Override

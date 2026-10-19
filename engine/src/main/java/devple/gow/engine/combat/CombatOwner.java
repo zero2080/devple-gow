@@ -9,6 +9,14 @@ public interface CombatOwner {
 
 	boolean onGround();
 
+	/**
+	 * 분기 허용 상태 마스크 (Combat_StateMask 0x207DC0, 10 문서 §2.4): 지상 0x2 / 공중 0x4 / 벽 0x20 / 줄 0x80 / 수영 0x10000.
+	 * 기본은 지상/공중만. 벽·줄에 붙는 적은 {@link EnemyNav#combatMask()}.
+	 */
+	default int stateMask() {
+		return onGround() ? 0x2 : 0x4;
+	}
+
 	int bladeLevel();
 
 	boolean godMode();

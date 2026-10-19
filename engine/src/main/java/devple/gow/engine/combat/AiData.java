@@ -44,6 +44,22 @@ public final class AiData {
 	public record Stone(int resist, int move) {
 	}
 
+	/**
+	 * 이동 속도 Sold 필드 (단위 m/s, 월드 = ×16). 32 문서 §이동 속도. 원작은 (owner+0x320)+8 → Sold 구조체 (sub_00243700) 로 읽는다.
+	 *
+	 * @param ground    +0x178 지상 목표 속도 = 이 값 × |스틱| (0x1EAFF0, 0x1EAEC8 지상 이동) [확실]. 해골 8, 미노 3, 크라토스 10
+	 * @param accel     +0x16C 가속 / {@code decel} +0x170 감속 (m/s², 0x1EAFF8 → sub_001E5FE0 접근) [확실]
+	 * @param maxSpeed  +0xEC AI 도착 감속 기준 (0x1D0088: 10 프레임 안에 닿을 거리면 스틱 축소) [확실]
+	 * @param minSpeed  +0xF0 막힘 판정 (0x1CBED8: 프레임 이동 &lt; ×0.25 가 AI1 0x9A 프레임 이어지면 막힘) [확실]
+	 * @param wallSide  +0x10C 벽 좌우 / {@code wallUp} +0x110 벽 상하 속도, {@code wallMin} +0x108 최소 (0x1C8D34 벽 오르기, 0x1CF5D0 AI) [확실: 필드 / 추정: 축]
+	 * @param rope      +0x158 줄 이동 속도 (0x1C6370 줄 갱신) [추정: 의미]
+	 */
+	public record Motion(float ground, float accel, float decel, float maxSpeed, float minSpeed, float wallMin, float wallSide, float wallUp,
+						 float rope) {
+		/** Sold 가 없을 때 (해골 Sold_020 값). */
+		public static final Motion DEFAULT = new Motion(8, 80, 80, 8, 3, 0.5f, 2.17f, 3.7f, 2);
+	}
+
 	/** BlockMod 항목 하나 (0x19BEF0): 영웅 기술, 최소 횟수, 최소 방어 %, 한계 횟수. */
 	public record BlockEntry(int move, int min, float minBlock, int limit) {
 	}
@@ -51,6 +67,7 @@ public final class AiData {
 	private final Map<Integer, DecisionTree> trees = new HashMap<>();
 	private final Map<Integer, Soldier> soldiers = new HashMap<>();
 	private final Map<Integer, Stone> stones = new HashMap<>();
+	private final Map<Integer, Motion> motions = new HashMap<>();
 
 	public static AiData load(WadFile... wads) {
 		AiData d = new AiData();
@@ -80,6 +97,10 @@ public final class AiData {
 					if (st != null) {
 						stones.put(sid, st);
 					}
+					Motion mo = motion(t.data());
+					if (mo != null) {
+						motions.put(sid, mo);
+					}
 				}
 			} catch (RuntimeException e) {
 				// 이름이 숫자가 아니거나 손상된 블록은 건너뜀
@@ -102,6 +123,11 @@ public final class AiData {
 	/** 석화 필드 (없으면 null). */
 	public Stone stone(int id) {
 		return stones.get(id);
+	}
+
+	/** 이동 속도 필드 (없으면 null). */
+	public Motion motion(int id) {
+		return motions.get(id);
 	}
 
 	/** BlockMod 템플릿 (/TweakTemplates/BlockMod/NNN/ "Move i", "Move i Min", "Move i Min Block", "Move i Limit"). */
@@ -133,6 +159,20 @@ public final class AiData {
 		int base = p + 1;
 		return new Soldier(b.getShort(base + 0x244) & 0xFFFF, b.getShort(base + 0x246) & 0xFFFF,
 				b.getShort(base + 0x248) & 0xFFFF, b.getShort(base + 0x24A) & 0xFFFF);
+	}
+
+	private static Motion motion(ByteBuffer src) {
+		ByteBuffer b = src.duplicate().order(ByteOrder.LITTLE_ENDIAN);
+		int p = 4;
+		while (p < b.limit() && b.get(p) != 0) {
+			p++;
+		}
+		int base = p + 1;
+		if (base + 0x17C > b.limit()) {
+			return null;
+		}
+		return new Motion(b.getFloat(base + 0x178), b.getFloat(base + 0x16C), b.getFloat(base + 0x170), b.getFloat(base + 0xEC),
+				b.getFloat(base + 0xF0), b.getFloat(base + 0x108), b.getFloat(base + 0x10C), b.getFloat(base + 0x110), b.getFloat(base + 0x158));
 	}
 
 	private static Stone stone(ByteBuffer src) {
