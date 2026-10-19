@@ -1,7 +1,9 @@
 package devple.gow.engine.asset;
 
+import devple.gow.engine.fx.MaterialFx;
 import devple.gow.engine.render.Mesh;
 import devple.gow.engine.render.Texture;
+import devple.gow.tools.fx.MaterialAnim;
 import devple.gow.tools.model.GowModel;
 import devple.gow.tools.model.TriMesh;
 import devple.gow.tools.texture.MaterialResource;
@@ -30,6 +32,9 @@ public final class WadAssets implements AutoCloseable {
 	private final Map<String, Texture> glTextures = new HashMap<>();
 	private final Map<String, RenderModel> models = new HashMap<>();
 	private final List<GowModel> gowModels;
+	private final Map<String, Texture[]> glFrames = new HashMap<>();
+	/** 머티리얼 ANM (플립북/UV 스크롤/불투명도, 16 문서 §3). */
+	private final Map<String, MaterialAnim.Anim> matAnims;
 
 	public WadAssets(Path wadPath) throws IOException {
 		this.wad = WadFile.load(wadPath);
@@ -38,6 +43,79 @@ public final class WadAssets implements AutoCloseable {
 			materials.putIfAbsent(m.name(), m);
 		}
 		this.gowModels = GowModel.load(wad);
+		this.matAnims = MaterialAnim.load(wad);
+	}
+
+	private TextureLibrary.Entry entry(String txrName) {
+		for (TextureLibrary.Entry e : textures.textures()) {
+			if (e.txr().name().equals(txrName)) {
+				return e;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * 애니메이션 텍스처(GFX frames &gt; 1)의 프레임별 GL 텍스처 (세로 스트립을 frames 개로 자름, GFX 생성 0x14C588). 정지 텍스처면 null.
+	 */
+	public Texture[] textureFrames(String txrName) {
+		if (txrName == null || txrName.isEmpty()) {
+			return null;
+		}
+		return glFrames.computeIfAbsent(txrName, n -> {
+			TextureLibrary.Entry e = entry(n);
+			if (e == null || e.gfx().frames() <= 1) {
+				return null;
+			}
+			int w = e.gfx().width(), fh = e.gfx().height() / e.gfx().frames();
+			int[] argb = TextureDecoder.decode(e.gfx(), e.pal(), 0);
+			Texture[] out = new Texture[e.gfx().frames()];
+			for (int f = 0; f < out.length; f++) {
+				int[] sub = new int[w * fh];
+				System.arraycopy(argb, f * w * fh, sub, 0, Math.min(sub.length, argb.length - f * w * fh));
+				out[f] = Texture.of(TextureDecoder.toImage(w, fh, sub), true);
+			}
+			return out;
+		});
+	}
+
+	/** 머티리얼 ANM (없으면 null). */
+	public MaterialAnim.Anim materialAnim(String mat) {
+		return matAnims.get(mat);
+	}
+
+	/**
+	 * 첫 레이어 블렌드 분류 (MAT 생성 0x1537C8 의 정렬 플래그 규칙, 16 문서 §3.3):
+	 * 0x48 → ADD, 0x42 → SUB, p28 ≠ 1 · p38 ≠ 1 · TXR flags bit18 → ALPHA, 텍스처 없는 0x44 → OPAQUE, 그 외 → CUTOUT.
+	 */
+	public RenderModel.Blend classify(MaterialResource mat, boolean textured) {
+		MaterialResource.Layer l = mat.layers().getFirst();
+		switch (l.gsAlpha()) {
+			case 0x48:
+				return RenderModel.Blend.ADD;
+			case 0x42:
+				return RenderModel.Blend.SUB;
+			case 0x01:
+				return RenderModel.Blend.INV;
+			default:
+				break;
+		}
+		TextureLibrary.Entry te = textured ? entry(l.texture()) : null;
+		if (mat.param28() != 1f || l.param38() != 1f || (te != null && (te.txr().flags() & 0x40000) != 0)) {
+			return RenderModel.Blend.ALPHA;
+		}
+		return textured ? RenderModel.Blend.CUTOUT : RenderModel.Blend.OPAQUE;
+	}
+
+	/** 레이어 색 배율: 텍스처 없는 레이어는 header.rgb × layer.rgb / 0.8 (중립 = 1, 16 문서 §3.3) [추정]. */
+	static float[] layerTint(MaterialResource mat, MaterialResource.Layer l, boolean textured) {
+		float[] t = l.rgba().clone();
+		if (!textured) {
+			for (int k = 0; k < 3; k++) {
+				t[k] = mat.color()[k] * t[k] / 0.8f;
+			}
+		}
+		return t;
 	}
 
 	public WadFile wad() {
@@ -143,19 +221,57 @@ public final class WadAssets implements AutoCloseable {
 			Texture tex = null;
 			RenderModel.Blend blend = RenderModel.Blend.OPAQUE;
 			float[] tint = {1, 1, 1, 1};
+			MaterialFx fx = null;
 			if (mat != null && !mat.layers().isEmpty()) {
 				MaterialResource.Layer l = mat.layers().getFirst();
 				tex = s.hasUv ? texture(l.texture()) : null;
-				blend = RenderModel.Blend.of(l.blendName());
-				tint = l.rgba();
+				blend = classify(mat, tex != null);
+				tint = layerTint(mat, l, tex != null);
+				if (blend == RenderModel.Blend.ALPHA) {
+					tint[3] *= mat.param28() * l.param38();
+				}
+				fx = materialFx(mat, s.hasUv, s.hasNormal);
 			}
-			parts.add(new RenderModel.Part(new Mesh(v, idx, GL_TRIANGLES), tex, blend, tint, s.hasNormal));
+			parts.add(new RenderModel.Part(new Mesh(v, idx, GL_TRIANGLES), tex, blend, tint, s.hasNormal, fx));
 		}
 		return new RenderModel(name, parts, min, max);
 	}
 
+	/** 플립북 프레임 / 머티리얼 ANM / 2·3번째 레이어가 있으면 MaterialFx, 없으면 null. */
+	private MaterialFx materialFx(MaterialResource mat, boolean hasUv, boolean hasNormal) {
+		MaterialAnim.Anim anim = matAnims.get(mat.name());
+		Texture[] frames = hasUv ? textureFrames(mat.layers().getFirst().texture()) : null;
+		List<MaterialFx.Layer> layers = new ArrayList<>();
+		for (int i = 1; i < mat.layers().size(); i++) {
+			MaterialResource.Layer l = mat.layers().get(i);
+			Texture t = hasUv || hasNormal ? texture(l.texture()) : null;
+			RenderModel.Blend b = switch (l.gsAlpha()) {
+				case 0x48 -> RenderModel.Blend.ADD;
+				case 0x42 -> RenderModel.Blend.SUB;
+				case 0x01 -> RenderModel.Blend.INV;
+				default -> RenderModel.Blend.ALPHA;
+			};
+			float[] tint = layerTint(mat, l, t != null);
+			tint[3] *= l.param38() * mat.param28();
+			// 레이어 렌더 플래그 bit1 (0x02) = 조명+환경맵 VU 프로그램 → 법선 있는 메시에서 구면 환경맵 UV [추정]
+			boolean env = (l.renderFlags() & 0x02) != 0 || (l.renderFlags() & 0x04) != 0;
+			layers.add(new MaterialFx.Layer(i, t, textureFrames(l.texture()), b, tint, env));
+		}
+		if (anim == null && frames == null && layers.isEmpty()) {
+			return null;
+		}
+		return new MaterialFx(frames, anim, layers);
+	}
+
 	@Override
 	public void close() {
+		glFrames.values().forEach(a -> {
+			if (a != null) {
+				for (Texture t : a) {
+					t.close();
+				}
+			}
+		});
 		models.values().forEach(RenderModel::close);
 		glTextures.values().forEach(t -> {
 			if (t != null) {

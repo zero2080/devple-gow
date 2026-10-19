@@ -17,7 +17,7 @@ import java.util.Map;
 /**
  * 배치된 모델 → 월드 좌표 {@link TriMesh} (정적 레벨 지오메트리용 CPU 변환).
  * 정점별 관절은 {@link SkinnedModel} 의 규칙(GIF 태그 관절 쌍, 관절 로컬 파트)을 그대로 쓰고,
- * UV/정점색은 같은 순서로 만든 {@link TriMesh} 에서 가져온다. 체인(chainCount &gt; 1) 은 체인마다 복제된다.
+ * UV/정점색은 같은 순서로 만든 {@link TriMesh} 에서 가져온다. 체인(chainCount &gt; 1) 은 체인마다 복제되고 정점색은 그 체인의 색 REF 를 쓴다 (16 문서 §3.5).
  */
 public final class PlacedMesh {
 
@@ -34,6 +34,7 @@ public final class PlacedMesh {
 			byKey.put(s.name.replaceFirst("_l\\d+_o", "_o"), s);
 		}
 		Map<String, List<float[]>> rows = rowOffsets(gm, lod);
+		Map<String, MeshObject> objects = meshObjects(gm, lod);
 		float[][] skinMats = sk.skin(jointWorld);
 		SkinnedModel skm = new SkinnedModel(gm, lod, -1);
 		TriMesh out = new TriMesh(gm.name);
@@ -48,6 +49,19 @@ public final class PlacedMesh {
 				continue;
 			}
 			float[][] mats = p.jointLocal() ? jointWorld : skinMats;
+			// 체인(인스턴스) 번호 → 그 체인의 베이크 정점색 (체인마다 다른 색 REF)
+			List<int[]> chainCol = null;
+			java.util.regex.Matcher im = INST.matcher(p.name);
+			MeshObject mo = objects.get(k);
+			if (im.find() && mo != null && mo.chainCount > 1) {
+				int inst = Integer.parseInt(im.group(1));
+				if (inst > 0) {
+					chainCol = mo.chainColors(inst);
+					if (chainCol.size() != s.pos.size()) {
+						chainCol = null;
+					}
+				}
+			}
 			TriMesh.Sub d = new TriMesh.Sub(p.name, s.material);
 			d.hasUv = s.hasUv;
 			d.hasNormal = s.hasNormal;
@@ -67,7 +81,8 @@ public final class PlacedMesh {
 				float l = (float) Math.sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
 				d.normal.add(l > 0 ? new float[]{n[0] / l, n[1] / l, n[2] / l} : new float[3]);
 				d.uv.add(s.uv.get(i));
-				d.color.add(s.color.get(i));
+				int[] cc = chainCol != null ? chainCol.get(i) : null;
+				d.color.add(cc != null ? cc : s.color.get(i));
 			}
 			d.tris.addAll(s.tris);
 			out.subs.add(d);
@@ -76,6 +91,29 @@ public final class PlacedMesh {
 	}
 
 	private static final float[] ZERO = new float[3];
+	private static final java.util.regex.Pattern INST = java.util.regex.Pattern.compile("_i(\\d+)$");
+
+	/** 키("메시_p파트_o오브젝트") → 메시 오브젝트 (LOD 선택 규칙은 {@link #rowOffsets} 와 같다). */
+	private static Map<String, MeshObject> meshObjects(GowModel m, int lod) {
+		Map<String, MeshObject> out = new HashMap<>();
+		for (GowMesh mesh : m.meshes) {
+			for (int p = 0; p < mesh.parts.size(); p++) {
+				GowMesh.Part part = mesh.parts.get(p);
+				int pick = Math.min(lod, part.groups().size() - 1);
+				while (pick >= 0 && pick + 1 < part.groups().size() && part.groups().get(pick).objects().isEmpty()) {
+					pick++;
+				}
+				if (pick < 0) {
+					continue;
+				}
+				List<MeshObject> objs = part.groups().get(pick).objects();
+				for (int k = 0; k < objs.size(); k++) {
+					out.put(String.format("%s_p%d_o%d", mesh.name, p, k), objs.get(k));
+				}
+			}
+		}
+		return out;
+	}
 
 	/**
 	 * 정점별 STROW 오프셋 ({@link VertexBatch#posRow}). 정적 메시(type 0x1D)의 위치에는 툴이 넣은 STROW 가 더해져 있는데,

@@ -80,6 +80,22 @@ public final class Shader implements AutoCloseable {
 		glUniform1i(loc(name), v);
 	}
 
+	public void set(String name, float v) {
+		glUniform1f(loc(name), v);
+	}
+
+	public void set(String name, float x, float y) {
+		glUniform2f(loc(name), x, y);
+	}
+
+	public void set(String name, float x, float y, float z) {
+		glUniform3f(loc(name), x, y, z);
+	}
+
+	public void set(String name, float x, float y, float z, float w) {
+		glUniform4f(loc(name), x, y, z, w);
+	}
+
 	@Override
 	public void close() {
 		glDeleteProgram(program);

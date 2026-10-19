@@ -3,6 +3,8 @@ package devple.gow.engine.level;
 import devple.gow.engine.asset.RenderModel;
 import devple.gow.engine.asset.WadAssets;
 import devple.gow.engine.core.Engine;
+import devple.gow.engine.fx.FxEnvironment;
+import devple.gow.engine.fx.LevelFx;
 import devple.gow.engine.input.PadButton;
 import devple.gow.engine.render.Camera;
 import devple.gow.engine.render.Mesh;
@@ -39,7 +41,7 @@ import static org.lwjgl.opengl.GL41C.*;
  */
 public final class LevelScene implements Scene {
 
-	/** 배치된 렌더 인스턴스. sky 면 카메라를 따라간다 (중심 = offset). */
+	/** 배치된 렌더 인스턴스. sky 면 카메라를 따라간다 (offset = 카메라에 놓일 점 = 인스턴스 위치). */
 	public record Instance(String name, RenderModel model, boolean sky, Vector3f offset) {
 	}
 
@@ -63,6 +65,8 @@ public final class LevelScene implements Scene {
 	private final Matrix4f tmp = new Matrix4f();
 	/** 게임 씬이 지정하는 카메라 (null 이면 뷰어 자체 카메라). */
 	private Camera external;
+	/** 환경/이펙트 (안개, 비, 파티클, 물 — 31 문서). */
+	private LevelFx fx;
 
 	/**
 	 * @param startCam    -1 자유, -2 CMV 자동, 0.. 레벨 카메라 번호
@@ -85,6 +89,11 @@ public final class LevelScene implements Scene {
 
 	public List<Instance> instances() {
 		return instances;
+	}
+
+	/** 환경/이펙트 (안개 유니폼을 다른 셰이더에도 적용할 때: {@code fx().env().applyFog(shader, cam, h)}). */
+	public LevelFx fx() {
+		return fx;
 	}
 
 	/** 통합 게임 씬용: 이 카메라로 렌더 (자유/레벨 카메라 처리 생략). */
@@ -120,6 +129,12 @@ public final class LevelScene implements Scene {
 			if (!sky) {
 				all.add(tm);
 			}
+			if (sky) {
+				// SCR_Sky (0x218848): 하늘 오브젝트를 카메라로 옮긴다 → 카메라 = 관절 0 월드 위치 (AABB 중심이 아님, 16 문서 §1.6).
+				// ATHN01A nightSky: 관절 0 = (0,448,0), 미니어처 바다면 y=432 → 지평선이 눈높이 바로 아래
+				float[] j0 = p.jointWorld()[0];
+				off.set(j0[12], j0[13], j0[14]);
+			}
 			instances.add(new Instance(p.instance().name(), assets.build(p.instance().name(), tm), sky, off));
 		}
 		collisionLines = buildCollisionLines();
@@ -129,6 +144,7 @@ public final class LevelScene implements Scene {
 		cam.fovDeg = 60f;
 		placeStart(all);
 		camMode = startCam;
+		fx = new LevelFx(e, assets, data, instances);
 		System.out.printf(Locale.ROOT, "레벨 %s: 렌더 인스턴스 %d (하늘 %d), 충돌 삼각형 %d, 볼륨 %d, 카메라 %d%n", assets.wad().name(),
 				instances.size(), instances.stream().filter(Instance::sky).count(), collision.triangles().size(),
 				data.volumes.size(), data.placedCameras.size());
@@ -233,6 +249,7 @@ public final class LevelScene implements Scene {
 
 	@Override
 	public void update(Engine e, float dt) {
+		fx.update(e, dt, external != null ? external.eye : cam.eye);
 		if (edge(e, 0, GLFW_KEY_1)) {
 			showCollision = !showCollision;
 		}
@@ -301,7 +318,9 @@ public final class LevelScene implements Scene {
 		} else {
 			applyCamera();
 		}
+		fx.beforeRender(e, cam);
 		e.renderer().begin3d(cam);
+		fx.beginWorld(e, cam, true);
 		// 하늘: 카메라 중심, 깊이 쓰기 끔 → 항상 맨 뒤
 		glDepthMask(false);
 		for (Instance i : instances) {
@@ -311,12 +330,15 @@ public final class LevelScene implements Scene {
 			}
 		}
 		glDepthMask(true);
+		fx.beginWorld(e, cam, false);
 		tmp.identity();
 		for (Instance i : instances) {
-			if (!i.sky()) {
+			if (!i.sky() && !fx.hidden(i)) {
 				e.renderer().draw(i.model(), tmp);
 			}
 		}
+		fx.renderEffects(e, cam);
+		FxEnvironment.disableFog(e.renderer().basic());
 		if (showCollision || showVolumes) {
 			e.renderer().begin3d(cam);
 			glDisable(GL_DEPTH_TEST);
@@ -332,6 +354,7 @@ public final class LevelScene implements Scene {
 
 	@Override
 	public void exit(Engine e) {
+		fx.close();
 		collisionLines.close();
 		volumeLines.close();
 		instances.forEach(i -> i.model().close());
