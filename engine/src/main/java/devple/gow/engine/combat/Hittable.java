@@ -33,6 +33,11 @@ public interface Hittable {
 		return null;
 	}
 
+	/** 이 대상의 전투 컴포넌트 (적 AI 가 대상의 방어 자세·현재 기술을 볼 때 사용, 17 문서 §3.2). 없으면 null. */
+	default Combatant combatant() {
+		return null;
+	}
+
 	/** 무적(이벤트 9) 또는 사망. */
 	boolean invulnerable();
 

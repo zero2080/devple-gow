@@ -22,6 +22,7 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 | 14 | [사운드 뱅크 (SND / 989snd SBlk 그레인·톤 / DPMS 플러그인 / VAG 팩 / SEM 이미터 / 음악 선택)](14-sound-bank-format.md) | 1차 완료 (전 뱅크 디코딩, ADSR·LFO·그레인 10–12 미상) |
 | 16 | [환경 / 이펙트 포맷 (SCR_Fog·LayeredFog·FarClip·Sky·Weather·Water·Mirror, 머티리얼 ANM, FXC_/PTC_ 파티클)](16-environment-fx-format.md) | 1차 완료 (안개 램프 기준·VU 상수 미상) |
 | 18 | [동영상 포맷 (PSS/PSW: MPEG-2 PS, SShd/SSbd PCM 오디오, 이름 매핑)](18-video-format.md) | 완료 (전 120개 조사) |
+| 17 | [적 AI (AI1 필드 / 결정 트리 DTre / 공격 토큰 / 포위 이동 / BlockMod 방어 / 난이도)](17-enemy-ai.md) | 1차 완료 (칸 선택·인지 세부 미상 §8) |
 | 20 | [구현: 성장 시스템](20-impl-progression.md) | 완료 (테스트 6) |
 | 22 | [구현: 씬 흐름 / 게임 상태 머신](22-impl-game-flow.md) | 로직 완료 (테스트 2) |
 | 24 | [구현: 이벤트 / 레벨 스크립트 VM](24-impl-script-events.md) | VM 완료 (전 레벨 실행 검증) |
@@ -36,6 +37,7 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 | 31 | [구현: 환경 / 이펙트 (안개, 하늘, 비, 물, 파티클, 머티리얼 애니메이션)](31-impl-environment-fx.md) | 1차 완료 (테스트 5, 스크린샷 4레벨) |
 | 33 | [구현: 컷신 재생 (MoviePlayer / MovieScene, JCodec MPEG-2)](33-impl-video.md) | 재생기 완료 (테스트 3, 스크린샷 3) |
 | 34 | [구현: 무기 궤적 / 원작 히트박스 (블레이드 부착, CDV 구, PartType, 스윕 판정)](34-impl-hitboxes.md) | 완료 (테스트 3, 디버그 시트) |
+| 32 | [구현: 원작 적 AI (AiBrain, 결정 트리, 공격 토큰)](32-impl-enemy-ai.md) | 완료 (테스트 8, 적 32종 스모크) |
 | 90 | [현황 / 로드맵](90-status-roadmap.md) | 수시 갱신 |
 
 ## 게임 실행

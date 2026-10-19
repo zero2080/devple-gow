@@ -25,14 +25,17 @@ import java.util.Locale;
  *       (석화 파편 "harstonedbrk" 처럼 관절이 더 많은 부속 스켈레톤이 있음)</li>
  *   <li>AI1 템플릿: WAD 의 첫 {@code /TweakTemplates/AI1/NNN/} (또는 지정 번호)</li>
  *   <li>CombatFileSet: 같은 WAD 의 첫 세트, {@code File 0..7} (번호가 AI1 과 다른 경우가 많아 "같은 WAD" 규칙 — 10 문서 §16)</li>
- *   <li>공격 목록: REQUEST0 루트 액션 중 공격 판정이 있고 방어 자세가 아닌 기술 / 방어: guard == 1 인 기술</li>
+ *   <li>공격 목록: REQUEST0 루트 액션 중 공격 판정이 있고 방어 자세가 아닌 기술 / 방어: guard == 1 인 기술
+ *       (결정 트리 없는 적의 대체 AI 용)</li>
+ *   <li>AI: TWK_DTre 결정 트리 / TWK_Sold 병사 구조체 ({@link AiData})</li>
  * </ul>
  */
 public final class EnemyFactory {
 
 	/** 렌더까지 포함한 적 한 종류 (같은 종류 여러 마리가 공유). */
 	public record Kind(WadAssets assets, Tweaks tweaks, Skeleton skeleton, AnimationSet anims, String model, int ai1,
-					   List<String> combatFiles, int[] attacks, int block, String idle, String walk, String animNode) {
+					   List<String> combatFiles, int[] attacks, int block, String idle, String walk, String animNode,
+					   AiData ai) {
 
 		public EnemyFighter spawn() {
 			return spawn(ai1);
@@ -41,7 +44,7 @@ public final class EnemyFactory {
 		/** 같은 WAD 의 다른 AI1 템플릿(예 R_SKA: 031 궁수 / 032 궁수 -P / 039 dumbArcher)으로 생성. */
 		public EnemyFighter spawn(int ai1Template) {
 			EnemyFighter f = new EnemyFighter(assets.wad(), tweaks, skeleton, anims, ai1Template, combatFiles, attacks, block, idle,
-					walk, 30f, animNode);
+					walk, 30f, animNode, ai);
 			// 원작 CDV 히트 볼륨 (34 문서) — 종류마다 같은 CDV, 인스턴스마다 포즈 상태가 따로
 			f.combat().setHitVolumes(HitVolumes.forObject(assets.wad(), skeleton));
 			return f;
@@ -123,8 +126,11 @@ public final class EnemyFactory {
 		String idle = clip(set, "standidle", "idle");
 		String walk = clip(set, "walkfront", "walkforward", "runfront", "walk");
 		String animNode = tw.findNode("/Animation/go" + best.name + "/");
+		// 결정 트리·병사 구조체 (17 문서). 영웅 Sold(000)는 공격 토큰 용량 (R_PERMK)
+		AiData ai = AiData.load(wad, permk);
+		AiTargets.setHeroSoldier(ai.soldier(0));
 		return new Kind(assets, tw, best, set, mdl, ai1, files, attacks.stream().mapToInt(Integer::intValue).toArray(), block,
-				idle, walk, animNode != null ? animNode : "/Animation/go" + best.name + "/");
+				idle, walk, animNode != null ? animNode : "/Animation/go" + best.name + "/", ai);
 	}
 
 	private static String clip(AnimationSet set, String... prefs) {
