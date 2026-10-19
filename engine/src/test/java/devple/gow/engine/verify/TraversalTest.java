@@ -115,6 +115,34 @@ class TraversalTest {
 		assertTrue(v.reach(TraversalVerifier.START, false).containsKey(TraversalVerifier.END), "걷기·상호작용·전투만으로 OLYMP02");
 	}
 
+	/**
+	 * 되돌아가는 전환도 강제 없이 (42 문서): ATHN01E 선장 = 버튼 1024 → a01MP04 → LoadWad(Athn01D) 뒤 짚라인, PAND01C 손잡이 질문
+	 * (Internal 0xB 1019 → 1021 예), PAND02AA 회전방 (레버 60 → Animator 51.7 초 → 벽 관절 Marker 202 → spinRmEnd → 레버 → LoadWad(Pand02A)).
+	 * 강제 이벤트 뒤에만 나오는 전환이 하나도 없다.
+	 */
+	@Test
+	void backtrackingNeedsNoForcedEvents() {
+		assertTrue(unforced("ATHN01E", "ATHN01D"), "선장 1024");
+		assertTrue(unforced("PAND01C", "PAND01B"), "손잡이 질문 1021");
+		assertTrue(unforced("PAND02AA", "PAND02A"), "회전방 Animator → Marker 202");
+		List<String> forced = v.results.values().stream().flatMap(r -> r.edges.stream().filter(e -> e.targetExists() && e.forced())
+				.map(e -> r.level + "→" + e.target())).toList();
+		assertTrue(forced.isEmpty(), "강제 뒤에만 나온 전환: " + forced);
+	}
+
+	/**
+	 * 숨긴 오브젝트를 숨긴 채로만 쓴 곳 (게임에서는 못 함): 이웃 레벨 GlobalData 로 다시 돌린 ATHN01D 선장 문 (열쇠 GlobalData:0 ← ATHN01E)·
+	 * PAND01BB 석상 크랭크 (손잡이 GlobalData:3 ← PAND00C) 는 풀리고, PAND00C 엘리베이터 레버 (고리 퍼즐 정답 + PAND00D 왕복) 만 남는다.
+	 */
+	@Test
+	void hiddenObjectsNeedOnlyTheRingPuzzle() {
+		List<String> hidden = v.results.values().stream().flatMap(r -> r.interactions.stream().filter(x -> x.startsWith(TraversalVerifier.HIDDEN_USE))
+				.map(x -> r.level + " " + x.substring(TraversalVerifier.HIDDEN_USE.length()))).toList();
+		assertEquals(List.of("PAND00C goelevatorlever"), hidden);
+		assertTrue(v.results.get("ATHN01D").withNeighbours.contains("ATHN01E"));
+		assertTrue(v.results.get("PAND01BB").withNeighbours.contains("PAND00C"));
+	}
+
 	/** 헤드리스 보스전 (HeadlessBoss): 히드라·메두사 여왕·아레스 1/3 이 원본 데이터 흐름으로 격파된다. */
 	@Test
 	void bossesDefeatedHeadless() {

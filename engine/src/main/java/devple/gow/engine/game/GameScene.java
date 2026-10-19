@@ -93,6 +93,8 @@ public final class GameScene implements Scene {
 	private boolean otherScenePending;
 	/** 표시 중인 메시지 번호 (-1 없음): 닫힐 때 이벤트 1040(번호) 를 플레이어가 보낸다 (원작 0x1B8ECC/0x1B8F98/0x1B9170). */
 	private int messageId = -1;
+	/** 열린 질문 메시지 번호 (Internal 0xB, −1 = 없음). */
+	private int questionId = -1;
 	private float stepTimer;
 	private boolean wasAir;
 	private boolean leaving;
@@ -509,6 +511,13 @@ public final class GameScene implements Scene {
 			}
 
 			@Override
+			public void animate(ScriptEntity source, List<String> objects, String anim) {
+				if (nav != null) {
+					nav.animate(source, objects, anim);
+				} // Animator → 발판·회전방 관절 애니 (Marker 위치도 따라감)
+			}
+
+			@Override
 			public void vis(ScriptEntity source, List<String> objects, int[] values) {
 				// Visible (슬롯 0): 1 보임 / 2 숨김 / 0 그대로 — 렌더와 R1 상호작용 (13 문서 Vis)
 				if (values.length > 0 && (values[0] == 1 || values[0] == 2)) {
@@ -545,6 +554,11 @@ public final class GameScene implements Scene {
 					} catch (IOException ex) {
 						System.out.println("해금 기록 실패: " + ex.getMessage());
 					}
+				}
+				if (func == 0xB && !args.isEmpty()) { // 질문 (원작 0x21D9C8 → GameMgr +0x152C): 메시지 + 예/아니오 → 1021 (답, 메시지 번호)
+					questionId = (int) num(args.get(0));
+					showMessage(questionId, Float.MAX_VALUE);
+					messageId = -1; // 질문은 1040 대신 1021
 				}
 				if (func == 0x9 && !args.isEmpty()) {
 					Object a = args.get(0);
@@ -850,6 +864,9 @@ public final class GameScene implements Scene {
 		return kinds.get(key);
 	}
 
+	/** 질문 답 (원작 GameMgr 0x1B8F4C). */
+	static final int EVENT_ANSWER = 1021;
+
 	private void showMessage(int id, float seconds) {
 		String text = session.messages != null ? session.messages.get(id) : null;
 		messageId = id;
@@ -883,7 +900,8 @@ public final class GameScene implements Scene {
 	/** 현재 미니게임 아이콘 (35 문서 §6): 타이밍 프롬프트 = 종류 아이콘, 연타 = XButtonPress [추정: 연타 아이콘 선택], 없으면 숨김. */
 	private int minigameIconIndex() {
 		if (!grab.active()) {
-			return devple.gow.engine.ui.MinigameIcon.NONE;
+			// 버튼 안내 센서 (슬롯 1, 원작 0x1AAD40) — 엔진은 아이콘 하나만 보이므로 잡기가 없을 때만
+			return world.promptActive() ? devple.gow.engine.ui.MinigameIcon.PROMPT : devple.gow.engine.ui.MinigameIcon.NONE;
 		}
 		if (grab.timed() != null) {
 			return grab.timed().iconIndex();
@@ -1010,6 +1028,17 @@ public final class GameScene implements Scene {
 		if (e.input().pressed(PadButton.R1) && !hero.combat.active() && nearSavePoint()) {
 			askSave();
 			return;
+		}
+		if (questionId >= 0 && (e.input().pressed(PadButton.CROSS) || e.input().pressed(PadButton.TRIANGLE))) {
+			// 원작 0x1B8F4C: PostEvent(1021, 답 +0x278, 질문 +0x152C, 0, 영웅). 예 = 1 (메뉴 "Yes"/"No" 0x1B9EE8) [근사: 메뉴 UI 대신 메시지 + ×/△]
+			world.postEvent(EVENT_ANSWER, e.input().pressed(PadButton.CROSS) ? 1 : 0, questionId, 0, world.player());
+			questionId = -1;
+			messageTimer = 0;
+			hud.variables().event("PS2_MessageTemplate_Event", 0);
+			return;
+		}
+		if (e.input().pressed(PadButton.R1) && !hero.combat.active()) {
+			world.postEvent(SceneNav.EVENT_USE, 0, 0, 0, world.player()); // 버튼 안내 센서 (mode 2 = 볼륨 안일 때만 반응)
 		}
 		if (e.input().pressed(PadButton.SELECT)) {
 			paused = powerUp = true;

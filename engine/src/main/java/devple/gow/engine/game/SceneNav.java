@@ -32,6 +32,12 @@ public final class SceneNav {
 	public static final int EVENT_TASK = 1023;
 	/** PushPull 붙잡기 / 놓기 (PAND05B pBoxPand05B-EventAttach/Detach). */
 	public static final int EVENT_ATTACH = 1048, EVENT_DETACH = 1049;
+	/**
+	 * 버튼 안내 센서용 누름 (원작 0x1DC3F8: 영웅이 잡기·다른 동작을 하지 않을 때 입력 +0x30 비트 7 → PostEvent(0x400, 0, 0, 0, 영웅)).
+	 * 받는 쪽은 EventSensor mode 2 (보낸 쪽 = 볼륨 안 영웅) + PromptOnEnter — ATHN01E 선장 `XFCcaptainCSM-main-r2` → a01MP04 → LoadWad(Athn01D)
+	 * [확실: 이벤트 번호·보낸 쪽 / 추정: 버튼 = R1].
+	 */
+	public static final int EVENT_USE = 1024;
 
 	/** 게임 씬 쪽 동작. */
 	public interface Host {
@@ -222,13 +228,24 @@ public final class SceneNav {
 		}
 	}
 
-	/** Animator 엔티티 → 발판 애니. */
-	public void animate(List<String> objects, String anim) {
+	/** Animator 엔티티 → 발판 애니 (모드·속도·시작 시간 = 슬롯 1..3, {@link Platforms#play(String, String, int, float, float)}). */
+	public void animate(ScriptEntity source, List<String> objects, String anim) {
+		int[] mode = new int[1];
+		float[] speed = {1}, start = new float[1];
+		animatorArgs(world, source, mode, speed, start);
 		for (String o : objects) {
-			if (navWorld.platforms().play(o, anim)) {
-				System.out.println("오브젝트 애니: " + o + " " + anim);
+			if (navWorld.platforms().play(o, anim, mode[0], speed[0], start[0])) {
+				System.out.println("오브젝트 애니: " + o + " " + anim + " 모드 0x" + Integer.toHexString(mode[0]) + " 속도 " + speed[0]);
 			}
 		}
+	}
+
+	/** Animator 슬롯 1 모드 (int), 2 속도 (없으면 1), 3 시작 시간. */
+	public static void animatorArgs(ScriptWorld w, ScriptEntity e, int[] mode, float[] speed, float[] start) {
+		Object m = w.slot(e, 1), sp = w.slot(e, 2), st = w.slot(e, 3);
+		mode[0] = m instanceof Number n ? n.intValue() : 0;
+		speed[0] = sp instanceof Number n ? n.floatValue() : 1f;
+		start[0] = st instanceof Number n ? n.floatValue() : 0f;
 	}
 
 	/** Creator "chest" → R1 상자. */

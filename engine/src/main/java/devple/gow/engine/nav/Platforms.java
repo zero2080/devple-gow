@@ -37,6 +37,9 @@ public final class Platforms {
 		Animation anim;
 		float time;
 		boolean playing;
+		/** 재생 속도 (음수 = 역재생), 반복 (0x2), 왕복 (0x4) — Animator 슬롯 1·2 (원작 0x1AB620). */
+		float rate = 1;
+		boolean loop, pingPong;
 		float[][] joints;
 		float[][] prev;
 
@@ -71,6 +74,11 @@ public final class Platforms {
 
 		public boolean playing() {
 			return playing;
+		}
+
+		/** 한 번 재생 중 (반복·왕복이 아님) — 끝나기를 기다릴 수 있는 애니. */
+		public boolean playingOnce() {
+			return playing && !loop && !pingPong;
 		}
 
 		public float time() {
@@ -189,9 +197,29 @@ public final class Platforms {
 	 * @return 재생을 시작했으면 true
 	 */
 	public boolean play(String owner, String animName) {
+		return play(owner, animName, 0, 1, 0);
+	}
+
+	/**
+	 * Animator 효과 (원작 0x1AB0B8) [확실: 코드]: 슬롯 0 이름 ("!n" = n 번째 act, "$…" = 재질 애니 → 여기서는 무시), 슬롯 1 모드 비트,
+	 * 슬롯 2 속도, 슬롯 3 시작 시간.
+	 * <ul>
+	 *   <li>0x10 = 일시 정지, 0x11 = 이어 재생 (그 밖의 설정 없음)</li>
+	 *   <li>0x1 = 역재생 (속도 부호 반전, 시작 시간 ≤ 0 이면 애니 끝에서), 0x8 = 시간 유지 (지금 자리에서 이어서)</li>
+	 *   <li>재생 방식 0x100A60: 0x4 → 4, 0x2 → 1, 그 밖 → 2 [추정: 4 왕복, 1 반복, 2 한 번]</li>
+	 * </ul>
+	 */
+	public boolean play(String owner, String animName, int mode, float speed, float start) {
 		Body b = body(owner);
-		if (b == null || b.anims == null) {
+		if (b == null || b.anims == null || animName != null && animName.startsWith("$")) {
 			return false;
+		}
+		if (mode == 0x10 || mode == 0x11) {
+			if (b.anim == null) {
+				return false;
+			}
+			b.playing = mode == 0x11;
+			return true;
 		}
 		Animation a = null;
 		List<Animation> all = b.anims.all();
@@ -212,8 +240,14 @@ public final class Platforms {
 		if (a == null) {
 			return false;
 		}
+		boolean keep = (mode & 0x8) != 0 && b.anim == a;
 		b.anim = a;
-		b.time = 0;
+		b.rate = (mode & 0x1) != 0 ? -speed : speed;
+		b.pingPong = (mode & 0x4) != 0;
+		b.loop = !b.pingPong && (mode & 0x2) != 0;
+		if (!keep) {
+			b.time = (mode & 0x1) != 0 && start <= 0 ? a.duration : Math.min(start, a.duration);
+		}
 		b.playing = true;
 		return true;
 	}
@@ -221,10 +255,18 @@ public final class Platforms {
 	public void update(float dt) {
 		for (Body b : bodies) {
 			if (b.playing && b.anim != null) {
-				b.time += dt;
-				if (b.time >= b.anim.duration) {
-					b.time = b.anim.duration;
-					b.playing = false;
+				float d = b.anim.duration;
+				b.time += dt * b.rate;
+				if (b.time > d || b.time < 0) {
+					if (b.loop && d > 0) {
+						b.time = ((b.time % d) + d) % d;
+					} else if (b.pingPong && d > 0) {
+						b.time = b.time > d ? 2 * d - b.time : -b.time;
+						b.rate = -b.rate;
+					} else {
+						b.time = Math.max(0, Math.min(d, b.time));
+						b.playing = false;
+					}
 				}
 				b.pose();
 			} else {

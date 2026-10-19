@@ -494,6 +494,28 @@ public final class ScriptWorld {
 		}
 	}
 
+	/**
+	 * 버튼 안내 (원작 0x1AAC88 볼륨 진입 / 0x1AAD6C 나감): 플레이어가 PromptOnEnter EventSensor (mode 2) 볼륨 안이고 조건이 참이며
+	 * 재발동 대기 중이 아니면 HUD 아이콘 슬롯 1 에 14 (R2ButtonStatic) — 누르면 1024 (0x1DC3F8) 뒤 지움.
+	 */
+	public boolean promptActive() {
+		if (player == null) {
+			return false;
+		}
+		for (ScriptEntity e : entities) {
+			if (e.type() != 4 || e.mode() != 2 || !boolSlot(e, "PromptOnEnter", false) || !passes(e, player) || !inVolume(e, player)
+					|| !boolSlot(e, EntitySlots.CONDITION, true)) {
+				continue;
+			}
+			float refract = floatSlot(e, EntitySlots.REFRACT);
+			if (e.lastTrigger > -Float.MAX_VALUE && (refract < 0 || time < e.lastTrigger + refract)) {
+				continue;
+			}
+			return true;
+		}
+		return false;
+	}
+
 	/** 게임 → 스크립트 이벤트 (예: 501 동영상 끝 (인자 0 = 이름), 1048 붙잡기). 다음 틱에 처리. 이벤트 짝 월드가 있으면 거기에도. */
 	public void postEvent(int id, Object a0, Object a1, Object a2, ScriptActor sender) {
 		Event e = new Event(id, a0 == null ? 0 : a0, a1 == null ? 0 : a1, a2 == null ? 0 : a2, sender);
@@ -501,6 +523,14 @@ public final class ScriptWorld {
 		if (eventPeer != null) {
 			eventPeer.events.add(e);
 		}
+	}
+
+	/** 스크립트가 보낸 전역 이벤트 (EventTransmitter 모드 5) 관찰 — 검증 하네스가 이웃 레벨에 다시 보낸다. */
+	private java.util.function.Consumer<Object[]> globalTap;
+
+	/** EventTransmitter 모드 5 가 보낼 때마다 {id, 인자 1, 인자 2} (null = 끔). */
+	public void tapGlobalEvents(java.util.function.Consumer<Object[]> tap) {
+		globalTap = tap;
 	}
 
 	/** 같은 전역 이벤트 큐를 쓰는 다른 슬롯 레벨 (null = 혼자). */
@@ -637,6 +667,9 @@ public final class ScriptWorld {
 		int id = intSlot(e, "EventId"), a1 = intSlot(e, "Arg1"), a2 = intSlot(e, "Arg2");
 		if (e.mode() == 5) {
 			postEvent(id, a1, a2, 0, sender);
+			if (globalTap != null) {
+				globalTap.accept(new Object[]{id, a1, a2});
+			}
 			return;
 		}
 		if (e.mode() == 1) {

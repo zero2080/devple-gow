@@ -137,6 +137,12 @@ public final class TraversalVerifier {
 		/** 헤드리스 보스전 단계 기록 / 격파 여부 (보스 레벨만). */
 		public final List<String> bossPhases = new ArrayList<>();
 		public boolean bossDefeated;
+		/** 끝났을 때 GlobalData (게임 전체 공유 — 이웃 레벨 재실행에 넘김). */
+		public final Map<Integer, Object> globals = new TreeMap<>();
+		/** 스크립트가 보낸 전역 이벤트 {id, 인자 1, 인자 2} (EventTransmitter 모드 5, 중복 제거). */
+		public final List<Object[]> globalEvents = new ArrayList<>();
+		/** 이웃 레벨 상태로 다시 돌렸으면 그 레벨들 (2 단계 실행). */
+		public final Set<String> withNeighbours = new java.util.TreeSet<>();
 
 		LevelResult(String level) {
 			this.level = level;
@@ -199,14 +205,88 @@ public final class TraversalVerifier {
 		for (String l : levels()) {
 			results.put(l, run(l));
 		}
+		rerunWithNeighbours();
 		resolveEdges();
 		checkArrivals();
 		return this;
 	}
 
+	/** 이웃 레벨에서 넘어오는 상태: 끝난 GlobalData 합집합, 보낸 전역 이벤트. */
+	record Neighbours(Set<String> levels, Map<Integer, Object> globals, List<Object[]> events) {
+	}
+
+	/**
+	 * 2 단계: 숨긴 오브젝트를 숨긴 채로만 쓴 레벨을, 2 걸음 안 이웃 레벨(전환·LoadWad·LoadCheck)이 끝났을 때의 GlobalData 와 그 레벨들이
+	 * 보낸 전역 이벤트를 받아 다시 돌린다. 원작은 GlobalData 가 게임 전체에서 이어지고 두 슬롯 스크립트가 이벤트 큐 하나를 쓴다
+	 * (ATHN01E 선장 열쇠 GlobalData:0 → ATHN01D 선장 문, PAND00C 손잡이 GlobalData:3 → PAND01BB 석상 크랭크). 숨김 상호작용이 줄면 결과를 바꾼다.
+	 * 남는 것: PAND00C 엘리베이터 레버 — 고리 5 개 위치(LevelData 3/4/7/8/9) 정답 회전 + PAND00D 와 203/204/202/205 왕복 (퍼즐 풀이 없음).
+	 */
+	void rerunWithNeighbours() throws IOException {
+		for (String l : List.copyOf(results.keySet())) {
+			LevelResult r = results.get(l);
+			long hidden = r.interactions.stream().filter(x -> x.startsWith(HIDDEN_USE)).count();
+			if (hidden == 0) {
+				continue;
+			}
+			Neighbours nb = neighbours(l);
+			LevelResult again = run(l, nb);
+			if (again.interactions.stream().filter(x -> x.startsWith(HIDDEN_USE)).count() < hidden) {
+				again.withNeighbours.addAll(nb.levels());
+				results.put(l, again);
+			}
+		}
+	}
+
+	/** 2 걸음 안 이웃의 끝난 GlobalData 합집합과 보낸 전역 이벤트. */
+	private Neighbours neighbours(String l) {
+		Set<String> near = new java.util.TreeSet<>();
+		for (String n : linked(l)) {
+			near.add(n);
+			near.addAll(linked(n));
+		}
+		near.remove(l);
+		Map<Integer, Object> g = new TreeMap<>();
+		List<Object[]> ev = new ArrayList<>();
+		for (String n : near) {
+			LevelResult x = results.get(n);
+			if (x != null) {
+				x.globals.forEach((k, v) -> g.merge(k, v, (a, b) -> truthy(a) ? a : b));
+				ev.addAll(x.globalEvents);
+			}
+		}
+		return new Neighbours(near, g, ev);
+	}
+
+	private static boolean truthy(Object v) {
+		return v instanceof Boolean b ? b : v instanceof Number n && n.doubleValue() != 0;
+	}
+
+	/** 레벨이 직접 잇는 레벨 (요청한 LoadWad·LoadForWarp·LoadCheck·Load, 또는 그 레벨을 요청한 레벨). */
+	private Set<String> linked(String l) {
+		Set<String> out = new HashSet<>();
+		LevelResult r = results.get(l);
+		if (r == null) {
+			return out;
+		}
+		out.addAll(r.loads.keySet());
+		out.addAll(r.loadChecks.keySet());
+		r.edges.forEach(e -> out.add(e.target()));
+		for (LevelResult x : results.values()) {
+			if (x.loads.containsKey(l) || x.loadChecks.containsKey(l) || x.edges.stream().anyMatch(e -> e.target().equals(l))) {
+				out.add(x.level);
+			}
+		}
+		out.retainAll(results.keySet());
+		return out;
+	}
+
 	// ---- 1단계: 레벨 하나 ----
 
 	public LevelResult run(String levelName) throws IOException {
+		return run(levelName, null);
+	}
+
+	LevelResult run(String levelName, Neighbours nb) throws IOException {
 		LevelResult r = new LevelResult(levelName);
 		LevelData lv = new LevelData(WadFile.load(rom.resolve(levelName + ".WAD")));
 		LevelCollision col = new LevelCollision(lv.sheets);
@@ -224,6 +304,7 @@ public final class TraversalVerifier {
 		ScriptWorld[] wref = new ScriptWorld[1];
 		Map<String, Target> targetsByName = new HashMap<>();
 		devple.gow.engine.boss.HeadlessBoss[] bossRef = new devple.gow.engine.boss.HeadlessBoss[1];
+		devple.gow.engine.nav.Platforms[] platforms = new devple.gow.engine.nav.Platforms[1];
 		boolean tr = levelName.equalsIgnoreCase(trace);
 		java.util.function.Consumer<String> log = m -> {
 			if (tr) {
@@ -235,6 +316,7 @@ public final class TraversalVerifier {
 		Map<Integer, Float> msgDue = new java.util.LinkedHashMap<>();
 		float[] clock = {0};
 		hiddenObjects.clear();
+		usedVisible.clear();
 		ScriptListener listener = new ScriptListener() {
 			@Override
 			public void vis(ScriptEntity source, List<String> objects, int[] values) {
@@ -259,6 +341,15 @@ public final class TraversalVerifier {
 			@Override
 			public void checkpoint(ScriptEntity s) {
 				r.checkpoints++;
+			}
+
+			@Override
+			public void internal(int func, List<Object> args) {
+				// 질문 (Internal 0xB) → 예 (1021 인자 0 = 1, 인자 1 = 메시지 번호) — GameScene × 와 같음. PAND01C 손잡이 1019 → 메시지 258 → LoadWad Pand01B
+				if (func == 0xB && !args.isEmpty() && args.get(0) instanceof Number n) {
+					r.messages.put(n.intValue(), messages.get(n.intValue()) != null);
+					wref[0].postEvent(1021, 1, n.intValue(), 0, wref[0].player());
+				}
 			}
 
 			@Override
@@ -342,6 +433,22 @@ public final class TraversalVerifier {
 			}
 
 			@Override
+			public void animate(ScriptEntity source, List<String> objects, String anim) {
+				// Animator → 관절 애니 (GameScene SceneNav 와 같음): 회전방 벽 관절의 Marker 가 진입 센서 볼륨을 지난다 (PAND02AA 201/202)
+				if (platforms[0] == null) {
+					return;
+				}
+				int[] mode = new int[1];
+				float[] speed = {1}, start = new float[1];
+				devple.gow.engine.game.SceneNav.animatorArgs(wref[0], source, mode, speed, start);
+				for (String o : objects) {
+					if (platforms[0].play(o, anim, mode[0], speed[0], start[0])) {
+						log.accept("animate " + o + " " + anim + " 0x" + Integer.toHexString(mode[0]));
+					}
+				}
+			}
+
+			@Override
 			public void objectEvent(ObjectEvent e) {
 				if (bossRef[0] != null) {
 					bossRef[0].objectEvent(e);
@@ -367,6 +474,8 @@ public final class TraversalVerifier {
 		};
 		ScriptWorld w = new ScriptWorld(lv, new ScriptHost(), listener);
 		wref[0] = w;
+		platforms[0] = devple.gow.engine.nav.Platforms.of(lv, devple.gow.engine.game.SceneNav.animatorOwners(w));
+		levelPlatforms = platforms[0];
 		if (devple.gow.engine.boss.BossDirector.hostsBoss(levelName)) {
 			bossRef[0] = devple.gow.engine.boss.HeadlessBoss.create(levelName, rom, permk, lv.wad, w);
 		}
@@ -383,8 +492,17 @@ public final class TraversalVerifier {
 		r.spawnFloorDistance = r.spawnGround ? 0 : snap != null ? (float) Math.hypot(snap[0] - r.spawn[0], snap[2] - r.spawn[2]) : Float.MAX_VALUE;
 		System.arraycopy(r.spawn, 0, player, 0, 3);
 
+		w.tapGlobalEvents(e -> {
+			if (r.globalEvents.stream().noneMatch(x -> java.util.Arrays.equals(x, e))) {
+				r.globalEvents.add(e);
+			}
+		});
 		try {
 			w.start();
+			if (nb != null) {
+				// GlobalData 는 게임 전체 공유: 이웃 레벨이 끝났을 때 값 (시작 초기화 뒤에 덮어씀)
+				w.host().globalData().putAll(nb.globals());
+			}
 			w.placePlayer(player[0], player[1], player[2], false);
 		} catch (RuntimeException ex) {
 			r.exceptions.add("start: " + ex);
@@ -418,6 +536,12 @@ public final class TraversalVerifier {
 					w.postEvent(ScriptWorld.EVENT_MOVIE_DONE, m, 0, 0, w.player());
 				}
 				movieDone.clear();
+				platforms[0].update(DT);
+				for (devple.gow.engine.nav.Platforms.Body b : platforms[0].bodies()) {
+					if (b.playing()) {
+						w.poseOwner(b.owner, b.joints());
+					}
+				}
 				w.tick(DT, player[0], player[1], player[2]);
 				clock[0] = w.time();
 				for (var it = msgDue.entrySet().iterator(); it.hasNext(); ) {
@@ -464,6 +588,29 @@ public final class TraversalVerifier {
 			interact(lv, w, levelTweaks, col, points, player, currentSource, step, r);
 			walk(new ArrayList<>(points.keySet()), points, player, currentSource, step, null);
 		}
+		if (nb != null) {
+			// 이웃 레벨 스크립트가 보낸 전역 이벤트 (원작은 두 슬롯이 큐 하나 — PAND00D 고리 205 → PAND00C). 이 레벨이 듣고 스스로는 안 보내는 것만
+			Set<Integer> own = new HashSet<>(), heard = new HashSet<>();
+			r.globalEvents.forEach(e -> own.add((Integer) e[0]));
+			for (ScriptEntity e : w.entities()) {
+				if (e.type() == 4) {
+					heard.add(intSlot(w, e, "EventId"));
+				}
+			}
+			for (Object[] e : nb.events()) {
+				int id = (Integer) e[0];
+				if (!heard.contains(id) || own.contains(id)) {
+					continue;
+				}
+				currentSource[0] = "이웃 레벨 이벤트 " + id;
+				w.postEvent(id, e[1], e[2], 0, w.player());
+				for (float t = 0; t < DWELL / 2; t += DT) {
+					step.run();
+				}
+			}
+			interact(lv, w, levelTweaks, col, points, player, currentSource, step, r);
+			walk(new ArrayList<>(points.keySet()), points, player, currentSource, step, null);
+		}
 		// 전투 마무리: 남은 적(죽이면 스크립트가 반응하는 것)이 다 죽고 재생성(MaximumCount)이 끝날 때까지 — 파도 전투 (ATHN08B 분신 25)
 		currentSource[0] = "(전투)";
 		for (float t = 0, quiet = 0; !spawnTime.isEmpty() && t < COMBAT_MAX && quiet < COMBAT_QUIET; t += DT) {
@@ -473,6 +620,9 @@ public final class TraversalVerifier {
 		if (bossRef[0] != null) {
 			bossPhase(bossRef[0], w, player, movieDone, currentSource, step, r);
 		}
+		// 보스·전투 뒤 다시 상호작용: 보스를 쓰러뜨린 뒤에야 열리는 것 (ATHN01E 히드라 입 속 선장 1024 → a01MP04 → LoadWad Athn01D)
+		interact(lv, w, levelTweaks, col, points, player, currentSource, step, r);
+		walk(new ArrayList<>(points.keySet()), points, player, currentSource, step, null);
 		// 게임 이벤트 강제 2회: 스크립트가 보내지 않는 이벤트(동영상 끝·보스 사망·과제 완료 …)를 조건 상수 조합으로 → 다시 보행
 		Set<Integer> scriptEvents = new HashSet<>();
 		for (ScriptEntity e : w.entities()) {
@@ -533,6 +683,9 @@ public final class TraversalVerifier {
 		for (float t = 0; t < FLUSH; t += DT) {
 			step.run();
 		}
+		r.globals.putAll(w.host().globalData());
+		// 끝난 뒤 숨는 것(열린 문·처치한 선장)은 앞 회차에서 보일 때 이미 썼다 → 표시 안 함
+		r.interactions.removeIf(x -> x.startsWith(HIDDEN_USE) && usedVisible.contains(x.substring(HIDDEN_USE.length())));
 		return r;
 	}
 
@@ -553,11 +706,33 @@ public final class TraversalVerifier {
 				items.addChest(e.owner.instance().name(), new org.joml.Vector3f(gp[0], gp[1], gp[2]), intSlot(w, e, "unk5"), intSlot(w, e, "unk6"), tw);
 			}
 		}
-		for (Interactables.Item it : items.items()) {
-			if (hiddenObjects.contains(it.owner.toLowerCase(Locale.ROOT))) {
+		// 보이는 것 먼저 → 버튼 안내 센서(1024) → 그 사이 드러난 것 → 끝까지 숨은 것 (PAND05A 지구본 손잡이는 석상 R2 1024 뒤에 보인다)
+		List<Interactables.Item> pending = new ArrayList<>(items.items());
+		boolean buttons = false, last = false;
+		while (!pending.isEmpty() || !buttons) {
+			Interactables.Item it = null;
+			for (Interactables.Item c : pending) {
+				if (last || !hiddenObjects.contains(c.owner.toLowerCase(Locale.ROOT))) {
+					it = c;
+					break;
+				}
+			}
+			if (it == null) {
+				if (!buttons) {
+					pressButtons(w, points, player, currentSource, step, r);
+					buttons = true;
+				} else {
+					last = true;
+				}
+				continue;
+			}
+			pending.remove(it);
+			if (!hiddenObjects.contains(it.owner.toLowerCase(Locale.ROOT))) {
+				usedVisible.add(it.owner);
+			} else if (!usedVisible.contains(it.owner)) {
 				// 게임에서는 숨겨진 오브젝트를 잡을 수 없다. 하네스는 레벨을 하나씩 돌려 두 레벨에 걸친 퍼즐(PAND00C/00D 고리 → 204/205 → LeverOn)을
 				// 재현하지 못하므로 상호작용은 하되 표시만 남긴다 [하네스 근사]
-				addOnce(r.interactions, "숨김 상태 상호작용(두 레벨 퍼즐 미재현) " + it.owner);
+				addOnce(r.interactions, HIDDEN_USE + it.owner);
 			}
 			float g = col.groundHeight(it.pos.x, it.pos.y + UP, it.pos.z, DROP);
 			player[0] = it.pos.x;
@@ -603,10 +778,44 @@ public final class TraversalVerifier {
 				default -> {
 				}
 			}
-			for (float t = 0; t < DWELL / 2; t += DT) {
+			// 오브젝트 애니가 끝날 때까지 (PAND02AA 회전방 51.7 초 ÷ 속도 0.9 — 끝에서야 Marker 202 가 spinRmEnd 에 든다)
+			for (float t = 0; t < DWELL / 2 || animating() && t < ANIM_MAX; t += DT) {
 				step.run();
 			}
 		}
+	}
+
+	/** 버튼 안내 센서 (1024, mode 2 = 볼륨 안 영웅): 그 볼륨 안에서 누름 — GameScene R1 과 같음. */
+	private void pressButtons(ScriptWorld w, Map<Target, float[]> points, float[] player, String[] currentSource, Runnable step, LevelResult r) {
+		for (ScriptEntity e : w.entities()) {
+			Target et = e.volume != null ? new Target(e.volume, ScriptWorld.regionOf(e)) : null;
+			if (e.type() != 4 || e.mode() != 2 || intSlot(w, e, "EventId") != devple.gow.engine.game.SceneNav.EVENT_USE
+					|| et == null || !points.containsKey(et)) {
+				continue;
+			}
+			System.arraycopy(points.get(et), 0, player, 0, 3);
+			currentSource[0] = "버튼 " + e.name();
+			step.run();
+			w.postEvent(devple.gow.engine.game.SceneNav.EVENT_USE, 0, 0, 0, w.player());
+			for (float t = 0; t < DWELL / 2; t += DT) {
+				step.run();
+			}
+			addOnce(r.interactions, "USE 1024 " + e.name());
+		}
+	}
+
+	/** 보고서: 숨긴 상태로만 상호작용한 오브젝트 (게임에서는 못 함 → 앞 조건을 하네스가 재현 못 함). */
+	static final String HIDDEN_USE = "숨김 상태 상호작용(두 레벨 퍼즐 미재현) ";
+	/** 이 레벨에서 보이는 상태로 상호작용한 오브젝트. */
+	private final Set<String> usedVisible = new HashSet<>();
+
+	/** 지금 돌리는 레벨의 Animator 관절 애니 (발판·회전방). */
+	private devple.gow.engine.nav.Platforms levelPlatforms;
+	/** 상호작용 뒤 오브젝트 애니를 기다리는 최대 시간 (초). */
+	static final float ANIM_MAX = 90, WALK_ANIM_MAX = 20;
+
+	private boolean animating() {
+		return levelPlatforms != null && levelPlatforms.bodies().stream().anyMatch(devple.gow.engine.nav.Platforms.Body::playingOnce);
 	}
 
 	/** 전투 마무리 최대 시간 / 적이 없는 채로 기다리는 시간 (마지막 처치 뒤 Delay 6 초 동영상 — ATHN08B winEnt) (초). */
@@ -738,7 +947,7 @@ public final class TraversalVerifier {
 	}
 
 	/** 남은 볼륨을 가까운 순서로 방문 (각 DWELL 초). r 이 있으면 방문 수를 센다. */
-	private static void walk(List<Target> todo, Map<Target, float[]> points, float[] player,
+	private void walk(List<Target> todo, Map<Target, float[]> points, float[] player,
 			String[] currentSource, Runnable step, LevelResult r) {
 		float[] at = player.clone();
 		while (!todo.isEmpty()) {
@@ -755,7 +964,8 @@ public final class TraversalVerifier {
 			at = points.get(next);
 			System.arraycopy(at, 0, player, 0, 3);
 			currentSource[0] = next.volume().hull().name + (next.region() >= 0 ? "#" + next.region() : "");
-			for (float t = 0; t < DWELL; t += DT) {
+			// 밟아서 움직인 발판·문 애니가 끝날 때까지 서 있는다 (PAND03A 누름판 → Marker 104 가 아래 볼륨에 든다)
+			for (float t = 0; t < DWELL || animating() && t < WALK_ANIM_MAX; t += DT) {
 				step.run();
 			}
 			if (r != null) {

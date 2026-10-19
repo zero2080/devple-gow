@@ -138,6 +138,9 @@ public final class TraversalReport {
 			if (!r.interactions.isEmpty()) {
 				lines.add("R1 상호작용: " + String.join("; ", r.interactions));
 			}
+			if (!r.withNeighbours.isEmpty()) {
+				lines.add("이웃 레벨 상태(GlobalData·전역 이벤트)로 다시 돌림: " + String.join(", ", r.withNeighbours));
+			}
 			if (!r.ropes.isEmpty()) {
 				lines.add("줄: " + r.ropes.stream().map(x -> x.owner() + " " + x.type()).toList());
 			}
