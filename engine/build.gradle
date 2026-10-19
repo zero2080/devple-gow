@@ -1,0 +1,27 @@
+plugins {
+	id 'application'
+}
+
+def lwjglVersion = '3.3.4'
+def lwjglNatives = 'natives-macos-arm64'
+
+dependencies {
+	implementation project(':tools')
+
+	implementation platform("org.lwjgl:lwjgl-bom:$lwjglVersion")
+	['lwjgl', 'lwjgl-glfw', 'lwjgl-opengl', 'lwjgl-openal', 'lwjgl-stb'].each { m ->
+		implementation "org.lwjgl:$m"
+		runtimeOnly "org.lwjgl:$m::$lwjglNatives"
+	}
+	implementation 'org.joml:joml:1.10.5'
+}
+
+application {
+	mainClass = 'devple.gow.engine.GowMain'
+	// macOS: GLFW 창은 메인 스레드(첫 스레드)에서만 생성 가능
+	applicationDefaultJvmArgs = ['-XstartOnFirstThread']
+}
+
+run {
+	workingDir = rootProject.projectDir
+}

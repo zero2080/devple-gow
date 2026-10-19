@@ -1,3 +1,4 @@
 rootProject.name = 'devple-gow'
 
 include 'tools'
+include 'engine'
