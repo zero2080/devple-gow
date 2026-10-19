@@ -95,6 +95,9 @@
 | `ScriptWorld` / `BallHull` / `LevelData.PlacedVolume` | **영역 ID 있는 진입/이탈 센서** — 같은 ENV 의 hull 마다 다른 센서. 전엔 히드라 구역 1–6 센서가 한꺼번에 발동했다 |
 | `GameScene` | 소리 전용 R_* (R_AHA 등) 은 사운드 뱅크만 로드 |
 | `Engine/GowMain` | `--ticks`, `--boss-demo`, `--skip-movies`, `--no-fx` |
+| `EnemyFighter.resetSpawnCount` | 적 난수 씨앗 = 정적 생성 순번이라 헤드리스 보스 테스트 결과가 앞선 테스트 수에 좌우됐다 → `BossRig` 가 매번 0 으로 (HydraFightTest 구역 2 대기 6 → 15초: 씨앗 0 은 포효 55 를 먼저 끝냄) |
+| `EnemyFighter.modelVariant` / `AnimatedModel.setVariant` / `SkinnedModel(…, variant)` | 클래스 코드가 정하는 모델 그룹 (BMI +0x120, §10.1) |
+| `BossArena.effects/collision/cameraTarget`, `BossFight.hud`, `CameraRig.setTargetSlot`, `EffectSystem.Effect.hold` | BMI 이펙트·투사체·HUD·카메라 대상 (§10.1) — GameScene 은 연결만 |
 
 ## 4. 히드라 (ATHN01E) — 완료
 ```
@@ -119,8 +122,24 @@
   근거 [데이터]: 보스 물기 애니 synchJoint(물기가 떨어지는 단상 지점)와 영웅 zeroJoint 의 대응 — BiteMiddle (1, 679, −382) ↔ 영웅 BHAbossKill (1, 682, 383),
   BiteLeft (−74, 679, −449) ↔ GrabLeft (−40, 682, 432), BiteRight (69, 679, −451) ↔ GrabRight (52, 682, 436). 이전 180° 회전은 x(좌우)가 반대라
   grabLeftCam 이 머리 쪽으로 돌면 크레토스가 카메라 축에서 45–57° (화면 밖)였다 → 뒤집기 후 30–40°. 그래도 1.2–2초 구간엔 화면 가장자리 밖이다 (§8).
+- **잡기 중 크레토스가 화면 밖 (1.2–2초) — 정렬 문제가 아니다 [데이터]** (§4.1).
 - 테스트: 스폰·구역 2 → 52 물기, 데이터 피해 → 1039, HP < 250 → 스크립트 내려찍기, 잡기 3회(연타 성공) → 돛대 단계 1→3,
   HP < 150 → 기절 → ○ 처형 → TimedPress → 연타 → KILLWIN → 컷신 a01Mp01 → Goto afterHydraDeath, 실패 시 영웅 피해, 피격으로 안 죽음.
+
+### 4.1 히드라 잡기 정렬 재조사 (806 BHAbossGrabLeft, 헤드리스 실측)
+보스 (−3163, 489, −115) 요 −π/2, 영웅 HERO_TO_BOSS → (−2731, 1170, −155). 0.17초 간격 실측 (월드):
+
+| t | JAW (BHA01JOCJAW1) | 영웅 손목 (lwrist/rwrist) | 차이 |
+|---|---|---|---|
+| 0.17 | (−2734, 1203, −180) | (−2722, 1189, −54…−64) | 옆 120 (손이 아직 올라오는 중) |
+| 0.50 | (−2731, 1245, −151) | (−2689…−2720, 1191, −130) | 옆 20, 위 55 |
+| 0.67–1.00 | (−2726…−2719, 1267…1297, −155…−175) | (−2699…−2726, 1186…1192, −157…−177) | **옆 ≤ 10, 위 77–105** (턱 관절 아래 면을 받침) |
+| 1.33–2.03 | (−2707…−2731, 1320…1357, −241…−316) | (−2721…−2770, 1184…1197, −147…−178) | 옆 90–160 (머리가 비틀며 옆으로 당김) |
+
+- 0–1초는 현재 정렬(z 뒤집기)로 손과 턱이 옆으로 10 안에 맞는다 → 정렬 규칙은 맞다. 1.2초부터 **히드라 애니(BHAbossGrabLeft) 자체가 머리를 옆으로 당기고,
+  영웅 애니의 zeroJoint 는 (−40, 682, 432) 그대로**다 (영웅도 손목만 40 정도 바다 쪽으로). 원작 데이터도 이 구간엔 손이 턱에서 떨어진다 → 보스 쪽을
+  다른 관절로 끌거나 영웅을 옮길 근거가 없다 (히드라는 Enemy1 일반 클래스, 레벨 스크립트 Animator 중 히드라·돛대 동기용은 없음: mast-main-mastBreak*/Shake* 는 돛대 오브젝트 애니).
+- 화면 밖 원인은 카메라: grabLeftCam 관절 애니가 머리 쪽으로 패닝 (30 §6.2). 원작 화면 대조 전에는 고치지 않음 [미확인].
 
 ## 5. 메두사 여왕 (ATHN02D) — 완료 (석화는 근사)
 ```
@@ -172,16 +191,16 @@ HP ≤ 9800 → 잡기 원 → ○ GRAB → 260 MAIMEWGRAB (일반 GrabSync, 같
 | 보스 체력 표시 (스크립트 1055 HealthMeterOn) | 다리에 대상만 기록, HUD 미표시 |
 | 미니게임 버튼 아이콘 (FlashSprite idx 10, TimedPress 아이콘) | 미표시 (35 문서 공백과 같음) |
 | 스크립트 카메라 (grabLeftCam, bossKillCam 등), AresCamera1 | **해결** (30 문서 §6): ESC 0x9/0x8 + 관절 애니 카메라(0x1000 재시작) + 전환 이벤트 1037. AresCamera1 = 원작 0x1F67C0 비용 함수 (30 §6.3) |
-| 히드라 잡기·처형 카메라에서 크레토스가 안 보임 | **부분**: 좌우 반전은 고침(위 §4). 남은 원인 — 잡기 애니에서 히드라 머리(JAW/TIP 관절)가 영웅 자리에서 100–200 옆 (손–관절 최소 거리 ≥ 84, 어떤 회전·반사로도 접촉 안 됨). 보스 grab 애니 synchJoint 는 원점·180°, 영웅 synchJoint 는 원점·0° 라 synchJoint 규칙(아래 §9)으로는 영웅이 바다 높이가 됨 → 히드라 쪽 정렬 규칙 미해결 |
+| 히드라 잡기·처형 카메라에서 크레토스가 안 보임 | **부분** (재조사 §4.1: 0–1초 손–턱 옆 ≤ 10 으로 정렬은 맞고, 1.2–2초는 히드라 애니가 머리를 옆으로 당기는 데이터 — 카메라 패닝이 원인): 좌우 반전은 고침(위 §4). 남은 원인 — 잡기 애니에서 히드라 머리(JAW/TIP 관절)가 영웅 자리에서 100–200 옆 (손–관절 최소 거리 ≥ 84, 어떤 회전·반사로도 접촉 안 됨). 보스 grab 애니 synchJoint 는 원점·180°, 영웅 synchJoint 는 원점·0° 라 synchJoint 규칙(아래 §9)으로는 영웅이 바다 높이가 됨 → 히드라 쪽 정렬 규칙 미해결 |
 | 아레스 잡기 (BOSS_TO_HERO) | **검증** (§11): 같은 원점·같은 방향이 맞다 (손목 ↔ 아레스 손가락 관절 평균 7.0). "64 앞 마주 봄" 은 25, zeroJoint 차 규칙은 40 |
 | RegenHealthBar (RegenBar 250/252: Regen Speed 150, 비율 0.8/0.45) | 의미 미확정 → 무시 |
 | SonicScream 힘 | 근사 (거리 ×16 안에서 Force/500 단위/초) |
 | 히드라 HERO_TO_BOSS 정렬, 메두사 석화, 아레스 차지 | [추정]/[근사] |
 | 아기 히드라 enc3 (`bhb` 253/258) | 리소스·DTre 로 싸움, 돛대 핀(110–117) 연출 미검증 |
 | ATHN08B 분신 크레토스·가족 | **해결** (§9): 가족 보호·포옹(정렬 고침 §11)·휘말림·사망 실패, 분신 잡기 860–863 (흔들기 탈출 / 실패 피해), 포옹 신들의 분노 게이지 |
-| 판도라 수호자 BMI (PAND03G) | **구현** (§10): 전용 클래스 Think/TakeDamage 원작 해독 → `BmiFight`, 결말(245 → p03MP07 → Pand03H)까지. 통나무 궤적·증기/갑옷 조각·HUD EnemyState·카메라 대상 슬롯은 근사/미구현 |
+| 판도라 수호자 BMI (PAND03G) | **구현** (§10, §10.1): 전용 클래스 Think/TakeDamage 원작 해독 → `BmiFight`, 결말(245 → p03MP07 → Pand03H)까지. 통나무 투사체·증기·갑옷 조각·모델 변형·HUD EnemyState·카메라 대상 슬롯 원작 해독 (§10.1). 피한 통나무가 빗나가는 판정만 근사 |
 | AresFight 데모 크레토스가 ~2.5초부터 멈춤 | **해결**: 1단계 데모는 0.9초마다 정면 60 에서 공격 (4 번에 500 임계 밑, 원 임계마다 290), 그 뒤 ○ 잡기. 예전엔 3초까지 서 있다가 불덩이에 맞고 정지 |
-| FakeDeadBMI (죽은 수호자 장식, 통나무 박힘) | 생성 센서 VisOff 가 안 먹어 전투 내내 보임 (GameScene/Vis 쪽, 이 작업에서 손대지 않음) |
+| FakeDeadBMI (죽은 수호자 장식, 통나무 박힘) | **해결** (Vis 적용, §10.x) |
 | ATHN02D 메두사 방 바닥 충돌이 없음 (충돌 삼각형 138) | **해결**: 바닥은 숙주 레벨 ATHN02C 시트에 있음 (아래 §8.1) |
 | 다른 슬롯 레벨 렌더 | ATHN02D 직접 진입 시 방 지오메트리(ATHN02C)가 그려지지 않음 — 충돌·스크립트만 올림 |
 | 0x800 차지 분기 일반 지원, 조건 25(스크립트 변수 해시), 27(+0x64 쓰는 곳) | 미구현 |
@@ -269,15 +288,34 @@ SCR: BMITurnOffVents(b) = 배출구 수 −b, 누적 0 (204/207/209/222/227 — 
   적중 → 단계 +1, EV_HIT_REACT tag 456 → A210 LOGHIT (HP 1001..) → 75 들이받기 / A245 (HP ≤ 1000) → SCR_ExplodeDeath
   단계 0 → 1 → 2 는 통나무 2 번, 2 → 3 은 갑옷 파괴, 마지막 243 의 통나무 → 245 → 1035(245) FinalMpegStuff → p03MP07 → LoadWad Pand03H
 ```
-엔진 (`BmiFight`) 근사: 위치 = 기술 애니 zeroJoint 변화량 (BMI 애니는 zeroJoint 절대값이 클립마다 다르고 몸은 제자리), 앵커 = 스폰 위치 (원작은 GO 부모 로케이터),
-통나무 = 1020(1000) 뒤 (거리 / 150·16) 초에 "이번 레버 주기에 999 로 피하지 않았으면" 적중 [근사: Arrow 궤적·logAim 미구현, Arrow "Ignore Invulnerable"],
-올라타기 정렬 ZERO (§11). 미구현: 배출구 증기 GO·갑옷 조각 BRK·HUD EnemyState(MeterState)·카메라 대상 슬롯(Camera Target Weight/Radius), 통나무 모델.
+엔진 (`BmiFight`) 근사: 위치 = 기술 애니 zeroJoint 변화량 (BMI 애니는 zeroJoint 절대값이 클립마다 다르고 몸은 제자리), 앵커 = 스포너 소유 GO (§10.1),
+통나무 = 레버 logAim 투사체 (§10.1), 올라타기 정렬 ZERO (§11). 증기·갑옷 조각·모델 변형·HUD EnemyState·카메라 대상 슬롯은 §10.1.
 순회 검증은 아직 맡지 않음 (`headless() == false`, 검증 하네스 경로 그대로).
 
 - 테스트 `BmiFightTest`: 문 앞 볼륨 → P03MP06 → Goto → 231 → 스폰 / 단계표 (멀리 → 1 걷기 이동, 정면 가까이 → 150), 앵커 선 /
   배출구 250·200·200·200·201 (HP 1500 유지, VentCam) → 203 → 잠금 중 무피해 → ○ → 450 (메시지 589) → 451–453 TimedPress 7 → 455 → 208 (LevelData4) → 레버 → 통나무 적중 → 단계 1, 210 /
   비기절 레버 → 999 → 220 → 빗나감 / 데모 끝까지: 232 (ArmorCam1/2), 240 → 242 → 243 → 245, 통나무 3 번, p03MP07 → camMinoDeado, LoadWad Pand03H.
 - 스크린샷 (`work/shots/37c/`): `bmi_t600.png` (정면 BMI 다리 사이 크레토스), `bmi_mount.png`·`bmi_ride1.png`·`bmi_ride3.png` (등에 올라탐), `bmi_loghit.png`·`bmi_armor.png` (통나무 카메라, 갑옷 균열), `bmi_final.png` (격파 뒤 문).
+
+### 10.1 통나무 투사체 / 증기 / 갑옷 조각 / HUD / 카메라 대상 (원작 해독, `BmiFight`)
+| 항목 | 원작 | 엔진 |
+|---|---|---|
+| 통나무 | logLever-Anim-logArrow 1020(1000) → 레버 GO `gologlever` 의 ArrowEmitter/100 "BMILogLauncher" (Arrow Template 60, **Aim Joint logAim** = 레버 스켈레톤 관절 6) → Arrow/060: **GO Name golog** (MDL_log + 불 FXC_FWemit1), Velocity 150 (×16 /초), Gravity Flag 꺼짐 (직선), 수명 #117c872e 10초, Hit Effect **gologShatter** (MDL_logShatter 28관절 1회 애니 + 불·파편), Damage 1000 Context 456, Ignore Invulnerable [확실: TWK + 0x222CE0 등록 오프셋 + 0x222710 발사] | logAim 월드 (1184, 8, 1912), +Z = (−1, 0, 0) (BMI 앵커 선을 따라 문 쪽) 에서 2400/초. 이전→현재 선분이 BMI 피격 구(CDV_BMI)에 닿으면 적중 (피해 1000 → 단계 +1, 태그 456 → 210/245), 레벨 면에 닿으면 빗나감 (문 쪽 벽 x ≈ −150), 그 자리에 gologShatter. golog 를 이펙트 GO 로 그림 (메시 + 불) |
+| 피한 통나무 | 999 → Dodge 220 BMIJUMPBACK → AUTO 221 TURTLESTUNIDLE. 스크립트는 LogMissCam → 2.5초 뒤 DrHitCam (문에 맞는 통나무) | 220/221/225/226 중에는 몸 판정을 건너뜀 [근사: 웅크린 몸 구가 통나무 높이(바닥 + 104)에 남아 있어 순수 기하로는 맞는다 — 원작 Arrow 충돌 0x223920 의 대상 거르기 미해석] |
+| 앵커 | Think 첫 갱신 (플래그 0x10): +0x360 = sub_1A8ED0(GO) → sub_1A9E98 = 부모 로케이터 행렬 이동 [확실: 경로] | 스폰한 SpawnEnemy 엔티티의 소유 GO (gominoboss 관절 0 (0, 0, 1920)) [추정: 부모 = 스포너 소유 GO] — 스폰 위치 (64, −96, 1920) 와 정면 64 차이 |
+| 배출구 증기 | 생성자 0x1C0378: steamAttach01..08 관절마다 **goSteamVent01** (FXC_ST2emit1/1A 200/초) 부착, 파티클 이미터 +0xB4 = 0. Think → 0x1C1D70: 열린 수 (0x1C1E40, 단계 0·1: 개수 0..5 → 0, 1, 2, 3, 5, 8, 단계 2+ → 0) 미만이면 1, 아니면 0. 소리 SND_MB_VENTSHOT (+ VENT%d_LP) | 8 이펙트를 관절에 붙이고 `rateOverride` 0 / 데이터대로. VENTSHOT 은 arena.sound, 반복음 미연결 |
+| 갑옷 조각 | 생성자: 관절 표 0x2B7400 (BMI01JOLULN1, JOLHUM1, JORULN1, JORHUM1, JOCVEB1, JOCVEC1, JOCHEA1, JOCNEC1) ↔ GO 표 0x2B74B0 (goLeftArmShatterBRK, goLeftShouldBRK, goRArm2BRK, goRightShouldBRK, goAbdomenBRK, goChestBRK, goHelmetBRK, goCollarBRK), 숨김. 갱신 0x1C1B10 (단계 ≥ 2): 깨진 수 (0x1C1D00: 단계 2 개수 0..4 → 같은 수, 5 이상·단계 3 → +0x37C = SCR_BMIBrokenPieces, 기본 4, 232 에서 6 → 8) 이상인 조각은 애니 0초 + BMI 관절 행렬 복사 (보임), 미만은 그 자리에서 애니 재생, 끝나면 숨김 | 같은 규칙: 안 깨진 조각 = 관절 부착 + `Effect.hold` (0초 정지), 깨지는 순간 관절 행렬 고정 + 애니 재생, 수명 = act 길이 |
+| 모델 변형 | 0x1C1AA8 (Think): 모델 컴포넌트 +0x120 = 단계 0 → 2, 1 → 1, 2+ → 0. MDL_BMI 파트 그룹 3개 = 갑옷 상태 (그룹 0 = 맨몸 본체, 1 = 금 + RayStreaks 빛줄기, 2 = 온전한 갑옷) | `EnemyFighter.modelVariant` → `AnimatedModel.setVariant`: 파트마다 그룹[v] (비면 그룹 0) — `SkinnedModel(…, variant=true)`. 예전 거리 LOD 규칙은 단계 0 부터 금·빛줄기가 보였다 |
+| HUD EnemyState | 0x1C1958 → +0x380: set(a1=1): 단계 0 → 1, 1 → 3, 2 → 4 + 2·개수, 3 → 14 / 아니면 0 → 2, 1 → 4, 2 → 5 + 2·개수. 생성자·통나무·갑옷 문턱 = set, 배출구·갑옷 누적 = 아니면. Think 0x1C0B00: HUD +0x28 "EnemyState_Value1", +0x238 "EnemyState_Event1" (처음 1, 그 뒤 2), +0x1590 켬 [확실] | `BossFight.hud(UiVariables)` (GameScene levelHud 갱신에서) → PS2_EnemyState_Value1/Event1. FLP_Pand03G SetValue: 1 LargeArmor 켬, 2·4 BMI_Glow, 3 조각 1–5, 5.. 흔들림/깨짐 |
+| 카메라 대상 | 생성자: sub_1F3F78(GO, 관절 BMI01JOCHEA1) → 슬롯 표 0x304790 (+0x4C 7, +0x48 가중 = "Camera Target Weight" 0.35, +0x40 = "Camera Target Radius" 2·16). CAM 0x10000 카메라의 대상 T (0x1F26E8) = bit0 슬롯 가중 평균 [확실] | `CameraRig.setTargetSlot` (BossArena.cameraTarget): 0x10000 카메라면 영웅 대상(가중 1)과 머리 관절(0.35)의 가중 평균. 반지름 미사용 |
+| 기술 250 의 CAMERA 이벤트 #9E9C68F3 | 종류 23 = 0x2054A0: **goCamera** GO 를 만들고 act = Hash127(이벤트 해시 시드, "%d" 번호) 를 GO 애니에서 찾아 재생 (전투 카메라 애니). R_PERMK ANM_camera 에는 act "main" 하나뿐 → BMI 에서는 찾지 못함 [확실: 경로, 미확인: 이 해시의 act 이름 — PAND03G/R_PERMK 문자열 전수 대입 불일치] | 미구현 (VentCam 은 스크립트 1035(250) 가 켬) |
+
+- 테스트 `BmiFightTest.logProjectileVentsHudCamera`: HUD 1 → 배출구 1 → 증기 1·HUD 2·Event 2·VENTSHOT, 5 개째 증기 8, 피한 통나무가 logAim (1184, 8) 에서 −x 로 날아 BMI 뒤 벽에서 gologShatter, golog GO 재생, 카메라 슬롯 = 머리 관절.
+  `demoReachesScriptedEnd`: 단계 2 에서 모델 변형 0·조각 8 개 보임·증기 0·HUD 4, 갑옷 피해로 조각 깨짐, 결말까지 8 조각·HUD 14. 기존 통나무 적중 3 번·빗나감 테스트는 실제 투사체로 통과.
+- 스크린샷 (`work/shots/`, 커밋 안 함): `bmi2_log2000.png` (LogHitCam: 통나무 적중 직후 단계 1 금 간 BMI + 파편 불꽃, HUD 갑옷 막대 금), `bmi2_armor5100.png` (단계 2 갑옷 BRK 조각을 두른 BMI),
+  `bmi2_v360_nofx.png` / `bmi2_v360.png` (보스 이펙트 끔/켬 비교 — 증기 과노출), `bmi2_t30.png` (등장 전, HUD 갑옷 막대).
+- **렌더 문제 (이 작업 밖)**: ① 증기(ST2part VU 3, 플래그 0x281 → 가산)·통나무 불이 크게 그려져 BMI 앞을 하얗게 덮는다 — 원작 생성률(200/초 ×2 ×8)은 데이터대로이고 PTC 크기 단위·블렌드 가정(40 §9)이 원인으로 보임.
+  ② 아레나 밖 배경이 하얗다: FinalMpegStuff(SceneryFlatsOn 의 소유 GO)는 돌벽·바닥 메시 (MAT_M01StnL03Wall/Floor/WallTrim)일 뿐이고, 그것과 gofogmain·BMI 빛 FX 인스턴스를 숨겨도 그대로 → 배경판 탓이 아니다 (레벨 지오메트리/안개/클리어 쪽, 미해결).
 
 ## 11. 동기 애니 정렬 — 관절 접촉 검사
 synchJoint 의 의미를 추정으로 정하던 것을 **데이터로 검사**: 동기 중 매 프레임 영웅 손목(lwrist/rwrist) ↔ 상대 골격 관절의 최소 거리 평균 (`BossSyncContact`).
@@ -305,5 +343,5 @@ synchJoint 의 의미를 추정으로 정하던 것을 **데이터로 검사**: 
 
 ### 10.x 병합 메모 (Vis 적용 후)
 - 스크립트 Vis 표시/숨김(28 문서)이 적용되어 `FakeDeadBMI-VisOff` 가 장식용 죽은 수호자 석상을 숨긴다 (전에는 싸움 내내 보였음).
-- 등장 동영상 끝(이벤트 231) 에 `FinalMpegStuff-SceneryFlatsOn` 이 용암 배경판을 켜고 p03MP07 을 미리 올린다 — 원작 순서. 카메라가 아레나 밖을 볼 때
-  배경판의 밝은 빛이 화면을 하얗게 채우는 장면이 있다 (블렌드/밝기 원작 대조 필요 [미확인]).
+- 등장 동영상 끝(이벤트 231) 에 `FinalMpegStuff-SceneryFlatsOn` 이 gofinalmpegstuff 를 켠다 — 이 GO 는 돌벽·바닥(MAT_M01StnL03*) 메시라 밝지 않다.
+  카메라가 아레나 밖을 볼 때의 흰 화면은 이것을 숨겨도 그대로다 (§10.1 렌더 문제 ②).

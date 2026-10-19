@@ -232,6 +232,12 @@ MFX 템플릿 0x48 바이트 (`/TweakTemplates/MFX/nnn/`):
 - 스크린샷 (스크래치 `fx2/shots`): `fx2_medusa_hero.png` (손에 든 메두사 머리 + 광선), `fx2_medusa.png` (ATHN01A), `fx2_pots.png` (ARENA06 항아리 파편 애니),
   `fx2_zeus_charge.png` (손의 번개 + 차지 불꽃), `fx2_poseidon.png` (StrikeGrp 기둥 + Radius), `fx2_blood.png` (ARENA08 적중 MFX 510/501 + 피 자국), `fx2_land.png` (goRockLand).
 
+## 8.1 판도라 수호자 BMI 이펙트 (37 §10.1)
+- 통나무 Arrow/060 GO golog (메시 + 불) 를 투사체 위치·logAim 회전으로 매 프레임, 명중/벽 충돌에 Hit Effect gologShatter (1회 act).
+- 배출구 goSteamVent01 ×8 을 BMI 관절 steamAttach01..08 에 부착, 원작 +0xB4 배율 0/1 → `rateOverride` 0 / 데이터대로.
+- 갑옷 BRK GO ×8: 깨지기 전엔 관절 부착 + **`Effect.hold`** (신설: 시간 정지 = 원작 0x1C1B10 이 애니를 0초에 둠), 깨지면 그 순간 관절 행렬 고정 후 재생.
+- 증기(ST2part1/1A, VU 3, 플래그 0x281/0x681)가 화면을 하얗게 덮는다 — §9 의 PTC 크기·블렌드 가정 문제로 보임 (미해결).
+
 ## 9. 남은 것
 - PTC 크기 단위 (VU 3 q10/q11, VU 4 상수), VU 4·8·9 상수 배치, PTC 플래그 0x8000 = 알파 가정 검증 — 2차에서 0x8000 검사 함수 후보만 훑음(PTC 로더 미발견), 미해결.
   rslicepart (돌 조각, 0x680) 처럼 0x8000 없는 불투명 조각도 가산으로 그려지는 문제 남음.

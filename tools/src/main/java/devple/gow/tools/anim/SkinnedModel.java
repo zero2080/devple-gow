@@ -65,13 +65,27 @@ public final class SkinnedModel {
 	 * @param instance chainCount &gt; 1 인 오브젝트에서 쓸 체인(인스턴스) 번호. -1 이면 모든 인스턴스를 각각 추가.
 	 */
 	public SkinnedModel(GowModel m, int lod, int instance) {
+		this(m, lod, instance, false);
+	}
+
+	/**
+	 * @param variant true 면 LOD 번호를 <b>모델 변형</b>으로 쓴다 (원작 모델 컴포넌트 +0x120 강제 LOD, 판도라 수호자 BMI 단계 0/1/2+ → 2/1/0,
+	 *                37 문서 §10): 파트마다 그룹[min(lod, n−1)], 비어 있으면 그룹 0, 그것도 비면 그리지 않음. false = 거리 LOD (비면 다음 그룹)
+	 */
+	public SkinnedModel(GowModel m, int lod, int instance, boolean variant) {
 		this.name = m.name;
 		for (GowMesh mesh : m.meshes) {
 			for (int p = 0; p < mesh.parts.size(); p++) {
 				GowMesh.Part part = mesh.parts.get(p);
 				int pick = Math.min(lod, part.groups().size() - 1);
-				while (pick >= 0 && pick + 1 < part.groups().size() && part.groups().get(pick).objects().isEmpty()) {
-					pick++;
+				if (variant) {
+					if (pick >= 0 && part.groups().get(pick).objects().isEmpty()) {
+						pick = 0;
+					}
+				} else {
+					while (pick >= 0 && pick + 1 < part.groups().size() && part.groups().get(pick).objects().isEmpty()) {
+						pick++;
+					}
 				}
 				if (pick < 0) {
 					continue;

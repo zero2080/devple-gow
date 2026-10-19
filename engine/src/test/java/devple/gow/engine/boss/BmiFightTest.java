@@ -137,7 +137,19 @@ class BmiFightTest {
 		BmiFight fight = (BmiFight) r.fight;
 		EnemyFighter b = fight.boss();
 		fight.autoPlay = true;
+		// 단계 2 (갑옷): 모델 변형 0 (+0x120), 갑옷 BRK GO 8 개가 관절에 보임, 배출구 증기 꺼짐, HUD 4 (단계 2 set)
+		assertTrue(until(r, 300, () -> fight.stage() == 2), "단계 2: " + fight.phases);
+		r.tick();
+		assertEquals(0, b.modelVariant);
+		assertEquals(8, fight.piecesShown(), "갑옷 조각 GO (goLeftArmShatterBRK …)");
+		assertEquals(0, fight.ventsEmitting());
+		assertTrue(fight.meterLog.contains(4), "단계 2 HUD 4: " + fight.meterLog);
+		// 갑옷 피해 150 마다 조각 하나씩 깨짐 (0x1C1D00: 개수), 232 의 SCR_BMIBrokenPieces 6 → 8
+		assertTrue(until(r, 60, () -> fight.piecesBroken >= 1), "조각 깨짐");
+		assertTrue(fight.meterLog.contains(6) || fight.meterLog.contains(5), "HUD 조각 흔들림/깨짐 5..: " + fight.meterLog);
 		assertTrue(until(r, 400, fight::defeated), "결말: stage " + fight.stage() + " hp " + b.hp + " move " + move(b) + " " + fight.phases);
+		assertEquals(8, fight.piecesBroken, "232 BMICINEARMORBREAK 뒤 8 조각 모두");
+		assertTrue(fight.meterLog.contains(14), "단계 3 HUD 14: " + fight.meterLog);
 		// 단계 0 → 1 → 2 (통나무 2 번), 갑옷 파괴 232 → 단계 3, HP 99 → 240 → 242 → 243 → 통나무 → 245 (SCR_ExplodeDeath)
 		assertTrue(r.bossMoves.containsAll(java.util.List.of(201, 203, 450, 455, 208, 210, 230, 232, 240, 242, 243, BmiFight.DEATH)), r.bossMoves.toString());
 		assertEquals(3, fight.logHits, "통나무 3 번");
@@ -149,5 +161,54 @@ class BmiFightTest {
 		r.run(1);
 		assertTrue(r.log.stream().anyMatch(s -> s.startsWith("cam camMinoDeado")), r.log.toString());
 		assertTrue(r.log.stream().anyMatch(s -> s.contains("LOAD_WAD PAND03H")), "LoadWad Pand03H: " + r.log);
+	}
+
+	/**
+	 * 통나무 = 실제 투사체 (레버 GO 관절 logAim 에서 +Z 로 Arrow/060 Velocity·16, GO golog), 배출구 증기 GO, HUD EnemyState, 모델 변형,
+	 * 카메라 대상 슬롯 (머리 관절 0.35).
+	 */
+	@Test
+	void logProjectileVentsHudCamera() throws Exception {
+		BossRig r = spawned();
+		BmiFight fight = (BmiFight) r.fight;
+		EnemyFighter b = fight.boss();
+		r.tick();
+		// 생성자 0x1C1958(1): HUD EnemyState 1 (Event 1 = 켬), 모델 변형 2 (단계 0), 배출구 GO 8 개 모두 꺼짐
+		assertEquals(java.util.List.of(1), fight.meterLog);
+		assertEquals("1", r.hud.get("PS2_EnemyState_Value1"));
+		assertEquals(2, b.modelVariant);
+		assertEquals(0, fight.ventsEmitting());
+		assertEquals(150 * 16f, fight.logSpeed, 1e-3);
+		// 카메라 대상 슬롯: BMI01JOCHEA1 (머리) — 몸 위
+		assertNotNull(r.cameraSlot, "카메라 대상 슬롯");
+		assertTrue(r.cameraSlot.y > b.pos.y + 50, "머리 관절 높이 " + r.cameraSlot + " / " + b.pos);
+		// 배출구 1 → 증기 1 개, HUD 2 (단계 0 문턱), 소리
+		front(r, 100);
+		hit(r, 100);
+		r.tick();
+		assertEquals(1, fight.ventsEmitting());
+		assertTrue(fight.meterLog.contains(2), fight.meterLog.toString());
+		assertEquals("2", r.hud.get("PS2_EnemyState_Event1"), "그 뒤 갱신은 Event 2");
+		assertTrue(r.sounds.contains("SND_MB_VENTSHOT"));
+		for (int i = 0; i < 4; i++) {
+			front(r, 100);
+			hit(r, 100);
+		}
+		r.tick();
+		assertEquals(8, fight.ventsEmitting(), "배출구 5 개째 → 0x1C1E40 표 8");
+		// 기절 중이 아닌 레버 → 999 피하기 → 통나무가 BMI 를 지나 문 쪽 벽에서 부서짐 (Hit Effect gologShatter)
+		assertTrue(until(r, 25, () -> move(b) != 201 && move(b) != 202 && move(b) != 203 && move(b) != 204), "기절 풀림");
+		fight.pullLever();
+		assertTrue(until(r, 3.2f, () -> fight.logPosition() != null), "1020(1000) → 통나무 발사");
+		var p0 = fight.logPosition();
+		assertEquals(1183.8f, p0.x, 2f);
+		assertEquals(8f, p0.y, 2f);
+		assertTrue(r.fx.live().stream().anyMatch(e -> e.def.object().equalsIgnoreCase("log")), "golog GO (MDL_log + 불)");
+		r.tick();
+		assertTrue(fight.logPosition().x < p0.x - 30, "+Z (−x) 로 날아감 " + fight.logPosition());
+		assertTrue(until(r, 2, () -> fight.logPosition() == null), "통나무 멈춤");
+		assertEquals(1, fight.logMisses, fight.lastLogEndReason + " @ " + fight.lastLogEnd);
+		assertTrue(fight.lastLogEnd.x < b.pos.x, "BMI 뒤 문 쪽 " + fight.lastLogEnd);
+		assertTrue(r.fx.live().stream().anyMatch(e -> e.def.object().equalsIgnoreCase("logshatter")), "gologShatter");
 	}
 }

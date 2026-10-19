@@ -359,6 +359,18 @@ public final class GameScene implements Scene {
 				public void requestCamera(String name, Vector3f... targets) {
 					cameraRig.request(name, targets); // 아레스 AresCamera1 (0x1C3370)
 				}
+
+				public devple.gow.engine.fx.EffectSystem effects() {
+					return magicFx != null ? magicFx.effects() : null;
+				}
+
+				public devple.gow.engine.level.LevelCollision collision() {
+					return col;
+				}
+
+				public void cameraTarget(Vector3f p, float weight) {
+					cameraRig.setTargetSlot(p, weight); // BMI 머리 관절 (0x1C0378 → 0x1F3F78)
+				}
 			};
 		}
 		return arena;
@@ -1004,6 +1016,9 @@ public final class GameScene implements Scene {
 			if (bridge != null) {
 				enemyMeters.update(hud.variables(), bridge.meterTargets());
 			}
+			if (boss != null) {
+				boss.hud(hud.variables()); // 클래스 코드가 직접 쓰는 HUD 변수 (BMI EnemyState, 37 문서 §10)
+			}
 			levelHud.update(e);
 		}
 		if (messageTimer > 0 && (messageTimer -= dt) <= 0) {
@@ -1338,6 +1353,7 @@ public final class GameScene implements Scene {
 			if (en.fighter().shattered()) {
 				continue; // 부서진 석상 (원작은 *stonedbrk 파편 모델) [근사: 숨김]
 			}
+			en.model().setVariant(en.fighter().modelVariant); // BMI 단계별 갑옷 (37 문서 §10)
 			en.model().draw(cam, e.window().aspect(), en.fighter().world(m, alpha), en.fighter().animator().pose(),
 					e.renderer().white());
 		}
