@@ -119,6 +119,26 @@ class AiBrainTest {
 		return new Run(f, at);
 	}
 
+	/** 인지 시선 가림 (0x1D22B0 → sub_0011E3E8): 벽에 막히면 인지하지 않고, 트이면 전투로. */
+	@Test
+	void wallBlocksPerception() throws Exception {
+		EnemyFactory.Kind k = kind("R_MIN.WAD");
+		EnemyFighter f = k.spawn();
+		f.pos.set(0, 0, -200);
+		boolean[] wall = {true};
+		f.brain().setSightBlocked((eye, to) -> wall[0]);
+		f.setFoe(dummy(new Vector3f()));
+		for (float t = 0; t < 3; t += DT) {
+			f.update(DT);
+		}
+		assertTrue(f.brain().state() != AiBrain.State.COMBAT, "벽 너머: " + f.brain().state());
+		wall[0] = false;
+		for (float t = 0; t < 1; t += DT) {
+			f.update(DT);
+		}
+		assertEquals(AiBrain.State.COMBAT, f.brain().state(), "시선이 트이면 인지");
+	}
+
 	@Test
 	void minotaurApproachesAndAttacksWithTemplateCadence() throws Exception {
 		EnemyFactory.Kind k = kind("R_MIN.WAD");

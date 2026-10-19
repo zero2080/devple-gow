@@ -39,6 +39,10 @@ public final class AiBrain {
 	private java.util.function.Supplier<Float> recovery = () -> 1f;
 	/** 조건 25..27 (스크립트/전역 변수, 17 문서 §3.2) 공급자. 기본 0. 예: 히드라 DTre_250 의 26 = 플레이어 +0x88 (이벤트 1054 구역). */
 	private java.util.function.IntUnaryOperator scriptSense = c -> 0;
+	/** 시선 가림 판정 (눈 → 대상 사이에 충돌면이 있으면 true, 원작 sub_0011E3E8). null 이면 검사 안 함. */
+	private java.util.function.BiPredicate<Vector3f, Vector3f> sightBlocked;
+	/** 시선 높이 (발 위, 유닛) [추정]. */
+	static final float EYE = 48f;
 
 	private Hittable target;
 	private Combatant targetCombat;
@@ -91,6 +95,10 @@ public final class AiBrain {
 	}
 
 	/** 조건 25(스크립트 변수)/26(전역 +0x88)/27(전역 +0x64) 값 공급자 (보스 구역 등). */
+	public void setSightBlocked(java.util.function.BiPredicate<Vector3f, Vector3f> p) {
+		sightBlocked = p;
+	}
+
 	public void setScriptSense(java.util.function.IntUnaryOperator s) {
 		scriptSense = s != null ? s : c -> 0;
 	}
@@ -236,11 +244,17 @@ public final class AiBrain {
 		}
 	}
 
-	/** 인지 (0x1D22B0): 시야 거리 ×16 안 + 정면 기준 반각 sightFov 안. */
+	/** 인지 (0x1D22B0): 시야 거리 ×16 안 + 정면 기준 반각 sightFov 안 + 시선이 막히지 않음 (템플릿 0x84&amp;0x800 이면 생략). */
 	private boolean perceives(Vector3f tp, float dist) {
-		if (dist > tmpl.sightRange * 16f) {
+		if (dist > tmpl.sightRange * 16f || !inSightCone(tp)) {
 			return false;
 		}
+		// 시선 가림 (0x1D257C sub_0011E3E8 충돌 월드 레이 — 원뿔 안일 때만 의미)
+		return sightBlocked == null || (tmpl.flags & AiTemplate.FLAG_IGNORE_LOS) != 0
+				|| !sightBlocked.test(new Vector3f(self.pos).add(0, EYE, 0), new Vector3f(tp).add(0, EYE, 0));
+	}
+
+	private boolean inSightCone(Vector3f tp) {
 		if (tmpl.sightFov >= 180f) {
 			return true;
 		}

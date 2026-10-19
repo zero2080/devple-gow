@@ -66,6 +66,11 @@ public final class Magic {
 		targets = t;
 	}
 
+	/** 메두사 시선 충돌 검사 (레벨 충돌 레이). */
+	public void setSightBlocked(java.util.function.BiPredicate<Vector3f, Vector3f> p) {
+		medusa.sightBlocked = p;
+	}
+
 	public void setSink(Sink s) {
 		sink = s;
 	}

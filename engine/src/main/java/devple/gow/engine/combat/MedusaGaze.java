@@ -20,7 +20,7 @@ import java.util.List;
  *       동결 30000 ({@link #nuke})</li>
  *   <li>광선이 꺼지면(버튼 뗌) 기술 분기가 PUTAWAYHEAD 로 넘어간다 (영웅 CombatFile)</li>
  * </ul>
- * 시선(LOS) 충돌 검사(0x195FB0)는 생략 [근사].
+ * 시선(LOS) 충돌 검사(0x195FB0)는 {@link Magic#setSightBlocked} 로 레벨 충돌 레이 (눈 높이 고정 [근사]).
  */
 public final class MedusaGaze {
 
@@ -44,6 +44,8 @@ public final class MedusaGaze {
 	/** 몸 정면 기준 최대 조준 각 [추정: Up/Down Angle Degree 덤프 손상, 하위 바이트 80]. */
 	static final float MAX_AIM = (float) Math.toRadians(80);
 	private int flashSerial = -1;
+	/** 시선 충돌 검사 (원작 0x195FB0 → sub_0011E190): 눈 → 대상 사이가 막혔으면 true. null 이면 생략. */
+	java.util.function.BiPredicate<Vector3f, Vector3f> sightBlocked;
 	/** 처리한 Nuke 이벤트 (기술 일련번호 &lt;&lt; 8 | idx). */
 	private final java.util.Set<Long> nukeDone = new java.util.HashSet<>();
 	/** 이번 틱에 석화된 대상 수 (테스트용 누적). */
@@ -193,7 +195,8 @@ public final class MedusaGaze {
 				continue;
 			}
 			Vector3f p = new Vector3f(h.position()).add(0, EYE_Y * 0.8f, 0);
-			if (inCone(p, apex, dir, halfAng, len, ENEMY_RADIUS * Magic.UNIT) && h.addFreeze(amount)) {
+			if (inCone(p, apex, dir, halfAng, len, ENEMY_RADIUS * Magic.UNIT)
+					&& (sightBlocked == null || !sightBlocked.test(eye, p)) && h.addFreeze(amount)) {
 				petrified++;
 				sink.petrified(h);
 			}

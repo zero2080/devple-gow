@@ -197,6 +197,11 @@ public final class GameScene implements Scene {
 		grab.onSound(n -> session.sound.play(n));
 		// 마법 (35 문서): 대상 = 살아있는 적 전체, 소리 → SoundManager, HUD 선택 마법 아이콘
 		hero.magic.setTargets(() -> enemies.stream().map(Enemy::fighter).filter(f -> !f.dead()).toList());
+		hero.magic.setSightBlocked((eye, to) -> {
+			Vector3f d = new Vector3f(to).sub(eye);
+			float len = d.length();
+			return len > 1f && col.raycast(eye, d, len - 1f) != null;
+		});
 		magicFx = new devple.gow.engine.fx.MagicFx();
 		hero.magic.setSink(new devple.gow.engine.combat.Magic.Sink() {
 			@Override
@@ -725,6 +730,11 @@ public final class GameScene implements Scene {
 		f.prevPos.set(f.pos);
 		f.setDifficulty(session.difficulty);
 		f.setFoe(hero.hittable());
+		f.brain().setSightBlocked((eye, to) -> { // 인지 시선 가림 (17 문서 §인지)
+			Vector3f d = new Vector3f(to).sub(eye);
+			float len = d.length();
+			return len > 1f && col.raycast(eye, d, len - 1f) != null;
+		});
 		f.combat().onSound((h, p) -> session.sound.play(h, p));
 		f.setIncomingScale(hero::incomingScale);
 		EnemyFactory.Kind fk = kind;

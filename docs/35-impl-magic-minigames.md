@@ -39,7 +39,7 @@ TWK `/Player/MedusaHead` 의 일부 값은 덤프가 float 로 잘못 보여준�
 - 기울기 = (Base − Top) / Distance, 반각 = atan(기울기) ≈ 10.4°.
 - 꼭짓점은 눈에서 Top/기울기 (2.73m) 뒤, 길이는 (Distance + apexBack) × 16.
 - 적 반지름 구와 원뿔의 교차로 판정한다.
-- 원작은 rWeapIH 관절 위치를 쓰고 시선 충돌 검사(0x195FB0)를 한다. 엔진은 고정 높이 50을 쓰고 시선 검사를 생략한다 [근사].
+- 원작은 rWeapIH 관절 위치를 쓰고 시선 충돌 검사(0x195FB0)를 한다. 엔진은 고정 높이 50 [근사] + 레벨 충돌 레이로 시선 검사 (`Magic.setSightBlocked`).
 
 **광선**:
 - USEHEAD 동안 마법 버튼을 누르고 있고 MP ≥ Drain·dt 이면 켜진다. MP −= Drain·dt.
@@ -250,7 +250,7 @@ GO 부착과 애니 구동이 미구현이라 같은 색·수명의 파티클로
 | `GrabTest` | 새 RepeatPress 규칙으로도 연타 성공 402 / 무입력 실패 403 |
 
 ## 9. 남은 것
-- 메두사 Nuke(Concussion 원형 Freeze 30000), 시선 충돌 검사, 석상 흔들림, `*stonedbrk` 파편 모델, 영웅 석화(적 메두사 EyeAttack).
+- 석상 흔들림, `*stonedbrk` 파편 모델, 영웅 석화(적 메두사 EyeAttack).
 - 제우스 차지 연출(boltCharge* 애니 혼합, goBoltChargeUp), 연속 입력 큐 2개, rWeapIH 관절 기준 발사 위치.
 - 원작 FXC/PTC 이펙트를 GO 단위로 붙이기, Wiggle Meter (아이콘 12/13 은 있으나 사용처 미확인).
 - 마법 선택·섬광·차지 버튼 비트(0x10/0x80)의 실제 패드 대응 확인.

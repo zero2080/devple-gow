@@ -14,6 +14,8 @@ public final class AiTemplate {
 
 	/** +0x84 플래그 비트 (해시 cb247958): 공격 토큰 사용. 0x1CEF04 에서 시작 시 "토큰 없음" 비트를 세운다. */
 	public static final int FLAG_USE_TOKEN = 0x100;
+	/** 0x84 &amp; 0x800 (ff0daf8f): 인지 시 시선 가림 검사 생략 (0x1D2564). */
+	public static final int FLAG_IGNORE_LOS = 0x800;
 
 	public final int id;
 	public final String node;
