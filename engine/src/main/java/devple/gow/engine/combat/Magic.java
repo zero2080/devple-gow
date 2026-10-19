@@ -39,6 +39,13 @@ public final class Magic {
 
 		default void petrified(Hittable h) {
 		}
+
+		/**
+		 * 화면 플래시 시작 (0x195BA8): Arrow 명중 (0x22411C) 이 템플릿 Fog Template / Bright·Dark Camera Filter / Flash Freq /
+		 * 지속 (#8ae891cf) 을 넘긴다. 45 문서 §1.4.
+		 */
+		default void screenFlash(int fogTemplate, int bright, int dark, int flashFreq, float duration) {
+		}
 	}
 
 	/** USEHEAD 기술 ID (영웅 CombatFile, 애니 없음 → 메두사 스크립트가 유지). */

@@ -367,6 +367,15 @@ public final class CameraRig {
 		return s != null && s.cam != null && (s.cam.def().p().flags() & devple.gow.tools.level.CameraDef.F_UNDERWATER) != 0;
 	}
 
+	/**
+	 * 현재 카메라의 필터 템플릿 번호 (CAM 0xB0, 활성화 0x1F3A38 이 그 템플릿 색을 카메라 상태에 복사 — 전환 보간 없음, 45 문서 §1).
+	 * 원작 카메라가 없으면 (엔진 Follow) −1.
+	 */
+	public int filter() {
+		Shot s = shots.isEmpty() ? null : shots.getLast();
+		return s == null || s.cam == null ? -1 : s.cam.def().filter();
+	}
+
 	public Pose pose() {
 		return cur;
 	}

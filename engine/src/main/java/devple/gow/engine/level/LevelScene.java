@@ -77,7 +77,11 @@ public final class LevelScene implements Scene {
 		e.renderer().begin3d(c);
 		fx.renderEffects(e, c);
 		FxEnvironment.disableFog(e.renderer().basic());
+		lensFlares.render(c, e.window().aspect());
 	}
+
+	/** SCR_LensFlare (46 문서): 캐릭터·이펙트 뒤 (깊이 버퍼 완성 후). */
+	private devple.gow.engine.fx.LensFlares lensFlares;
 
 	/** 게임 씬이 지정하는 카메라 (null 이면 뷰어 자체 카메라). */
 	private Camera external;
@@ -215,6 +219,7 @@ public final class LevelScene implements Scene {
 		devple.gow.tools.fx.EnvParams envParams = new devple.gow.tools.fx.EnvParams(assets.wad());
 		java.util.Set<String> skyNames = skyNames(envParams);
 		Map<String, int[]> mirrorOwners = Mirrors.owners(envParams);
+		lensFlares = new devple.gow.engine.fx.LensFlares(envParams, data, assets); // SCR_LensFlare (46 문서)
 		for (LevelLayout.Placement p : data.layout.placements()) {
 			String mdl = p.model();
 			GowModel gm = mdl == null ? null : assets.gowModel(mdl);
@@ -577,6 +582,7 @@ public final class LevelScene implements Scene {
 		renderPosed(e, cam, 0);
 		if (!deferEffects) {
 			fx.renderEffects(e, cam);
+			lensFlares.render(cam, e.window().aspect());
 		}
 		FxEnvironment.disableFog(e.renderer().basic());
 		if (showCollision || showVolumes) {
@@ -832,6 +838,7 @@ public final class LevelScene implements Scene {
 	@Override
 	public void exit(Engine e) {
 		fx.close();
+		lensFlares.close();
 		collisionLines.close();
 		volumeLines.close();
 		instances.forEach(i -> i.model().close());

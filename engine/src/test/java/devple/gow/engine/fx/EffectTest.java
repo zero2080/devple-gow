@@ -246,4 +246,22 @@ class EffectTest {
 		assertEquals(2, orbs.getFirst().type());
 		assertEquals(8f, b3.item("gobreakablewooddoor").hp, "Breakable5 Hit Points 8");
 	}
+
+	/** 블레이드 god 판 (0x1FA9A0): 모든 무기 WAD 에 goMAIgodblade GO (반복 act = ANM_maigodblade 재질 애니) 가 있다 (45 문서 §2). */
+	@Test
+	void godBladeGoInEveryWeaponWad() throws Exception {
+		for (int c = 0; c <= 5; c++) {
+			for (int n = 0; n <= 5; n++) {
+				EffectSystem fx = EffectSystem.headless();
+				fx.add(wad("R_WPN" + c + "_" + n));
+				EffectSystem.Effect g = fx.play(MagicFx.GOD_BLADE, EffectSystem.Anchor.at(new Vector3f(), 0), Float.MAX_VALUE);
+				assertNotNull(g, "R_WPN" + c + "_" + n);
+				assertNotNull(fx.play("goMAIblade", EffectSystem.Anchor.at(new Vector3f(), 0), Float.MAX_VALUE), "보통 판도 같은 WAD");
+				for (int i = 0; i < 120; i++) {
+					fx.update(1 / 60f, new Vector3f());
+				}
+				assertFalse(g.done(), "무한 수명 (해제 0x1FA9D8 까지)");
+			}
+		}
+	}
 }
