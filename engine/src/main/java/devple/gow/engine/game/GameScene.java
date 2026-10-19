@@ -235,6 +235,15 @@ public final class GameScene implements Scene {
 		magicFx.setGodBlades(session.rom.resolve("R_WPN" + hero.player.costume + "_" + Math.max(0, Math.min(5, hero.bladeLevel())) + ".WAD"),
 				() -> !hero.player.artemisEquipped); // 블레이드 god 판 (0x1FA9A0, 45 문서 §2)
 		hero.hideBlades = magicFx::godBladesOn;
+		magicFx.bindBlades(new devple.gow.engine.fx.MagicFx.Blades() { // 사슬이 정한 블레이드 행렬·궤적 (45 문서 §3)
+			public boolean world(int side, Matrix4f out) {
+				return hero.bladeWorld(side, out);
+			}
+
+			public boolean trail(int side) {
+				return hero.trail(side);
+			}
+		});
 		wireEffects();
 		hudBinding.castable = hero.magic::has;
 		boolean seamless = arrival != null && (arrival.kind() == LevelLink.Kind.SEAMLESS || arrival.kind() == LevelLink.Kind.WALK);
@@ -1209,6 +1218,7 @@ public final class GameScene implements Scene {
 		cameraRig.update(dt, p, hero.ctl.yaw, !hero.ctl.grounded);
 		session.sound.setUnderwater(cameraRig.underwater()); // 수중 카메라 → 소리 수중 처리 (29 문서 §10)
 		world.tick(dt, p.x, p.y, p.z);
+		hero.tickBlades(dt); // 블레이드 사슬 (0x1FDB18): 이번 틱 자세가 정해진 뒤, 블레이드 GO 앵커보다 먼저
 		magicFx.update(hero.magic, p, hero.ctl.yaw, enemies.stream().map(Enemy::fighter).toList(), dt, cam.eye);
 		magicFx.weaponWorld(hero.combat, (n, at) -> session.sound.play(n, at)); // 무기-월드 베기 Slice Hit (40 문서 §6)
 		if (hero.player.hp <= 0) {
@@ -1485,6 +1495,7 @@ public final class GameScene implements Scene {
 		}
 		hero.draw(cam, e.window().aspect(), alpha, e.renderer().white());
 		devple.gow.engine.fx.FxEnvironment.disableFog(hero.shader());
+		hero.drawChains(cam, e.window().aspect(), alpha, magicFx.godBladesOn()); // 사슬·궤적 (45 문서 §3)
 		devple.gow.engine.fx.FxEnvironment.disableFog(enemyShader);
 		if (System.getProperty("gow.nofx") == null) {
 			level.renderEffects(e, cam); // 비·파티클·물은 캐릭터 뒤에 (--no-fx 로 끔: 스크린샷용)

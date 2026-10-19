@@ -49,6 +49,11 @@ public final class HeroRig implements AutoCloseable {
 	private final devple.gow.engine.asset.BladeModels blades;
 	/** 참이면 보통 블레이드를 그리지 않는다 (신들의 분노 god 판 GO 가 대신, MagicFx.godBladesOn, 45 문서 §2). */
 	public java.util.function.BooleanSupplier hideBlades = () -> false;
+	/** 블레이드 사슬 (블레이드 행렬 따라가기 + 사슬 베지어, 45 문서 §3). */
+	public final BladeChain chain;
+	private devple.gow.engine.render.BladeChainRenderer chainRenderer;
+	/** 블레이드 행렬을 계산한 틱의 영웅 행렬 (렌더 보간 보정). */
+	private final Matrix4f bladeTickWorld = new Matrix4f();
 	private devple.gow.engine.asset.ArtemisBladeModel artemis;
 	private int artemisStageLoaded = -1;
 	private final Path rom;
@@ -90,6 +95,7 @@ public final class HeroRig implements AutoCloseable {
 		Path wpn = rom.resolve("R_WPN" + costume + "_" + Math.max(0, Math.min(5, bladeLevel())) + ".WAD");
 		combat.setHitVolumes(HitVolumes.forHero(assets.wad(), sk, java.nio.file.Files.exists(wpn) ? WadFile.load(wpn) : null));
 		blades = devple.gow.engine.asset.BladeModels.load(rom, costume, bladeLevel(), shader);
+		chain = BladeChain.fromTweaks(tweaks);
 		this.rom = rom;
 		hittable = new Hittable() {
 			public Vector3f position() {
@@ -329,6 +335,55 @@ public final class HeroRig implements AutoCloseable {
 		return tint.clone();
 	}
 
+	/**
+	 * 블레이드 사슬 한 틱 (원작 0x1FDB18 → 0x1FB460, 매 프레임). 전투·잡기·내비게이션 어느 상태든 애니 자세가 정해진 뒤 부른다.
+	 */
+	public void tickBlades(float dt) {
+		var m = combat.move();
+		chain.update(this::jointWorld, combat.active(), m != null && (m.flags() & 0x80) != 0, dt);
+		ctl.world(bladeTickWorld, 1f);
+	}
+
+	/** 블레이드 GO 행렬 (사슬이 정한 행렬 × 배율). 아직 계산 전이면 false. */
+	public boolean bladeWorld(int side, Matrix4f out) {
+		BladeChain.Side s = chain.sides[side];
+		if (!s.valid()) {
+			return false;
+		}
+		s.world(out);
+		return true;
+	}
+
+	/** 궤적 켜짐 (기술 이벤트 17/18). */
+	public boolean trail(int side) {
+		return combat.trail(side);
+	}
+
+	/** 렌더 보간 보정: 이번 프레임 영웅 행렬 × 블레이드 틱 영웅 행렬⁻¹. */
+	private Matrix4f renderFix(float alpha) {
+		return ctl.world(new Matrix4f(), alpha).mul(new Matrix4f(bladeTickWorld).invert());
+	}
+
+	/**
+	 * 사슬 고리·사슬 빛·궤적 (45 문서 §3). 반투명이라 불투명 패스 뒤에 부른다. 아르테미스의 검이면 없음.
+	 *
+	 * @param god 신들의 분노 god 판 머티리얼·Trail Tint
+	 */
+	public void drawChains(Camera cam, float aspect, float alpha, boolean god) {
+		if (blades == null || player.artemisEquipped || System.getProperty("gow.nochain") != null) {
+			return;
+		}
+		if (chainRenderer == null) {
+			chainRenderer = new devple.gow.engine.render.BladeChainRenderer(blades.assets());
+		}
+		String n = "/Player/Weapon Level " + bladeLevel() + "/";
+		String p = god ? "God Mode Trail Tint " : "Trail Tint ";
+		float[] tint = {tweaks.f(n, p + "R", 1), tweaks.f(n, p + "G", 1), tweaks.f(n, p + "B", 1), tweaks.f(n, p + "A", god ? 1 : 0.8f)};
+		String c = "/Player/Costume " + player.costume + "/";
+		float wl = tweaks.f(c, god ? "God Mode Weapon Length" : "Weapon Length", 0.7f) * 16f;
+		chainRenderer.draw(cam, aspect, renderFix(alpha), chain, god, tint, new boolean[]{trail(0), trail(1)}, wl);
+	}
+
 	/** 관절 월드 행렬 (영웅 월드 × 관절, 이펙트 부착용). 없는 관절이면 영웅 원점 + false. */
 	public boolean jointWorld(String joint, Matrix4f out) {
 		ctl.world(out, 1f);
@@ -363,7 +418,16 @@ public final class HeroRig implements AutoCloseable {
 				artemis.draw(cam, aspect, w, sk, pose.world(sk), white);
 			}
 		} else if (blades != null && !hideBlades.getAsBoolean()) {
-			blades.draw(cam, aspect, w, sk, pose.world(sk), white);
+			if (chain.sides[0].valid() && chain.sides[1].valid()) {
+				// 블레이드 행렬 = 사슬이 따라간 행렬 (원작 0x1FBB50 → 블레이드 GO), 렌더 보간만 보정
+				Matrix4f fix = renderFix(alpha);
+				Matrix4f bw = new Matrix4f();
+				for (BladeChain.Side s : chain.sides) {
+					blades.drawAt(cam, aspect, new Matrix4f(fix).mul(s.world(bw)), white);
+				}
+			} else {
+				blades.draw(cam, aspect, w, sk, pose.world(sk), white);
+			}
 		}
 	}
 
@@ -372,6 +436,9 @@ public final class HeroRig implements AutoCloseable {
 		model.close();
 		if (blades != null) {
 			blades.close();
+		}
+		if (chainRenderer != null) {
+			chainRenderer.close();
 		}
 		if (artemis != null) {
 			artemis.close();

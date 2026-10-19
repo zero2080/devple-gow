@@ -104,6 +104,10 @@ public final class EffectSystem implements AutoCloseable {
 		public float rateScale = 1;
 		/** 평면 무늬 (VU 종류 9) 바닥 법선 (월드). 피 자국은 바닥 충돌 법선 (원작 0x1F8990). */
 		public final Vector3f planeNormal = new Vector3f(0, 1, 0);
+		/**
+		 * 참이면 그 이미터 생성률 0 (원작 부착물 종류별 켜기/끄기 0x201C78 / 0x201DD8 — 블레이드 "flame*" 파티클은 궤적 중에만, 45 문서 §3).
+		 */
+		public java.util.function.Predicate<EffectLibrary.EmitterDef> emitterOff;
 		/** 시간 정지 (act 0 초 포즈 유지 — BMI 갑옷 조각이 깨지기 전, 원작 0x1C1B10 이 애니를 0 초에 둔다). */
 		public boolean hold;
 		private final List<ParticleSystem.Emitter> emitters = new ArrayList<>();
@@ -240,6 +244,9 @@ public final class EffectSystem implements AutoCloseable {
 				float at = act == def.anim() ? time : actTime;
 				float ct = act != null && act.looping() && act.duration > 0 ? at % act.duration : at;
 				e.rate = (rateOverride >= 0 ? rateOverride : def.rate(act, ed, at)) * lodScale * rateScale;
+				if (emitterOff != null && emitterOff.test(ed)) {
+					e.rate = 0;
+				}
 				e.speed = def.param(act, ed, 4, ct, fx.speed()) * 16 * Math.min(s, 4f) * speedScale;
 				e.speedRnd = def.param(act, ed, 5, ct, fx.speedRnd()) * 16 * Math.min(s, 4f) * speedScale;
 				if (fx.subtype() == 1 || fx.subtype() == 8) {

@@ -345,6 +345,25 @@ public final class Combatant {
 		return move != null && eventActive(9);
 	}
 
+	/**
+	 * 블레이드 궤적 (이벤트 17 TRAIL_LEFT / 18 TRAIL_RIGHT → combatant +0x1AC 0x8 / 0x10, 0x205B4C 가 블레이드 0 / 1 의 부착물
+	 * 종류 0·3·4 (궤적·불꽃 이미터·BladeLight) 를 켜고 끔, 45 문서 §3). 무기 레벨 조건은 다른 이벤트와 같이 적용.
+	 * [근사: CombatFileSet "Trail Left/Right" 세트 플래그는 엔진이 쓰지 않음]
+	 */
+	public boolean trail(int side) {
+		if (move == null) {
+			return false;
+		}
+		float t = progress();
+		int type = side == 0 ? 17 : 18;
+		for (Event e : move.events()) {
+			if (e.type() == type && t >= e.start() && t <= e.end() && e.level() <= owner.bladeLevel()) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	public boolean guarding() {
 		return move != null && move.guard() == 1;
 	}
