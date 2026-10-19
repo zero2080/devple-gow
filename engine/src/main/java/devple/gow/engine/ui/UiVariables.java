@@ -40,6 +40,16 @@ public final class UiVariables {
 		return FlpVm.toNumber(values.get(name));
 	}
 
+	/** 없거나 숫자가 아니면 def. */
+	public double number(String name, double def) {
+		String s = values.get(name);
+		if (s == null || s.isEmpty()) {
+			return def;
+		}
+		double d = FlpVm.toNumber(s);
+		return Double.isNaN(d) ? def : d;
+	}
+
 	/** 엔진 쪽 세팅. */
 	public UiVariables set(String name, String value) {
 		values.put(name, value);

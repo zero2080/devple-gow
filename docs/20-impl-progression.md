@@ -29,3 +29,19 @@
 ## 4. 미정 사항
 - 아르테미스의 검 아이템 ID 미확정 → 임시로 7 (11 문서 §9)
 - 업그레이드에 따른 무기/마법 WAD 교체(`R_WPN<c>_<lv>`, `R_LGHTN<lv>` …)는 레벨 로딩 구현 시 연결
+
+## 5. 게임 안 파워업 메뉴 (원작 FLP_HUDK 스크립트 그대로)
+| 단계 | 처리 |
+|------|------|
+| SELECT | `HudBinding.write` (Progress_ToHud) → `PS2_PSMMenu_Event = 1`, 게임 정지, 이후 HUD 값 쓰기 중단 (메뉴가 투자 처리) |
+| 투자 | 메뉴 스크립트: ○ 누르고 있으면 프레임당 1개 → 잠시 후 10개(QuickDrain) 씩 `PS2_PowerOrb_Count` → `PS2_<무기>Orb_Count`, 비용 도달 시 `PS2_<무기>_Level`++ 와 레벨업 화면 |
+| 레벨업 화면 | 실제 2초(GetTime) 대기 후 `PowerUp_LevelUp_Check = 99` → ○ 로 닫기 |
+| 메뉴 닫기 | △ **뗌**(입력 cond 9) → `Animate_Off` → `PS2_PSMDone = 1` |
+| 반영 | `GameScene.onPowerUpClosed`: 오브·투자·레벨을 HUD 변수에서 PlayerState 로 (원작 0x1D7700 / Upgrade_LoadWad 0x1D7890) |
+
+엔진이 넣어 줘야 하는 변수 (없으면 메뉴 버튼이 무반응 — 테스트로 발견):
+- `PS2_EnableButtons = 1` : 메뉴 ○/△ 핸들러의 첫 조건
+- `PS2_PowerUp_FirstTime = 0` : 첫 사용 안내가 끝났음 (원작 PlayerProgress 힌트 비트)
+
+FLP `GetTime` 을 벽시계에서 **UI 틱 × 1000/60** 으로 변경 (결정적, 일시정지와 일관 — 헤드리스 테스트에서 2초 대기가 통과하지 않던 문제 해결).
+`PowerUpMenuTest`: 붉은 오브 2000 → 블레이드 레벨 1, 남은 500, `PS2_PSMDone = 1`.

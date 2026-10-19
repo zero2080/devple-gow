@@ -38,6 +38,14 @@ public final class HudBinding {
 		v.set("PS2_PowerOrb_Count", ps.redOrbs);
 		v.set("PS2_PowerOrb_Capacity", POWER_ORB_CAPACITY);
 		v.set("PS2_HealthShard_Count", ps.gorgonEyes);
+		// 엔진이 메뉴 입력을 허용하는지 (메뉴 ○/△ 핸들러의 첫 조건). 원작 엔진이 1 로 둔다
+		if (!v.has("PS2_EnableButtons") || v.get("PS2_EnableButtons").isEmpty()) {
+			v.set("PS2_EnableButtons", 1);
+		}
+		// 첫 파워업 안내 여부 (원작 PlayerProgress 첫 사용 힌트 비트). 0 이어야 메뉴 닫기(Animate_Off) 조건이 통과
+		if (!v.has("PS2_PowerUp_FirstTime") || v.get("PS2_PowerUp_FirstTime").isEmpty()) {
+			v.set("PS2_PowerUp_FirstTime", 0);
+		}
 		v.set("PS2_MagicShard_Count", ps.phoenixFeathers);
 		for (Weapon w : Weapon.values()) {
 			v.set("PS2_" + w.key + "_Level", ps.level.get(w));

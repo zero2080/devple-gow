@@ -37,7 +37,8 @@ public final class FlpPlayer {
 	private final Deque<Object[]> actions = new ArrayDeque<>();
 	private final Map<FlpFile.Timeline, Map<Integer, List<byte[]>>> frameScripts = new IdentityHashMap<>();
 	private final List<CommandListener> commandListeners = new ArrayList<>();
-	private final long startNanos = System.nanoTime();
+	/** UI 틱 수 (엔진 고정 60Hz 와 1:1). GetTime 은 이 값 기준 — 결정적이고 일시정지에도 일관. */
+	private long tickCount;
 	private int pressed, released, held;
 	/** 디버그: 실행 추적. */
 	public boolean trace;
@@ -83,6 +84,7 @@ public final class FlpPlayer {
 
 	/** 한 프레임: 입력 이벤트 → SimKeyEvent → 타임라인 진행 → 프레임 스크립트. */
 	public void tick() {
+		tickCount++;
 		List<FlpNode> sprites = new ArrayList<>();
 		collect(root, sprites, true);
 		for (FlpNode s : sprites) {
@@ -349,7 +351,7 @@ public final class FlpPlayer {
 	}
 
 	double timeMillis() {
-		return (System.nanoTime() - startNanos) / 1e6;
+		return tickCount * 1000.0 / 60.0;
 	}
 
 	/** 슬래시 경로 해석: "/a/b", "_level0/a", "a/b"(base 기준), "..", "" = base. */

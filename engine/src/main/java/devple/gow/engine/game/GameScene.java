@@ -72,6 +72,8 @@ public final class GameScene implements Scene {
 	private float spawnYaw;
 	private float camYaw;
 	private boolean paused;
+	/** 파워업(업그레이드) 메뉴 열림: 메뉴 스크립트가 투자를 처리하므로 HUD 값 쓰기를 멈춘다. */
+	private boolean powerUp;
 	private float time;
 	private float messageTimer;
 	private String pendingLevel;
@@ -103,7 +105,9 @@ public final class GameScene implements Scene {
 			UiVariables vars = new UiVariables();
 			hud = new UiLayer(new WadAssets(session.rom.resolve("R_PERMK.WAD")), true, "FLP_HUDK", session.messages, vars);
 			vars.addListener((name, value) -> {
-				if (paused && (name.endsWith("Done") || name.endsWith("Menu_Choice"))) {
+				if (powerUp && name.equals("PS2_PSMDone") && "1".equals(String.valueOf(value).replace(".0", ""))) {
+					onPowerUpClosed();
+				} else if (paused && !powerUp && (name.equals("PS2_PauseDone") || name.endsWith("Menu_Choice"))) {
 					onMenuClosed(name, value);
 				}
 			});
@@ -289,6 +293,26 @@ public final class GameScene implements Scene {
 		respawn(checkpoint);
 	}
 
+	/**
+	 * 원작 상태 13 PowerUpMenu 종료 (PSMDone): 메뉴가 바꾼 HUD 값을 진행도로 되돌려 쓴다 (0x1D7700 투자 오브 복사,
+	 * Upgrade_LoadWad 0x1D7890 레벨 복사). 무기 레벨이 바뀌면 원작은 R_WPN / 마법 WAD 를 교체한다 (여기서는 수치만).
+	 */
+	private void onPowerUpClosed() {
+		UiVariables v = hud.variables();
+		PlayerState ps = hero.player;
+		ps.redOrbs = (int) v.number("PS2_PowerOrb_Count", ps.redOrbs);
+		for (Weapon w : Weapon.values()) {
+			int lv = (int) v.number("PS2_" + w.key + "_Level", ps.level.get(w));
+			if (lv != ps.level.get(w)) {
+				System.out.printf("업그레이드: %s 레벨 %d → %d%n", w, ps.level.get(w), lv);
+			}
+			ps.level.put(w, lv);
+			ps.invested.put(w, (int) v.number("PS2_" + w.key + "Orb_Count", ps.invested.get(w)));
+		}
+		powerUp = false;
+		paused = false;
+	}
+
 	private void onMenuClosed(String name, Object value) {
 		paused = false;
 		hud.acceptInput = true;
@@ -301,7 +325,9 @@ public final class GameScene implements Scene {
 	public void update(Engine e, float dt) {
 		pendingEngine = e;
 		time += dt;
-		hudBinding.update(hero.player, hud.variables());
+		if (!powerUp) {
+			hudBinding.update(hero.player, hud.variables());
+		}
 		hud.update(e);
 		if (messageTimer > 0 && (messageTimer -= dt) <= 0) {
 			hud.variables().event("PS2_MessageTemplate_Event", 0);
@@ -312,6 +338,12 @@ public final class GameScene implements Scene {
 		if (e.input().pressed(PadButton.START)) {
 			paused = true;
 			hud.variables().event("PS2_PauseMenu_Event", 1);
+			return;
+		}
+		if (e.input().pressed(PadButton.SELECT)) {
+			paused = powerUp = true;
+			HudBinding.write(hero.player, hud.variables()); // Progress_ToHud
+			hud.variables().event("PS2_PSMMenu_Event", 1);
 			return;
 		}
 		Input in = e.input();
