@@ -328,6 +328,29 @@ public final class SceneNav {
 		return navWorld.platforms().bodies();
 	}
 
+	/** 붙잡는 오브젝트 (레버·크랭크·밀기 상자) — 영웅이 손잡이에 닿아야 하므로 벽 판정에서 뺀다. */
+	private java.util.Set<String> grabbed;
+
+	/** 움직이는 오브젝트 CDV (문·창살·회전방) 로 영웅 구 밀어내기. */
+	public boolean collideBodies(Vector3f c, float r) {
+		if (grabbed == null) {
+			grabbed = new java.util.HashSet<>();
+			for (Interactables.Item it : items.items()) {
+				if (it.kind == Interactables.Kind.LEVER || it.kind == Interactables.Kind.PUSH) {
+					grabbed.add(it.owner);
+				}
+			}
+		}
+		return navWorld.platforms().collideSphere(c, r, grabbed);
+	}
+
+	/** 스크립트 Vis Attr11_0 → 충돌 켜고 끄기. */
+	public void setSolid(List<String> owners, boolean on) {
+		for (String o : owners) {
+			navWorld.platforms().setSolid(o, on);
+		}
+	}
+
 	/** 리스폰·Goto 뒤 내비게이터 상태 초기화. */
 	public void reset() {
 		navigator.reset();

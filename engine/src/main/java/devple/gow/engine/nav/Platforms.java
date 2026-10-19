@@ -42,6 +42,8 @@ public final class Platforms {
 		boolean loop, pingPong;
 		float[][] joints;
 		float[][] prev;
+		/** 충돌 켜짐 — 스크립트 Vis Attr11_0 (1 켬 / 2 끔: "collisionOFF", "DoorCollOff") [추정: 슬롯 이름은 미확정, 데이터 용례로]. */
+		public boolean solid = true;
 
 		Body(String owner, Skeleton sk, float[] inst, AnimationSet anims, BallHull hull) {
 			this.owner = owner;
@@ -313,6 +315,74 @@ public final class Platforms {
 			} else {
 				b.prev = b.joints;
 			}
+		}
+	}
+
+	/**
+	 * 구 밀어내기 (CDV 볼록 hull = 문·창살·회전방 벽): hull 관절 로컬로 옮겨 각 평면 n·x + d 의 부호 거리 중 최댓값이 반지름보다 작으면
+	 * 그 평면 법선 방향으로 밀어낸다 (가장 얕게 파고든 면) [근사: 모서리·꼭짓점 영역은 면으로 처리]. skip = 붙잡는 오브젝트 (레버·크랭크·상자).
+	 *
+	 * @return 밀렸으면 true
+	 */
+	public boolean collideSphere(org.joml.Vector3f c, float r, Collection<String> skip) {
+		boolean moved = false;
+		for (int iter = 0; iter < 3; iter++) {
+			boolean any = false;
+			for (Body b : bodies) {
+				if (b.solid && b.hull != null && !skip.contains(b.owner)) {
+					any |= pushOut(b, c, r);
+				}
+			}
+			moved |= any;
+			if (!any) {
+				break;
+			}
+		}
+		return moved;
+	}
+
+	private static boolean pushOut(Body b, org.joml.Vector3f c, float r) {
+		boolean moved = false;
+		for (int h = 0; h < b.hull.hulls.size(); h++) {
+			BallHull.Hull hh = b.hull.hulls.get(h);
+			if (hh.planes().size() < 4) {
+				continue;
+			}
+			float[] m = b.joints[Math.min(b.hull.hullJoint[h], b.joints.length - 1)];
+			float[] inv = Mat4.invertAffine(m);
+			float[] lp = new float[3];
+			Mat4.transformPoint(inv, c.x, c.y, c.z, lp);
+			float scale = (float) Math.sqrt(m[0] * m[0] + m[1] * m[1] + m[2] * m[2]);
+			float lr = r / Math.max(1e-3f, scale);
+			float best = -Float.MAX_VALUE;
+			float[] bn = null;
+			for (float[] pl : hh.planes()) {
+				float len = (float) Math.sqrt(pl[0] * pl[0] + pl[1] * pl[1] + pl[2] * pl[2]);
+				if (len < 1e-6f) {
+					continue;
+				}
+				float sd = (pl[0] * lp[0] + pl[1] * lp[1] + pl[2] * lp[2] + pl[3]) / len;
+				if (sd > best) {
+					best = sd;
+					bn = new float[]{pl[0] / len, pl[1] / len, pl[2] / len};
+				}
+			}
+			if (bn != null && best < lr - 1e-3f) {
+				float push = lr - best;
+				float[] w = new float[3];
+				Mat4.transformPoint(m, lp[0] + bn[0] * push, lp[1] + bn[1] * push, lp[2] + bn[2] * push, w);
+				c.set(w[0], w[1], w[2]);
+				moved = true;
+			}
+		}
+		return moved;
+	}
+
+	/** 소유 GO 의 충돌 켜고 끄기 (스크립트 Vis Attr11_0). */
+	public void setSolid(String owner, boolean on) {
+		Body b = body(owner);
+		if (b != null) {
+			b.solid = on;
 		}
 	}
 

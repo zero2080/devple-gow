@@ -147,7 +147,7 @@ PAND05B `pBoxPand05B-Marker511` → `semoMovieHaveBox-…-semo08marker511` (Filt
 - **오브젝트 애니 타입 11 (unk10 = 4) = 관절 이동** (이동 타입 5 가 없는 세트만) [추정, 수치 일치]: ATHN05D `WarpElevator5D` 스트림 5/9 (관절 1/2 의 Y) 절대값 138.47 = 바인드 로컬 Y, 가산으로 −52.2 까지 → 발판 윗면 871 → **677 = Warp 도착점 WarpFrom4A 높이**. (`Animation.objectTracks`)
 - 윗면 = hull 평면들로 수직선 구간을 잘라 위 끝. 서 있으면 지지 관절의 틱 간 이동을 영웅에 적용 (carry). Animator `AnimName "!n"` = n 번째 act [추정].
 - 도착점 아래 정적 바닥이 없으면 발판 애니 중 윗면이 도착점 ±24 에 오는 시각으로 자세를 맞춘다 [근사] → ATHN05D 도착 해결.
-- ~~한계: 발판 모델의 렌더링 자세는 아직 바인드~~ → 애니 자세로 그림 (42 §3·§5). CDV 벽(문·창살)은 영웅을 막지 않는다.
+- ~~한계: 발판 모델의 렌더링 자세는 아직 바인드~~ → 애니 자세로 그림 (42 §3·§5). ~~CDV 벽(문·창살)은 영웅을 막지 않는다~~ → 막는다 (42 §5).
 
 ## 5. 이웃 레벨 스크립트 (`SceneNav`)
 - GameScene 이 다른 슬롯 레벨(LoadWad/이음 전환으로 남은 레벨)의 `ScriptWorld` 를 같이 틱한다. 호스트 = `ScriptHost.neighbour(main)`: GlobalData·초기화 기록 공유, LevelData 따로.

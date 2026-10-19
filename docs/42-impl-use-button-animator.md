@@ -91,6 +91,10 @@
 **오브젝트 자세 = 진행 시간**: R1 오브젝트(레버·크랭크·CSM 문·TAndF)의 관절 자세를 과제 진행 시간으로 정한다 (`Platforms.of(…, posed)` — 충돌 볼륨 없는 오브젝트도, `Platforms.poseAt`, `SceneNav.poseItems`). Marker 가 관절을 따라가고, 렌더도 애니 자세다 (CSM 문이 열리는 모습 등).
 - PAND00C: Marker 101 (`goring1crank` 관절 1) → `R1SouthVol` → LevelData 3, Marker 104 (`goring4`), Marker 103 (`goring3group4`).
 
+**움직이는 오브젝트 충돌**: 자세를 갖는 오브젝트(Animator 발판·회전방, R1 문)의 CDV 볼록 hull 이 영웅을 막는다 (`Platforms.collideSphere`) — hull 관절 로컬에서 평면 n·x + d 의 부호 거리 최댓값이 반지름보다 작으면 그 평면 법선으로 밀어낸다 [근사: 모서리 영역도 면으로], 최대 3 회. 전에는 문·창살을 그냥 통과했다.
+- 스크립트 Vis 슬롯 3 `Attr11_0` (1 켬 / 2 끔) = 충돌 [추정: "collisionOFF"·"DoorCollOff"·"XFCcaptainCSM-main-collisionOFF" 등 데이터 용례]. `GameScene.vis` → `SceneNav.setSolid`.
+- 붙잡는 오브젝트(레버·크랭크·밀기 상자)는 영웅이 손잡이에 닿아야 하므로 뺀다. 적은 아직 막지 않는다.
+
 **고리 퍼즐 흐름** [확실: 데이터]:
 1. 고리 3 개를 남쪽 자리에 둔다 → LevelData 3/4/7, 레버 112·113 = 100 → LevelData 8/9.
 2. PAND01BB 석상 크랭크에 손잡이 (질문 1005 예) → GlobalData:4.
@@ -112,6 +116,7 @@
 | `nav/TaskProgressTest.ringCrankSnapsToQuarterDetents` | 링 크랭크 가속·멈춤 자리 복귀·자리 밖 정지·감기·단방향 |
 | `nav/TaskProgressTest.craneCrankIsTwoWayAndBounded` | 기중기형: 끝에서 멈춤·완료 없음·역방향·놓으면 Dec 정지 |
 | `verify/TraversalTest.hiddenObjectsAllRevealed` | 숨김 상태 상호작용 0, PAND00C 링 크랭크 풀이 |
+| `nav/BodyCollisionTest` | ATHN01D 쌍발차기 문 hull 안 → 밀려남, 충돌 끔이면 통과 |
 | `nav/AnimatorModeTest` | 회전방 정방향 → Marker 202 → LevelData:1 참 / 역방향(끝에서 시작) → 거짓 / 0x10 정지·0x11 이어서·0x8 시간 유지 / `$` 무시 |
 
 ## 7. 남은 것

@@ -553,6 +553,9 @@ public final class GameScene implements Scene {
 						}
 					}
 				}
+				if (values.length > 3 && values[3] != 0 && nav != null) {
+					nav.setSolid(objects, values[3] == 1); // Attr11_0: 충돌 on/off ("collisionOFF", "DoorCollOff") [추정: 데이터 용례]
+				}
 				if (values.length > 4 && values[4] != 0) {
 					objects.forEach(o -> cameraRig.setOwnerVolumes(o, values[4] == 1)); // Attr11_1: CMV 볼륨 on/off
 				}
@@ -1368,6 +1371,9 @@ public final class GameScene implements Scene {
 		boolean pushed = col.collideSphere(c, 12);
 		if (otherCol != null) {
 			pushed |= otherCol.collideSphere(c, 12);
+		}
+		if (nav != null) {
+			pushed |= nav.collideBodies(c, 12); // 문·창살·회전방 CDV (42 문서 §5)
 		}
 		if (pushed) {
 			p.x = c.x;
