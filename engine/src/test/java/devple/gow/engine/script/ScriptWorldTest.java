@@ -263,4 +263,90 @@ class ScriptWorldTest {
 		assertTrue(n > 10000);
 		assertTrue(bad.isEmpty(), bad.size() + " " + bad.stream().limit(20).toList());
 	}
+
+	/** 볼륨 안에서 영역 번호 집합이 정확히 {region} 인 점 (월드). */
+	private static float[] inRegion(LevelData.PlacedVolume v, int region) {
+		float[] s = v.hull().sphere;
+		float[] w = new float[3];
+		for (int i = 0; i <= 30; i++) {
+			for (int j = 0; j <= 30; j++) {
+				for (int k = 0; k <= 30; k++) {
+					Mat4.transformPoint(v.world(), s[0] + s[3] * (i / 15f - 1), s[1] + s[3] * (j / 15f - 1), s[2] + s[3] * (k / 15f - 1), w);
+					if (v.regions(w[0], w[1], w[2]).equals(java.util.Set.of(region))) {
+						return w.clone();
+					}
+				}
+			}
+		}
+		fail(v.hull().name + " 영역 " + region + " 점 없음");
+		return w;
+	}
+
+	/** 한 ENV 볼륨의 영역별 센서 (36 문서 §2): PAND00B Warpto00A 의 LoadVol(영역 0) 과 WarpVol(영역 1) 은 따로 발동한다. */
+	@Test
+	void volumeRegionsTriggerSeparately() throws Exception {
+		LevelData lv = level("PAND00B.WAD");
+		Rec r = new Rec();
+		ScriptWorld w = new ScriptWorld(lv, new ScriptHost(), r);
+		w.start();
+		w.tick(1 / 60f, FAR[0], FAR[1], FAR[2]);
+		LevelData.PlacedVolume v = volume(lv, "ENV_Warpto00A");
+		float[] p0 = inRegion(v, 0), p1 = inRegion(v, 1);
+		w.tick(1 / 60f, p0[0], p0[1], p0[2]);
+		w.tick(1 / 60f, p0[0], p0[1], p0[2]);
+		assertTrue(r.log.contains("level LOAD_FOR_WARP PAND00A"), r.log.toString());
+		assertFalse(r.log.contains("level WARP null"), "LoadVol 만 밟았는데 Warp: " + r.log);
+		w.tick(1 / 60f, p1[0], p1[1], p1[2]);
+		w.tick(1 / 60f, p1[0], p1[1], p1[2]);
+		assertTrue(r.log.contains("level WARP null"), r.log.toString());
+	}
+
+	/** Warp 도착 = 모드 2 Start 중 슬롯 0 이 떠나온 레벨인 것 (원작 0x1AE710), 기본 = 첫 모드 1 Start. */
+	@Test
+	void warpTargetAndDefaultStart() throws Exception {
+		ScriptWorld b = new ScriptWorld(level("ATHN06B.WAD"), new ScriptHost(), null);
+		assertEquals("WarpFrom6A", b.warpTarget("athn06a").name());
+		assertEquals("WarpFrom6C", b.warpTarget("ATHN06C").name());
+		assertEquals("Start", b.warpTarget("PAND00A").name());
+		ScriptWorld e = new ScriptWorld(level("ATHN01E.WAD"), new ScriptHost(), null);
+		assertEquals("InMouth", e.startEntity().name(), "첫 Start 는 Goto 지점");
+		assertEquals("Start", e.defaultStart().name());
+	}
+
+	/** 이음 전환 도착: 서 있는 볼륨은 이미 안으로 본다 (되돌아가는 LoadCheck 가 바로 발동하지 않음). */
+	@Test
+	void seamlessPlacementSuppressesEntry() throws Exception {
+		LevelData lv = level("ATHN01A.WAD");
+		float[] p = inside(volume(lv, "ENV_LoadCheckB"));
+		Rec r = new Rec();
+		ScriptWorld w = new ScriptWorld(lv, new ScriptHost(), r);
+		w.start();
+		w.placePlayer(p[0], p[1], p[2], true);
+		w.tick(1 / 60f, p[0], p[1], p[2]);
+		assertFalse(r.log.contains("level LOAD_CHECK ATHN01B"), r.log.toString());
+		w.tick(1 / 60f, FAR[0], FAR[1], FAR[2]);
+		w.tick(1 / 60f, p[0], p[1], p[2]);
+		assertTrue(r.log.contains("level LOAD_CHECK ATHN01B"), r.log.toString());
+	}
+
+	/** 동영상 끝 이벤트 501(인자 0 = 이름): ATHN01D 쌍발차기 문 → Semo02 끝 → Warp (ATHN01F 로). */
+	@Test
+	void movieDoneEventDrivesWarp() throws Exception {
+		LevelData lv = level("ATHN01D.WAD");
+		Rec r = new Rec();
+		ScriptWorld w = new ScriptWorld(lv, new ScriptHost(), r);
+		w.start();
+		w.tick(1 / 60f, FAR[0], FAR[1], FAR[2]);
+		float[] p = inside(volume(lv, "ENV_toAthn01F"));
+		w.tick(1 / 60f, p[0], p[1], p[2]);
+		assertTrue(r.log.contains("level LOAD_FOR_WARP ATHN01F"), r.log.toString());
+		w.postEvent(ScriptWorld.EVENT_MOVIE_DONE, "Other", 0, 0, null);
+		w.tick(1 / 60f, p[0], p[1], p[2]);
+		assertFalse(r.log.contains("level WARP null"), "다른 동영상 이름이면 무시");
+		w.postEvent(ScriptWorld.EVENT_MOVIE_DONE, "Semo02", 0, 0, null);
+		for (int i = 0; i < 30; i++) {
+			w.tick(1 / 60f, p[0], p[1], p[2]);
+		}
+		assertTrue(r.log.contains("level WARP null"), r.log.toString());
+	}
 }

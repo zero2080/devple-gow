@@ -38,6 +38,7 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 | 33 | [구현: 컷신 재생 (MoviePlayer / MovieScene, JCodec MPEG-2)](33-impl-video.md) | 재생기 완료 (테스트 3, 스크린샷 3) |
 | 34 | [구현: 무기 궤적 / 원작 히트박스 (블레이드 부착, CDV 구, PartType, 스윕 판정)](34-impl-hitboxes.md) | 완료 (테스트 3, 디버그 시트) |
 | 32 | [구현: 원작 적 AI (AiBrain, 결정 트리, 공격 토큰)](32-impl-enemy-ai.md) | 완료 (테스트 8, 적 32종 스모크) |
+| 36 | [검증: 전 레벨 순회 (TraversalVerifier, 레벨 슬롯·Warp·LoadCheck, 볼륨 영역)](36-verify-traversal.md) | 완료 (ATHN01A → OLYMP02 도달, 버그 10 수정, 테스트 18) |
 | 90 | [현황 / 로드맵](90-status-roadmap.md) | 수시 갱신 |
 
 ## 게임 실행
@@ -66,6 +67,7 @@ Shift L3 + 오른쪽 Shift R3 = 신들의 분노, Enter = START(일시정지). �
 ./gradlew :tools:run --args="progress:dump gow-rom"                                  # 업그레이드 비용·성장·오브·세이브 구조
 ./gradlew :engine:run --args="--ui gow-rom/R_SHELLK.WAD FLP_ShellK"                    # FLP UI 런타임 (hud|pause|powerup 모드)
 ./gradlew :tools:run --args="progress:levels gow-rom work/progression/levels.txt"    # 레벨 연결 그래프 (ESC 씬 이동 호출)
+./gradlew :engine:test --tests '*TraversalTest*'                                  # 전 레벨 순회 검증 → work/verify/report.md (36 문서)
 ./gradlew :tools:run --args="combat:tree gow-rom/R_PERMK.WAD ROOT 6 normal"              # 영웅 콤보 트리 (combat:dump / combat:enemies)
 ./gradlew :tools:run --args="anim:sheet gow-rom/R_HERO0.WAD MDL_hero combo3A work/hitbox/c.png --weapon gow-rom/R_WPN0_2.WAD --hit"  # 블레이드 + 히트박스
 ./gradlew :tools:run --args="level:info gow-rom/ATHN01A.WAD"                          # 레벨 배치/충돌/볼륨/카메라

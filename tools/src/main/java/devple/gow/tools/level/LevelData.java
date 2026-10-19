@@ -26,6 +26,13 @@ public final class LevelData {
 			return hull.contains(l[0], l[1], l[2]);
 		}
 
+		/** 월드 좌표 점을 포함하는 ball/hull 의 영역 번호들. */
+		public java.util.Set<Integer> regions(float x, float y, float z) {
+			float[] l = new float[3];
+			Mat4.transformPoint(inverse, x, y, z, l);
+			return hull.regionsAt(l[0], l[1], l[2]);
+		}
+
 		/** 월드 좌표 점을 포함하는 hull 번호 (-1 없음). */
 		public int find(float x, float y, float z) {
 			float[] l = new float[3];

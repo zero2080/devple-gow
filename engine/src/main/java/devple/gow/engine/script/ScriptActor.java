@@ -1,6 +1,5 @@
 package devple.gow.engine.script;
 
-import devple.gow.tools.level.LevelData;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -16,7 +15,8 @@ public final class ScriptActor {
 	public final float[] pos = new float[3];
 	/** 만든 SpawnEnemy (없으면 null). "부모 == 소유자" 판정(원작 +0x2C → +0x54)에 쓴다. */
 	public final ScriptEntity spawner;
-	final Set<LevelData.PlacedVolume> inside = new HashSet<>();
+	/** 안에 있는 (볼륨, 영역) — 영역 -1 = 볼륨 전체 (영역이 맞지 않는 엔티티용). */
+	final Set<ScriptWorld.VolumeRegion> inside = new HashSet<>();
 	boolean destroyed;
 
 	public ScriptActor(String name, int group, float[] pos, ScriptEntity spawner) {

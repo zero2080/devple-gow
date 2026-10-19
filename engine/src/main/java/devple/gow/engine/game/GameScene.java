@@ -19,16 +19,12 @@ import devple.gow.engine.script.ScriptWorld;
 import devple.gow.engine.ui.HudBinding;
 import devple.gow.engine.ui.UiLayer;
 import devple.gow.engine.ui.UiVariables;
-import devple.gow.tools.level.GoInstance;
 import devple.gow.tools.level.LevelData;
-import devple.gow.tools.wad.WadTag;
-import devple.gow.tools.wad.WadTagType;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -51,6 +47,13 @@ public final class GameScene implements Scene {
 	public static final float UNITS_PER_METER = 16f;
 	private static final float GRAVITY = 9.82f * UNITS_PER_METER;
 	private static final float STEP = 14f;
+
+	/**
+	 * 다른 레벨에서 넘어올 때의 도착 정보 (36 문서 §3). kind: SEAMLESS/WALK = 위치·방향 유지(pos, yaw),
+	 * WARP = from 레벨 이름으로 도착 Start 를 찾는다. from = 떠나온 레벨 (SEAMLESS/WALK 면 다른 슬롯에 남아 충돌이 유지됨).
+	 */
+	public record Arrival(LevelLink.Kind kind, String from, float[] pos, float yaw) {
+	}
 
 	/** 스폰된 적 한 마리 (전투 + 렌더 모델 + 스크립트 액터). */
 	private record Enemy(EnemyFighter fighter, AnimatedModel model, ScriptActor actor, EnemyFactory.Kind kind) {
@@ -79,10 +82,21 @@ public final class GameScene implements Scene {
 	private float messageTimer;
 	private float stepTimer;
 	private boolean wasAir;
-	private String pendingLevel;
 	private boolean leaving;
+	/** 원작 레벨 슬롯 2개 (LoadWad/LoadCheck/Warp 판정). */
+	private LevelLink link;
+	/** 도착 정보 (null = 새 게임/직접 시작/불러오기). */
+	private Arrival arrival;
+	/** 다른 슬롯 레벨의 충돌 (원작은 이웃 레벨도 상주 → 경계에서 바닥이 이어진다). null = 없음. */
+	private String otherName;
+	private LevelCollision otherCol;
+	private float otherFloorTime;
 	private final Map<String, EnemyFactory.Kind> kinds = new HashMap<>();
 	private final List<Enemy> enemies = new ArrayList<>();
+	/** 사운드만 올린 리소스 WAD (exit 때 내림). */
+	private final List<String> soundOnly = new ArrayList<>();
+	/** 사운드 전용 WAD 의 AI1 템플릿 번호 (스폰하지 않음). */
+	private final java.util.Set<Integer> soundOnlyTemplates = new java.util.HashSet<>();
 	private Shader enemyShader;
 	private Tweaks orbTweaks;
 	private devple.gow.engine.combat.GrabSync grab;
@@ -105,6 +119,12 @@ public final class GameScene implements Scene {
 		this.levelName = levelName.toUpperCase();
 		this.entry = entry;
 		this.autoRun = autoRun;
+	}
+
+	/** 레벨 전환으로 들어옴. */
+	public GameScene(GameSession session, String levelName, Arrival arrival) {
+		this(session, levelName, null, 0);
+		this.arrival = arrival;
 	}
 
 	@Override
@@ -142,73 +162,110 @@ public final class GameScene implements Scene {
 			throw new UncheckedIOException(ex);
 		}
 		grab = new devple.gow.engine.combat.GrabSync(hero.ctl, hero.combat);
-		placeSpawn();
+		boolean seamless = arrival != null && (arrival.kind() == LevelLink.Kind.SEAMLESS || arrival.kind() == LevelLink.Kind.WALK);
+		link = new LevelLink(levelName, seamless ? arrival.from() : null, w -> Files.exists(session.rom.resolve(w + ".WAD")));
+		if (link.other() != null) {
+			loadOther(link.other());
+		}
+		cameraRig = new devple.gow.engine.level.CameraRig(level.data());
+		world = new ScriptWorld(level.data(), session.scriptHost, listener());
+		String arrivalCam = placeSpawn();
 		respawn(spawn);
 		checkpoint.set(spawn);
 		cam.fovDeg = 60;
 		cam.near = 2;
 		cam.far = 30000;
-		cameraRig = new devple.gow.engine.level.CameraRig(level.data());
+		if (!arrivalCam.isEmpty()) {
+			cameraRig.request(arrivalCam); // Warp 도착 Start 의 CameraName
+		}
 		cameraRig.update(0, hero.ctl.position, hero.ctl.yaw, false);
-		world = new ScriptWorld(level.data(), session.scriptHost, listener());
 		world.start();
+		world.placePlayer(spawn.x, spawn.y, spawn.z, seamless);
 		System.out.printf("레벨 %s (진입점 %s): 시작 (%.0f, %.0f, %.0f), 적 종류 %s%n", levelName, entry, spawn.x, spawn.y,
 				spawn.z, kinds.keySet());
 	}
 
 	/** 레벨이 쓰는 적 리소스: RSRCS 태그(0x1F4)의 24바이트 이름들 → R_&lt;이름&gt;.WAD (11 문서 §6.3 Slots 힙). */
 	private void loadEnemyKinds() throws IOException {
-		for (WadTag t : level.data().wad.tags()) {
-			if (t.tag() != WadTagType.RESOURCES || !t.hasData()) {
-				continue;
-			}
-			var d = t.data();
-			for (int off = 0; off + 24 <= d.limit(); off += 24) {
-				int n = 0;
-				while (n < 24 && d.get(off + n) != 0) {
-					n++;
-				}
-				if (n == 0) {
-					continue;
-				}
-				byte[] b = new byte[n];
-				d.get(off, b);
-				String name = "R_" + new String(b, StandardCharsets.ISO_8859_1).toUpperCase();
-				var path = session.rom.resolve(name + ".WAD");
-				if (!kinds.containsKey(name) && Files.exists(path)) {
-					try {
-						EnemyFactory.Kind k = EnemyFactory.load(path, session.permk, -1);
-						kinds.put(name, k);
-						orbTweaks.load(k.assets().wad());
-						session.sound.load(k.assets().wad());
-						hero.attachExternalAnims(k.assets().wad());
-					} catch (RuntimeException ex) {
-						System.out.println("적 리소스 로드 실패 " + name + ": " + ex.getMessage());
+		for (String name : EnemyFactory.resourceWads(level.data().wad)) {
+			var path = session.rom.resolve(name + ".WAD");
+			if (!kinds.containsKey(name) && Files.exists(path)) {
+				try {
+					EnemyFactory.Kind k = EnemyFactory.load(path, session.permk, -1);
+					kinds.put(name, k);
+					orbTweaks.load(k.assets().wad());
+					session.sound.load(k.assets().wad());
+					hero.attachExternalAnims(k.assets().wad());
+				} catch (RuntimeException ex) {
+					// 스켈레톤 없는 리소스 WAD (R_AHH 등 "FkSnd" 사운드 뱅크 로더): 사운드만 올린다
+					System.out.println("적 리소스 " + name + ": 전투 개체 아님 (" + ex.getMessage() + ") → 사운드만");
+					devple.gow.tools.wad.WadFile sw = devple.gow.tools.wad.WadFile.load(path);
+					session.sound.load(sw);
+					soundOnly.add(sw.name());
+					Tweaks st = new Tweaks();
+					st.load(sw);
+					for (String n : st.nodes("/TweakTemplates/AI1/")) {
+						try {
+							soundOnlyTemplates.add(Integer.parseInt(n.split("/")[3]));
+						} catch (RuntimeException ignored) {
+							// 숫자가 아닌 노드
+						}
 					}
 				}
 			}
 		}
 	}
 
-	private void placeSpawn() {
+	/** 시작 위치·방향 결정 ({@link LevelEntry}). 반환 = 도착 카메라 이름 (없으면 ""). */
+	private String placeSpawn() {
 		if (loadPos != null) {
 			spawn.set(loadPos[0], loadPos[1], loadPos[2]);
 			spawnYaw = loadYaw;
+			return "";
+		}
+		if (arrival != null && arrival.pos() != null && arrival.kind() != LevelLink.Kind.WARP) {
+			spawn.set(arrival.pos()[0], arrival.pos()[1], arrival.pos()[2]);
+			spawnYaw = arrival.yaw();
+			return "";
+		}
+		String from = arrival != null && arrival.kind() == LevelLink.Kind.WARP ? arrival.from() : null;
+		LevelEntry.Spot s = LevelEntry.resolve(level.data(), world, entry, from);
+		float[] at = LevelEntry.snapToFloor(col, s.pos(), 256);
+		if (at == null) {
+			at = s.pos();
+		} else if (at != s.pos()) {
+			System.out.printf("시작 지점 아래 바닥 없음 → 가까운 바닥 (%.0f, %.0f, %.0f) [근사]%n", at[0], at[1], at[2]);
+		}
+		spawn.set(at[0], at[1], at[2]);
+		spawnYaw = s.yaw();
+		System.out.println("시작 지점: " + s.source());
+		return s.camera();
+	}
+
+	/** 다른 슬롯 레벨의 충돌만 읽어 둔다 (렌더·스크립트 없음). 원작은 백그라운드 로드, 여기서는 즉시 [근사]. */
+	private void loadOther(String wad) {
+		if (wad.equals(otherName)) {
 			return;
 		}
-		LevelData data = level.data();
-		GoInstance start = null;
-		if (entry != null) {
-			start = data.layout.instances.stream().filter(g -> g.name().equalsIgnoreCase(entry) || g.object().equalsIgnoreCase(entry))
-					.findFirst().orElse(null);
+		otherName = wad;
+		otherCol = null;
+		try {
+			otherCol = new LevelCollision(new LevelData(devple.gow.tools.wad.WadFile.load(session.rom.resolve(wad + ".WAD"))).sheets);
+		} catch (IOException | RuntimeException ex) {
+			System.out.println("이웃 레벨 충돌 로드 실패 " + wad + ": " + ex.getMessage());
 		}
-		if (start == null) {
-			start = data.layout.instances.stream().filter(g -> g.object().toLowerCase().startsWith("start")).findFirst().orElse(null);
+	}
+
+	/** 현재 + 다른 슬롯 레벨 바닥 중 높은 것 (NaN = 둘 다 없음). */
+	private float ground(float x, float y, float z, float drop) {
+		float g = col.groundHeight(x, y, z, drop);
+		if (otherCol != null) {
+			float o = otherCol.groundHeight(x, y, z, drop);
+			if (!Float.isNaN(o) && (Float.isNaN(g) || o > g)) {
+				return o;
+			}
 		}
-		if (start != null) {
-			spawn.set(start.pos()[0], start.pos()[1], start.pos()[2]);
-			spawnYaw = start.rot()[1];
-		}
+		return g;
 	}
 
 	private void respawn(Vector3f at) {
@@ -253,17 +310,39 @@ public final class GameScene implements Scene {
 
 			@Override
 			public void level(LevelRequest r) {
-				switch (r.op()) {
-					case LOAD_WAD, LOAD_FOR_WARP -> {
-						pendingLevel = r.wad();
-						System.out.println("다음 레벨 미리 로드 요청: " + r.wad());
-					}
-					case WARP -> {
-						if (pendingLevel != null) {
-							goToLevel(pendingLevel, null);
+				if (r.op() == LevelOp.GOTO) {
+					// Internal:7 Goto(name): 같은 레벨 안 엔티티 위치로 이동 (원작 Warp_Jump)
+					ScriptEntity t = world.find(r.entry());
+					if (t != null) {
+						float[] p = t.position();
+						spawnYaw = (float) Math.atan2(t.world[8], t.world[10]);
+						respawn(new Vector3f(p[0], p[1], p[2]));
+						String cam = t.type() == 9 ? String.valueOf(world.slot(t, "CameraName")) : "";
+						if (!cam.isEmpty()) {
+							cameraRig.request(cam);
 						}
 					}
-					case LOAD -> goToLevel(r.wad(), r.entry());
+					return;
+				}
+				LevelLink.Transition t = link.handle(r);
+				if (link.other() != null && !link.other().equals(otherName)) {
+					System.out.println("다른 슬롯 레벨: " + link.other() + " (" + r.op() + ")");
+					loadOther(link.other());
+				}
+				if (t == null) {
+					return;
+				}
+				Vector3f p = hero.ctl.position;
+				switch (t.kind()) {
+					case WARP -> goToLevel(t.target(), new Arrival(LevelLink.Kind.WARP, levelName, null, 0));
+					case SEAMLESS -> {
+						// LoadCheck: 원작은 "현재 레벨" 표시만 바꾼다. 이웃 레벨 바닥이 발밑에 있을 때만 그 레벨로 넘어간다
+						// (좌표계가 다른 Warp 짝 레벨에서 허공으로 떨어지지 않도록, 36 문서 §3)
+						if (otherCol != null && !Float.isNaN(otherCol.groundHeight(p.x, p.y + 32, p.z, 600))) {
+							goToLevel(t.target(), new Arrival(LevelLink.Kind.SEAMLESS, levelName, new float[]{p.x, p.y, p.z}, hero.ctl.yaw));
+						}
+					}
+					case LOAD -> goToLevel(t.target(), t.entry());
 					default -> {
 					}
 				}
@@ -271,8 +350,8 @@ public final class GameScene implements Scene {
 
 			@Override
 			public boolean loadCheck(String wad) {
-				// 원작은 백그라운드 로드 완료 여부. 여기서는 WAD 가 있으면 즉시 준비된 것으로 본다
-				return Files.exists(session.rom.resolve(wad.toUpperCase() + ".WAD"));
+				// 원작은 백그라운드 로드 완료 여부. 여기서는 슬롯에 올라 있으면 준비된 것으로 본다
+				return link.loaded(wad);
 			}
 
 			@Override
@@ -339,7 +418,7 @@ public final class GameScene implements Scene {
 
 	/**
 	 * 컷신 재생 (33 문서): 씬 스택에 MovieScene 을 올려 게임을 멈추고, 끝나면 음악을 다시 켜고
-	 * 스크립트에 종료 이벤트를 보낸다 (mpegDone 핸들러 — 이벤트 7 로 추정, 18 문서).
+	 * 스크립트에 종료 이벤트 501(인자 0 = 동영상 이름)을 보낸다 (36 문서: ATHN01D TwinKickDoor-main-movieDone 이 EventArg(0) == "Semo02" 를 검사).
 	 */
 	private void playMovie(Engine e, String name) {
 		String music = session.sound.currentMusic();
@@ -348,7 +427,7 @@ public final class GameScene implements Scene {
 			if (music != null) {
 				session.sound.music(music, 0.5f);
 			}
-			world.postEvent(7, 0, 0, 0, null);
+			world.postEvent(ScriptWorld.EVENT_MOVIE_DONE, name, 0, 0, null);
 		});
 	}
 
@@ -365,22 +444,58 @@ public final class GameScene implements Scene {
 		pendingEngine.scenes().transitionTo(new GameScene(session, wad, entryName, 0));
 	}
 
-	private Engine pendingEngine;
-
-	private void spawn(ScriptListener.SpawnRequest r) {
-		if (kinds.isEmpty()) {
+	private void goToLevel(String wad, Arrival a) {
+		if (leaving) {
 			return;
 		}
-		// TemplateId → 적 종류 매핑은 미해결 (13 문서 공백) → AI1 번호가 같은 종류, 없으면 레벨의 첫 종류
-		EnemyFactory.Kind kind = kinds.values().stream().filter(k -> k.hasTemplate(r.templateId())).findFirst().orElse(null);
+		leaving = true;
+		System.out.println("레벨 전환 → " + wad + " (" + a.kind() + ", " + a.from() + " 에서)");
+		pendingEngine.scenes().transitionTo(new GameScene(session, wad, a));
+	}
+
+	private Engine pendingEngine;
+
+	/**
+	 * SpawnEnemy (36 문서 §4): TemplateId = AI1 번호.
+	 * <ol>
+	 *   <li>레벨 RSRCS 적 WAD 중 그 AI1 이 있는 종류</li>
+	 *   <li>레벨 WAD 자체 AI1 (예 ATHN01D 301 "AOXF1") → 템플릿 Instance Name 과 같은 레벨 오브젝트(aoxf1)의 스켈레톤·모델</li>
+	 *   <li>RSRCS 의 비전투 WAD 에만 있는 템플릿 (R_AHH "FakeBHHsnd" 같은 사운드 뱅크 로더) → 전투 개체를 만들지 않는다</li>
+	 *   <li>그 밖 (오브젝트가 없는 레벨 템플릿 = 히드라·메두사 여왕·아레스 같은 보스) → 첫 적 종류를 대역으로 [근사]
+	 *       (사망 → DestructionSensor 로 스크립트가 진행되도록)</li>
+	 * </ol>
+	 * 이전에는 2·3 도 첫 적 종류로 생성해 ATHN01B 등에 엉뚱한 해골 병사가 나왔다.
+	 */
+	private void spawn(ScriptListener.SpawnRequest r) {
+		int tpl = r.templateId();
+		// 레벨 템플릿 종류(키 "레벨:오브젝트")는 레벨 WAD 의 모든 AI1 을 가지므로 1단계에서 뺀다
+		EnemyFactory.Kind kind = kinds.entrySet().stream().filter(e -> !e.getKey().contains(":") && e.getValue() != null
+				&& e.getValue().hasTemplate(tpl)).map(Map.Entry::getValue).findFirst().orElse(null);
+		if (kind == null) {
+			kind = levelTemplateKind(tpl);
+		}
 		EnemyFighter f;
 		if (kind != null) {
-			f = kind.spawn(r.templateId());
+			f = kind.spawn(tpl);
 		} else {
-			// 레벨 WAD 자체에 정의된 AI1 템플릿 (예 ATHN01D 의 301 "AOXF1") → 레벨 튜닝값을 첫 적 종류에 합쳐 그 템플릿으로
-			kind = kinds.values().iterator().next();
-			kind.tweaks().load(level.data().wad);
-			f = kind.hasTemplate(r.templateId()) ? kind.spawn(r.templateId()) : kind.spawn();
+			if (soundOnlyTemplates.contains(tpl)) {
+				System.out.printf("스폰 생략: 템플릿 %d 은 사운드 뱅크 로더 (%s)%n", tpl, r.source().name());
+				return;
+			}
+			kind = kinds.entrySet().stream().filter(e -> !e.getKey().contains(":") && e.getValue() != null).map(Map.Entry::getValue)
+					.findFirst().orElse(null);
+			if (kind == null) {
+				return;
+			}
+			Tweaks merged = new Tweaks();
+			merged.load(session.permk);
+			merged.load(kind.assets().wad());
+			merged.load(level.data().wad);
+			boolean has = merged.findNode(String.format("/TweakTemplates/AI1/%03d/", tpl)) != null;
+			kind = new EnemyFactory.Kind(kind.assets(), merged, kind.skeleton(), kind.anims(), kind.model(), kind.ai1(), kind.combatFiles(),
+					kind.attacks(), kind.block(), kind.idle(), kind.walk(), kind.animNode(), kind.ai());
+			f = has ? kind.spawn(tpl) : kind.spawn();
+			System.out.printf("보스/특수 템플릿 %d → %s 대역 [근사]%n", tpl, kind.assets().wad().name());
 		}
 		float[] w = r.world();
 		f.pos.set(w[12], w[13], w[14]);
@@ -392,6 +507,27 @@ public final class GameScene implements Scene {
 		enemies.add(new Enemy(f, kind.buildModel(enemyShader), r.actor(), kind));
 		System.out.printf("적 스폰: %s (템플릿 %d, 순찰 %s) at (%.0f, %.0f, %.0f)%n", kind.assets().wad().name(), r.templateId(),
 				r.patrol(), f.pos.x, f.pos.y, f.pos.z);
+	}
+
+	/** 레벨 WAD 자체 AI1 템플릿의 종류 (처음 쓸 때 로드, 없으면 null). */
+	private EnemyFactory.Kind levelTemplateKind(int ai1) {
+		Tweaks lt = new Tweaks();
+		lt.load(level.data().wad);
+		String obj = EnemyFactory.levelTemplateObject(lt, ai1);
+		if (obj == null) {
+			return null;
+		}
+		String key = levelName + ":" + obj;
+		if (!kinds.containsKey(key)) {
+			EnemyFactory.Kind k = null;
+			try {
+				k = EnemyFactory.load(session.rom.resolve(levelName + ".WAD"), session.permk, ai1, obj);
+			} catch (IOException | RuntimeException ex) {
+				System.out.println("레벨 템플릿 " + ai1 + " (" + obj + ") 로드 실패: " + ex.getMessage());
+			}
+			kinds.put(key, k);
+		}
+		return kinds.get(key);
 	}
 
 	private void showMessage(int id, float seconds) {
@@ -623,12 +759,12 @@ public final class GameScene implements Scene {
 		Vector3f p = hero.ctl.position;
 		// 허공 방지: 지상에서 이동한 결과 아래에 바닥이 전혀 없으면(배 가장자리 밖 등) 수평 이동 취소.
 		// 원작의 보이지 않는 벽 / 바다 데스존을 대신하는 근사 — 아래층 바닥이 있는 낙하는 허용
-		if (hero.ctl.grounded && Float.isNaN(col.groundHeight(p.x, p.y + STEP, p.z, 4000))
-				&& !Float.isNaN(col.groundHeight(hero.ctl.prevPosition.x, hero.ctl.prevPosition.y + STEP, hero.ctl.prevPosition.z, 4000))) {
+		if (hero.ctl.grounded && Float.isNaN(ground(p.x, p.y + STEP, p.z, 4000))
+				&& !Float.isNaN(ground(hero.ctl.prevPosition.x, hero.ctl.prevPosition.y + STEP, hero.ctl.prevPosition.z, 4000))) {
 			p.x = hero.ctl.prevPosition.x;
 			p.z = hero.ctl.prevPosition.z;
 		}
-		float g = col.groundHeight(p.x, p.y + STEP, p.z, 4000);
+		float g = ground(p.x, p.y + STEP, p.z, 4000);
 		var c0 = hero.ctl;
 		if (!Float.isNaN(g) && p.y - g <= 2f && c0.vy <= 0) {
 			p.y = g;
@@ -648,9 +784,22 @@ public final class GameScene implements Scene {
 			heroDied(); // 바닥 없는 곳으로 떨어짐
 		}
 		Vector3f c = new Vector3f(p.x, p.y + 20, p.z);
-		if (col.collideSphere(c, 12)) {
+		boolean pushed = col.collideSphere(c, 12);
+		if (otherCol != null) {
+			pushed |= otherCol.collideSphere(c, 12);
+		}
+		if (pushed) {
 			p.x = c.x;
 			p.z = c.z;
+		}
+		// 다른 슬롯 레벨 바닥만 밟고 있으면 그 레벨로 (원작은 두 레벨이 같이 상주, 예 SEWR01 → SEWR02)
+		if (otherCol != null && c0.grounded && Float.isNaN(col.groundHeight(p.x, p.y + STEP, p.z, 64))
+				&& !Float.isNaN(otherCol.groundHeight(p.x, p.y + STEP, p.z, 64))) {
+			if ((otherFloorTime += dt) > 0.25f) { // 이음매에서 오가며 바뀌지 않도록 잠깐 머문 뒤
+				goToLevel(otherName, new Arrival(LevelLink.Kind.WALK, levelName, new float[]{p.x, p.y, p.z}, hero.ctl.yaw));
+			}
+		} else {
+			otherFloorTime = 0;
 		}
 	}
 
@@ -684,7 +833,8 @@ public final class GameScene implements Scene {
 	public void exit(Engine e) {
 		session.sound.stopAll();
 		session.sound.unload(level.data().wad.name());
-		kinds.values().forEach(k -> session.sound.unload(k.assets().wad().name()));
+		kinds.values().stream().filter(k -> k != null).forEach(k -> session.sound.unload(k.assets().wad().name()));
+		soundOnly.forEach(session.sound::unload);
 		enemies.forEach(en -> en.model().close());
 		enemyShader.close();
 		hero.close();

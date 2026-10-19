@@ -24,7 +24,7 @@
   (`ESC_DeathZone1` ↔ `DeathZone1-pCube2-EntrySensor1` ↔ `godeathzone1` ↔ `ENV_DeathZone1`). 두 번째 토막(`pCube2`, `nurbsSphere1`)은
   볼륨을 만든 Maya 노드 이름일 뿐 런타임에 쓰이지 않는다. 전 레벨에서 ESC 를 가진 오브젝트는 모두 정확히 한 번 배치되고,
   진입/이탈 센서의 소유자는 ENV 볼륨을 0..1 개 가진다 (예외 1: ATHN02B `Elev2BDown`, ENV 없음).
-- **영역 ID** (원본 0x4A): BallHull 의 hull 별 영역 번호(off[6] 표)와 같다 — `ENV_DeathZone1` 0x0A = 엔티티 base 10,
+- **영역 ID** (원본 0x4A): BallHull 의 hull 별 영역 번호(off[7] u8 표, ball 은 off[2] — 36 문서 §5 에서 off[6] 을 정정)와 같다 — `ENV_DeathZone1` 0x0A = 엔티티 base 10,
   `ENV_HatchZoneGroup` 0x35 = 53. 진입 콜백은 (소유 GO, 영역 ID) 로 엔티티를 찾는다(`0x1A88F0`). [확실: 값 일치 / 추정: 표 의미]
 - Marker(14) 가 핸들러를 정확히 1개 가지면 생성 시 그 값을 ID 로 웨이포인트 오브젝트를 만든다 (`0x1A74EC`, `0x1A5E18`).
 
@@ -65,7 +65,7 @@
 | 8 EventTransmitter | 0 EventId, 1 Arg1, 2 Arg2 (int) | 3 | `0x1A3578` |
 | 9 Start | 0 PlayerName str ("Hero"), 1 Filter int(+0x9C), 2 CameraName str | – | `0x1A3780` |
 | 10 SpawnEnemy | 0 ? int, 1 ? int(-1), 2 SpawnAtStart bool, 3 Respawn bool, 4 TemplateId int, 5..8 int, 9 Patrol str ("patrolN") | 10 | `0x1A3840`, 효과 `0x1AC850` |
-| 11 Creator | 0,1 str, 2 float, 3..5 int(-1), 6,7 int, 8,9 bool | 10 | +17 bool (`0x1A3B90`) |
+| 11 Creator | 0 Name0 str ("chest", "savepoint", "aoRED" …), 1 Name1 str, 2 float, 3..5 int(-1), 6,7 int, **8 CreateAtStart bool** (36 문서 §5), 9 bool | 10 | +17 bool (`0x1A3B90`) |
 | 12 GlobalData / 13 LevelData | 0 Priority int, 1..16 Init action (변수 초기화) | – | `0x1A3F18` / `0x1A4240` |
 | 14 Marker | 0 Id int (+0x9C) | – | `0x1A4568` |
 | 15 SoundController | 0 Op int(기본 1), 1..4 float, 5 int | 6 | `0x1A45D0` |

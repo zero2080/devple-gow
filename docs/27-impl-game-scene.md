@@ -30,8 +30,8 @@
 | ShowMessage(id, 초) | 원작 HUD 메시지 창: `PS2_MessageTemplate_Line1..5` 에 줄별 텍스트, `PS2_MessageTemplate_Event = 1`, 시간 후 0 |
 | CheckPoint | 재시작 위치 갱신 |
 | 데스존 (플레이어) | 사망 → 체크포인트 재시작 (원작 HP 보정 `onCheckpointRestart`) |
-| LoadWad / LoadForWarp → Warp, Load(wad, entry) | 페이드 전환으로 새 `GameScene` (진행도·GlobalData 는 `GameSession` 으로 유지). 진입점 이름의 GO 위치에서 시작 |
-| LoadCheck | WAD 가 있으면 준비 완료 (원작은 백그라운드 로드 완료 여부) |
+| LoadWad / LoadForWarp / Warp / LoadCheck | 레벨 슬롯 2개 모델 `LevelLink` → SEAMLESS(LoadCheck, 위치 유지)·WALK(다른 슬롯 바닥)·WARP(도착 Start) 전환. 36 문서 §2 |
+| Load(wad, entry) | 진입점 이름의 GO/엔티티 위치에서 시작 (데이터에는 사용처 없음) |
 | SpawnEnemy | 레벨 RSRCS 태그(0x1F4)의 적 리소스 `R_<이름>` 를 `EnemyFactory` 로 미리 구성, **TemplateId = AI1 번호**로 종류 선택 |
 | 적 사망 | `ScriptWorld.destroy(actor)` → DestructionSensor (튜토리얼 메시지 등) + OrbEmitter "<적> Death" 오브 |
 

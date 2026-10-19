@@ -40,4 +40,22 @@ class EnemyFactoryTest {
 		assertEquals("har", h.skeleton().name, "석화 파편 스켈레톤이 아니라 본체");
 		assertEquals(15f, h.spawn().maxHp());
 	}
+
+	/** 레벨 자체 AI1 템플릿 (ATHN01D 301 "AOXF1") → 같은 레벨 WAD 의 aoxf1 오브젝트 (36 문서 §4). */
+	@Test
+	void levelLocalTemplateUsesLevelObject() throws Exception {
+		Path rom = Path.of(System.getProperty("gow.rom", "../gow-rom"));
+		Assumptions.assumeTrue(Files.exists(rom.resolve("ATHN01D.WAD")), "gow-rom 없음");
+		WadFile lvl = WadFile.load(rom.resolve("ATHN01D.WAD"));
+		devple.gow.engine.game.Tweaks tw = new devple.gow.engine.game.Tweaks();
+		tw.load(lvl);
+		assertEquals("aoxf1", EnemyFactory.levelTemplateObject(tw, 301));
+		assertEquals("aoxf4", EnemyFactory.levelTemplateObject(tw, 303));
+		assertNull(EnemyFactory.levelTemplateObject(tw, 20));
+		EnemyFactory.Kind k = EnemyFactory.load(rom.resolve("ATHN01D.WAD"), WadFile.load(rom.resolve("R_PERMK.WAD")), 301, "aoxf1");
+		assertEquals("aoxf1", k.skeleton().name);
+		assertEquals("MDL_aoXF1", k.model());
+		assertEquals(301, k.ai1());
+		assertTrue(EnemyFactory.resourceWads(lvl).contains("R_SKS"));
+	}
 }

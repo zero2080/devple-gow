@@ -66,7 +66,7 @@ public final class EntitySlots {
 		for (int i = 3; i <= 5; i++) {
 			add(11, "unk" + i, INT, -1);
 		}
-		add(11, "unk6", INT, 0).add(11, "unk7", INT, 0).add(11, "unk8", BOOL, false).add(11, "unk9", BOOL, false);
+		add(11, "unk6", INT, 0).add(11, "unk7", INT, 0).add(11, "CreateAtStart", BOOL, false).add(11, "unk9", BOOL, false);
 		base(11);
 		add(11, "unk17", BOOL, false);
 		for (int t = 12; t <= 13; t++) {

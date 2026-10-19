@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
+import java.util.Set;
 
 /**
  * 레벨 하나의 ESC 엔티티 런타임 (원작 SCR_Entities, 13 문서). 엔티티 생성 → 시작 큐(우선순위) → 매 틱
@@ -29,12 +30,18 @@ public final class ScriptWorld {
 
 	/** 원작 "제거" 이벤트 (DeathZone 송신기가 적에게 보냄) [추정]. */
 	public static final int EVENT_KILL = 1029;
+	/** 동영상 끝 이벤트: 인자 0 = 동영상 이름 (예 ATHN01D TwinKickDoor-main-movieDone: EventArg(0) == "Semo02") [확실: 데이터]. */
+	public static final int EVENT_MOVIE_DONE = 501;
 	/** 원작 "EvtForce" 이벤트: arg1 = 강제 상태 번호 (예: 영웅 DeathZone 504) [추정]. */
 	public static final int EVENT_FORCE = 1019;
 	/** 스폰 재생성 최소 지연 (원작 0x29D93C 플래그 → max(delay, 0.25)). */
 	static final float RESPAWN_MIN_DELAY = 0.25f;
 
 	private record Pending(float time, long seq, ScriptEntity entity, ScriptActor sender) {
+	}
+
+	/** 볼륨의 한 영역 (region -1 = 볼륨 전체). */
+	record VolumeRegion(LevelData.PlacedVolume volume, int region) {
 	}
 
 	private record Event(int id, Object a0, Object a1, Object a2, ScriptActor sender) {
@@ -142,6 +149,67 @@ public final class ScriptWorld {
 	/** 첫 Start 엔티티 (플레이어 이름 / 그룹 / 시작 위치). */
 	public ScriptEntity startEntity() {
 		return entities.stream().filter(e -> e.type() == 9).findFirst().orElse(null);
+	}
+
+	/** Start 모드: 1 기본 시작, 2 워프 도착점(슬롯 0 = 떠나온 레벨 이름), 3 Goto 지점 (36 문서 §2). */
+	public static final int START_DEFAULT = 1, START_WARP = 2, START_GOTO = 3;
+
+	/** 기본 시작 지점 = 모드 1 인 첫 Start (ATHN01E 처럼 Goto 지점(모드 3)이 먼저 나오는 레벨이 있다). 없으면 null. */
+	public ScriptEntity defaultStart() {
+		return entities.stream().filter(e -> e.type() == 9 && e.mode() == START_DEFAULT).findFirst().orElse(null);
+	}
+
+	/**
+	 * Warp 도착점 (원작 0x1AE710): 모드 2 Start 중 슬롯 0(떠나온 레벨 이름)이 fromLevel 과 같은 것, 없으면 첫 모드 1 Start.
+	 * 원작 비교 함수 0x28DF50 은 대소문자 무시로 본다 (데이터에 "athn08c", "sewr02" 처럼 소문자 이름이 섞여 있음) [추정].
+	 */
+	public ScriptEntity warpTarget(String fromLevel) {
+		if (fromLevel != null) {
+			for (ScriptEntity e : entities) {
+				if (e.type() == 9 && e.mode() == START_WARP && fromLevel.equalsIgnoreCase(String.valueOf(slot(e, 0)))) {
+					return e;
+				}
+			}
+		}
+		return defaultStart();
+	}
+
+	/** 검증용: 핸들러 return 뒤 스택이 남으면 통지 (36 문서). */
+	public void onUnbalanced(java.util.function.Consumer<String> l) {
+		vm.onUnbalanced(l);
+	}
+
+	/**
+	 * 플레이어를 옮기고, seamless 이면 그 위치를 감싸는 볼륨을 "이미 안" 으로 표시한다 (진입 센서 발동 없음).
+	 * 원작은 이웃 레벨 두 개가 동시에 상주해 경계를 넘을 때 새 레벨의 센서가 계속 살아 있었으므로,
+	 * LoadCheck 이음 전환 직후 도착 레벨의 LoadCheck 볼륨이 즉시 되돌아가는 일이 없다. {@link #start()} 뒤, 첫 틱 전에 부른다.
+	 */
+	public void placePlayer(float x, float y, float z, boolean seamless) {
+		if (player == null) {
+			return;
+		}
+		player.moveTo(x, y, z);
+		player.inside.clear();
+		if (seamless) {
+			for (Map.Entry<LevelData.PlacedVolume, List<ScriptEntity>> m : byVolume.entrySet()) {
+				LevelData.PlacedVolume v = m.getKey();
+				Set<Integer> now = v.regions(x, y, z);
+				if (now.isEmpty()) {
+					continue;
+				}
+				player.inside.add(new VolumeRegion(v, -1));
+				now.forEach(r -> player.inside.add(new VolumeRegion(v, r)));
+			}
+		}
+	}
+
+	/**
+	 * 엔티티가 반응하는 볼륨 영역: 엔티티 영역 ID(원본 0x4A)가 볼륨의 ball/hull 영역 번호에 있으면 그 영역, 없으면 볼륨 전체 [근사].
+	 * 전 레벨 1617 개 ESC/ENV 쌍 중 1610 개가 일치, 99 개 볼륨이 여러 영역 (예 PAND00B Warpto00A: LoadVol 0 / WarpVol 1).
+	 */
+	public static int regionOf(ScriptEntity e) {
+		int r = e.data.baseId();
+		return e.volume != null && e.volume.hull().hasRegion(r) ? r : -1;
 	}
 
 	// ---- 슬롯 평가 ----
@@ -255,6 +323,14 @@ public final class ScriptWorld {
 					zeroDelay = false;
 				}
 			}
+			case 11 -> {
+				// Creator 슬롯 8 = 시작 시 생성 [강한 추정]: 상자 335 개·세이브 포인트 42 개 대부분이 이 값만 true 이고 다른 발동 경로가 없다 (36 문서 §5)
+				if (e.owner != null && boolSlot(e, "CreateAtStart", false)) {
+					zeroDelay = true;
+					trigger(e, null);
+					zeroDelay = false;
+				}
+			}
 			default -> {
 			}
 		}
@@ -303,18 +379,31 @@ public final class ScriptWorld {
 		}
 		for (Map.Entry<LevelData.PlacedVolume, List<ScriptEntity>> m : byVolume.entrySet()) {
 			LevelData.PlacedVolume v = m.getKey();
-			boolean in = v.contains(a.pos[0], a.pos[1], a.pos[2]);
-			boolean was = a.inside.contains(v);
-			if (in == was) {
-				continue;
-			}
-			if (in) {
-				a.inside.add(v);
-			} else {
-				a.inside.remove(v);
+			Set<Integer> now = v.regions(a.pos[0], a.pos[1], a.pos[2]);
+			// 영역별 진입/이탈 판정 (원작 0x1A88F0: (소유 GO, 영역 ID) 로 엔티티를 찾음)
+			Map<Integer, Boolean> changed = new HashMap<>();
+			for (ScriptEntity e : m.getValue()) {
+				int r = regionOf(e);
+				if (changed.containsKey(r)) {
+					continue;
+				}
+				boolean in = r < 0 ? !now.isEmpty() : now.contains(r);
+				VolumeRegion key = new VolumeRegion(v, r);
+				boolean was = a.inside.contains(key);
+				if (in != was) {
+					if (in) {
+						a.inside.add(key);
+					} else {
+						a.inside.remove(key);
+					}
+					changed.put(r, in);
+				} else {
+					changed.put(r, null);
+				}
 			}
 			for (ScriptEntity e : m.getValue()) {
-				if ((in ? e.type() == 0 : e.type() == 1) && passes(e, a)) {
+				Boolean in = changed.get(regionOf(e));
+				if (in != null && (in ? e.type() == 0 : e.type() == 1) && passes(e, a)) {
 					trigger(e, a);
 				}
 			}
@@ -349,7 +438,12 @@ public final class ScriptWorld {
 	}
 
 	private static boolean inVolume(ScriptEntity e, ScriptActor a) {
-		return e.volume != null && e.volume.contains(a.pos[0], a.pos[1], a.pos[2]);
+		if (e.volume == null) {
+			return false;
+		}
+		int r = regionOf(e);
+		Set<Integer> now = e.volume.regions(a.pos[0], a.pos[1], a.pos[2]);
+		return r < 0 ? !now.isEmpty() : now.contains(r);
 	}
 
 	// ---- 발동 ----

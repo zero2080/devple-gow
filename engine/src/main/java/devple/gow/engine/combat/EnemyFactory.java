@@ -63,7 +63,49 @@ public final class EnemyFactory {
 	private EnemyFactory() {
 	}
 
+	/**
+	 * 레벨 WAD 자체에 정의된 AI1 템플릿(예 ATHN01D 301 "AOXF1")의 오브젝트 이름: 템플릿 "Instance Name" 의 소문자
+	 * = 같은 레벨 WAD 의 스켈레톤 오브젝트 (aoxf1: MDL_aoXF1 / ANM_aoxf1 / CDV_aoXF1, 36 문서 §4). 템플릿이 없으면 null.
+	 */
+	public static String levelTemplateObject(Tweaks levelTweaks, int ai1) {
+		String node = levelTweaks.findNode(String.format("/TweakTemplates/AI1/%03d/", ai1));
+		String n = node == null ? null : levelTweaks.s(node, "Instance Name", null);
+		return n == null || n.isEmpty() ? null : n.toLowerCase(Locale.ROOT);
+	}
+
+	/** 레벨이 쓰는 적 리소스 WAD 이름: RSRCS 태그(0x1F4)의 24바이트 이름들 → "R_&lt;이름&gt;" (대문자, 11 문서 §6.3 Slots 힙). */
+	public static List<String> resourceWads(WadFile level) {
+		List<String> out = new ArrayList<>();
+		for (devple.gow.tools.wad.WadTag t : level.tags()) {
+			if (t.tag() != devple.gow.tools.wad.WadTagType.RESOURCES || !t.hasData()) {
+				continue;
+			}
+			var d = t.data();
+			for (int off = 0; off + 24 <= d.limit(); off += 24) {
+				int n = 0;
+				while (n < 24 && d.get(off + n) != 0) {
+					n++;
+				}
+				if (n == 0) {
+					continue;
+				}
+				byte[] b = new byte[n];
+				d.get(off, b);
+				String name = "R_" + new String(b, java.nio.charset.StandardCharsets.ISO_8859_1).toUpperCase(Locale.ROOT);
+				if (!out.contains(name)) {
+					out.add(name);
+				}
+			}
+		}
+		return out;
+	}
+
 	public static Kind load(Path wadPath, WadFile permk, int ai1OrMinus1) throws IOException {
+		return load(wadPath, permk, ai1OrMinus1, null);
+	}
+
+	/** skeleton: 고를 스켈레톤 이름 (null 이면 WAD 이름 → 관절 수 최대). 레벨 자체 템플릿은 레벨 WAD + {@link #levelTemplateObject}. */
+	public static Kind load(Path wadPath, WadFile permk, int ai1OrMinus1, String skeleton) throws IOException {
 		WadAssets assets = new WadAssets(wadPath);
 		WadFile wad = assets.wad();
 		Tweaks tw = new Tweaks();
@@ -71,7 +113,8 @@ public final class EnemyFactory {
 		tw.load(wad);
 		Tweaks own = new Tweaks();
 		own.load(wad);
-		String base = wadPath.getFileName().toString().replaceFirst("(?i)\\.WAD$", "").replaceFirst("^R_", "").toLowerCase(Locale.ROOT);
+		String base = skeleton != null ? skeleton
+				: wadPath.getFileName().toString().replaceFirst("(?i)\\.WAD$", "").replaceFirst("^R_", "").toLowerCase(Locale.ROOT);
 		Skeleton best = null;
 		String mdl = null, anm = null;
 		boolean bestNamed = false;
@@ -88,8 +131,8 @@ public final class EnemyFactory {
 				anm = a;
 			}
 		}
-		if (best == null) {
-			throw new IllegalArgumentException("적 스켈레톤 없음: " + wadPath);
+		if (best == null || skeleton != null && !bestNamed) {
+			throw new IllegalArgumentException("적 스켈레톤 없음: " + wadPath + (skeleton != null ? " " + skeleton : ""));
 		}
 		AnimationSet set = AnimationSet.load(wad, anm);
 		String ai1Node = ai1OrMinus1 >= 0 ? String.format("/TweakTemplates/AI1/%03d/", ai1OrMinus1)
