@@ -21,6 +21,7 @@ import java.nio.file.Path;
  *   ./gradlew :engine:run --args="--anim gow-rom/R_HERO0.WAD MDL_hero hero ANM_hero [애니이름]"   (애니메이션 뷰어)
  *   ./gradlew :engine:run --args="--ui gow-rom/R_SHELLK.WAD FLP_ShellK [menu|hud|pause|powerup] [--ui-warm n]"   (FLP UI)
  *   ./gradlew :engine:run --args="--level gow-rom/ATHN01A.WAD [--cam N|auto] [--col]"   (레벨 배치 뷰어, 23 문서)
+ *   ./gradlew :engine:run --args="--game [ATHN01A] [--auto-run s]"   (통합 게임: 레벨 + 크레토스 + 전투 + HUD)
  * </pre>
  */
 public final class GowMain {
@@ -34,6 +35,10 @@ public final class GowMain {
 		for (int i = 0; i < args.length; i++) {
 			if (args[i].equals("--screenshot") && i + 1 < args.length) {
 				shot = args[++i];
+			} else if (args[i].equals("--game")) {
+				String lvl = i + 1 < args.length && !args[i + 1].startsWith("--") ? args[++i] : "ATHN01A";
+				int ri = java.util.Arrays.asList(args).indexOf("--auto-run");
+				first = new devple.gow.engine.game.GameScene(Path.of("gow-rom"), lvl, ri >= 0 ? Float.parseFloat(args[ri + 1]) : 0);
 			} else if (args[i].equals("--hero")) {
 				String rom = i + 1 < args.length && !args[i + 1].startsWith("--") ? args[++i] : "gow-rom";
 				java.util.List<String> al = java.util.Arrays.asList(args);

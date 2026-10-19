@@ -61,6 +61,8 @@ public final class LevelScene implements Scene {
 	private int camMode;
 	private final boolean[] keyPrev = new boolean[3];
 	private final Matrix4f tmp = new Matrix4f();
+	/** 게임 씬이 지정하는 카메라 (null 이면 뷰어 자체 카메라). */
+	private Camera external;
 
 	/**
 	 * @param startCam    -1 자유, -2 CMV 자동, 0.. 레벨 카메라 번호
@@ -83,6 +85,11 @@ public final class LevelScene implements Scene {
 
 	public List<Instance> instances() {
 		return instances;
+	}
+
+	/** 통합 게임 씬용: 이 카메라로 렌더 (자유/레벨 카메라 처리 생략). */
+	public void setExternalCamera(Camera c) {
+		external = c;
 	}
 
 	@Override
@@ -288,7 +295,12 @@ public final class LevelScene implements Scene {
 
 	@Override
 	public void render(Engine e, float alpha) {
-		applyCamera();
+		Camera cam = this.cam;
+		if (external != null) {
+			cam = external;
+		} else {
+			applyCamera();
+		}
 		e.renderer().begin3d(cam);
 		// 하늘: 카메라 중심, 깊이 쓰기 끔 → 항상 맨 뒤
 		glDepthMask(false);
