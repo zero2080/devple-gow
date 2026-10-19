@@ -14,7 +14,7 @@ import java.nio.file.Path;
 /**
  * 엔진 진입점.
  * <pre>
- *   ./gradlew :engine:run
+ *   ./gradlew :engine:run                                         (메인 메뉴 → 새 게임 → ATHN01A)
  *   ./gradlew :engine:run --args="--screenshot work/shot.png"   (몇 프레임 후 캡처하고 종료)
  *   ./gradlew :engine:run --args="--view gow-rom/R_HERO0.WAD [MDL이름]"   (모델 뷰어)
  *   ./gradlew :engine:run --args="--hero [gow-rom] [--blade N] [--auto run|combo] [--enemy R_SKS]"   (평지 조작 + 전투 연습)
@@ -31,7 +31,9 @@ public final class GowMain {
 		int levelCam = -1;
 		boolean levelCol = false;
 		Path level = null;
-		Scene first = new DebugScene(0.2f);
+		// 인자 없이 실행 = 원작처럼 메인 메뉴부터
+		Scene first = java.nio.file.Files.exists(Path.of("gow-rom", "R_SHELLK.WAD"))
+				? new devple.gow.engine.game.ShellScene(Path.of("gow-rom")) : new DebugScene(0.2f);
 		for (int i = 0; i < args.length; i++) {
 			if (args[i].equals("--screenshot") && i + 1 < args.length) {
 				shot = args[++i];

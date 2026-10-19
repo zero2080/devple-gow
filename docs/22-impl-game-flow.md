@@ -35,3 +35,17 @@ IN_GAME ─세이브 포인트→ SAVE_POINT → SAVE_DONE → IN_GAME
 ## 5. 미구현
 - 메모리카드 불러오기/저장 흐름(LOAD_CARD, SAVE_WRITE)과 세이브 직렬화 → 자체 포맷으로 구현 예정
 - `Goto`, `ZoneReport`, `ShowItemCard`, `CompleteGame` 메시지는 ESC 스크립트 VM 구현 시 연결
+
+## 6. 실제 화면 흐름 연결 (ShellScene → GameScene)
+`./gradlew :engine:run` (인자 없음) = 원작처럼 **메인 메뉴부터** 시작.
+
+| 원작 상태 | 엔진 |
+|----------|------|
+| 1–3 ShellLoad/ShellMenu | `game/ShellScene`: R_SHELLK `FLP_ShellK` 실행 |
+| 메뉴 결과 | 스크립트가 `PS2_Menu_Choice`(1 새 게임 / 2 불러오기) + `PS2_Done = 1` |
+| 4 NewGame → 9 LevelLoading → 11 InGame | `GameSession`(난이도) 생성 → 페이드 → `GameScene(ATHN01A)` |
+| 레벨 전환 | 스크립트 LoadWad/Warp → 새 `GameScene` (27 문서) |
+
+- `ShellNewGameTest`(헤드리스): 원작 메뉴에서 ○ → `PS2_Menu_Choice=1, PS2_Done=1` 확인.
+- `PS2_Difficulty_Level` 은 메뉴가 읽기만 하고 빈 값 → 엔진이 넣어 주는 변수로 판단, 현재는 보통(1). 난이도 선택 화면 연결은 미완.
+- 불러오기(2)는 세이브 미구현이라 새 게임으로 시작.

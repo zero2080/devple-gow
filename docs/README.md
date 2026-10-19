@@ -30,6 +30,16 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 | 28 | [구현: ESC 엔티티 런타임 (ScriptWorld)](28-impl-script-world.md) | 센서·발동·이벤트·스폰 완료 (테스트 8) |
 | 2x | 구현 진행 중: 스크립트·적 스폰 통합, 잡기/QTE, 세이브, 연출 | 진행 중 |
 
+## 게임 실행
+
+```bash
+./gradlew :engine:run                                  # 메인 메뉴 → 새 게임 → ATHN01A (원작 흐름)
+./gradlew :engine:run --args="--game ATHN01A"          # 레벨 바로 시작
+./gradlew :engine:run --args="--hero --enemy R_MIN"    # 평지 전투 연습
+```
+조작: WASD 이동, J □(약공) / I △(강공) / L ○(잡기) / K ×(점프) / Q L1(방어) / E R1, C R2(마법), 방향키 = 오른쪽 스틱(회피),
+Shift L3 + 오른쪽 Shift R3 = 신들의 분노, Enter = START(일시정지). 게임패드 자동 인식.
+
 ## 빌드 / 도구 실행
 
 ```bash
