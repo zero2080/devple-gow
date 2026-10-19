@@ -18,10 +18,14 @@ public final class MinigameIcon {
 		return current;
 	}
 
-	/** idx = 표 번호 (NONE = 숨김). */
-	public void show(FlpPlayer p, int idx) {
+	/**
+	 * idx = 표 번호 (NONE = 숨김). 원작 슬롯 설정 sub_0021DA50 은 10..13(연타·스틱) 으로 바뀔 때 SND_ICON 을 낸다.
+	 *
+	 * @return 바뀌어서 SND_ICON 을 내야 하면 true
+	 */
+	public boolean show(FlpPlayer p, int idx) {
 		if (idx == current) {
-			return;
+			return false;
 		}
 		if (current >= 0) {
 			p.detach(CLIPS[current]);
@@ -30,5 +34,6 @@ public final class MinigameIcon {
 		if (idx >= 0 && idx < CLIPS.length && p.attach(CLIPS[idx])) {
 			current = idx;
 		}
+		return idx >= BUTTON_PRESS && idx <= WIGGLE_BACK_FORTH;
 	}
 }

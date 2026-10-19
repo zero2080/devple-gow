@@ -214,6 +214,9 @@ TWK `/Player/MedusaHead` 의 일부 값은 덤프가 float 로 잘못 보여준�
 - 미니게임 버튼 아이콘은 변수가 아니다. 원작 `sub_001BA338(hud, idx)`: idx 가 바뀌면 이전 인스턴스를 떼고(`sub_0014AB18`),
   idx &lt; 15 이면 표 0x29DA40 의 이름 심볼을 FLP 에 붙인다(`sub_0014A980`). 표: 0–9 TimedPress 종류(XButtonGreek … 360CCW),
   10 XButtonPress(연타 ○ 버튼 그림), 11 R2ButtonPress, 12 WiggleStick, 13 WiggleBackForth, 14 R2ButtonStatic.
+- 슬롯 설정 `sub_0021DA50(slot, idx)`: TimedPress 시작(0x192ED0)이 슬롯 3 에 종류 아이콘(0–3 버튼, 8/9 360°…)을, 끝(0x192C90)이 −1 을 넣는다.
+  idx 10–13 으로 바뀌면 `SND_ICON` 을 낸다. 표시 = 8 슬롯 중 슬롯 7 → 0 역순으로 처음 −1 이 아닌 것 (0x21E908). RepeatPress(0x192160)는 이
+  함수를 부르지 않아 연타 아이콘 경로는 미확인.
 - **엔진**: `FlpPlayer.attach/detach(name)` — 루트 타임라인 키프레임에서 그 이름의 배치를 찾아 같은 변환으로 인스턴스를 만들어
   루트 위에 그린다 (루트 타임라인이 지나가도 유지). `MinigameIcon.show(player, idx)` 가 한 번에 하나만 유지.
   `GameScene`: 결합 중 타이밍 프롬프트 → `timed().iconIndex()`, 연타 진행 중 → 10 XButtonPress [추정: 연타 아이콘 선택], 그 밖 숨김.

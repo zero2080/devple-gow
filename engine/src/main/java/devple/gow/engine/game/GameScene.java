@@ -780,7 +780,9 @@ public final class GameScene implements Scene {
 				target.hp = 0; // 처형 성공 → 사망 처리 (원작은 처형 기술의 피해/스크립트) [근사]
 			}
 		}
-		minigameIcon.show(hud.player(), minigameIconIndex());
+		if (minigameIcon.show(hud.player(), minigameIconIndex())) {
+			session.sound.play("SND_ICON");
+		}
 		Vector3f p = hero.ctl.position;
 		cameraRig.update(dt, p, hero.ctl.yaw, !hero.ctl.grounded);
 		world.tick(dt, p.x, p.y, p.z);
