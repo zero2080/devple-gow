@@ -62,7 +62,20 @@ engine/
 - UV: GS 텍스처 좌표 원점이 좌상단 = 이미지 첫 행. GL 업로드도 첫 행부터 하므로 뒤집지 않는다
 - 법선이 없는 정적 메시(레벨)는 베이크된 정점색만 사용(`lit=false`), 컬링 없음(양면)
 
-## 6. 다음 단계
+## 6. GPU 스키닝 (05 문서 연동)
+| 클래스 | 역할 |
+|-------|------|
+| `render/SkinnedMesh` | 정점 15 float: pos, normal, uv, color, joints(A,B), weight |
+| `shaders/skinned.vert` | `p = (J[A]·v)·w + (J[B]·v)·(1−w)` — 원작 VU1 의 2관절 블렌딩 대체 |
+| `asset/AnimatedModel` | `SkinnedModel`(tools) → GPU. 파트마다 팔레트 선택: 모델 공간 파트 = `skin`(invBind·world), 관절 로컬 파트 = `world` |
+| `scene/AnimViewerScene` | `--anim <WAD> <MDL> <스켈레톤> <ANM> [애니]`, □/△ 로 251개 애니메이션 순환 |
+
+- 원본 행렬은 **행벡터 규약 row-major**. 그대로(전치 없이) `glUniformMatrix4fv` 로 올리면 GLSL 이 열 우선으로 읽어 전치가 되므로 `M * v` 가 원작의 `v · M` 과 같아진다 → 변환 코드 없이 재사용.
+- 관절 수: 크레토스 111 (유니폼 배열 128 로 충분, macOS GL 4.1 정점 유니폼 1024 vec4).
+- `SkinnedModel.Part` 에 UV / 정점색 / hasUv / hasNormal 추가 (텍스처 표시용).
+- 검증: `combo3A`, `walkBlend1` 을 엔진에서 텍스처 포함 재생 (스크린샷 `work/anim_engine.png`, `work/anim_walk.png`).
+
+## 7. 다음 단계
 1. 레벨: 게임 오브젝트(`go*`)/CXT 배치 정보를 해석해 레벨 전체 지오메트리 배치
 2. 05 단계 스켈레톤·애니메이션 → GPU 스키닝
 3. 06/07 단계의 실행 파일·스크립트 분석을 바탕으로 게임 오브젝트 / 전투 / UI 시스템 구현

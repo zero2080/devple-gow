@@ -48,6 +48,15 @@ public final class WadAssets implements AutoCloseable {
 		return gowModels.stream().map(m -> m.name).toList();
 	}
 
+	public MaterialResource material(String name) {
+		return materials.get(name);
+	}
+
+	public GowModel gowModel(String mdlName) {
+		return gowModels.stream().filter(m -> m.name.equals(mdlName)).findFirst()
+				.orElseThrow(() -> new IllegalArgumentException("모델 없음: " + mdlName));
+	}
+
 	public Texture texture(String txrName) {
 		if (txrName == null || txrName.isEmpty()) {
 			return null;
@@ -113,12 +122,7 @@ public final class WadAssets implements AutoCloseable {
 			if (mat != null && !mat.layers().isEmpty()) {
 				MaterialResource.Layer l = mat.layers().getFirst();
 				tex = s.hasUv ? texture(l.texture()) : null;
-				blend = switch (l.blendName()) {
-					case "add" -> RenderModel.Blend.ADD;
-					case "sub" -> RenderModel.Blend.SUB;
-					case "blend", "invblend" -> RenderModel.Blend.ALPHA;
-					default -> RenderModel.Blend.OPAQUE;
-				};
+				blend = RenderModel.Blend.of(l.blendName());
 				tint = l.rgba();
 			}
 			parts.add(new RenderModel.Part(new Mesh(v, idx, GL_TRIANGLES), tex, blend, tint, s.hasNormal));

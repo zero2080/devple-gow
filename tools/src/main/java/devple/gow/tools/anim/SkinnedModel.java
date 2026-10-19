@@ -29,6 +29,11 @@ public final class SkinnedModel {
 		public final String material;
 		public final List<float[]> pos = new ArrayList<>();
 		public final List<float[]> normal = new ArrayList<>();
+		public final List<float[]> uv = new ArrayList<>();
+		/** RGBA, PS2 0x80 = 1.0 */
+		public final List<int[]> color = new ArrayList<>();
+		public boolean hasUv;
+		public boolean hasNormal;
 		/** {jointA, jointB} 스켈레톤 인덱스. */
 		public final List<int[]> joints = new ArrayList<>();
 		public final List<Float> weights = new ArrayList<>();
@@ -145,9 +150,13 @@ public final class SkinnedModel {
 			}
 		}
 		int base = sp.pos.size();
+		sp.hasUv |= vb.uv != null;
+		sp.hasNormal |= vb.normal != null;
 		for (int i = 0; i < vb.count; i++) {
 			sp.pos.add(new float[]{vb.x(i), vb.y(i), vb.z(i)});
 			sp.normal.add(vb.normal != null ? vb.normal[i] : new float[3]);
+			sp.uv.add(vb.uv != null ? vb.uv[i] : new float[2]);
+			sp.color.add(vb.color != null ? vb.color[i] : new int[]{128, 128, 128, 128});
 			sp.joints.add(new int[]{ja[i], jb[i]});
 			sp.weights.add(vb.weight(i) / 4096f);
 		}

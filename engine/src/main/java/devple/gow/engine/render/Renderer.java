@@ -30,6 +30,10 @@ public final class Renderer implements AutoCloseable {
 				.build(GL_TRIANGLES);
 	}
 
+	public Texture white() {
+		return white;
+	}
+
 	public Shader basic() {
 		return basic;
 	}

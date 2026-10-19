@@ -12,7 +12,19 @@ import java.util.List;
  */
 public record RenderModel(String name, List<Part> parts, float[] min, float[] max) implements AutoCloseable {
 
-	public enum Blend { OPAQUE, ALPHA, ADD, SUB }
+	public enum Blend {
+		OPAQUE, ALPHA, ADD, SUB;
+
+		/** MaterialResource.Layer#blendName (GS ALPHA 레지스터) → 블렌드. */
+		public static Blend of(String gsBlend) {
+			return switch (gsBlend) {
+				case "add" -> ADD;
+				case "sub" -> SUB;
+				case "blend", "invblend" -> ALPHA;
+				default -> OPAQUE;
+			};
+		}
+	}
 
 	public record Part(Mesh mesh, Texture texture, Blend blend, float[] tint, boolean lit) {
 	}

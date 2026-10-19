@@ -58,6 +58,10 @@ public final class Shader implements AutoCloseable {
 		glUseProgram(program);
 	}
 
+	public int location(String name) {
+		return loc(name);
+	}
+
 	private int loc(String name) {
 		return uniforms.computeIfAbsent(name, n -> glGetUniformLocation(program, n));
 	}
