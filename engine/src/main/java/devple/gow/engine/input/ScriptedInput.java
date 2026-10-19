@@ -12,6 +12,18 @@ public final class ScriptedInput extends Input {
 	public record Step(float at, float hold, PadButton button) {
 	}
 
+	/** 스틱 입력 구간: right = 오른쪽 스틱 여부. */
+	public record Stick(float at, float hold, boolean right, float x, float y) {
+	}
+
+	private final List<Stick> sticks = new java.util.ArrayList<>();
+	private float lx, ly, rx, ry;
+
+	public ScriptedInput stick(Stick s) {
+		sticks.add(s);
+		return this;
+	}
+
 	private final List<Step> steps;
 	private final Set<PadButton> down = EnumSet.noneOf(PadButton.class);
 	private final Set<PadButton> prev = EnumSet.noneOf(PadButton.class);
@@ -30,6 +42,18 @@ public final class ScriptedInput extends Input {
 		for (Step s : steps) {
 			if (time >= s.at() && time < s.at() + s.hold()) {
 				down.add(s.button());
+			}
+		}
+		lx = ly = rx = ry = 0;
+		for (Stick s : sticks) {
+			if (time >= s.at() && time < s.at() + s.hold()) {
+				if (s.right()) {
+					rx = s.x();
+					ry = s.y();
+				} else {
+					lx = s.x();
+					ly = s.y();
+				}
 			}
 		}
 	}
@@ -55,22 +79,22 @@ public final class ScriptedInput extends Input {
 
 	@Override
 	public float leftX() {
-		return 0;
+		return lx;
 	}
 
 	@Override
 	public float leftY() {
-		return 0;
+		return ly;
 	}
 
 	@Override
 	public float rightX() {
-		return 0;
+		return rx;
 	}
 
 	@Override
 	public float rightY() {
-		return 0;
+		return ry;
 	}
 
 	public float time() {
