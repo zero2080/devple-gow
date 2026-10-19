@@ -127,6 +127,7 @@ public final class Magic {
 		return magicId >= 3 && magicId <= 6 && player.mp >= cost(magicId);
 	}
 
+
 	/**
 	 * 분기 시작 시 소모 (Combatant.start). 번개만 시작 때 Stage Magic Drain 을 쓰고,
 	 * 메두사·제우스·하데스는 효과 쪽(0x1DCA58 호출 위치)에서 소모한다.

@@ -3,6 +3,7 @@ package devple.gow.engine.combat;
 import devple.gow.engine.game.Tweaks;
 import devple.gow.engine.input.Input;
 import devple.gow.engine.input.PadButton;
+import devple.gow.tools.combat.CombatFile;
 import org.joml.Vector3f;
 
 import java.util.List;
@@ -13,7 +14,10 @@ import java.util.List;
  *   <li>광선: USEHEAD 의 SCRIPT {@code SCR_MedusaHead} 동안 마법 버튼을 누르고 있으면 켜짐. MP 초당 Stage Drain (12.5/10/8.33)</li>
  *   <li>원뿔: 기울기 = (Base − Top)/Distance, 꼭짓점 = 눈 − 방향 × Top/기울기, 길이 (Distance + apexBack) × 16 — 적 반지름 포함 원뿔-구 판정</li>
  *   <li>명중한 적의 동결 게이지 −= Freeze Factor(u16 100/115/125) × 60 × dt; 0 이 되면 석화 ({@link Hittable#addFreeze})</li>
- *   <li>섬광(단계 1·2): ○ 누름(원작 비트 0x10, 추정) + MP ≥ Flash Points(20) → 20 소모, 섬광 원뿔(14/18) 안 적에 8000 한 번</li>
+ *   <li>섬광(단계 1·2): 광선 중 △ (SCR_TriggerMedusaHead, 패드 비트 4) 또는 공중 AIRUSEHEAD 의 SCR_FlashMedusaHead
+ *       + MP ≥ Flash Points(20) → 20 소모, 섬광 원뿔(14/18) 안 적에 8000 한 번</li>
+ *   <li>Nuke(단계 2, MP ≥ 100): 광선 중 ○ → HEADNUKESTART(차지) → HEADNUKESLAM 의 SCR_MedusaNuke = Concussion 0/1 반경 7.5/15
+ *       동결 30000 ({@link #nuke})</li>
  *   <li>광선이 꺼지면(버튼 뗌) 기술 분기가 PUTAWAYHEAD 로 넘어간다 (영웅 CombatFile)</li>
  * </ul>
  * 시선(LOS) 충돌 검사(0x195FB0)는 생략 [근사].
@@ -22,6 +26,10 @@ public final class MedusaGaze {
 
 	/** SCR_MedusaHead / SCR_FlashMedusaHead 의 Hash127Upper. */
 	public static final int SCR_HEAD = 0x45fa7bf4, SCR_FLASH = 0x8466f02a;
+	/** SCR_MedusaNuke 의 Hash127Upper. */
+	public static final int SCR_NUKE = 0x46b9f9f5;
+	/** SCR_TriggerMedusaHead 의 Hash127Upper. */
+	public static final int SCR_TRIGGER = 0x7408dbd2;
 	/** u16 필드 (덤프가 float 로 잘못 표시): Freeze Factor 100/115/125, Flash Freeze Factor 10000/8000/8000. */
 	static final int[] FREEZE = {100, 115, 125}, FLASH_FREEZE = {10000, 8000, 8000};
 	/** 원작 영웅 "적 반지름"(vtable +0xBC) 근사, m. */
@@ -36,6 +44,8 @@ public final class MedusaGaze {
 	/** 몸 정면 기준 최대 조준 각 [추정: Up/Down Angle Degree 덤프 손상, 하위 바이트 80]. */
 	static final float MAX_AIM = (float) Math.toRadians(80);
 	private int flashSerial = -1;
+	/** 처리한 Nuke 이벤트 (기술 일련번호 &lt;&lt; 8 | idx). */
+	private final java.util.Set<Long> nukeDone = new java.util.HashSet<>();
 	/** 이번 틱에 석화된 대상 수 (테스트용 누적). */
 	public int petrified;
 
@@ -102,9 +112,15 @@ public final class MedusaGaze {
 					base = tw.f(n, st + "Cone Base Rad", 3.25f);
 			cone(c, targets, dist, top, base, u16(n, st + "Freeze Factor", FREEZE[stage]) * 60f * dt, sink);
 		}
-		// 섬광: AIRUSEHEAD 의 SCR_FlashMedusaHead 이벤트 또는 광선 중 ○ 누름
+		// SCR_TriggerMedusaHead (0x197FD8, USEHEAD 내내): Allow Flash Freeze 이고 패드 비트 4(△) 새로 누름 → 섬광 요청,
+		// Allow Nuke 이고 MP ≥ Nuke Points → +0x1AC|=0x1000 (광선 중 ○ 분기 flags 0x8 = HEADNUKESTART 조건), 아니면 끔
+		boolean trigger = c.activeScript(SCR_TRIGGER) != null;
+		boolean flashBtn = trigger && in != null && in.pressed(PadButton.TRIANGLE)
+				&& (tw.raw(n, st + "Allow Flash Freeze").orElse(0) & 0xFF) != 0;
+		c.setStateBit(Combatant.STATE_TRIGGER, trigger && (tw.raw(n, st + "Allow Nuke").orElse(0) & 0xFF) != 0
+				&& mp >= tw.f(n, st + "Nuke Points", 100f));
+		// 섬광: AIRUSEHEAD 의 SCR_FlashMedusaHead 이벤트 또는 광선 중 △
 		boolean flashEv = c.activeScript(SCR_FLASH) != null && c.moveSerial() != flashSerial;
-		boolean flashBtn = head && in != null && in.pressed(PadButton.CIRCLE);
 		if ((flashEv || flashBtn) && tw.f(n, st + "Flash Distance", 0) > 0) {
 			flashSerial = c.moveSerial();
 			float pts = tw.f(n, st + "Flash Points", 20f);
@@ -117,6 +133,42 @@ public final class MedusaGaze {
 			} else {
 				sink.sound("SND_IG_MAGICOUT", c.owner().position());
 			}
+		}
+		used += nuke(c, targets, st, mp - used, sink);
+		return used;
+	}
+
+	/**
+	 * SCR_MedusaNuke (0x198928): HEADNUKESLAM(65 작은 / 66 큰) 의 이벤트 idx = Concussion 템플릿 번호.
+	 * 0/1 "Medusa Nuke S/L" = Freeze(bool) 1, Freeze Factor 30000, 반경 7.5/15 (× 16) → 반경 안 대상에 동결 한 번.
+	 * 3/4 "Medusa Small/Large FX" = 연출만 (Effect goMedHeadNuke). MP: 단계 Nuke Points (단계 2 = 100, 0·1 = 0) 를 이벤트마다
+	 * sub_001DCA58 로 소모 [확실: 호출 / 추정: 0 이 아닌 단계만 의미]. 반경이 Duration 동안 End Radius 로 줄어드는 것은 시작 반경 한 번으로 근사.
+	 */
+	private float nuke(Combatant c, List<? extends Hittable> targets, String st, float mp, Magic.Sink sink) {
+		float used = 0;
+		for (CombatFile.Event e : c.activeScripts(SCR_NUKE)) {
+			long key = ((long) c.moveSerial() << 8) | (e.index() & 0xFF);
+			if (!nukeDone.add(key)) {
+				continue;
+			}
+			String cn = String.format("/TweakTemplates/Concussion/%03d/", e.index());
+			Vector3f at = c.owner().position();
+			sink.effect(tw.s(cn, "Effect Name", "goMedHeadNuke"), at);
+			if ((tw.raw(cn, "Freeze").orElse(0) & 0xFF) == 0) {
+				continue;
+			}
+			float pts = Math.min(mp - used, tw.f("/Player/MedusaHead/", st + "Nuke Points", 0));
+			used += Math.max(0, pts);
+			float r = tw.f(cn, "Start Radius", 7.5f) * Magic.UNIT;
+			int amount = tw.raw(cn, "Freeze Factor").orElse(30000) & 0xFFFF;
+			for (Hittable h : targets) {
+				if (h.hp() > 0 && !h.petrified() && h.position().distance(at) <= r + ENEMY_RADIUS * Magic.UNIT && h.addFreeze(amount)) {
+					sink.petrified(h);
+				}
+			}
+		}
+		if (nukeDone.size() > 64) {
+			nukeDone.clear();
 		}
 		return used;
 	}

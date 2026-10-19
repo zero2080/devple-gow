@@ -134,6 +134,28 @@ public final class Combatant {
 	 * 현재 진행률에서 활성인 SCRIPT(8) 이벤트 중 해시가 같은 것 (없으면 null).
 	 * 해시 = SCR_ 명령 이름의 Hash127Upper (예 SCR_ThrowThunderbolt = 0x96EDE590, 35 문서 §1).
 	 */
+	/** {@link #activeScript} 와 같지만 같은 해시의 활성 이벤트 전부 (예 HEADNUKESLAM 의 SCR_MedusaNuke idx 0 + 3). */
+	/** combatant+0x1AC 상태 비트 0x1000 (분기 flags 0x8 의 조건, 10 문서 §2.4). */
+	public static final int STATE_TRIGGER = 0x1000;
+	private int stateBits;
+
+	/** 원작 sub_001E1B70 / sub_001E1BD0: +0x1AC 비트 켜기/끄기. */
+	public void setStateBit(int bit, boolean on) {
+		stateBits = on ? stateBits | bit : stateBits & ~bit;
+	}
+
+	public boolean stateBit(int bit) {
+		return (stateBits & bit) != 0;
+	}
+
+	public java.util.List<CombatFile.Event> activeScripts(int hash) {
+		if (move == null) {
+			return java.util.List.of();
+		}
+		float t = progress();
+		return move.events().stream().filter(e -> e.type() == 8 && e.hash() == hash && t >= e.start() && t <= e.end()).toList();
+	}
+
 	public CombatFile.Event activeScript(int hash) {
 		if (move == null) {
 			return null;
@@ -448,8 +470,11 @@ public final class Combatant {
 		if ((f & 0x8000) == 0 && ((f & 0x2000) != 0) != owner.artemisEquipped()) {
 			return -1;
 		}
-		if ((f & 0x20000) != 0 || (f & 0x80000) != 0 || (f & 0x800) != 0 || (f & 0x8) != 0) {
+		if ((f & 0x20000) != 0 || (f & 0x80000) != 0 || (f & 0x800) != 0) {
 			return -1; // 미상 플래그 / 차지는 아직 미지원
+		}
+		if ((f & 0x8) != 0 && (stateBits & STATE_TRIGGER) == 0) {
+			return -1; // combatant+0x1AC&0x1000 필요 (메두사 Nuke: SCR_TriggerMedusaHead 가 켬)
 		}
 		// 대상 조건 (10 문서 §2.4): 0x40 = 무시, 아니면 대상 +0x1B8(잡기 가능) == (0x10 ? 참 : 거짓). 폴링(락온 대상)에만 적용
 		if ((f & 0x40) == 0 && o.polled() && o.grabbable() != ((f & 0x10) != 0)) {
@@ -500,6 +525,9 @@ public final class Combatant {
 	}
 
 	private void start(Branch b, Input in) {
+		if ((b.flags() & 0x8) != 0) {
+			stateBits &= ~STATE_TRIGGER; // 실행 시 소비
+		}
 		end();
 		if (b.target() == -2) {
 			return;

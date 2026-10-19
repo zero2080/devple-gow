@@ -132,6 +132,43 @@ class MagicSpellsTest {
 		assertTrue(en.dead());
 	}
 
+	/** 단계 2: 광선 중 ○ → HEADNUKESTART(64) → HEADNUKESLAM(65/66) 의 SCR_MedusaNuke → 반경 안(원뿔 밖 포함) 적 석화, Nuke Points 소모. */
+	@Test
+	void medusaNukeAtStage2() throws Exception {
+		Rig r = new Rig(4);
+		r.ps.level.put(devple.gow.engine.game.Weapon.MEDUSA, 2);
+		r.ps.mpLevel = 3; // Nuke Points 100 이상 (MP 최대가 레벨 0 에서는 부족)
+		r.ps.mp = r.ps.maxMp();
+		assertTrue(r.ps.mp >= 100, "최대 MP " + r.ps.mp);
+		EnemyFighter behind = EnemyFactory.load(r.rom.resolve("R_MIN.WAD"), r.perm, -1).spawn();
+		behind.pos.set(0, 0, 120); // 뒤쪽 (광선 원뿔 밖), Nuke L 반경 15 × 16 = 240 안
+		r.magic.setTargets(() -> List.of(behind));
+		ScriptedInput in = new ScriptedInput(0, List.of(new ScriptedInput.Step(0.1f, 3.5f, PadButton.R2),
+				new ScriptedInput.Step(1.5f, 0.05f, PadButton.CIRCLE)));
+		float mpBefore = r.ps.mp;
+		for (float t = 0; t < 3.5f && !behind.petrified(); t += DT) {
+			r.tick(in, new Vector3f(0, 0, -150));
+			behind.update(DT);
+		}
+		assertTrue(r.moves.contains(64), "광선 중 ○ → HEADNUKESTART: " + r.moves);
+		assertTrue(r.moves.contains(65) || r.moves.contains(66), "HEADNUKESLAM: " + r.moves);
+		assertTrue(behind.petrified(), "Nuke 동결 30000 ≥ 미노타우로스 6000: 게이지 " + behind.freezeMeter());
+		assertTrue(mpBefore - r.ps.mp >= 100 - 1e-3, "단계 2 Nuke Points 100 소모: " + (mpBefore - r.ps.mp));
+	}
+
+	/** 단계 0: Allow Nuke = 0 → +0x1AC&0x1000 이 꺼져 광선 중 ○ 분기(flags 0x8) 불가 (SCR_TriggerMedusaHead 0x197FD8). */
+	@Test
+	void medusaNukeNotAtStage0() throws Exception {
+		Rig r = new Rig(4);
+		ScriptedInput in = new ScriptedInput(0, List.of(new ScriptedInput.Step(0.1f, 2f, PadButton.R2),
+				new ScriptedInput.Step(1.5f, 0.05f, PadButton.CIRCLE)));
+		for (float t = 0; t < 2f; t += DT) {
+			r.tick(in, new Vector3f(0, 0, -150));
+		}
+		assertTrue(r.moves.contains(82), "USEHEAD: " + r.moves);
+		assertFalse(r.moves.contains(64), "단계 0 은 Nuke 불가: " + r.moves);
+	}
+
 	@Test
 	void medusaStoneWearsOff() throws Exception {
 		Rig r = new Rig(4);

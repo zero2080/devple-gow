@@ -50,11 +50,27 @@ TWK `/Player/MedusaHead` 의 일부 값은 덤프가 float 로 잘못 보여준�
 `Combatant.setMoveHold` 로 버튼을 누르는 동안 기술을 유지하고, 버튼을 떼면 원작 분기대로 PUTAWAYHEAD(83)로 간다.
 
 **섬광** (단계 1·2):
-- AIRUSEHEAD 의 SCR_FlashMedusaHead, 또는 광선 중 ○ 로 발동한다 (원작 비트 0x10, 버튼 대응은 추정).
+- AIRUSEHEAD 의 SCR_FlashMedusaHead, 또는 광선 중 **△** 로 발동한다. USEHEAD 내내 도는 `SCR_TriggerMedusaHead`(0x197FD8, #7408dbd2)가
+  단계 `Allow Flash Freeze`(bool) 이고 패드 비트 4(게임 패드 배치 = △, 10 문서 §2.5 표와 같은 순서) 새로 누름이면 섬광 요청(0x29D804 = 1)을 건다
+  [확실: 코드 / 이전 문서의 "○" 는 오류].
 - MP ≥ 20 이면 20 을 한 번 소모하고, 섬광 원뿔 안 적에 8000 을 한 번 준다.
 - MP 가 모자라면 SND_IG_MAGICOUT 을 낸다.
 
-**Nuke**: Concussion 000/001 "Medusa Nuke S/L" (반경 7.5/15, Freeze 30000)이다. 미구현.
+**Nuke** (단계 2) [확실: 흐름·값 / 추정: 반경 축소 근사]:
+- 조건: `SCR_TriggerMedusaHead` 가 매 프레임 `Allow Nuke`(단계 2 만 1) 이고 MP ≥ `Nuke Points`(100) 이면 combatant `+0x1AC |= 0x1000`
+  (sub_001E1B70), 아니면 끈다(sub_001E1BD0). USEHEAD 의 `CIRCLE/press MedusaHead → M64 HEADNUKESTART` 분기 flags `0x10824B` 의
+  **0x8 = +0x1AC&0x1000 필요, 실행 시 소비** (10 문서 §2.4) — 그래서 단계 0·1 이나 MP 부족이면 ○ 가 아무 일도 안 한다.
+- HEADNUKESTART(64, 차지 SND_CHARGE_LP) → ○ 를 떼면 M65, 끝까지 차지하면 M66 HEADNUKESLAM. 0.47 에 `SCR_MedusaNuke`(0x198928, #46B9F9F5)
+  이벤트 둘: M65 = idx 0 + 3, M66 = idx 1 + 4. **idx = Concussion 템플릿 번호**.
+- `SCR_MedusaNuke`: 단계 Nuke Points 를 MP 에서 소모(sub_001DCA58) → Concussion 템플릿을 synchJoint 에 생성(sub_00191720).
+  | 템플릿 | 이름 | Freeze(bool) | Freeze Factor(u16) | 반경 시작→끝 | 지속 |
+  |---|---|---|---|---|---|
+  | 000 | Medusa Nuke S | 1 | 30000 | 7.5 → 3.0 | 0.1 |
+  | 001 | Medusa Nuke L | 1 | 30000 | 15.0 → 3.0 | 0.3 |
+  | 003 / 004 | Medusa Small / Large FX | 0 | – | 0 → 7.5 / 15 | 0.3 / 0.6 |
+- 엔진 (`MedusaGaze.nuke`): 이벤트마다 한 번, Freeze 템플릿이면 영웅 중심 시작 반경(× 16, 적 반지름 포함) 안 대상에 동결 30000 (석화 게이지 최대
+  6000 인 미노타우로스는 즉시 석화, 원뿔 밖·뒤도 포함), FX 템플릿은 Effect goMedHeadNuke 만. `Combatant.setStateBit(STATE_TRIGGER)` / 분기 0x8 조건.
+- 검증: `MagicSpellsTest.medusaNukeAtStage2` (뒤쪽 120 유닛 미노타우로스 석화, MP 100 소모), `medusaNukeNotAtStage0` (○ 분기 없음).
 
 ### 2.1 적 쪽 동결 게이지 / 석화 / 파괴 (`EnemyFighter`, 0x1E8C40)
 
