@@ -14,9 +14,17 @@ import java.util.List;
  *   <li>HANG: 관절 0 (매단 점) → 마지막 관절 (바인드 자세에서 수직으로 늘어진 끝)</li>
  *   <li>TRAVERSE / ZIPLINE: 관절 0 → SCR 끝점 (미터 ×16)</li>
  * </ul>
- * 원작은 질점-스프링 줄 시뮬레이션 (TWK Segment Mass / Spring Damping / Gravity) 이지만 여기서는 곧은 선분 [근사].
+ * 판정·잡기는 곧은 선분. 매단 줄 (HANG) 에 매달린 동안은 {@link RopeSim} (원작 질점-스프링 0x217A40) 이 줄 모양을 움직인다.
+ * 양끝 고정 줄 (TRAVERSE / ZIPLINE) 은 곧은 선분 그대로 [근사: 원작은 같은 시뮬레이션, 매달림 최대 무게 10].
+ *
+ * @param joints 줄 오브젝트 관절 수 (시뮬레이션 노드 수 [추정: 원작은 사슬 관절 수])
  */
-public record NavRope(String owner, RopeDef.Type type, int template, float maxSwingDeg, Vector3f top, Vector3f end) {
+public record NavRope(String owner, RopeDef.Type type, int template, float maxSwingDeg, Vector3f top, Vector3f end, int joints) {
+
+	/** 관절 수를 모를 때 (시험) 9 노드 = 8 칸. */
+	public NavRope(String owner, RopeDef.Type type, int template, float maxSwingDeg, Vector3f top, Vector3f end) {
+		this(owner, type, template, maxSwingDeg, top, end, 9);
+	}
 
 	public float length() {
 		return top.distance(end);
@@ -54,7 +62,7 @@ public record NavRope(String owner, RopeDef.Type type, int template, float maxSw
 			int l = jw.length - 1;
 			Vector3f end = d.type() == RopeDef.Type.HANG ? new Vector3f(jw[l][12], jw[l][13], jw[l][14])
 					: new Vector3f(d.end()[0], d.end()[1], d.end()[2]);
-			out.add(new NavRope(p.instance().name(), d.type(), d.template(), d.angle(), top, end));
+			out.add(new NavRope(p.instance().name(), d.type(), d.template(), d.angle(), top, end, jw.length));
 		}
 		return out;
 	}

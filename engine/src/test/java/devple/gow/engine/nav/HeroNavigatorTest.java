@@ -181,7 +181,7 @@ class HeroNavigatorTest {
 		Pad in = new Pad();
 		in.ly = 1;
 		in.down.add(PadButton.CROSS);
-		b.pos.set(0, 0, -2);
+		b.pos.set(0, 0, -8); // 지상 벽 질의는 정면 14.4 (0x1E48E4) — 게임 몸 구 반지름 12 만큼 벽에서 떨어진 자리
 		tick(nav, b, w, in);
 		assertEquals(NavState.WALL_CLIMB, nav.state(), "벽 쪽 스틱 + × → 벽 오르기");
 		assertEquals(-20 + HeroNavigator.WALL_OFF, b.pos.z, 0.01f);
@@ -189,10 +189,15 @@ class HeroNavigatorTest {
 			in.ly = 1;
 			tick(nav, b, w, in);
 		}
+		// 원작 0x1C78FC: 올라가다 손 높이에 턱 (0x1E3A80) → 턱 매달리기 (0x1C75F8), 발 = 턱 − 35.2
+		assertEquals(NavState.LEDGE_HANG, nav.state(), "꼭대기 턱에 매달림");
+		assertEquals(100 - HeroNavigator.HANG, b.pos.y, 0.01f);
+		in.ly = 1;
+		tick(nav, b, w, in);
 		assertEquals(NavState.GROUND, nav.state(), "꼭대기에서 올라섬");
 		assertEquals(100, b.pos.y, 0.01f);
 		assertTrue(b.pos.z < -20, "벽 너머 위 바닥 " + b.pos);
-		assertTrue(b.played.contains("wClimbBlend0") && b.played.contains("wallpullup"), b.played.toString());
+		assertTrue(b.played.contains("wClimbBlend0") && b.played.contains("WallhangCatch") && b.played.contains("wallpullup"), b.played.toString());
 	}
 
 	@Test
@@ -223,9 +228,10 @@ class HeroNavigatorTest {
 		Pad in = new Pad();
 		b.grounded = false;
 		b.vy = -10;
-		b.pos.set(0, 12, -4);
+		b.pos.set(0, 4, -10); // 손 (발 + 35.2) 이 턱 40 을 막 지남, 턱 탐색 점 = 정면 12.8 (벽 너머 2.8)
 		tick(nav, b, w, in);
 		assertEquals(NavState.LEDGE_HANG, nav.state(), "하강 중 손 높이 턱 → 매달림");
+		assertEquals(-20 + HeroNavigator.WALL_OFF, b.pos.z, 0.01f);
 		assertEquals(40 - HeroNavigator.HANG, b.pos.y, 0.01f);
 		assertEquals("WallhangCatch", b.anim);
 		// 좌우 이동 (ANIWallHangR)
@@ -255,7 +261,7 @@ class HeroNavigatorTest {
 		HeroNavigator nav = new HeroNavigator(b, w, null);
 		Pad in = new Pad();
 		in.ly = 1;
-		b.pos.set(0, 0, -4);
+		b.pos.set(0, 0, -8);
 		tick(nav, b, w, in);
 		assertEquals(NavState.LADDER, nav.state(), "사다리는 스틱만으로 붙는다");
 		for (int i = 0; i < 900 && nav.state() == NavState.LADDER; i++) {
@@ -310,7 +316,8 @@ class HeroNavigatorTest {
 			in.ly = 1;
 			tick(nav, b, w, in);
 		}
-		assertTrue(b.pos.y > y0 + 40, "줄 오르기 " + y0 + " → " + b.pos.y);
+		// 2 초 × 24 = 48 오르지만 그동안 영웅 무게 (0 → 100, 0x217C48) 로 줄이 늘어나 ≈ 15 처짐 (RopeSim)
+		assertTrue(b.pos.y > y0 + 25, "줄 오르기 " + y0 + " → " + b.pos.y);
 		assertEquals("ropeUp", b.anim);
 		in.ly = 0;
 		for (int i = 0; i < 180; i++) {
@@ -712,5 +719,200 @@ class HeroNavigatorTest {
 		assertEquals("1049 111", log.getLast());
 		assertTrue(log.contains("1023 100 111 0"), "완료 100 % (ElevatorLever-LeverProgress 조건): " + log);
 		assertEquals(NavState.GROUND, nav.state());
+	}
+
+	/** 표면 레코드가 붙은 사각형 (WallHangTimer 시험용). */
+	static void quadInfo(List<LevelCollision.Tri> out, Vector3f a, Vector3f b, Vector3f c, Vector3f d, float hangTimer, SurfaceAttr... at) {
+		long m = 0;
+		for (SurfaceAttr x : at) {
+			m |= x.bit();
+		}
+		devple.gow.tools.level.SheetSurface info = new devple.gow.tools.level.SheetSurface("t", m, 0, 8, hangTimer, 0, 0);
+		for (Vector3f[] tri : new Vector3f[][] {{a, b, c}, {a, c, d}}) {
+			Vector3f n = new Vector3f(tri[1]).sub(tri[0]).cross(new Vector3f(tri[2]).sub(tri[0])).normalize();
+			out.add(new LevelCollision.Tri(tri[0], tri[1], tri[2], n, 0, m, info));
+		}
+	}
+
+	/** 원작 0x1E47E0: 벽 오르기 = 발 + 6.4 에서 좌우 ±8 · 정면 14.4 두 선분이 모두 붙는 면, 머리 (+27.8) 선분도 붙는 면, 위치 = 벽 + 9.6. */
+	@Test
+	void wallProbeNeedsBothRaysAndHeadAndSnapsToHalfDepth() {
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -200, -200, 200, 200, 0, SurfaceAttr.GROUND);
+		wallZ(t, -20, -100, 100, 0, 200, SurfaceAttr.CLIMBABLE);          // 넓은 벽
+		wallZ(t, -60, 300, 306, 0, 200, SurfaceAttr.CLIMBABLE);            // 폭 6 띠 (한 선분만 맞음)
+		wallZ(t, -60, 500, 600, 0, 20, SurfaceAttr.CLIMBABLE);             // 머리 높이 아래에서 끝나는 벽
+		wallZ(t, -60, 500, 600, 20, 200, SurfaceAttr.GROUND);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		HeroNavigator nav = new HeroNavigator(new Body(), w, null);
+		Vector3f into = v(0, 0, -1);
+		HeroNavigator.WallProbe p = nav.probeWall(v(5, 0, -8), into, null);
+		assertNotNull(p);
+		assertEquals(-20 + 9.6f, p.feet().z, 1e-3f, "벽 + 상자 반 깊이 9.6");
+		assertEquals(5, p.feet().x, 1e-3f);
+		assertEquals(0, p.feet().y, 1e-3f);
+		assertEquals(1, p.n().z, 1e-4f);
+		assertNull(nav.probeWall(v(5, 0, -3), into, null), "정면 14.4 밖 (벽까지 17)");
+		assertNull(nav.probeWall(v(303, 0, -48), into, null), "폭 6 띠: ±8 선분 중 하나만 맞음");
+		assertNull(nav.probeWall(v(550, 0, -48), into, null), "머리 높이 (발 + 34.2) 가 Climbable 아님");
+		assertEquals(9.6f, HeroNavigator.WALL_OFF, 1e-4f);
+		assertEquals(35.2f, HeroNavigator.HANG, 1e-4f);
+		assertEquals(28.8f, HeroNavigator.REACH, 1e-4f);
+	}
+
+	/** 원작 0x1E3A80: 턱 = 정면 12.8 · 좌우 ±4.8 수직 선분 둘이 손 높이 ± d 에서 바닥 (법선 y &gt; 0.85, Slide·NoWallHang 아님) 에 맞을 때. */
+	@Test
+	void ledgeProbeRules() {
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -200, -20, 200, 200, 0, SurfaceAttr.GROUND);
+		wallZ(t, -20, -100, 300, 0, 40, SurfaceAttr.GROUND);
+		floor(t, -100, -300, 100, -20, 40, SurfaceAttr.GROUND);
+		floor(t, 100, -300, 200, -20, 40, SurfaceAttr.GROUND, SurfaceAttr.SLIDE);
+		quadInfo(t, v(200, 40, -300), v(200, 40, -20), v(300, 40, -20), v(300, 40, -300), 60, SurfaceAttr.GROUND, SurfaceAttr.NO_WALL_HANG);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		Body b = new Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		Vector3f f = v(0, 0, -1);
+		HeroNavigator.Ledge l = nav.probeLedge(v(0, 4, -10), v(0, 4.5f, -10), f, null);
+		assertNotNull(l, "하강 중 손 (발 + 35.2 = 39.2) 이 턱 40 아래");
+		assertEquals(40, l.y(), 1e-3f);
+		assertEquals(40 - 35.2f, l.feet().y, 1e-3f);
+		assertEquals(-20 + 9.6f, l.feet().z, 1e-3f);
+		assertNull(nav.probeLedge(v(0, 6, -10), v(0, 6.5f, -10), f, null), "하강 중인데 손 (41.2) 이 아직 턱 위");
+		assertNotNull(nav.probeLedge(v(0, 6, -10), v(0, 5.5f, -10), f, null), "올라가는 중엔 창 (±3.2) 안이면 잡음");
+		assertNull(nav.probeLedge(v(0, -2, -10), v(0, -1.5f, -10), f, null), "손이 창 밖 (턱 아래 6.8)");
+		assertNull(nav.probeLedge(v(0, 4, -3), v(0, 4.5f, -3), f, null), "턱 탐색 점 (정면 12.8) 이 아직 벽 앞");
+		assertNull(nav.probeLedge(v(150, 4, -10), v(150, 4.5f, -10), f, null), "Slide 턱");
+		assertNull(nav.probeLedge(v(250, 4, -10), v(250, 4.5f, -10), f, null), "NoWallHang 턱");
+		assertEquals(-20 + 9.6f, nav.probeLedge(v(0, 4, -12.5f), v(0, 4.5f, -12.5f), f, null).feet().z, 1e-3f, "벽 + 9.6 으로 맞춤");
+	}
+
+	/** 원작 0x1C772C / 0x1C7B04: 매달리기 시간 = 턱 면 WallHangTimer, 다 쓰면 떨어지고 땅에 닿기 전엔 다시 못 잡음. */
+	@Test
+	void wallHangTimerDropsAndBlocksRegrabUntilLanding() {
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -200, -20, 200, 200, 0, SurfaceAttr.GROUND);
+		wallZ(t, -20, -100, 100, 0, 40, SurfaceAttr.GROUND);
+		quadInfo(t, v(-100, 40, -300), v(-100, 40, -20), v(100, 40, -20), v(100, 40, -300), 0.5f, SurfaceAttr.GROUND);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		Body b = new Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		Pad in = new Pad();
+		b.grounded = false;
+		b.vy = -10;
+		b.pos.set(0, 4, -10);
+		tick(nav, b, w, in);
+		assertEquals(NavState.LEDGE_HANG, nav.state());
+		assertEquals(0.5f, nav.hangTimer(), 1e-4f);
+		int n = 0;
+		while (nav.state() == NavState.LEDGE_HANG && n < 100) {
+			tick(nav, b, w, in);
+			n++;
+		}
+		assertEquals(30, n, 1, "0.5 초 매달린 뒤 떨어짐");
+		assertEquals(0, nav.hangTimer());
+		// 떨어지는 동안 손이 턱을 다시 지나도 (타이머 0) 못 잡음
+		b.pos.set(0, 4, -10);
+		b.vy = -10;
+		b.grounded = false;
+		tick(nav, b, w, in);
+		assertNotEquals(NavState.LEDGE_HANG, nav.state());
+		for (int i = 0; i < 120 && !b.grounded; i++) {
+			tick(nav, b, w, in);
+		}
+		assertTrue(b.grounded);
+		tick(nav, b, w, in);
+		assertEquals(Float.MAX_VALUE, nav.hangTimer(), "착지 → 초기화 (0x1C78A0)");
+	}
+
+	/** 원작 0x1C44E0: 붙은 상자를 미는 영웅 속도 = Sold+0x188[무게] × 스틱 (최소 +0x17C), 상자 최대 #95b8bfb6. */
+	@Test
+	void pushSpeedFollowsWeightClass() {
+		assertEquals(1.9f * 16, HeroNavigator.pushSpeedMax(0), 1e-3f);
+		assertEquals(1.5f * 16, HeroNavigator.pushSpeedMax(1), 1e-3f);
+		assertEquals(1.2f * 16, HeroNavigator.pushSpeedMax(2), 1e-3f);
+		assertEquals(0.5f * 16, HeroNavigator.pushSpeedMin(2), 1e-3f);
+		assertEquals(9 * 16, HeroNavigator.kickSpeed(2, 2), 1e-3f);
+		assertEquals(4.5f * 16, HeroNavigator.kickSpeed(2, 1), 1e-3f);
+		assertEquals(24 * 16, HeroNavigator.kickSpeed(0, 5), 1e-3f, "충전은 2 초에서 포화");
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -400, -400, 400, 400, 0, SurfaceAttr.GROUND);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		Body b = new Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		Interactables items = new Interactables();
+		Interactables.Item box = items.add(new Interactables.Item(Interactables.Kind.PUSH, "gopbox", v(0, 0, -40), 225, 503, "pushIdle", null,
+				"Pandora's Box", 16));
+		box.weight = 2;
+		nav.setItems(items);
+		Pad in = new Pad();
+		in.down.add(PadButton.USE);
+		tick(nav, b, w, in);
+		for (int i = 0; i < 60; i++) {
+			in.ly = 1;
+			in.down.add(PadButton.USE);
+			tick(nav, b, w, in);
+		}
+		assertEquals(-40 - 19.2f, box.pos.z, 0.05f, "무게 2 = 1.2 m/s");
+		float z = box.pos.z;
+		for (int i = 0; i < 60; i++) {
+			in.ly = 0.35f; // 스틱 조금 (0.35 × 1.2 = 0.42 m/s) → 최소 0.5 m/s
+			in.down.add(PadButton.USE);
+			tick(nav, b, w, in);
+		}
+		assertEquals(z - 8, box.pos.z, 0.05f);
+		assertEquals("Push", b.anim);
+	}
+
+	/** 원작 0x1C4928: 밀기 중 × 누르고 있으면 충전 (KickBox1 → KickBox3), 떼면 0x41D + 상자 속도 += 정면 × 차기 속도, 상자는 마찰 (9.82·16) 로 멈춤. */
+	@Test
+	void kickBoxChargesThenSlidesWithFriction() {
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -400, -400, 400, 400, 0, SurfaceAttr.GROUND);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		Body b = new Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		Interactables items = new Interactables();
+		Interactables.Item box = items.add(new Interactables.Item(Interactables.Kind.PUSH, "gopbox", v(0, 0, -40), 225, 503, "pushIdle", null,
+				"Pandora's Box", 16));
+		box.weight = 2;
+		nav.setItems(items);
+		b.clips.put("KickBox1", 0.3f);
+		b.clips.put("KickBox2", 0.5f);
+		List<String> ev = new ArrayList<>();
+		nav.setListener(new HeroNavigator.Listener() {
+			@Override
+			public void boxKicked(Interactables.Item it) {
+				ev.add("kick " + it.id);
+			}
+
+			@Override
+			public void pushDetach(Interactables.Item it) {
+				ev.add("detach");
+			}
+		});
+		Pad in = new Pad();
+		in.down.add(PadButton.USE);
+		tick(nav, b, w, in);
+		for (int i = 0; i < 61; i++) {
+			in.down.add(PadButton.USE);
+			in.down.add(PadButton.CROSS);
+			tick(nav, b, w, in);
+		}
+		assertTrue(b.played.contains("KickBox1") && b.played.contains("KickBox3"), b.played.toString());
+		assertEquals(-40, box.pos.z, 1e-3f, "충전 중엔 상자 그대로");
+		in.down.add(PadButton.USE);
+		tick(nav, b, w, in); // × 뗌 → 차기
+		assertEquals(List.of("kick 503"), ev);
+		assertEquals("KickBox2", b.anim);
+		in.down.clear();
+		tick(nav, b, w, in); // 사용 버튼도 뗌 → 놓고 상자는 혼자 미끄러짐
+		for (int i = 0; i < 120; i++) {
+			tick(nav, b, w, in);
+		}
+		assertEquals(0, box.vel.length(), 1e-4f, "마찰로 멈춤");
+		// 차기 속도 4.5 m/s (충전 1 초) = 72 → 미끄러짐 ≈ 72² / (2 · 157.12) = 16.5
+		assertEquals(-40 - 16.5f, box.pos.z, 1.5f);
+		assertEquals(List.of("kick 503", "detach"), ev);
 	}
 }

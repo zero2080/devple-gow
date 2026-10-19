@@ -97,6 +97,12 @@ public final class SceneNav {
 			}
 
 			@Override
+			public void boxKicked(Interactables.Item it) {
+				// 원작 0x1C4980: sub_001A8C78(0x41D, 0, 0, 0, 영웅)
+				world.postEvent(HeroNavigator.EVENT_KICK, 0, 0, 0, world.player());
+			}
+
+			@Override
 			public void pushMoved(Interactables.Item it, Vector3f d) {
 				world.moveOwnerBy(it.owner, d.x, d.y, d.z);
 			}

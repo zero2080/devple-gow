@@ -46,6 +46,10 @@ import java.util.Map;
  * 0x164 10     0x1C6134                짚라인 가속                                         [확실]
  * 0x168 1.25   0x1C8CBC / 0x1C7484     좁은 턱 벽 따라 걷기 (WallFront/Back) 속도              [확실: 엔진 미구현]
  * 0x178 10     0x1EAFF0                지상 목표 속도 (× 스틱)                               [확실: 엔진 영웅은 애니 이동량]
+ * 0x17C 0.5 ×3 0x1C4518                붙은 오브젝트 밀기 최소 속도 [무게 0/1/2]               [확실]
+ * 0x188 1.9 / 1.5 / 1.2  0x1C453C      붙은 오브젝트 밀기 최대 속도 [무게 0/1/2] (× 스틱)      [확실]
+ * 0x194 0 ×3, 0x1A0 24 / 16 / 9  0x1C4A08  상자 차기 속도 lerp(최소, 최대, 충전 / 0x1AC) [무게]  [확실]
+ * 0x1AC 2      0x1C49A8                상자 차기 최대 충전 시간                               [확실]
  * 0x1D4 7.5    0x1CA7F8                수영 (+0x174 0x100, ANISwim) 목표 속도                  [확실]
  * 0x1D8 4.5    0x1CA7F0                물 위 떠 있기 (0x80, ANITread) 목표 속도                [확실: 엔진 미구분]
  * 0x1DC 1      0x1CA80C                수영 최소 속도                                       [확실]
@@ -73,7 +77,7 @@ public final class NavTuning {
 			WALL_AWAY = 0x11C, LADDER = 0x124, LADDER_SLIDE_STICK = 0x128, LADDER_SLIDE_MAX = 0x12C, LADDER_SLIDE_ACC = 0x130,
 			LADDER_SLIDE_DEC = 0x134, ROPE_CLIMB = 0x138, ROPE_CLIMB_MIN = 0x13C, ROPE_SWING_FORCE = 0x148, ROPE_SLIDE_MAX = 0x14C,
 			ROPE_SLIDE_ACC = 0x150, ROPE_SLIDE_DEC = 0x154, TRAVERSE = 0x158, TRAVERSE_MIN = 0x15C, ZIP_SPEED = 0x160, ZIP_ACCEL = 0x164,
-			LEDGE_WALK = 0x168, GROUND = 0x178, SWIM = 0x1D4, TREAD = 0x1D8, SWIM_MIN = 0x1DC, SWIM_ACCEL = 0x1E0, SWIM_DECEL = 0x1E4,
+			LEDGE_WALK = 0x168, GROUND = 0x178, PUSH_MIN = 0x17C, PUSH_MAX = 0x188, KICK_MIN = 0x194, KICK_MAX = 0x1A0, KICK_CHARGE = 0x1AC, SWIM = 0x1D4, TREAD = 0x1D8, SWIM_MIN = 0x1DC, SWIM_ACCEL = 0x1E0, SWIM_DECEL = 0x1E4,
 			SWIM_TURN = 0x1E8, WATER_LINE = 0x1EC, NARROW_SCALE = 0x230, BODY_HALF = 0x234, BODY_HEIGHT = 0x238, BODY_BASE = 0x23C;
 
 	/** R_PERMK TWK_Sold_000 (크라토스) — 데이터 테스트가 원본과 대조. */
@@ -86,7 +90,11 @@ public final class NavTuning {
 			Map.entry(ROPE_CLIMB, 1.5f), Map.entry(ROPE_CLIMB_MIN, 0.5f), Map.entry(ROPE_SWING_FORCE, 500f),
 			Map.entry(ROPE_SLIDE_MAX, 7.5f), Map.entry(ROPE_SLIDE_ACC, 20f), Map.entry(ROPE_SLIDE_DEC, 20f),
 			Map.entry(TRAVERSE, 2.5f), Map.entry(TRAVERSE_MIN, 1.25f), Map.entry(ZIP_SPEED, 20f), Map.entry(ZIP_ACCEL, 10f),
-			Map.entry(LEDGE_WALK, 1.25f), Map.entry(GROUND, 10f), Map.entry(SWIM, 7.5f), Map.entry(TREAD, 4.5f), Map.entry(SWIM_MIN, 1f),
+			Map.entry(LEDGE_WALK, 1.25f), Map.entry(GROUND, 10f),
+			Map.entry(PUSH_MIN, 0.5f), Map.entry(PUSH_MIN + 4, 0.5f), Map.entry(PUSH_MIN + 8, 0.5f),
+			Map.entry(PUSH_MAX, 1.9f), Map.entry(PUSH_MAX + 4, 1.5f), Map.entry(PUSH_MAX + 8, 1.2f),
+			Map.entry(KICK_MIN, 0f), Map.entry(KICK_MIN + 4, 0f), Map.entry(KICK_MIN + 8, 0f),
+			Map.entry(KICK_MAX, 24f), Map.entry(KICK_MAX + 4, 16f), Map.entry(KICK_MAX + 8, 9f), Map.entry(KICK_CHARGE, 2f), Map.entry(SWIM, 7.5f), Map.entry(TREAD, 4.5f), Map.entry(SWIM_MIN, 1f),
 			Map.entry(SWIM_ACCEL, 7.5f), Map.entry(SWIM_DECEL, 7.5f), Map.entry(SWIM_TURN, 0.15f), Map.entry(WATER_LINE, 0.2f),
 			Map.entry(NARROW_SCALE, 1f), Map.entry(BODY_HALF, 0.6f), Map.entry(BODY_HEIGHT, 2.2f), Map.entry(BODY_BASE, 0.4f)));
 
