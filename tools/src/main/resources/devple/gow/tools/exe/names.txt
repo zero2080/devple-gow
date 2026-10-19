@@ -94,8 +94,8 @@
 001a7a78 Game_RestoreFromSave    "** Restarted or loaded save game **" [추정]
 001a5130 SavePoint_Find          goSavePoint [추정]
 0022e810 Save_SlotText           "Save Point %d" [확실]
-00230248 MemCard_Save            data%d.bin [추정]
-00230a98 MemCard_Load            data%d.bin [추정]
+00230248 MemCard_Load            data%d.bin 읽기 + 체크섬 검사 [확실, 11 문서]
+00230a98 MemCard_Save            아이콘 + data%d.bin 쓰기 [확실, 11 문서]
 
 # ---- UI / HUD / 입력 / 카메라
 001b6490 Hud_RegisterFlashVars   HealthMeter_Value ... (FLP 변수) [확실]
