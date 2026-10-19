@@ -27,7 +27,7 @@ public final class AnimatedModel implements AutoCloseable {
 	public static final int MAX_JOINTS = 128;
 
 	private record Part(SkinnedMesh mesh, Texture texture, RenderModel.Blend blend, float[] tint, boolean lit,
-						boolean jointLocal) {
+						boolean jointLocal, devple.gow.tools.fx.MaterialAnim.Anim matAnim) {
 	}
 
 	private final Skeleton skeleton;
@@ -80,7 +80,7 @@ public final class AnimatedModel implements AutoCloseable {
 				blend = assets.classify(mat, tex != null);
 				tint = l.rgba();
 			}
-			parts.add(new Part(new SkinnedMesh(v, idx), tex, blend, tint, p.hasNormal, p.jointLocal()));
+			parts.add(new Part(new SkinnedMesh(v, idx), tex, blend, tint, p.hasNormal, p.jointLocal(), assets.materialAnim(p.material)));
 		}
 	}
 
@@ -89,6 +89,14 @@ public final class AnimatedModel implements AutoCloseable {
 	}
 
 	public void draw(Camera cam, float aspect, Matrix4f world, Pose pose, Texture white) {
+		draw(cam, aspect, world, pose, white, -1f, 1f);
+	}
+
+	/**
+	 * 머티리얼 ANM 을 적용해 그린다 (이펙트 GO, 40 문서 §5): fxTime ≥ 0 이면 파트 머티리얼의 UV 스크롤(레이어 0)과
+	 * 불투명도(hdr8 = p28)를 시간 fxTime 으로, alpha 는 전체 불투명도 배율 (페이드 아웃).
+	 */
+	public void draw(Camera cam, float aspect, Matrix4f world, Pose pose, Texture white, float fxTime, float alpha) {
 		float[][] w = pose.world(skeleton);
 		float[][] skin = skeleton.skin(w);
 		shader.use();
@@ -128,8 +136,21 @@ public final class AnimatedModel implements AutoCloseable {
 				shader.set("uUseTex", p.texture() != null ? 1 : 0);
 				shader.set("uLit", p.lit() ? 1 : 0);
 				float[] t = p.tint();
-				shader.set("uTint", new org.joml.Vector4f(t[0], t[1], t[2], t[3]));
+				float op = alpha;
+				boolean scrolled = false;
+				if (fxTime >= 0 && p.matAnim() != null) {
+					float[] uv = p.matAnim().uv(0, fxTime);
+					if (uv != null) {
+						shader.set("uUvOffset", uv[0], uv[1]);
+						scrolled = true;
+					}
+					op *= p.matAnim().value("hdr8", fxTime, 1f);
+				}
+				shader.set("uTint", new org.joml.Vector4f(t[0], t[1], t[2], t[3] * op));
 				p.mesh().draw();
+				if (scrolled) {
+					shader.set("uUvOffset", 0f, 0f);
+				}
 				if (!opaque) {
 					glDisable(GL_BLEND);
 					glDepthMask(true);

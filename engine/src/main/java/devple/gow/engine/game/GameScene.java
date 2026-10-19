@@ -212,18 +212,9 @@ public final class GameScene implements Scene {
 			float len = d.length();
 			return len > 1f && col.raycast(eye, d, len - 1f) != null;
 		});
-		magicFx = new devple.gow.engine.fx.MagicFx();
-		hero.magic.setSink(new devple.gow.engine.combat.Magic.Sink() {
-			@Override
-			public void sound(String name, Vector3f at) {
-				session.sound.play(name, at);
-			}
-
-			@Override
-			public void effect(String name, Vector3f at) {
-				magicFx.effect(name, at);
-			}
-		});
+		magicFx = new devple.gow.engine.fx.MagicFx(session.rom); // 원작 이펙트 GO (40 문서)
+		hero.magic.setSink(magicFx.sink((name, at) -> session.sound.play(name, at)));
+		magicFx.bindHero(hero.combat, hero::jointWorld);
 		hudBinding.castable = hero.magic::has;
 		boolean seamless = arrival != null && (arrival.kind() == LevelLink.Kind.SEAMLESS || arrival.kind() == LevelLink.Kind.WALK);
 		link = new LevelLink(levelName, seamless ? arrival.from() : null, w -> Files.exists(session.rom.resolve(w + ".WAD")));
@@ -789,6 +780,9 @@ public final class GameScene implements Scene {
 			return len > 1f && col.raycast(eye, d, len - 1f) != null;
 		});
 		f.combat().onSound((h, p) -> session.sound.play(h, p));
+		if (magicFx != null) {
+			magicFx.bind(f.combat(), devple.gow.engine.fx.MagicFx.joints(f), false); // 적 기술 PlayFX·적중 피 (40 문서)
+		}
 		f.setIncomingScale(hero::incomingScale);
 		EnemyFactory.Kind fk = kind;
 		f.onShatter(() -> stoneKill(f, fk));
@@ -1131,12 +1125,19 @@ public final class GameScene implements Scene {
 		if ((stepTimer -= dt) <= 0) {
 			stepTimer = cur.duration / 2;
 			session.sound.play(surface, c.position, run ? 2 : 1);
+			if (run) {
+				magicFx.footstep(surfaceFx(c.position), c.position, c.yaw); // MFX Run Dust Name (40 문서 §6.3)
+			}
 		}
 	}
 
-	private String footSound(Vector3f p) {
+	private int surfaceFx(Vector3f p) {
 		LevelCollision.Floor f = col.floorAt(p.x, p.y + 4, p.z, 8);
-		int fx = f != null && f.tri().info() != null ? f.tri().info().sheetFx() : 0;
+		return f != null && f.tri().info() != null ? f.tri().info().sheetFx() : 0;
+	}
+
+	private String footSound(Vector3f p) {
+		int fx = surfaceFx(p);
 		String s = fx > 0 ? orbTweaks.s(String.format("/TweakTemplates/MFX/%03d/", fx), "Foot Sound", null) : null;
 		return s != null && s.startsWith("SND_") ? s : "SND_FOOTSTEP_PLANK";
 	}
@@ -1223,7 +1224,7 @@ public final class GameScene implements Scene {
 		if (System.getProperty("gow.nofx") == null) {
 			level.renderEffects(e, cam); // 비·파티클·물은 캐릭터 뒤에 (--no-fx 로 끔: 스크린샷용)
 		}
-		magicFx.render(cam, e.window().aspect());
+		magicFx.render(cam, e.window().aspect(), e.renderer().white());
 		if (levelHud != null) {
 			levelHud.render(e);
 		}

@@ -42,6 +42,11 @@ public final class ParticleSystem implements AutoCloseable {
 		public float lodNear = -1, lodFar = -1;
 		/** followCamera 일 때 상자 중심을 카메라 앞으로 이 거리만큼 (원작 셀/2 − near). */
 		public float ahead;
+		/**
+		 * 이펙트 GO 가 매 프레임 덮어쓰는 FXC P 블록 값 (40 문서 §3, ANM 타입 10 채널). 음수/NaN = 정의 값 사용.
+		 * rate = 초당 생성 수, speed / speedRnd / cone = 원뿔 모드 속력·폭·퍼짐, sizeScale = 크기 배율 (인스턴스 스케일).
+		 */
+		public float rate = -1, speed = Float.NaN, speedRnd = Float.NaN, cone = Float.NaN, sizeScale = 1;
 		float carry;
 
 		Emitter(ParticleDef def) {
@@ -130,7 +135,7 @@ public final class ParticleSystem implements AutoCloseable {
 				float d = eye.distance(e.pos) / 16f;
 				lod = Math.clamp((e.lodFar - d) / (e.lodFar - e.lodNear), 0f, 1f);
 			}
-			e.carry += e.def.rate() * dt * lod;
+			e.carry += (e.rate >= 0 ? e.rate : e.def.rate()) * dt * lod;
 			int n = (int) e.carry;
 			e.carry -= n;
 			for (int k = 0; k < n && count < max; k++) {
@@ -206,12 +211,14 @@ public final class ParticleSystem implements AutoCloseable {
 		pz[i] = c.z + r(b[2]);
 		if (d.cone() >= 0) {
 			// FXC 서브타입 1 (0x122E78): +Y 기준 원뿔 → 이미터 방향으로 회전
-			double th = rnd.nextFloat() * d.cone() * Math.PI / 2, ph = rnd.nextFloat() * 2 * Math.PI;
+			float coneW = Float.isNaN(e.cone) ? d.cone() : e.cone;
+			double th = rnd.nextFloat() * coneW * Math.PI / 2, ph = rnd.nextFloat() * 2 * Math.PI;
 			float lx = (float) (Math.sin(ph) * Math.sin(th)), ly = (float) Math.cos(th), lz = (float) (Math.cos(ph) * Math.sin(th));
 			Vector3f up = e.dir;
 			Vector3f t1 = Math.abs(up.y) < 0.99f ? new Vector3f(0, 1, 0).cross(up).normalize() : new Vector3f(1, 0, 0);
 			Vector3f t2 = new Vector3f(up).cross(t1);
-			float sp = d.speed() - d.speedRnd() / 2 + rnd.nextFloat() * d.speedRnd();
+			float spd = Float.isNaN(e.speed) ? d.speed() : e.speed, sr = Float.isNaN(e.speedRnd) ? d.speedRnd() : e.speedRnd;
+			float sp = spd - sr / 2 + rnd.nextFloat() * sr;
 			vx[i] = (t1.x * lx + up.x * ly + t2.x * lz) * sp;
 			vy[i] = (t1.y * lx + up.y * ly + t2.y * lz) * sp;
 			vz[i] = (t1.z * lx + up.z * ly + t2.z * lz) * sp;
@@ -254,11 +261,15 @@ public final class ParticleSystem implements AutoCloseable {
 		glDepthMask(false);
 		glBindVertexArray(vao);
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
+		// 정의 목록은 살아 있는 파티클에서 모은다 (이미터를 지운 뒤에도 남은 파티클은 수명까지 그린다)
 		List<ParticleDef> defs = new ArrayList<>();
-		for (Emitter e : emitters) {
-			if (!defs.contains(e.def)) {
-				defs.add(e.def);
+		ParticleDef last = null;
+		for (int i = 0; i < count; i++) {
+			ParticleDef d = owner[i].def;
+			if (d != last && !defs.contains(d)) {
+				defs.add(d);
 			}
+			last = d;
 		}
 		Vector3f a = new Vector3f(), bAx = new Vector3f(), tmp = new Vector3f();
 		for (ParticleDef d : defs) {
@@ -269,7 +280,7 @@ public final class ParticleSystem implements AutoCloseable {
 					continue;
 				}
 				float t = age[i] / life[i];
-				float size = d.size0() + (d.size1() - d.size0()) * t;
+				float size = (d.size0() + (d.size1() - d.size0()) * t) * owner[i].sizeScale;
 				float[] c0 = d.color0(), c1 = d.color1();
 				float fade = Math.min(1, Math.min(age[i] / Math.max(d.fadeIn(), 1e-4f), 1));
 				float cr = c0[0] + (c1[0] - c0[0]) * t, cg = c0[1] + (c1[1] - c0[1]) * t, cb = c0[2] + (c1[2] - c0[2]) * t;

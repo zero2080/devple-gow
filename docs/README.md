@@ -43,6 +43,7 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 | 37 | [구현: 보스전 (히드라·메두사 여왕·아레스: 레벨 WAD 보스 리소스, 전투↔스크립트 이벤트 1035/1047/1039/1019/1054, 동기 처형)](37-impl-bosses.md) | 히드라·메두사 완료, 아레스 결말까지 (테스트 11, 스크린샷 8) |
 | 38 | [구현: 이동 기술 (표면 속성, 벽 오르기·매달리기·사다리·줄·짚라인·수영·균형, R1 오브젝트·밀기, 발판, 이웃 레벨 스크립트)](38-impl-traversal-mechanics.md) | 1차 (주 경로 강제 전환 8 → 6 → 0 (§10: 과제 진행률·MaximumCount·헤드리스 보스전), 테스트 22 + 12) |
 | 39 | [구현: 귀중품(보너스) 메뉴 (FLP_ShellK Treasure 화면, 메시지 900–916 항목·잠금 문자·BonusScroll, 보너스 영상/신들의 시험)](39-impl-bonus-menu.md) | 완료 (테스트 3, 스크린샷 1) |
+| 40 | [구현: 원작 이펙트 GO (이펙트 이름 → GO 인스턴스 → MDL/ANM/FXC/PTC, ANM 타입 10 채널 = FXC 곡선, 부착·수명, PlayFX/Concussion/MFX 템플릿)](40-impl-effects.md) | 마법 4종·적중 피·발소리 먼지 연결 (테스트 5, 스크린샷 7) |
 | 41 | [구현: 부서지는 물체 (Breakable 비헤이비어, Brkb 템플릿, Marker 101 → 파괴 센서)](41-impl-breakables.md) | 1차 (테스트 1) |
 | 90 | [현황 / 로드맵](90-status-roadmap.md) | 수시 갱신 |
 
@@ -56,6 +57,7 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 ./gradlew :engine:run --args="--hero --enemy R_MIN --auto magic"   # 메두사 석화 → 파괴 자동 시연
 ./gradlew :engine:run --args="--game ATHN01E --boss-demo --skip-movies --no-fx"   # 히드라 보스전 자동 연출 (ATHN02D 메두사, ATHN08A/08C 아레스)
 ./gradlew :engine:run -PgowUnlockAll                  # 메인 메뉴, 귀중품(보너스) 전부 해금 (39 문서)
+./gradlew :engine:run -PgowFxLog -PgowMagicStage=2 "-PgowScript=LEFT:0.3:0.05,R2:0.6:3,CIRCLE:1.5:0.05" --args="--hero --enemy R_MIN"   # 원작 이펙트 GO (40 문서)
 ./gradlew :engine:run --args="--movie SEMO01"          # 컷신 재생 (ISO 직접 읽기, --wide = PSW, START/× 건너뛰기)
 ```
 조작: WASD 이동, J □(약공) / I △(강공) / L ○(잡기) / K ×(점프) / Q L1(방어) / E R1, C R2(마법), 방향키 = 오른쪽 스틱(회피),

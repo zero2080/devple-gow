@@ -33,6 +33,12 @@ run {
 	if (project.hasProperty('gowGiveAll')) {
 		systemProperty 'gow.giveAll', 'true'
 	}
+	if (project.hasProperty('gowMagicStage')) {
+		systemProperty 'gow.magicStage', project.property('gowMagicStage')   // 연습 씬 마법 단계 (40 문서)
+	}
+	if (project.hasProperty('gowFxLog')) {
+		systemProperty 'gow.fxlog', 'true'   // 이펙트 GO 재생·해석 로그 (40 문서)
+	}
 	if (project.hasProperty('gowUnlockAll')) {
 		systemProperty 'gow.unlockAll', 'true'   // 귀중품(보너스) 메뉴 전부 해금 (39 문서)
 	}
