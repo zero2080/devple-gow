@@ -32,6 +32,7 @@ public final class HydraFight extends BossFight {
 
 	public static final String LEVEL = "ATHN01E";
 	private final Vector3f anchor = new Vector3f();
+	private float anchorYaw;
 	private boolean killDone;
 	private boolean demoPlaced, demoGrabbed, demoKill;
 	private float demoWait;
@@ -63,6 +64,7 @@ public final class HydraFight extends BossFight {
 	protected void bind(EnemyFighter f, ScriptActor a) {
 		f.hpFloor = 1;
 		anchor.set(f.pos);
+		anchorYaw = f.yaw;
 		f.brain().engage();
 	}
 
@@ -72,9 +74,12 @@ public final class HydraFight extends BossFight {
 		if (f.hp > 0) {
 			f.brain().engage();
 		}
-		// 목이 바다에 고정된 머리: AI 의 이동 의도는 버리고 방향만 [근사]
+		// 목이 바다에 고정된 몸통: 위치·방향 모두 스폰 값 고정 [추정]. 공격 방향은 구역별 애니(51 왼쪽 / 52 오른쪽 / 62 가운데)가 맡고,
+		// 잡기·처형 카메라(gobossleftfight 등)가 월드 고정 오브젝트라 동기 장면도 스폰 방향 기준으로 저작됨 (30 문서 §6).
+		// 방향을 AI 에 맡기면 영웅 쪽으로 돌아 HERO_TO_BOSS 정렬된 크레토스가 망대 밖 허공 / 카메라 밖에 놓였다.
 		f.pos.x = anchor.x;
 		f.pos.z = anchor.z;
+		f.yaw = anchorYaw;
 		int m = f.combat().active() ? f.combat().move().id() : -1;
 		if (m == 812 && f.hp <= 0 || killDone) {
 			killDone = true;

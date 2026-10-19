@@ -66,6 +66,8 @@ public final class AresFight extends BossFight {
 	@Override
 	protected void tick(Input in, float dt) {
 		EnemyFighter f = boss;
+		// 원작 아레스 클래스(Enemy1 하위 클래스 2) 갱신 0x1C3370: 매 프레임 SwitchCamera("AresCamera1", 0) — 영웅 + 아레스 두 대상 카메라
+		arena.requestCamera(devple.gow.engine.level.CameraRig.ARES_CAMERA, f.pos);
 		for (int t : circles) {
 			if (lastHp > t && f.hp <= t && f.hp > 0) {
 				f.combat().fire(CombatInput.EV_CIRCLE, -1, null);

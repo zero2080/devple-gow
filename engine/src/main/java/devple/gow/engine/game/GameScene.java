@@ -95,6 +95,8 @@ public final class GameScene implements Scene {
 	private Arrival arrival;
 	/** 다른 슬롯 레벨의 충돌 (원작은 이웃 레벨도 상주 → 경계에서 바닥이 이어진다). null = 없음. */
 	private String otherName;
+	/** 이 레벨의 바닥을 가진 숙주 레벨 (ATHN02D → ATHN02C). 그 바닥을 밟아도 WALK 전환하지 않는다. */
+	private String hostLevel;
 	private LevelCollision otherCol;
 	private LevelData otherData;
 	/** 기어오르기·줄·발판·R1 오브젝트·이웃 레벨 스크립트 (38 문서). */
@@ -223,6 +225,12 @@ public final class GameScene implements Scene {
 			loadOther(link.other());
 		}
 		cameraRig = new devple.gow.engine.level.CameraRig(level.data());
+		// 카메라 전환 → 전역 이벤트 1037 (인자0 = 카메라 이름, 원작 0x1EEE88)
+		cameraRig.onSwitch(n -> {
+			if (world != null) {
+				world.postEvent(1037, n, 0, 0, null);
+			}
+		});
 		world = new ScriptWorld(level.data(), session.scriptHost, listener());
 		nav = new SceneNav(level.data(), col, hero, world, session.scriptHost, orbTweaks, navHost());
 		if (otherName != null) {
@@ -345,9 +353,31 @@ public final class GameScene implements Scene {
 				public void sound(String name) {
 					session.sound.play(name);
 				}
+
+				public void requestCamera(String name, Vector3f second) {
+					cameraRig.request(name, second); // 아레스 AresCamera1 (0x1C3370)
+				}
 			};
 		}
 		return arena;
+	}
+
+	/**
+	 * 바닥을 이웃 레벨에 두는 레벨 (ATHN02D → ATHN02C, {@link devple.gow.engine.level.HostLevel}): 서 있을 점 아래 자기 바닥이 없으면
+	 * 숙주 레벨을 다른 슬롯에 올린다. 원작은 숙주가 이 레벨을 LoadWad 한 뒤 두 레벨이 함께 상주한다.
+	 */
+	private void ensureHost(float x, float y, float z) {
+		if (!Float.isNaN(col.groundHeight(x, y + STEP, z, 600)) || !devple.gow.engine.level.HostLevel.addOn(level.data().wad)) {
+			return;
+		}
+		String h = devple.gow.engine.level.HostLevel.find(session.rom, levelName, x, y, z);
+		if (h != null) {
+			hostLevel = h;
+			if (!h.equals(otherName)) {
+				System.out.println("숙주 레벨 " + h + " (바닥이 그쪽 시트에 있음) → 다른 슬롯");
+				loadOther(h);
+			}
+		}
 	}
 
 	/** 시작 위치·방향 결정 ({@link LevelEntry}). 반환 = 도착 카메라 이름 (없으면 ""). */
@@ -355,15 +385,25 @@ public final class GameScene implements Scene {
 		if (loadPos != null) {
 			spawn.set(loadPos[0], loadPos[1], loadPos[2]);
 			spawnYaw = loadYaw;
+			ensureHost(spawn.x, spawn.y, spawn.z);
 			return "";
 		}
 		if (arrival != null && arrival.pos() != null && arrival.kind() != LevelLink.Kind.WARP) {
 			spawn.set(arrival.pos()[0], arrival.pos()[1], arrival.pos()[2]);
 			spawnYaw = arrival.yaw();
+			ensureHost(spawn.x, spawn.y, spawn.z);
 			return "";
 		}
 		String from = arrival != null && arrival.kind() == LevelLink.Kind.WARP ? arrival.from() : null;
 		LevelEntry.Spot s = LevelEntry.resolve(level.data(), world, entry, from);
+		ensureHost(s.pos()[0], s.pos()[1], s.pos()[2]);
+		if (hostLevel != null && otherCol != null && !Float.isNaN(otherCol.groundHeight(s.pos()[0], s.pos()[1] + STEP, s.pos()[2], 600))) {
+			float[] p0 = s.pos();
+			spawn.set(p0[0], otherCol.groundHeight(p0[0], p0[1] + STEP, p0[2], 600), p0[2]);
+			spawnYaw = s.yaw();
+			System.out.println("시작 지점: " + s.source() + " (숙주 " + hostLevel + " 바닥)");
+			return s.camera();
+		}
 		float[] at = LevelEntry.snapToFloor(col, s.pos(), 256);
 		if (at == null) {
 			at = s.pos();
@@ -730,6 +770,10 @@ public final class GameScene implements Scene {
 		float[] w = r.world();
 		f.pos.set(w[12], w[13], w[14]);
 		f.prevPos.set(f.pos);
+		if (bossKind != null) {
+			// 보스는 스폰 엔티티 방향으로 (헤드리스 BossRig 와 같은 규칙) — 히드라는 이 방향에 고정, 잡기 카메라·동기 정렬의 기준 (37 문서 §4)
+			f.yaw = (float) Math.atan2(w[8], w[10]);
+		}
 		f.setDifficulty(session.difficulty);
 		f.setFoe(hero.hittable());
 		f.brain().setSightBlocked((eye, to) -> { // 인지 시선 가림 (17 문서 §인지)
@@ -1129,7 +1173,7 @@ public final class GameScene implements Scene {
 			p.z = c.z;
 		}
 		// 다른 슬롯 레벨 바닥만 밟고 있으면 그 레벨로 (원작은 두 레벨이 같이 상주, 예 SEWR01 → SEWR02)
-		if (otherCol != null && c0.grounded && Float.isNaN(col.groundHeight(p.x, p.y + STEP, p.z, 64))
+		if (otherCol != null && !otherName.equals(hostLevel) && c0.grounded && Float.isNaN(col.groundHeight(p.x, p.y + STEP, p.z, 64))
 				&& !Float.isNaN(otherCol.groundHeight(p.x, p.y + STEP, p.z, 64))) {
 			if ((otherFloorTime += dt) > 0.25f) { // 이음매에서 오가며 바뀌지 않도록 잠깐 머문 뒤
 				goToLevel(otherName, new Arrival(LevelLink.Kind.WALK, levelName, new float[]{p.x, p.y, p.z}, hero.ctl.yaw));

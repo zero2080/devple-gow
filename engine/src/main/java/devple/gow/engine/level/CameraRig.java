@@ -1,15 +1,22 @@
 package devple.gow.engine.level;
 
 import devple.gow.engine.render.Camera;
+import devple.gow.tools.anim.Animation;
+import devple.gow.tools.anim.AnimationSet;
 import devple.gow.tools.anim.Mat4;
+import devple.gow.tools.anim.Skeleton;
 import devple.gow.tools.level.BallHull;
 import devple.gow.tools.level.CameraDef;
 import devple.gow.tools.level.LevelData;
+import devple.gow.tools.level.LevelLayout;
 import devple.gow.tools.level.NcvCurve;
 import org.joml.Vector3f;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * 원작 레벨 카메라 시스템 재구현 (30 문서). 실행 파일의 카메라 관리자 0x1EE8E0/0x1EF310/0x1EF3F0 와 카메라 상태 갱신 0x1F3768/0x1F29A0 를 따른다.
@@ -21,6 +28,11 @@ import java.util.List;
  *   <li>전환: 기본 시간 CAM 0xB8 또는 전환표(이전 카메라 이름) 시간. 0 이하 = 컷. 상태 공간(T, 각, 거리)에서 Hermite 보간 [근사: 속도항 0]</li>
  * </ul>
  * 스크립트: {@link #request} = Internal 0x8 SwitchCamera (한 프레임 후보), {@link #setVolumeQuery} = Internal 0x9 (CMV 질의 on/off).
+ * <p>
+ * 관절 카메라: 소유 오브젝트에 ANM 이 있으면 카메라(이름이 같은 관절, 없으면 관절 0)는 그 애니를 따라 움직인다. 플래그 0x1000 이면 활성화될 때
+ * 애니를 처음부터 튼다 (0x1F3A38 → 0x1004B8/0x131038). 보스 잡기·처형 카메라(grabLeftCam, bossKillCam …)가 이 방식이다 (30 문서 §6).
+ * 전환마다 {@link #onSwitch} 로 새 카메라 이름을 알린다 (원작 0x1EEE88 → 전역 이벤트 1037, 인자0 = 카메라 이름).
+ * AresCamera1 은 원작 전용 함수 0x1F67C0 (영웅 + 아레스 두 대상, 레일 NCV_AresCamRail) — 여기서는 근사 ({@link #request(String, Vector3f)}).
  */
 public final class CameraRig {
 
@@ -29,6 +41,10 @@ public final class CameraRig {
 	/** 대상이 없을 때 쓰는 추적 카메라 거리/피치 (원작 기본 "Follow" 카메라 대용, 추정). */
 	private static final float FOLLOW_DIST = 150f, FOLLOW_PITCH = -18f;
 	private static final float FRAME = 1 / 60f;
+	/** 원작 전용 처리 카메라 이름 (0x1F38C8 문자열 비교 → 0x1F67C0). */
+	public static final String ARES_CAMERA = "AresCamera1";
+	/** /GlobGame/BAR "Camera Target Weight" (R_PERMK) — 두 번째 대상 쪽으로 주시점을 옮기는 비율. */
+	public static final float ARES_TARGET_WEIGHT = 0.35f;
 
 	/** 카메라 매개 상태 (원작 상태 블록 +0x70..0x94 해당). */
 	public static final class Pose {
@@ -57,6 +73,30 @@ public final class CameraRig {
 		}
 	}
 
+	/** 소유 오브젝트 ANM 으로 움직이는 카메라 (관절 카메라). */
+	private static final class CamAnim {
+		final Skeleton sk;
+		final float[] inst, local;
+		final int joint;
+		final Animation anim;
+		float time;
+		boolean live;
+
+		CamAnim(Skeleton sk, float[] inst, float[] local, int joint, Animation anim) {
+			this.sk = sk;
+			this.inst = inst;
+			this.local = local;
+			this.joint = joint;
+			this.anim = anim;
+		}
+
+		/** 시간 time 의 카메라 월드 행렬. 애니 끝에서는 마지막 프레임 유지 [추정]. */
+		float[] world() {
+			float[][] lw = anim.sample(sk, time, false).world(sk);
+			return Mat4.mul(local, Mat4.mul(lw[Math.min(joint, lw.length - 1)], inst));
+		}
+	}
+
 	/** 카메라 하나의 실행 상태 (원작 0x170 상태 링 원소). */
 	private final class Shot {
 		final LevelData.PlacedCamera cam;
@@ -71,6 +111,10 @@ public final class CameraRig {
 	}
 
 	private final LevelData data;
+	private final Map<LevelData.PlacedCamera, CamAnim> anims = new HashMap<>();
+	/** 요청과 함께 온 두 번째 대상 (AresCamera1: 아레스 위치). */
+	private Vector3f focus;
+	private Consumer<String> switchListener;
 	private final List<LevelData.PlacedCamera> active = new ArrayList<>();
 	private final List<LevelData.PlacedCamera> requests = new ArrayList<>();
 	private final List<Shot> shots = new ArrayList<>();
@@ -86,14 +130,87 @@ public final class CameraRig {
 
 	public CameraRig(LevelData data) {
 		this.data = data;
+		bindAnimations();
+	}
+
+	/** 카메라를 가진 오브젝트에 ANM 이 있으면 그 카메라는 관절 애니를 따른다 (LevelData 와 같은 관절 규칙). */
+	private void bindAnimations() {
+		if (data.wad == null) {
+			return;
+		}
+		for (LevelLayout.Placement p : data.layout.placements()) {
+			String anm = null;
+			boolean cams = false;
+			for (String r : p.object().refs()) {
+				if (r.startsWith("ANM_")) {
+					anm = r;
+				}
+				cams |= r.startsWith("CAM_");
+			}
+			if (anm == null || !cams) {
+				continue;
+			}
+			Animation act = null;
+			try {
+				AnimationSet set = AnimationSet.load(data.wad, anm);
+				act = set.all().isEmpty() ? null : set.all().getFirst(); // 카메라 오브젝트 ANM 은 act 1 개 (ATHN01E/02D 전수) [확실: 데이터]
+			} catch (RuntimeException ignored) {
+				// 읽지 못하는 ANM: 정지 카메라로 둔다
+			}
+			if (act == null) {
+				continue;
+			}
+			Skeleton sk = p.object().skeleton();
+			for (LevelData.PlacedCamera c : data.placedCameras) {
+				if (!c.owner().equals(p.instance().name()) || !p.object().refs().contains(c.def().name())) {
+					continue;
+				}
+				String jn = c.def().name().substring(4);
+				int j = 0;
+				for (int k = 0; k < sk.size(); k++) {
+					if (sk.joints.get(k).name().equalsIgnoreCase(jn)) {
+						j = k;
+					}
+				}
+				anims.put(c, new CamAnim(sk, p.instance().matrix(), c.def().local(), j, act));
+			}
+		}
 	}
 
 	/** Internal 0x8 SwitchCamera: 이름(RCM_ 접두사 선택)을 이번 갱신의 후보로 넣는다. */
 	public void request(String name) {
+		request(name, null);
+	}
+
+	/**
+	 * 두 번째 대상이 있는 요청. 원작 아레스 클래스(Enemy1 하위 클래스 2, vtable 0x2BB2D0)의 갱신 0x1C3370 이 매 프레임
+	 * SwitchCamera("AresCamera1", 0) 을 부른다 — 그 카메라는 영웅과 아레스를 함께 잡는다.
+	 */
+	public void request(String name, Vector3f second) {
 		LevelData.PlacedCamera c = data.camera(name);
 		if (c != null) {
 			requests.add(c);
+			if (second != null) {
+				focus = new Vector3f(second);
+			}
 		}
+	}
+
+	/** 카메라가 바뀔 때마다 새 카메라 짧은 이름 (원작 전역 이벤트 1037 → EventSensor, 예 ATHN02C AlcWall "SparkCam13"). */
+	public void onSwitch(Consumer<String> l) {
+		switchListener = l;
+	}
+
+	/** 현재 카메라가 관절 애니 카메라면 그 애니 시간(초), 아니면 -1. */
+	public float animTime() {
+		Shot s = shots.isEmpty() ? null : shots.getLast();
+		CamAnim a = s != null && s.cam != null ? anims.get(s.cam) : null;
+		return a == null ? -1 : a.time;
+	}
+
+	/** 현재 상태의 눈 위치 (헤드리스 검증용). */
+	public Vector3f eye() {
+		return cur.eye(new Vector3f());
 	}
 
 	/** Internal 0x9: CMV 볼륨 질의 켜기/끄기 (전역 0x29F138). 끄면 스크립트 요청 카메라만 후보가 된다. */
@@ -140,6 +257,16 @@ public final class CameraRig {
 				break;
 			}
 		}
+		for (CamAnim a : anims.values()) {
+			a.live = false;
+		}
+		for (Shot s : shots) {
+			CamAnim a = s.cam != null ? anims.get(s.cam) : null;
+			if (a != null && !a.live) {
+				a.live = true;
+				a.time += dt;
+			}
+		}
 		Pose out = null;
 		for (Shot s : shots) {
 			solve(s, t, heroYaw, dt);
@@ -156,8 +283,13 @@ public final class CameraRig {
 			first = false;
 		}
 		String n = current();
-		if (!n.equals(last) && System.getProperty("gow.debug") != null) {
-			System.out.printf("[카메라] %s → %s (전환 %.2f초)%n", last, n, shots.getLast().blend);
+		if (!n.equals(last)) {
+			if (System.getProperty("gow.debug") != null) {
+				System.out.printf("[카메라] %s → %s (전환 %.2f초)%n", last, n, shots.getLast().blend);
+			}
+			if (switchListener != null && !n.equals("Follow")) {
+				switchListener.accept(n);
+			}
 		}
 		last = n;
 	}
@@ -247,6 +379,10 @@ public final class CameraRig {
 			return;
 		}
 		Shot s = new Shot(best);
+		CamAnim a = anims.get(best);
+		if (a != null && (best.def().p().flags() & CameraDef.F_RESTART_ANIM) != 0) {
+			a.time = 0; // 0x1F3B60: 활성화 시 소유 오브젝트 애니 처음부터
+		}
 		CameraDef.Transition tr = transition(best, curName);
 		s.blend = curShot == null ? 0 : tr != null ? tr.blend() : best.def().p().blend();
 		if (s.blend <= 0) {
@@ -291,7 +427,8 @@ public final class CameraRig {
 		}
 		CameraDef.Params cp = s.cam.def().p();
 		p.fovDeg = verticalFov(cp.fovRad());
-		float[] w = s.cam.world();
+		CamAnim anim = anims.get(s.cam);
+		float[] w = anim != null ? anim.world() : s.cam.world();
 		Vector3f camPos = new Vector3f(w[12], w[13], w[14]);
 		float[] f = s.cam.forward();
 		Vector3f fwd = new Vector3f(f[0], f[1], f[2]);
@@ -312,7 +449,22 @@ public final class CameraRig {
 		boolean railMode = pm == 3 || ym == 3, posMode = pm == 2 || ym == 2;
 		boolean limited = cp.yawRange() < 180 || cp.pitchRange() < 90;
 		Vector3f pivot = new Vector3f(camPos);
-		if (railMode && s.cam.rail() != null) {
+		if (ARES_CAMERA.equalsIgnoreCase(s.cam.def().shortName()) && s.cam.rail() != null) {
+			// AresCamera1 (0x1F67C0) [근사]: 주시점 = 영웅 대상에서 아레스 쪽으로 Camera Target Weight(0.35) 만큼.
+			// 기준점 = 레일(NCV_AresCamRail, 아레나 +z 쪽 반원) 위에서 시선(영웅 − P)과 영웅→아레스 선이 이루는 수평 각이
+			// /GlobGame/BAR "f line angle" 60° 에 가장 가까운 t ("f line symetrical" → 양쪽 허용). 원작 비용 0x1F5C58 은 두 대상의
+			// 화면 각도·가중(50/10/40)까지 보지만 세부 미해석 [근사]
+			Vector3f hero = new Vector3f(t);
+			Vector3f boss = focus != null ? new Vector3f(focus.x, focus.y + TARGET_HEIGHT, focus.z) : null;
+			if (boss != null) {
+				t = new Vector3f(t).lerp(boss, ARES_TARGET_WEIGHT);
+			}
+			s.t = aresRail(s.cam.rail(), hero, boss, s.t);
+			float[] r = new float[3];
+			s.cam.rail().eval(s.t, r);
+			pivot.set(r[0], r[1], r[2]);
+			posMode = true;
+		} else if (railMode && s.cam.rail() != null) {
 			s.t = railParam(s, t, dYaw, dPitch, limited, dt);
 			float[] r = new float[3];
 			s.cam.rail().eval(s.t, r);
@@ -352,6 +504,57 @@ public final class CameraRig {
 			p.pitch = Math.max(dPitch - cp.pitchRange(), Math.min(dPitch + cp.pitchRange(), p.pitch));
 		}
 		s.init = true;
+	}
+
+	/** /GlobGame/BAR "f line angle" (R_PERMK). */
+	static final float ARES_LINE_ANGLE = 60f;
+
+	/** AresCamera1 레일 비용: 아레스가 없으면 영웅과의 수평 거리, 있으면 |∠(영웅 − P, 아레스 − 영웅) − f line angle| (수평, 도). */
+	private static float aresCost(NcvCurve rail, float u, Vector3f hero, Vector3f boss) {
+		float[] r = new float[3];
+		rail.eval(u, r);
+		float hx = hero.x - r[0], hz = hero.z - r[2];
+		if (boss == null) {
+			return (float) Math.sqrt(hx * hx + hz * hz);
+		}
+		float bx = boss.x - hero.x, bz = boss.z - hero.z;
+		float lh = (float) Math.sqrt(hx * hx + hz * hz), lb = (float) Math.sqrt(bx * bx + bz * bz);
+		if (lh < 1e-3f || lb < 1e-3f) {
+			return 1;
+		}
+		double a = Math.toDegrees(Math.acos(Math.max(-1, Math.min(1, (hx * bx + hz * bz) / (lh * lb)))));
+		return (float) Math.abs(a - ARES_LINE_ANGLE);
+	}
+
+	/** AresCamera1 레일 t: 처음엔 전 구간 표본, 이후 이전 t 에서 지역 탐색 (레일 감쇠 0xA8 = 0 → 바로 따라감). */
+	private static float aresRail(NcvCurve rail, Vector3f hero, Vector3f boss, float prev) {
+		float best = Math.max(0, prev);
+		float bc;
+		if (prev < 0) {
+			bc = Float.MAX_VALUE;
+			for (int i = 0; i <= 128; i++) {
+				float u = rail.tMax() * i / 128;
+				float c = aresCost(rail, u, hero, boss);
+				if (c < bc) {
+					bc = c;
+					best = u;
+				}
+			}
+		}
+		bc = aresCost(rail, best, hero, boss);
+		float step = 0.05f;
+		for (int guard = 0; Math.abs(step) > 0.0005f && guard < 400; guard++) {
+			float n = Math.max(0, Math.min(rail.tMax(), best + step));
+			float c = aresCost(rail, n, hero, boss);
+			if (c < bc) {
+				bc = c;
+				best = n;
+				step *= 1.5f;
+			} else {
+				step *= -0.5f;
+			}
+		}
+		return best;
 	}
 
 	/** 레일 t: 비용 최소점을 이전 t 에서 지역 탐색 (0x1F1AA0, 0x1F20F0), 감쇠 0xA8 로 따라간다. */
