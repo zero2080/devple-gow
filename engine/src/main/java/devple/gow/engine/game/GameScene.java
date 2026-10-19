@@ -86,6 +86,7 @@ public final class GameScene implements Scene {
 	private Shader enemyShader;
 	private Tweaks orbTweaks;
 	private devple.gow.engine.combat.GrabSync grab;
+	private devple.gow.engine.fx.MagicFx magicFx;
 	private final Random rnd = new Random();
 
 	/** 불러오기 시 시작 위치 (null 이면 진입점/시작 인스턴스). */
@@ -142,6 +143,22 @@ public final class GameScene implements Scene {
 			throw new UncheckedIOException(ex);
 		}
 		grab = new devple.gow.engine.combat.GrabSync(hero.ctl, hero.combat);
+		grab.onSound(n -> session.sound.play(n));
+		// 마법 (35 문서): 대상 = 살아있는 적 전체, 소리 → SoundManager, HUD 선택 마법 아이콘
+		hero.magic.setTargets(() -> enemies.stream().map(Enemy::fighter).filter(f -> !f.dead()).toList());
+		magicFx = new devple.gow.engine.fx.MagicFx();
+		hero.magic.setSink(new devple.gow.engine.combat.Magic.Sink() {
+			@Override
+			public void sound(String name, Vector3f at) {
+				session.sound.play(name, at);
+			}
+
+			@Override
+			public void effect(String name, Vector3f at) {
+				magicFx.effect(name, at);
+			}
+		});
+		hudBinding.castable = hero.magic::has;
 		placeSpawn();
 		respawn(spawn);
 		checkpoint.set(spawn);
@@ -389,9 +406,20 @@ public final class GameScene implements Scene {
 		f.setFoe(hero.hittable());
 		f.combat().onSound((h, p) -> session.sound.play(h, p));
 		f.setIncomingScale(hero::incomingScale);
+		EnemyFactory.Kind fk = kind;
+		f.onShatter(() -> stoneKill(f, fk));
 		enemies.add(new Enemy(f, kind.buildModel(enemyShader), r.actor(), kind));
 		System.out.printf("적 스폰: %s (템플릿 %d, 순찰 %s) at (%.0f, %.0f, %.0f)%n", kind.assets().wad().name(), r.templateId(),
 				r.patrol(), f.pos.x, f.pos.y, f.pos.z);
+	}
+
+	/** 석상 파괴 보너스 (Bonus 023 "Stone Kill" / 공중 024 "Air Stone Kill": #eed31206 붉은 오브, #2af48b79 메시지). */
+	private void stoneKill(EnemyFighter f, EnemyFactory.Kind k) {
+		String node = String.format("/TweakTemplates/Bonus/%03d/", hero.ctl.grounded ? 23 : 24);
+		var orbs = k.tweaks().rawHash(node, 0xeed31206);
+		hero.player.addRedOrbs(orbs.isPresent() ? (int) Float.intBitsToFloat(orbs.getAsInt()) : 15);
+		magicFx.effect("shatter", f.pos);
+		session.sound.play("SND_PICKUPS_ORBS_E");
 	}
 
 	private void showMessage(int id, float seconds) {
@@ -526,13 +554,14 @@ public final class GameScene implements Scene {
 			Enemy te = enemies.stream().filter(x -> x.fighter() == target).findFirst().orElse(null);
 			boolean was = grab.active();
 			grab.update(in, target, te != null ? te.kind().tweaks() : null, dt);
-			if (was && !grab.active() && grab.lastResult() == devple.gow.engine.combat.RepeatPressQte.State.PASSED) {
+			if (was && !grab.active() && grab.executionSucceeded()) {
 				target.hp = 0; // 처형 성공 → 사망 처리 (원작은 처형 기술의 피해/스크립트) [근사]
 			}
 		}
 		Vector3f p = hero.ctl.position;
 		cameraRig.update(dt, p, hero.ctl.yaw, !hero.ctl.grounded);
 		world.tick(dt, p.x, p.y, p.z);
+		magicFx.update(hero.magic, p, hero.ctl.yaw, enemies.stream().map(Enemy::fighter).toList(), dt, cam.eye);
 		if (hero.player.hp <= 0) {
 			heroDied();
 		}
@@ -670,6 +699,9 @@ public final class GameScene implements Scene {
 		env.applyFog(enemyShader, cam, e.window().height());
 		Matrix4f m = new Matrix4f();
 		for (Enemy en : enemies) {
+			if (en.fighter().shattered()) {
+				continue; // 부서진 석상 (원작은 *stonedbrk 파편 모델) [근사: 숨김]
+			}
 			en.model().draw(cam, e.window().aspect(), en.fighter().world(m, alpha), en.fighter().animator().pose(),
 					e.renderer().white());
 		}
@@ -677,6 +709,7 @@ public final class GameScene implements Scene {
 		devple.gow.engine.fx.FxEnvironment.disableFog(hero.shader());
 		devple.gow.engine.fx.FxEnvironment.disableFog(enemyShader);
 		level.renderEffects(e, cam); // 비·파티클·물은 캐릭터 뒤에
+		magicFx.render(cam, e.window().aspect());
 		hud.render(e);
 	}
 
@@ -687,6 +720,7 @@ public final class GameScene implements Scene {
 		kinds.values().forEach(k -> session.sound.unload(k.assets().wad().name()));
 		enemies.forEach(en -> en.model().close());
 		enemyShader.close();
+		magicFx.close();
 		hero.close();
 		hud.close();
 		level.exit(e);

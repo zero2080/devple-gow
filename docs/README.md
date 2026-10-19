@@ -38,6 +38,7 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 | 33 | [구현: 컷신 재생 (MoviePlayer / MovieScene, JCodec MPEG-2)](33-impl-video.md) | 재생기 완료 (테스트 3, 스크린샷 3) |
 | 34 | [구현: 무기 궤적 / 원작 히트박스 (블레이드 부착, CDV 구, PartType, 스윕 판정)](34-impl-hitboxes.md) | 완료 (테스트 3, 디버그 시트) |
 | 32 | [구현: 원작 적 AI (AiBrain, 결정 트리, 공격 토큰)](32-impl-enemy-ai.md) | 완료 (테스트 8, 적 32종 스모크) |
+| 35 | [구현: 마법 3종(메두사 석화·제우스 투사체·하데스 영혼) / 방향키 선택 / TimedPress·스틱 미니게임](35-impl-magic-minigames.md) | 완료 (테스트 12, 스크린샷 2) |
 | 90 | [현황 / 로드맵](90-status-roadmap.md) | 수시 갱신 |
 
 ## 게임 실행
@@ -46,7 +47,8 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 ./gradlew :engine:run                                  # 메인 메뉴 → 새 게임 → ATHN01A (원작 흐름)
 ./gradlew :engine:run --args="--game ATHN01A"          # 레벨 바로 시작
 ./gradlew :engine:run --args="--game PAND01A --entry gomusicgrppan1c1start --auto-run 3"   # 진입점 지정 + 자동 달리기
-./gradlew :engine:run --args="--hero --enemy R_MIN"    # 평지 전투 연습
+./gradlew :engine:run --args="--hero --enemy R_MIN"    # 평지 전투 연습 (마법 4종 보유, 방향키 선택)
+./gradlew :engine:run --args="--hero --enemy R_MIN --auto magic"   # 메두사 석화 → 파괴 자동 시연
 ./gradlew :engine:run --args="--movie SEMO01"          # 컷신 재생 (ISO 직접 읽기, --wide = PSW, START/× 건너뛰기)
 ```
 조작: WASD 이동, J □(약공) / I △(강공) / L ○(잡기) / K ×(점프) / Q L1(방어) / E R1, C R2(마법), 방향키 = 오른쪽 스틱(회피),

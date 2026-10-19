@@ -38,6 +38,19 @@ public interface Hittable {
 		return null;
 	}
 
+	/**
+	 * 메두사의 시선 누적 (원작 SCR_TurnToRock 0x19FA78 계열, 35 문서 §2). amount = 이번 틱 동결량.
+	 * @return 이번 호출로 돌이 되었으면 true. 돌이 될 수 없는 대상은 false.
+	 */
+	default boolean addFreeze(float amount) {
+		return false;
+	}
+
+	/** 돌 상태 (석화). 돌인 대상은 맞으면 부서진다 (Stone Kill). */
+	default boolean petrified() {
+		return false;
+	}
+
 	/** 무적(이벤트 9) 또는 사망. */
 	boolean invulnerable();
 

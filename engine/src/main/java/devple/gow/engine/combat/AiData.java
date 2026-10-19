@@ -35,12 +35,22 @@ public final class AiData {
 		public static final Soldier HERO = new Soldier(4, 12, 10, 10);
 	}
 
+	/**
+	 * 석화 관련 Sold 필드 (0x1E8C40, 35 문서 §2).
+	 *
+	 * @param resist +0x26C u16 동결 게이지 최대치 (미노타우로스 6000, 사이클롭스 20000, ≥ 60000 = 면역)
+	 * @param move   +0x270 u16 석화 기술 ID (적 160 freezePose, 영웅 120)
+	 */
+	public record Stone(int resist, int move) {
+	}
+
 	/** BlockMod 항목 하나 (0x19BEF0): 영웅 기술, 최소 횟수, 최소 방어 %, 한계 횟수. */
 	public record BlockEntry(int move, int min, float minBlock, int limit) {
 	}
 
 	private final Map<Integer, DecisionTree> trees = new HashMap<>();
 	private final Map<Integer, Soldier> soldiers = new HashMap<>();
+	private final Map<Integer, Stone> stones = new HashMap<>();
 
 	public static AiData load(WadFile... wads) {
 		AiData d = new AiData();
@@ -64,7 +74,12 @@ public final class AiData {
 						trees.put(Integer.parseInt(t.name().substring(9)), DecisionTree.parse(blob));
 					}
 				} else if (t.tag() == WadTagType.TWEAK_REF && t.name().startsWith("TWK_Sold_")) {
-					soldiers.put(Integer.parseInt(t.name().substring(9)), soldier(t.data()));
+					int sid = Integer.parseInt(t.name().substring(9));
+					soldiers.put(sid, soldier(t.data()));
+					Stone st = stone(t.data());
+					if (st != null) {
+						stones.put(sid, st);
+					}
 				}
 			} catch (RuntimeException e) {
 				// 이름이 숫자가 아니거나 손상된 블록은 건너뜀
@@ -82,6 +97,11 @@ public final class AiData {
 
 	public Soldier soldier(int id) {
 		return soldiers.get(id);
+	}
+
+	/** 석화 필드 (없으면 null). */
+	public Stone stone(int id) {
+		return stones.get(id);
 	}
 
 	/** BlockMod 템플릿 (/TweakTemplates/BlockMod/NNN/ "Move i", "Move i Min", "Move i Min Block", "Move i Limit"). */
@@ -113,6 +133,19 @@ public final class AiData {
 		int base = p + 1;
 		return new Soldier(b.getShort(base + 0x244) & 0xFFFF, b.getShort(base + 0x246) & 0xFFFF,
 				b.getShort(base + 0x248) & 0xFFFF, b.getShort(base + 0x24A) & 0xFFFF);
+	}
+
+	private static Stone stone(ByteBuffer src) {
+		ByteBuffer b = src.duplicate().order(ByteOrder.LITTLE_ENDIAN);
+		int p = 4;
+		while (p < b.limit() && b.get(p) != 0) {
+			p++;
+		}
+		int base = p + 1;
+		if (base + 0x272 > b.limit()) {
+			return null;
+		}
+		return new Stone(b.getShort(base + 0x26C) & 0xFFFF, b.getShort(base + 0x270) & 0xFFFF);
 	}
 
 	/** TWK 바이너리에서 hash 키의 블록 값 원시 바이트 (NUL 이후 포함). TweakFile 레코드 규칙 그대로. */

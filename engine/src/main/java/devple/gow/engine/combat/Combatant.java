@@ -65,6 +65,13 @@ public final class Combatant {
 	public float reach = REACH, hitRadius = HIT_RADIUS;
 	public int hitCounter;
 	public float godMeter;
+	/** 기술 시작마다 1 증가 (같은 기술 재시작 구분 — 마법 스크립트 이벤트 1회 발동용). */
+	private int moveSerial;
+	private java.util.function.IntPredicate moveHold = id -> false;
+	/** 이 combatant 애니 세트에 없는 기술 애니의 대체 (시간·이름만, 재생 안 함). 예: 사이클롭스 처형 애니는 적 세트에 붙지 않음. */
+	private java.util.function.IntFunction<Animation> clipFallback = h -> null;
+	private Animation vclip;
+	private float vtime;
 
 	public Combatant(CombatData data, Animator anim, CombatOwner owner) {
 		this.data = data;
@@ -123,20 +130,111 @@ public final class Combatant {
 		return move != null && move.events().stream().anyMatch(e -> e.type() == 8);
 	}
 
+	/**
+	 * 현재 진행률에서 활성인 SCRIPT(8) 이벤트 중 해시가 같은 것 (없으면 null).
+	 * 해시 = SCR_ 명령 이름의 Hash127Upper (예 SCR_ThrowThunderbolt = 0x96EDE590, 35 문서 §1).
+	 */
+	public CombatFile.Event activeScript(int hash) {
+		if (move == null) {
+			return null;
+		}
+		float t = progress();
+		for (CombatFile.Event e : move.events()) {
+			if (e.type() == 8 && e.hash() == hash && t >= e.start() && t <= e.end()) {
+				return e;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * 애니가 없는 기술(예 USEHEAD 82 — 원작은 SCR_MedusaHead 가 useHeadTurnLeft/Right 를 직접 섞음)을
+	 * 스크립트가 붙잡는 동안 유지. 기본 = 즉시 종료.
+	 */
+	public void setMoveHold(java.util.function.IntPredicate p) {
+		moveHold = p != null ? p : id -> false;
+	}
+
+	/**
+	 * 미니게임 실패 처리 (TimedPress 실패 핸들러 0x192A80): 현재 기술에서 입력 코드 0 이고
+	 * 창이 이벤트 창을 포함하는 첫 분기(예 {@code [창]! REQUEST0 -> MAICYWMINIF1})를 실행.
+	 */
+	public boolean runWindowBranch(CombatFile.Event e) {
+		if (move == null) {
+			return false;
+		}
+		for (Branch b : move.branches()) {
+			if (b.input() == 0 && b.winStart() <= e.start() + 1e-3f && b.winEnd() >= e.end() - 1e-3f && b.target() >= 0) {
+				start(b, null);
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** 분기 조건 없이 기술 시작 (테스트·스크립트용: 처형 기술을 직접 재생). */
+	public boolean forceMove(int moveId) {
+		Move m = data.move(moveId);
+		if (m == null) {
+			return false;
+		}
+		end();
+		move = m;
+		moveSerial++;
+		clip = data.animation(m);
+		virtualClip(m);
+		heldAtStart = 0;
+		accumDamage = 0;
+		stanceTag = -1;
+		hitLog.clear();
+		firedEvents.clear();
+		hitThisMove = false;
+		if (clip != null) {
+			anim.playClip(clip, 0, m.speed() > 0 ? m.speed() : 1f);
+		}
+		log.accept(String.format("기술 %d %s (직접)", m.id(), clip != null ? clip.name : "?"));
+		return true;
+	}
+
+	/** 애니 대체 조회 (애니 해시 → 다른 세트의 Animation). GrabSync 가 영웅 세트를 연결한다. */
+	public void setClipFallback(java.util.function.IntFunction<Animation> f) {
+		clipFallback = f != null ? f : h -> null;
+	}
+
+	/** 애니 해시로 이 combatant 세트의 애니 (없으면 null). */
+	public Animation animationByHash(int hash) {
+		return data.animation(hash);
+	}
+
+	private void virtualClip(Move m) {
+		vtime = 0;
+		vclip = clip == null ? clipFallback.apply(m.animHash()) : null;
+	}
+
+	/** 기술 인스턴스 번호 (시작마다 증가). */
+	public int moveSerial() {
+		return moveSerial;
+	}
+
 	/** 애니 진행을 외부에서 지정 (재생 속도 0 인 미니게임 기술: 게이지 = 진행률). */
 	public void setProgress(float p) {
 		if (clip != null) {
 			anim.seek(Math.max(0, Math.min(1, p)) * clip.duration);
+		} else if (vclip != null) {
+			vtime = Math.max(0, Math.min(1, p)) * vclip.duration;
 		}
 	}
 
 	/** 현재 기술의 애니 이름 (없으면 null). */
 	public String clipName() {
-		return clip != null ? clip.name : null;
+		return clip != null ? clip.name : vclip != null ? vclip.name : null;
 	}
 
 	/** 현재 기술 진행률 0..1 (애니 시간 / 길이). */
 	public float progress() {
+		if (move != null && clip == null && vclip != null && vclip.duration > 0) {
+			return Math.min(1f, vtime / vclip.duration);
+		}
 		if (move == null || clip == null || clip.duration <= 0) {
 			return 1f;
 		}
@@ -179,7 +277,12 @@ public final class Combatant {
 		}
 		if (move != null) {
 			attacks(t);
-			if (clip == null || (!clip.looping() && anim.time() >= clip.duration)) {
+			if (clip == null && vclip != null && move.speed() > 0) {
+				vtime += dt * move.speed();
+			}
+			boolean vdone = vclip == null || vtime >= vclip.duration;
+			if ((clip == null && vdone && !moveHold.test(move.id()))
+					|| (clip != null && !clip.looping() && anim.time() >= clip.duration)) {
 				end();
 			}
 		}
@@ -420,7 +523,9 @@ public final class Combatant {
 			owner.useMagic(b.magic());
 		}
 		move = m;
+		moveSerial++;
 		clip = data.animation(m);
+		virtualClip(m);
 		heldAtStart = in != null ? CombatInput.mask(in) : 0;
 		accumDamage = 0;
 		stanceTag = -1;
@@ -437,6 +542,7 @@ public final class Combatant {
 	private void end() {
 		move = null;
 		clip = null;
+		vclip = null;
 		anim.setRate(1f);
 	}
 

@@ -17,7 +17,7 @@ import java.nio.file.Path;
  *   ./gradlew :engine:run                                         (메인 메뉴 → 새 게임 → ATHN01A)
  *   ./gradlew :engine:run --args="--screenshot work/shot.png"   (몇 프레임 후 캡처하고 종료)
  *   ./gradlew :engine:run --args="--view gow-rom/R_HERO0.WAD [MDL이름]"   (모델 뷰어)
- *   ./gradlew :engine:run --args="--hero [gow-rom] [--blade N] [--auto run|combo] [--enemy R_SKS]"   (평지 조작 + 전투 연습)
+ *   ./gradlew :engine:run --args="--hero [gow-rom] [--blade N] [--auto run|combo|magic] [--enemy R_SKS]"   (평지 조작 + 전투 연습)
  *   ./gradlew :engine:run --args="--anim gow-rom/R_HERO0.WAD MDL_hero hero ANM_hero [애니이름]"   (애니메이션 뷰어)
  *   ./gradlew :engine:run --args="--ui gow-rom/R_SHELLK.WAD FLP_ShellK [menu|hud|pause|powerup] [--ui-warm n]"   (FLP UI)
  *   ./gradlew :engine:run --args="--level gow-rom/ATHN01A.WAD [--cam N|auto] [--col]"   (레벨 배치 뷰어, 23 문서)

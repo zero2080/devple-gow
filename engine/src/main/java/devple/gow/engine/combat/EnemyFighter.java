@@ -55,6 +55,20 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 	private Hittable foe;
 	private float deadTime;
 	private static int spawnCount;
+	// ---- 석화 (메두사의 시선, 35 문서 §2) ----
+	/** 동결 게이지 최대 = Sold +0x26C (≥ 60000 면역), 기본 30 (0x1E8C40 초기값). */
+	private final float freezeMax;
+	private float freezeMeter;
+	private boolean freezeHit;
+	private final int stoneMove;
+	/** 돌 지속 = AI1 #b5134762 (+0x40, ms). */
+	private final float stoneTime;
+	/** /GlobGame/Unfreeze Speed (u16 50) × 60 = 초당 회복량. */
+	private final float unfreezeRate;
+	private boolean stone;
+	private float stoneElapsed;
+	private boolean shattered;
+	private Runnable onShatter = () -> { };
 
 	/**
 	 * @param ai1         AI1 템플릿 번호 (미노타우로스 Lv1 = 50)
@@ -109,6 +123,14 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 		this.brain = new AiBrain(this, tmpl, tree, AiData.blockMod(tw, tmpl.blockMod), sold, seed);
 		setDifficulty(1);
 		anim.play(idleClip, true);
+		AiData.Stone stn = ai != null ? ai.stone(tmpl.soldier) : null;
+		this.freezeMax = stn != null ? stn.resist() : 30f;
+		this.stoneMove = stn != null ? stn.move() : 160;
+		this.freezeMeter = freezeMax;
+		var sm = tw.rawHash(tmpl.node, 0xb5134762);
+		this.stoneTime = (sm.isPresent() ? sm.getAsInt() : 5000) / 1000f;
+		var us = tw.raw("/GlobGame/", "Unfreeze Speed");
+		this.unfreezeRate = (us.isPresent() ? us.getAsInt() & 0xFFFF : 50) * 60f;
 	}
 
 	/** 난이도 0..3 (Easy..Impossible): "AI Recovery Time Mult" 를 공격 후 대기에 적용. */
@@ -155,6 +177,23 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 	public void update(float dt) {
 		prevPos.set(pos);
 		prevYaw = yaw;
+		if (stone) {
+			// 돌: AI·전투 정지, 석화 자세(freezePose)만 끝까지 재생 후 유지. 지속 후 원상 복귀 (UnFreeze 0x1E8AF8)
+			stoneElapsed += dt;
+			var cur = anim.current();
+			if (cur != null && anim.time() + dt < cur.duration) {
+				anim.update(dt);
+			}
+			if (stoneElapsed >= stoneTime) {
+				stone = false;
+				freezeMeter = freezeMax;
+			}
+			return;
+		}
+		if (!freezeHit && freezeMeter > 0 && freezeMeter < freezeMax) {
+			freezeMeter = Math.min(freezeMax, freezeMeter + unfreezeRate * dt);
+		}
+		freezeHit = false;
 		combat.update(null, dt);
 		if (hp <= 0) {
 			deadTime += dt;
@@ -308,11 +347,64 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 
 	@Override
 	public boolean invulnerable() {
-		return hp <= 0 || combat.invulnerable();
+		return hp <= 0 || (!stone && combat.invulnerable());
+	}
+
+	@Override
+	public boolean addFreeze(float amount) {
+		if (hp <= 0 || stone || freezeMax >= 60000) {
+			return false;
+		}
+		freezeHit = true;
+		freezeMeter = Math.max(0, freezeMeter - amount);
+		if (freezeMeter > 0) {
+			return false;
+		}
+		stone = true;
+		stoneElapsed = 0;
+		combat.request(stoneMove); // 메시지 0x407 → 석화 기술 (160 freezePose)
+		return true;
+	}
+
+	@Override
+	public boolean petrified() {
+		return stone;
+	}
+
+	/** 돌 상태에서 맞아 부서졌는지 (Stone Kill). */
+	public boolean shattered() {
+		return shattered;
+	}
+
+	/** 동결 게이지 (현재, 최대) — 테스트/HUD. */
+	public float freezeMeter() {
+		return freezeMeter;
+	}
+
+	public float freezeMax() {
+		return freezeMax;
+	}
+
+	/** 돌 지속 시간 (초). */
+	public float stoneTime() {
+		return stoneTime;
+	}
+
+	/** 부서짐 콜백 (Stone Kill 보너스 등). */
+	public void onShatter(Runnable r) {
+		onShatter = r;
 	}
 
 	@Override
 	public Result receive(Attack attack, Combatant attacker, float damage, Vector3f knock) {
+		if (stone) {
+			// 석상(Brkb, Hit Points 1)은 한 번 맞으면 부서짐 → 소유자 사망 0x405 + Stone Kill 0x416
+			stone = false;
+			shattered = true;
+			hp = 0;
+			onShatter.run();
+			return Result.HIT;
+		}
 		// 원작 Combat_OnContact(0x204124): 방어 자세가 아니고 방어 불가 공격이 아니면 owner 의 방어 판단(0x1CBFF8) 먼저
 		boolean fromFoe = attacker != null && foe != null && attacker.owner() != null
 				&& attacker.owner().position().distanceSquared(foe.position()) < 1f;

@@ -483,6 +483,27 @@ m = Difficulty.AIDamageMult × Costume.AIDamageMult × (GodMode ? WeaponLevel[lv
 
 입력 모드: 메두사·제우스 = 마법 버튼 **홀드**(꺼내기 → 놓으면 PUTAWAYHEAD/던지기), 번개·하데스 = 누름(지상 분기는 홀드도 허용).
 
+### 10.1 마법 효과 (35 문서에서 확장) [확실: 주소·수치 / 추정 표시]
+- **발동**: 영웅 기술의 SCRIPT(8) 이벤트 해시 = SCR_ 명령 이름의 Hash127Upper.
+  - SCR_MedusaHead 0x45FA7BF4 (USEHEAD 82), SCR_ThrowThunderbolt 0x96EDE590 (BOLTTHROW 61 @0.55), SCR_RaiseTheDead 0x139D9006 (RAISETHEDEAD 508 @0.58).
+- **단위**: TWK 거리·속도 × 16 = 월드 유닛.
+- **MP**: 분기 시작은 HasMagic 확인뿐이다. 실제 소모(0x1DCA58)는 효과 쪽이 한다.
+  - 메두사 = 광선 중 Drain/초. 제우스 = 던질 때마다 (차지 샷은 Ch1/Ch2 Drain 으로 대체). 하데스 = 영혼마다 Drain (합 75).
+- **메두사** (0x1964D0 원뿔, 0x1972E8 광선, Freeze 0x1E1778, 적 0x1E8C40):
+  - Freeze Factor 는 u16 (100/115/125). 덤프의 12.5 는 잘못 디코딩된 값이다.
+  - 적 동결 게이지 −= Factor × 60 × dt. 게이지 최대 = Sold +0x26C (미노타우로스 6000, ≥ 60000 면역), 회복 Unfreeze Speed 50 × 60/초.
+  - 0 이 되면 0x407 → 석화 기술 Sold +0x270 (160). 돌 지속 = AI1 +0x40 (ms, 대부분 5000).
+  - 돌이 맞으면 파괴(0x405) + Stone Kill 0x416 → Bonus 023 (15 오브), 공중이면 024 (30).
+  - 섬광 (단계 1·2): Flash Points 20, Flash Freeze u16 8000 (한 번). Nuke: Concussion 000/001 Freeze 30000.
+- **제우스** (상태 0x29D85A, Arrow 0x222710/0x2249A0):
+  - Arrow Emitter 2/3/5 → Arrow 002/003/004: Damage 8/20/65, Velocity 60 m/s, 수명 #117c872e 5초.
+  - 차지 샷은 Concussion 005/006 (반경 2/4 m). 임계 = 비율 × Charge Time. Playback Speed = 던지기 애니 속도.
+- **하데스** (0x19DAC0, 슬롯 6 개 0x2FF9D0):
+  - 영혼 N 이 반경 방향으로 출발하고, Reach × 16 안의 적을 순환 배정한다. 조향 `vel += dir·MaxVel·Homing·dt` 후 정규화.
+  - 명중: 2m 이내, 0.5초 간격 → Damage Per Hit. 누적 ≥ Max Damage 면 소멸, 15초 후 전부 소멸.
+- **선택**: 방향키 → 3, ← 4, ↓ 5, ↑ 6 (sub_001D7E10).
+  - 미보유면 SND_SELECT_NULL. HUD 아이콘 = `PS2_PickUp_Event` (0 / 2·id−1 / 2·id).
+
 ---
 
 ## 11. 오브 · 히트 카운터 · 보너스
@@ -515,8 +536,23 @@ m = Difficulty.AIDamageMult × Costume.AIDamageMult × (GodMode ? WeaponLevel[lv
 - 적 HP 가 AI1 `Circle Health Threshold`(1–5개, 65535 = 없음) 아래로 내려가면 `TakeDamage` 가 잡기 원(goMiniGameCircle)을 띄우고 피격자 이벤트 21. 적 애니 이벤트가 자세 태그 14 를 세우면 영웅 ○ 분기(COMBO5A, tag=14)가 열린다 [추정: 태그 14 설정 주체].
 - 잡기 → 파일 002 의 적별 처형 기술(MAISKB*, MAIMIN01–04, MAICYWMINI*, MAISATSTRUGGLE …, 대부분 무적·NO_BLOCK). 상대와 SYNC(18) 분기로 애니 동기화.
 - **RepeatPress**(연타, `SCR_RepeatPress` 0x1924F0, 갱신 0x192160): `Total Time`(3–5초), `Forward Amount`(누를 때 게이지 +0.18–0.225), 감소(#b4af76ab 0.02–0.025 ×dt), `Button`(아이콘 표 0x29D740), 성공 시 `Pass Move`, 실패(시간 초과) 시 `Fail Move` — 두 combatant 모두 해당 기술로 전환 [필드 일부 추정].
-- **TimedPress**(타이밍, `SCR_TimedPress` 0x192ED0): `arcPress180rand/360rand`, 사운드 `SND_MINIGAME_BUT/HIT` [세부 미해석].
-- `/Player/Wiggle Meter Drain` = 2.0, 버튼 아이콘 이름 표 0x29DA40(`XButtonGreek`, `Up180CW`, `360CW`, `WiggleStick`, `R2ButtonPress` …).
+- RepeatPress 재해석 (35 문서 §5.1) [확실]:
+  - 게이지는 0 에서 시작하고, 누를 때 +F 다.
+  - 감소 #b4af76ab 는 **프레임당** 적용한다.
+  - `#1fc6d36d` = 누름 사이 최대 간격 (넘으면 실패).
+  - `#870e6017` = 최소 간격 (더 빠르면 감점).
+  - `#4ba7dfc2` = 표시 평활. Fail +0x34 / Pass +0x36.
+  - 템플릿 번호 = SCRIPT 이벤트 idx.
+- **TimedPress**(타이밍, `SCR_TimedPress` 0x192ED0, 틱 0x192C90, 실패 0x192A80) [확실]:
+  - 적 MAI 기술의 SCRIPT 이벤트(해시 0xF980EF69, idx = 템플릿) 하나가 프롬프트 하나다. 입력 창 = 이벤트 창.
+  - 템플릿 필드: #d650acb2 종류 (값 표 0x29D740: 4 △ 5 ○ 6 × 7 □, F0–F5 스틱 회전, FB–FF 무작위), #776f2158 회전 허용 오차 (s8), #815ff05d 표시 소리, #f48a3e39 성공 소리.
+  - 버튼: 맞으면 성공 (기술 그대로 진행), 다른 얼굴 버튼이면 즉시 실패.
+  - 회전: 왼쪽 스틱 사분면(데드존 0.6) 변화 순서. Up180CW = ←↑, 360CW = ←↑→ 등.
+  - 실패 = 현재 기술에서 입력 0 이고 창이 이벤트 창을 포함하는 분기 (`[창]! REQUEST0 -> 실패 기술`).
+  - 사용처: 사이클롭스 MAICYWMINI02(4 프롬프트, TP 000 무작위 버튼), MAICY3MINI01(3), 고르곤 MAIMEWGRAB(060 180 무작위 + 061 360 무작위 → 실패 MAIMEWESCAPE).
+  - 하피 처형에는 QTE 가 없다.
+- `/Player/Wiggle Meter Drain` = 2.0 (0x1D8B98: 스틱 흔들기 게이지, 사용처 미확인).
+- 버튼 아이콘 이름 표 0x29DA40 = FLP_HUDK 루트의 클립 이름 15개 (XButtonGreek … 360CCW, XButtonPress, R2ButtonPress, WiggleStick, WiggleBackForth, R2ButtonStatic). 0x338788 우선순위 슬롯 3 에 표시된다.
 
 ---
 

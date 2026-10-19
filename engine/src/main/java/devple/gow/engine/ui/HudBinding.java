@@ -23,6 +23,21 @@ public final class HudBinding {
 	private int lastOrbs = -1, lastHpLevel = -1, lastMpLevel = -1;
 	/** SetHealth/MagicMeter 는 저장된 단계(_level0/:X_Level)가 현재 단계와 같을 때만 바를 갱신하므로 단계 변경 후 한 번 더 보낸다. */
 	private int resync;
+	private int lastPickUp = Integer.MIN_VALUE;
+	/** 선택 마법 시전 가능 여부 (원작 sub_001D93C0 HasMagic). 게임 씬이 Magic::has 를 연결. */
+	public java.util.function.IntPredicate castable = id -> true;
+
+	/**
+	 * 선택 마법 아이콘 값 (Progress_UpdateHud 0x1D75E8): 0 = 없음, 시전 가능 2·id − 1, 불가 2·id [추정: 짝/홀 의미].
+	 * FLP_HUDK 는 {@code PS2_PickUp_Event} 로 MainMeter/PickUps 를 GotoFrame(1 + 값).
+	 */
+	public static int pickUpValue(PlayerState ps, boolean castable) {
+		if (ps.selectedMagic == null || ps.selectedMagic.itemId == 0) {
+			return 0;
+		}
+		int id = ps.selectedMagic.itemId;
+		return castable ? 2 * id - 1 : 2 * id;
+	}
 
 	/**
 	 * 값만 기록 (이벤트 없이). 메뉴 진입 직전 (Progress_ToHud) 에도 쓴다.
@@ -73,6 +88,11 @@ public final class HudBinding {
 		}
 		if (again || ps.mp != lastMp || ps.mpLevel != lastMpLevel) {
 			v.event("PS2_MagicMeter_Event", 2);
+		}
+		int pu = pickUpValue(ps, ps.selectedMagic != null && castable.test(ps.selectedMagic.itemId));
+		if (pu != lastPickUp) {
+			lastPickUp = pu;
+			v.event("PS2_PickUp_Event", pu);
 		}
 		if (ps.redOrbs != lastOrbs) {
 			v.event("PS2_PowerOrb_Event", 1);

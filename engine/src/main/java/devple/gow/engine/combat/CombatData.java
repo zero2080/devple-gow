@@ -72,6 +72,11 @@ public final class CombatData {
 		return animByHash.get(m.animHash());
 	}
 
+	/** 애니 이름 해시(Hash127Upper)로 조회. */
+	public Animation animation(int animHash) {
+		return animByHash.get(animHash);
+	}
+
 	public int moveCount() {
 		return moves.size();
 	}

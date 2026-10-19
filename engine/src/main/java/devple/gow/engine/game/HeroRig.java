@@ -228,7 +228,8 @@ public final class HeroRig implements AutoCloseable {
 			}
 		}
 		hitCounter.update(dt);
-		magic.update(combat, dt);
+		magic.select(in, ctl.position); // 방향키 마법 선택 (원작 sub_001D7E10)
+		magic.update(combat, in, dt);
 	}
 
 	public void draw(Camera cam, float aspect, float alpha, Texture white) {

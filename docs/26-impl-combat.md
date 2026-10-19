@@ -103,7 +103,7 @@
 - 비용 (TWK `/Player/<마법>/`): 번개·제우스 `Stage n Magic Drain`, 메두사 `Stage n Drain × 0.05`, 하데스 75.
 - 포세이돈의 분노: 마법 버튼(R2 매핑) 홀드 → M513 AIRLIGHTNINGSTART → 루프(M510/507) 동안 0.25초마다 `Stage n Damage Per Second × 0.25`, 사거리 `Reach × 16 × 2` [추정], 넉백 `Ground Impulse Away`.
 - `MagicTest`: 포세이돈 획득 → MP 100, 시전 → 67 (비용 33), 범위 피해 확인.
-- 미구현: 메두사 석화, 제우스 투척, 하데스 소환 효과, 시각 이펙트(FXC/PTC 파티클).
+- ~~미구현: 메두사 석화, 제우스 투척, 하데스 소환 효과~~ → [35 문서](35-impl-magic-minigames.md) (MP 소모 위치도 효과 쪽으로 옮김).
 
 ## 10. 방어 · 패리 · 회피 (3단계) 검증
 `DefenseTest` (헤드리스, 원본 데이터):
@@ -135,4 +135,4 @@ MAIMIN02 의 SCRIPT 이벤트 → RepeatPress 템플릿: 5초, ○ 한 번 +0.2,
 | `RepeatPressQte` | 템플릿 키 일부는 해시만 존재 → 값 패턴으로 의미 추정(시간 5.0 / 시작 0.5 / Pass 402) |
 
 `GrabTest`: 연타 → PASSED → 402, 무입력 → FAILED → 403. 처형 성공 후 적 사망은 근사(기술 종료 시 HP 0).
-미구현: 미니게임 버튼 아이콘 HUD 표시, TimedPress(타이밍) / 스틱 회전 미니게임, 적별 다른 처형(MAISKB/MAICYW…) 개별 검증.
+TimedPress / 스틱 회전, RepeatPress 필드 재해석(시작 0.5 → 누름 간격 제한)은 [35 문서](35-impl-magic-minigames.md) §5. 남은 것: 미니게임 버튼 아이콘 HUD 표시.

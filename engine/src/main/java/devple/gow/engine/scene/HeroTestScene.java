@@ -48,7 +48,7 @@ import static org.lwjgl.opengl.GL41C.GL_TRIANGLES;
  */
 public final class HeroTestScene implements Scene {
 
-	public enum Auto { NONE, RUN, COMBO }
+	public enum Auto { NONE, RUN, COMBO, MAGIC }
 
 	private final Path rom;
 	private final Auto auto;
@@ -80,6 +80,9 @@ public final class HeroTestScene implements Scene {
 	private float camYaw;
 	private float autoTime;
 	private ScriptedInput scripted;
+	/** 마법 4종 (35 문서): 연습 씬에서는 전부 보유, 방향키로 선택. */
+	private devple.gow.engine.combat.Magic magic;
+	private devple.gow.engine.fx.MagicFx magicFx;
 
 	private String enemyWad = "R_MIN";
 
@@ -119,6 +122,23 @@ public final class HeroTestScene implements Scene {
 		godMode = new devple.gow.engine.combat.GodMode(tw);
 		hitCounter = new devple.gow.engine.game.HitCounter(tw);
 		player.level.put(devple.gow.engine.game.Weapon.BLADES, bladeLevel);
+		for (int id = 3; id <= 6; id++) {
+			player.addItem(id, 1);
+		}
+		magic = new devple.gow.engine.combat.Magic(tw, player);
+		hudBinding.castable = magic::has;
+		magicFx = new devple.gow.engine.fx.MagicFx();
+		magic.setSink(new devple.gow.engine.combat.Magic.Sink() {
+			@Override
+			public void effect(String name, Vector3f at) {
+				magicFx.effect(name, at);
+			}
+
+			@Override
+			public void petrified(Hittable h) {
+				System.out.println("석화: " + h);
+			}
+		});
 		combat = new Combatant(data, animator, owner());
 		DamageRules rules = new DamageRules(tw);
 		combat.setDamageScale(() -> rules.playerScale(1, 0, bladeLevel, godMode.active()));
@@ -180,6 +200,11 @@ public final class HeroTestScene implements Scene {
 				orbTweaks.load(WadFile.load(lvl));
 			}
 			enemy.combat().onLog(s -> System.out.println("[" + enemyWad + "] " + s));
+			EnemyFighter en0 = enemy;
+			enemy.onShatter(() -> {
+				System.out.println(enemyWad + " 석상 파괴 (Stone Kill)");
+				magicFx.effect("shatter", en0.pos);
+			});
 			hud = new UiLayer(new WadAssets(rom.resolve("R_PERMK.WAD")), true, "FLP_HUDK", MessageTable.fromWad(perm).orElse(null), new devple.gow.engine.ui.UiVariables());
 		} catch (IOException ex) {
 			throw new UncheckedIOException(ex);
@@ -206,6 +231,12 @@ public final class HeroTestScene implements Scene {
 			}
 			st.add(new ScriptedInput.Step(4.0f, 0.05f, PadButton.TRIANGLE));
 			scripted = new ScriptedInput(e.window().handle(), st);
+		} else if (auto == Auto.MAGIC) {
+			// ← 메두사 선택 → R2 홀드(광선, 석화) → □□ (석상 파괴) → ↑ 하데스 → R2 (영혼)
+			scripted = new ScriptedInput(e.window().handle(), List.of(new ScriptedInput.Step(0.2f, 0.05f, PadButton.LEFT),
+					new ScriptedInput.Step(0.5f, 3f, PadButton.R2), new ScriptedInput.Step(4.0f, 0.05f, PadButton.SQUARE),
+					new ScriptedInput.Step(4.4f, 0.05f, PadButton.SQUARE), new ScriptedInput.Step(6.0f, 0.05f, PadButton.UP),
+					new ScriptedInput.Step(6.3f, 0.1f, PadButton.R2)));
 		}
 	}
 
@@ -237,7 +268,15 @@ public final class HeroTestScene implements Scene {
 			}
 
 			public int selectedMagic() {
-				return 0;
+				return player.selectedMagic != null ? player.selectedMagic.itemId : 0;
+			}
+
+			public boolean hasMagic(int id) {
+				return magic.has(id);
+			}
+
+			public void useMagic(int id) {
+				magic.use(id);
 			}
 
 			public int classId() {
@@ -277,6 +316,10 @@ public final class HeroTestScene implements Scene {
 			}
 		}
 		hitCounter.update(dt);
+		magic.select(in, ctl.position);
+		magic.setTargets(() -> enemy != null ? List.of(enemy) : List.of(dummy));
+		magic.update(combat, in, dt);
+		magicFx.update(magic, ctl.position, ctl.yaw, enemy != null ? List.of(enemy) : List.of(dummy), dt, cam.eye);
 		if (combat.active()) {
 			Vector3f aim = enemy != null ? (enemy.dead() ? null : enemy.pos) : (dummy.hp > 0 ? dummy.pos : null);
 			ctl.updateCombat(combat, in, camYaw, dt, aim);
@@ -331,7 +374,7 @@ public final class HeroTestScene implements Scene {
 			e.renderer().basic().set("uTint", dummy.flash > 0 ? new Vector4f(1, 1, 1, 1) : new Vector4f(0.8f, 0.25f + 0.5f * k, 0.2f, 1));
 			e.renderer().draw(box, new Matrix4f().translation(dummy.pos), true);
 			e.renderer().basic().set("uTint", new Vector4f(1, 1, 1, 1));
-		} else if (enemy.deadTime() < 3f) {
+		} else if (enemy.deadTime() < 3f && !enemy.shattered()) {
 			minModel.draw(cam, e.window().aspect(), enemy.world(new Matrix4f(), alpha), enemy.animator().pose(), e.renderer().white());
 		}
 		var pose = ctl.animator().pose();
@@ -339,6 +382,7 @@ public final class HeroTestScene implements Scene {
 		if (blades != null) {
 			blades.draw(cam, e.window().aspect(), world, ctl.animator().skeleton(), pose.world(ctl.animator().skeleton()), e.renderer().white());
 		}
+		magicFx.render(cam, e.window().aspect());
 		if (hud != null) {
 			hud.render(e);
 		}
@@ -352,6 +396,7 @@ public final class HeroTestScene implements Scene {
 		}
 		skinned.close();
 		grid.close();
+		magicFx.close();
 		box.close();
 		hero.close();
 		if (minModel != null) {

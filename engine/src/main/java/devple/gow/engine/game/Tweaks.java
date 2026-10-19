@@ -92,6 +92,13 @@ public final class Tweaks {
 		return v == null ? OptionalInt.empty() : OptionalInt.of(v);
 	}
 
+	/** 키 이름이 복원되지 않은 문자열 값: 해시로 직접 조회. */
+	public String sHash(String node, int hash, String def) {
+		Map<Integer, String> m = strings.get(node);
+		String v = m == null ? null : m.get(hash);
+		return v == null ? def : v;
+	}
+
 	/** short/bool 형 값 (상위 바이트 쓰레기 제거). */
 	public int i16(String node, String key, int def) {
 		OptionalInt r = raw(node, key);
