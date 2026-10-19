@@ -32,6 +32,8 @@ public final class GameSession {
 	/** 오디오 (R_PERMK 의 GENERAL/GENERAL2/Hero 뱅크 상주). 메뉴와 게임 씬이 같은 인스턴스를 쓴다. */
 	public final SoundManager sound;
 	public int difficulty = 1;
+	/** 코스튬 (셸 PS2_Costume_Choice, 세이브 options[8]) → R_HERO&lt;n&gt; / R_WPN&lt;n&gt;_&lt;레벨&gt; / /Player/Costume n 배율 (11 문서 §2.4). */
+	public int costume;
 	/** 누적 플레이 시간 (초): GameScene 이 일시정지가 아닐 때 더한다. 세이브 슬롯 표시용. */
 	public float playTime;
 	/** 새 게임 첫 ATHN01A 진입 시 오프닝(Semo01) 재생 여부 (원작 sub_0021efd8). */

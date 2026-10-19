@@ -51,6 +51,9 @@ IN_GAME ─세이브 포인트→ SAVE_POINT → SAVE_DONE → IN_GAME
   - `PS2_Difficulty_Level` — 난이도 커서 초기값 (기본 1 = 보통). 메뉴는 선택 결과 `_level0/:ShellDifficulty` 를 다시 이 변수로 복사 → 게임 시작 시 `GameRules` 난이도로 사용. 값이 비어 있으면 난이도 화면이 결과를 쓰지 않는다 (이전 버그 원인).
   - `PS2_EnableButtons=1` (입력 허용), `PS2_HardMode_Unlocked` / `PS2_Costumes_Unlocked` (세이브 해금 비트 0x7 / 0x8).
   - 옵션: `PS2_SoundVolume`·`PS2_MusicVolume` (0..10 → `SoundManager` 그룹 0/1 볼륨 = 값/10, 변경 리스너로 즉시 반영), `PS2_Vibration`, `PS2_WideScreen`, `PS2_ProgressiveScan`, `PS2_DeFlicker`, `PS2_SoundMode` (값만 보관).
+  - `PS2_Costume_Choice`: 의상 해금(`Costumes_Unlocked`, 해금 비트 0x8) 이면 난이도 다음에 의상 화면(CostumeOn, ←/→) 이 나오고 선택을 이 변수에 쓴다 →
+    `GameSession.costume` → `HeroRig` 가 `R_HERO<n>` / `R_WPN<n>_<레벨>` 과 `/Player/Costume n` 배율 사용 (11 문서 §2.4). 세이브 불러오기도 세이브의 코스튬을 쓴다
+    (이전에는 항상 0 으로 덮어썼음). 디버그: `--game LVL --costume n`. 검증 `ShellNewGameTest.chooseCostumeWhenUnlocked` (→ 한 번 = 의상 1, 요리사).
   - 검증: `ShellNewGameTest.chooseHardDifficulty` — 새 게임 ○ → ↓ → ○ 로 `PS2_Difficulty_Level=2` (영웅).
 - 불러오기(2) → §7 메모리카드 화면.
 

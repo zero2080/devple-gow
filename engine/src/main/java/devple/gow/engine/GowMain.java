@@ -53,7 +53,10 @@ public final class GowMain {
 				int ri = java.util.Arrays.asList(args).indexOf("--auto-run");
 				int ei = java.util.Arrays.asList(args).indexOf("--entry"); // 시작 인스턴스/오브젝트 이름 (진입점)
 				try {
-					first = new devple.gow.engine.game.GameScene(new devple.gow.engine.game.GameSession(Path.of("gow-rom")), lvl,
+					var session = new devple.gow.engine.game.GameSession(Path.of("gow-rom"));
+					int ci = java.util.Arrays.asList(args).indexOf("--costume"); // 코스튬 n (R_HERO<n>)
+					session.costume = ci >= 0 ? Integer.parseInt(args[ci + 1]) : 0;
+					first = new devple.gow.engine.game.GameScene(session, lvl,
 							ei >= 0 ? args[ei + 1] : null, ri >= 0 ? Float.parseFloat(args[ri + 1]) : 0);
 				} catch (java.io.IOException ex) {
 					throw new java.io.UncheckedIOException(ex);

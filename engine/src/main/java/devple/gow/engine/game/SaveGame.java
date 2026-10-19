@@ -85,6 +85,7 @@ public final class SaveGame {
 		});
 		s.player = p;
 		s.difficulty = difficulty;
+		s.costume = costume;
 		s.playTime = playTime;
 		globalData.forEach((k, v) -> s.scriptHost.globalData().put(k, decode(v)));
 	}

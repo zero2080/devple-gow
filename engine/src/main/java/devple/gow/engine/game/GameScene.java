@@ -147,7 +147,7 @@ public final class GameScene implements Scene {
 			level.setExternalCamera(cam);
 			level.setDeferEffects(true);
 			col = level.collision();
-			hero = new HeroRig(session.rom, session.permk, 0, session.player);
+			hero = new HeroRig(session.rom, session.permk, session.player != null ? session.player.costume : session.costume, session.player);
 			hero.difficulty = session.difficulty;
 			session.player = hero.player;
 			UiVariables vars = new UiVariables();

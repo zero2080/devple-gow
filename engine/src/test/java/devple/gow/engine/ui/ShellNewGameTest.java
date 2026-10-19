@@ -79,4 +79,34 @@ class ShellNewGameTest {
 		assertTrue(log.contains("PS2_Done=1"), log.toString());
 		assertEquals("2", v.get("PS2_Difficulty_Level").replace(".0", ""), "↓ 한 번 = 영웅(어려움): " + log);
 	}
+
+	@Test
+	void chooseCostumeWhenUnlocked() throws Exception {
+		Path dir = FlpPlayerTest.rom();
+		Assumptions.assumeTrue(Files.exists(dir.resolve("R_SHELLK.WAD")), "gow-rom 없음");
+		WadFile w = WadFile.load(dir.resolve("R_SHELLK.WAD"));
+		WadTag t = w.tags().stream().filter(x -> x.name().equals("FLP_ShellK") && x.hasData()).findFirst().orElseThrow();
+		UiVariables v = new UiVariables();
+		devple.gow.engine.game.ShellBinding.init(v, 0x8); // 신들의 도전 클리어 → 의상 해금
+		List<String> log = new ArrayList<>();
+		v.addListener((n, val) -> log.add(n + "=" + val));
+		FlpPlayer p = new FlpPlayer(new FlpFile(t.data()), v,
+				MessageTable.fromWad(WadFile.load(dir.resolve("R_PERMK.WAD"))).orElseThrow());
+		// 새 게임 ○ → 난이도 ○ → (의상 화면) → → ○ → 이후 확인은 ○
+		int[] seq = {UiPad.CIRCLE, UiPad.CIRCLE, UiPad.RIGHT, UiPad.CIRCLE, UiPad.CIRCLE, UiPad.CIRCLE, UiPad.CIRCLE};
+		for (int k = 0; k < seq.length && !log.contains("PS2_Done=1"); k++) {
+			for (int i = 0; i < 60; i++) {
+				p.pad(0);
+				p.tick();
+			}
+			p.pad(seq[k]);
+			p.tick();
+		}
+		for (int i = 0; i < 60; i++) {
+			p.pad(0);
+			p.tick();
+		}
+		assertTrue(log.contains("PS2_Done=1"), log.toString());
+		assertEquals("1", v.get("PS2_Costume_Choice").replace(".0", ""), "→ 한 번 = 의상 1: " + log);
+	}
 }
