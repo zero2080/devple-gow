@@ -109,6 +109,14 @@ render  fx.beforeRender(e, cam)                        // FarClip → cam.far, r
 - ~~안개 거리 보정값~~ → 원작 패스 해석식 (16 §1.2). ~~층 안개 키 알파·t 의 카메라 피치~~ (16 §1.3). 남은 것: TEXA 상태 가정, 텍스처 층 안개 0x127240 UV.
 - 여러 SCR_Fog 전환은 소유 GO 최근접으로 대체 (원작은 ESC 추정).
 - 비 볼륨 상자 판정, 눈/먼지/플랑크톤 모양, 표면·커브 이미터, 칼 궤적(0xB), 필드. (~~PTC 크기 단위~~ 16 §2.4)
-- SCR_Mirror (반사 바닥 — OLYMP02 유리 바닥 아래가 배경 안개색으로 보임, 43 §4), LensFlare, GhostTrail, RopeSkinned, cloth 미구현.
-- 반투명 패스 안의 정렬 (원작 정렬 단위 미확인, 지금은 인스턴스 순서). 스크립트 Animator 없이 보이는 관절 오브젝트 (PAND03A `godmcdog2`) 는 바인드 자세. LGT 동적 조명 미구현 (캐릭터용).
+- ~~SCR_Mirror~~ (§8, 반사에 캐릭터 미포함·값 a/b 미해석), LensFlare, GhostTrail, RopeSkinned, cloth 미구현.
+- 반투명 패스 안의 정렬 (원작 정렬 단위 미확인, 지금은 인스턴스 순서). ~~스크립트 Animator 없이 보이는 관절 오브젝트 (PAND03A `godmcdog2`) 는 바인드 자세~~ → 시작 act 자세 (43 §6). LGT 동적 조명 미구현 (캐릭터용).
 - 파티클·물은 레벨 렌더 안에서 그려서 이후에 그리는 캐릭터가 덮는다 (GameScene 의 늦은 효과 패스 훅 필요).
+
+## 8. SCR_Mirror 반사 (`level/Mirrors`, `LevelScene.renderMirrors`) — 16 §1.7
+- 원작 [확실]: 소유 GO 를 일반 그리기에서 빼고, 거울 렌더러가 카메라를 평면에 대해 반사 (0x12A4E8) 해 장면을 거울 영역에 합성.
+- 엔진 [근사: GL 합성]: 평면 = 거울 메시 (월드) 면적 가중 법선 · 무게중심 (이탈 > max(0.5, 크기 1%) 면 평면 아님 → 생략, ATHN07 sword1 등).
+  불투명 패스 뒤: ① 보이는 거울 화소 스텐실 + 가림 질의 ② 그 화소 깊이 = 1 (`glDepthRange(1,1)`) ③ 조건부 렌더로 VP·R (R = 평면 반사) 하늘 (반사 눈 위치 중심) + 레벨 인스턴스 2 패스,
+  `gl_ClipDistance` (basic.vert `uClipPlane`) 로 평면 뒤쪽 자름 ④ 거울 깊이 복원 ⑤ 거울 모델 두 패스 (일반 패스에서는 뺌 = 원작 bit 61) —
+  불투명 파트는 반사를 덮고 반투명 파트 (OLYMP02·ATHN04B 대리석) 는 반사 위에 블렌드 [추정: 원작 합성 순서].
+- 반사에 넣지 않는 것: 영웅·적 (GameScene 이 레벨 뒤에 그림), 스키닝 오브젝트 (posed/반복 act), 파티클. 비교 `GOW_MIRROR=off`.

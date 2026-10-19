@@ -96,6 +96,11 @@ public final class Platforms {
 			return joints;
 		}
 
+		/** 현재 act 의 관절 숨김 (u8 가시성 트랙, 41 §1.3) — 애니가 없거나 트랙이 없으면 null. */
+		public boolean[] hidden() {
+			return anim == null ? null : anim.hiddenJoints(skeleton, time);
+		}
+
 		/** (x, z) 수직선이 hull 들과 만나는 구간의 윗면 중 y+step 이하·y-drop 이상에서 가장 높은 것. 없으면 NaN. hull 관절은 out[0]. */
 		float top(float x, float y, float z, float drop, int[] jointOut) {
 			float best = Float.NaN;
@@ -182,7 +187,14 @@ public final class Platforms {
 			} catch (RuntimeException ignored) {
 				// 애니 없는 발판은 정지 상태로만
 			}
-			ps.bodies.add(new Body(name, p.object().skeleton(), p.instance().matrix(), set, cdv));
+			Body body = new Body(name, p.object().skeleton(), p.instance().matrix(), set, cdv);
+			// 시작 자세 = 인스턴스 시작 act 를 시작 시간에 (원작 GO 리셋 0x1309C0, StartPose) — Marker·hull 도 렌더와 같은 자세
+			devple.gow.tools.level.StartPose sp = devple.gow.tools.level.StartPose.of(p, set);
+			if (sp.act() != null) {
+				body.joints = sp.jointWorld();
+				body.prev = body.joints;
+			}
+			ps.bodies.add(body);
 		}
 		return ps;
 	}

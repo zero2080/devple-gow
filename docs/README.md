@@ -46,7 +46,7 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 | 40 | [구현: 원작 이펙트 GO (이펙트 이름 → GO 인스턴스 → MDL/ANM/FXC/PTC, ANM 타입 10 채널 = FXC 곡선, 부착·수명, PlayFX/Concussion/MFX 템플릿)](40-impl-effects.md) | 마법 4종·적중 피·발소리 먼지 연결 (테스트 5, 스크린샷 7) |
 | 41 | [구현: 부서지는 물체 (Breakable 비헤이비어, Brkb 템플릿, Marker 101 → 파괴 센서)](41-impl-breakables.md) | 1차 (테스트 1) |
 | 42 | [구현: 버튼 안내 1024·질문 Internal 0xB·Animator 모드, 하네스 2 단계 (이웃 GlobalData·전역 이벤트)](42-impl-use-button-animator.md) | 1차 (테스트 3) |
-| 43 | [검증: 전 레벨 시각 QA (효과 켬 105 레벨, SCR_Sky 하늘·배경 안개·반투명 패스 순서)](43-visual-qa.md) | 완료 (정상 84, 의심 4, 테스트 3) |
+| 43 | [검증: 전 레벨 시각 QA (효과 켬 105 레벨, SCR_Sky 하늘·배경 안개·반투명 패스 순서, 시작 act 자세·SCR_Mirror 반사)](43-visual-qa.md) | 완료 (의심 4 → 2, 테스트 3 + 4) |
 | 90 | [현황 / 로드맵](90-status-roadmap.md) | 수시 갱신 |
 
 ## 게임 실행

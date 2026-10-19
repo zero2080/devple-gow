@@ -188,6 +188,13 @@ PAND01A gowaterholeloc1: 11×15, cell .5 (23×31), REFLENVM, 물방울 20×15 �
 ### 1.7 SCR_Mirror / SCR_AresSky
 - SCR_Mirror: `[0] u32, [4] u32` = (1,0)/(0,1)/(0,0). 소유 GO 모델의 렌더 플래그 bit 61 을 지우고(일반 그리기 숨김) 뷰 슬롯 2개(표 0x29CD48)마다
   거울 렌더러 0x12AA18(model, a, b) 생성 → 반사 바닥/평면 거울. a, b 의미 미상 (캐릭터/월드 반사 플래그 추정).
+  - 0x12AA18: 0x30 바이트 객체 {+0x20 모델 GO, +0x24 a, +0x28 b, +0x2C vtable 0x2BDBF8} 를 뷰 목록 (+0x1C) 에 연결 [확실].
+  - vtable 1 = **0x12A4E8 카메라 반사** [확실: VU0 디코드]: 평면 (n, d) 에 대해 카메라 행렬 각 행을 v' = v − 2(n·v − d)·n
+    (위치 행 = 점 반사, 축 행 = 원점·위치 차로 반사 후 rsqrt 정규화), X 축 부호 반전 (손잡이 보정).
+  - vtable 5 = 0x12ABA0: GS 패킷 (FRAME/ZBUF/TEST/ALPHA 레지스터, 0x5353 스프라이트) 으로 반사 장면을 거울 영역에 합성 — 레지스터 순서 미해석.
+  - 데이터 (인스턴스 37 개, 값 (1,0)/(0,1)/(0,0)): 거울 모델 = 반사 바닥 자체 — OLYMP02 `gomirror` (MAT_tnMarblePlainNew00b 알파 블렌드 대리석,
+    수평, 가장자리 조각 이탈 1.04), ATHN06B/ATRET01B/OLYMP01 floorReflect, ATHN04A puddle00, PAND01BB/PAND03H mirrorFloor, ATHN03A group2839–2841 (0,1) …
+    ATHN07 `sword1` 처럼 평면이 아닌 거울도 있다. 엔진 구현은 31 문서 §8.
 - SCR_AresSky: 객체 {f32 −1, s32 −1}, 갱신 0x2189A8 (2개뿐, 미해석).
 
 ## 2. 파티클 (FXC_ 이미터 / PTC_ 모양)

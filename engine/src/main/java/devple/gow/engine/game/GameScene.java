@@ -1161,7 +1161,7 @@ public final class GameScene implements Scene {
 		nav.update(dt, p);
 		for (var b : nav.platformBodies()) {
 			if (b.anim() != null) {
-				level.poseInstance(b.owner, b.joints()); // 움직인 발판·문·회전방은 애니 자세로 그린다
+				level.poseInstance(b.owner, b.joints(), b.hidden()); // 움직인 발판·문·회전방은 애니 자세로 (관절 숨김 포함: DMC 결계)
 			}
 		}
 		breakables.update(hero.combat, world, this::onBreak);

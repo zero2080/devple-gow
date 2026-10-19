@@ -121,6 +121,30 @@ public final class LevelScene implements Scene {
 	private final java.util.Set<String> removed = new java.util.HashSet<>();
 	/** 스크립트 Animator 로 움직인 오브젝트 (이름 → 관절 월드) — 구운 메시 대신 스키닝 모델로 그린다. */
 	private final Map<String, float[][]> posed = new HashMap<>();
+	/** posed 오브젝트의 관절 숨김 (u8 가시성 트랙, 41 §1.3) — 없으면 null. */
+	private final Map<String, boolean[]> posedHidden = new HashMap<>();
+
+	/**
+	 * 시작 act 가 반복 act (flags bit0) 인 배치: 시작 시간부터 계속 재생 (돛, 흔들리는 그릇, 나무, PAND03C 굴러가는 바위 …).
+	 * [확실: 시작 act/시간 = GO 리셋 0x1309C0] [추정: 계속 재생 여부 = act 반복 비트 — 1 회 act (부서지는 물체, DMC 결계, 발판) 는
+	 * 스크립트·비헤이비어가 재생할 때까지 시작 자세. 데이터: 시작 시간을 엇갈려 둔 배치(ATHN08A fellergroup, PAND03C rock)는 모두 반복 act].
+	 */
+	private record Ambient(String key, devple.gow.tools.anim.Skeleton skeleton, devple.gow.tools.anim.Animation act, float[] inst,
+						   float start) {
+	}
+
+	private final List<Ambient> ambient = new ArrayList<>();
+	/** SCR_Mirror 반사 평면 (Mirrors). */
+	private final List<Mirrors.Mirror> mirrors = new ArrayList<>();
+	private int mirrorQuery;
+	private final java.util.Set<String> mirrorKeys = new java.util.HashSet<>();
+
+	/** SCR_Mirror 반사 평면 수 (테스트·로그). */
+	public int mirrorCount() {
+		return mirrors.size();
+	}
+	/** 시작 자세 (act 를 시작 시간에) 로 구운 배치 수 / 반복 재생 배치 수 — 로그·테스트용. */
+	private int startPosed;
 	private final Map<String, devple.gow.engine.asset.AnimatedModel> posedModels = new HashMap<>();
 	private devple.gow.engine.render.Shader skinned;
 
@@ -129,7 +153,18 @@ public final class LevelScene implements Scene {
 	 * 엔진은 불러올 때 정지 자세로 정점을 구워 두므로, 애니가 한 번이라도 돈 오브젝트만 스키닝 모델로 바꿔 그린다.
 	 */
 	public void poseInstance(String name, float[][] jointWorld) {
-		posed.put(name.toLowerCase(Locale.ROOT), jointWorld);
+		poseInstance(name, jointWorld, null);
+	}
+
+	/** @param hidden 관절 숨김 ({@link devple.gow.tools.anim.Animation#hiddenJoints}, 없으면 null) — DMC 결계 dogIn/dogOut 등 */
+	public void poseInstance(String name, float[][] jointWorld, boolean[] hidden) {
+		String key = name.toLowerCase(Locale.ROOT);
+		posed.put(key, jointWorld);
+		if (hidden != null) {
+			posedHidden.put(key, hidden);
+		} else {
+			posedHidden.remove(key);
+		}
 	}
 
 	/** 인스턴스를 더 그리지 않는다 (부서지는 물체 파괴, 스크립트 Vis 숨김). */
@@ -157,14 +192,30 @@ public final class LevelScene implements Scene {
 		data = new LevelData(assets.wad());
 		collision = new LevelCollision(data.sheets);
 		List<TriMesh> all = new ArrayList<>();
-		java.util.Set<String> skyNames = skyNames(new devple.gow.tools.fx.EnvParams(assets.wad()));
+		devple.gow.tools.fx.EnvParams envParams = new devple.gow.tools.fx.EnvParams(assets.wad());
+		java.util.Set<String> skyNames = skyNames(envParams);
+		Map<String, int[]> mirrorOwners = Mirrors.owners(envParams);
 		for (LevelLayout.Placement p : data.layout.placements()) {
 			String mdl = p.model();
 			GowModel gm = mdl == null ? null : assets.gowModel(mdl);
 			if (gm == null || p.instance().scale() == 0) {
 				continue;
 			}
-			TriMesh tm = PlacedMesh.build(gm, p.object().skeleton(), p.jointWorld(), 0);
+			// 시작 자세 (원작 GO 리셋 0x1309C0: 인스턴스 시작 act 를 시작 시간에) — ANM 이 없으면 바인드 자세 그대로
+			devple.gow.tools.level.StartPose sp = devple.gow.tools.level.StartPose.of(p, START_POSE ? animSet(p) : null);
+			TriMesh tm = sp.act() == null ? PlacedMesh.build(gm, p.object().skeleton(), p.jointWorld(), 0)
+					: PlacedMesh.build(gm, p.object().skeleton(), sp.jointWorld(), 0, sp.hidden());
+			Ambient amb = null;
+			if (sp.act() != null) {
+				startPosed++;
+				// 비헤이비어 (PushPull 크랭크·레버, IO_CSM, Breakable …) 가 있는 GO 는 그 클래스가 애니 시간을 정한다 (R1 진행 시간 0x215928,
+				// 파괴 0x1DDF70) → 스스로 돌지 않는다 (PAND00C 고리 goring1crank 는 반복 act 지만 크랭크로만 돈다)
+				if (!data.behaviors.containsKey(p.instance().name()) && sp.act().looping() && sp.act().duration > 0 && sp.act().hasSkeletalData()
+						&& p.object().skeleton().size() <= devple.gow.engine.asset.AnimatedModel.MAX_JOINTS) {
+					amb = new Ambient(p.instance().name().toLowerCase(Locale.ROOT), p.object().skeleton(), sp.act(),
+							p.instance().matrix(), sp.time());
+				}
+			}
 			if (tm.subs.isEmpty()) {
 				continue;
 			}
@@ -178,6 +229,9 @@ public final class LevelScene implements Scene {
 					: isScrSky(p, skyNames);
 			if (!sky) {
 				all.add(tm);
+				if (amb != null) {
+					ambient.add(amb); // 하늘은 SCR_Sky 경로 (카메라 따라감) 로만 그린다
+				}
 			}
 			if (sky) {
 				// SCR_Sky (0x218848): 하늘 오브젝트를 카메라로 옮긴다 → 카메라 = 관절 0 월드 위치 (AABB 중심이 아님, 16 문서 §1.6).
@@ -186,6 +240,23 @@ public final class LevelScene implements Scene {
 				off.set(j0[12], j0[13], j0[14]);
 			}
 			instances.add(new Instance(p.instance().name(), assets.build(p.instance().name(), tm), sky, off));
+			int[] mab = mirrorOwners.get(p.instance().name().toLowerCase(Locale.ROOT));
+			if (mab != null && !sky) {
+				Mirrors.Mirror m = Mirrors.fit(p.instance().name().toLowerCase(Locale.ROOT), tm, mab);
+				// 평면이 아닌 거울 (칼·조각상 등 — ATHN07 sword1) 은 평면 반사로 흉내 낼 수 없다 → 건너뜀 (메시는 평소대로)
+				float ext = Math.max(b[3] - b[0], Math.max(b[4] - b[1], b[5] - b[2]));
+				if (m != null && m.maxDev() <= Math.max(0.5f, ext * 0.01f)) {
+					mirrors.add(m);
+					mirrorKeys.add(m.key());
+					if (Boolean.getBoolean("gow.debug")) {
+						System.out.printf(Locale.ROOT, "SCR_Mirror %s: 평면 n=(%.2f, %.2f, %.2f) d=%.1f 이탈 %.2f 범위 %s%n", p.instance().name(),
+								m.normal().x, m.normal().y, m.normal().z, m.d(), m.maxDev(), java.util.Arrays.toString(b));
+					}
+				} else if (Boolean.getBoolean("gow.debug")) {
+					System.out.printf(Locale.ROOT, "SCR_Mirror %s: 평면 아님 (이탈 %.2f / 크기 %.1f) — 반사 생략%n", p.instance().name(),
+							m == null ? -1f : m.maxDev(), ext);
+				}
+			}
 		}
 		collisionLines = buildCollisionLines();
 		volumeLines = buildVolumeLines();
@@ -195,9 +266,39 @@ public final class LevelScene implements Scene {
 		placeStart(all);
 		camMode = startCam;
 		fx = new LevelFx(e, assets, data, instances, wadPath);
-		System.out.printf(Locale.ROOT, "레벨 %s: 렌더 인스턴스 %d (하늘 %d), 충돌 삼각형 %d, 볼륨 %d, 카메라 %d%n", assets.wad().name(),
-				instances.size(), instances.stream().filter(Instance::sky).count(), collision.triangles().size(),
-				data.volumes.size(), data.placedCameras.size());
+		System.out.printf(Locale.ROOT, "레벨 %s: 렌더 인스턴스 %d (하늘 %d, 시작 act 자세 %d, 반복 재생 %d, 거울 %d), 충돌 삼각형 %d, 볼륨 %d, 카메라 %d%n",
+				assets.wad().name(), instances.size(), instances.stream().filter(Instance::sky).count(), startPosed, ambient.size(), mirrors.size(),
+				collision.triangles().size(), data.volumes.size(), data.placedCameras.size());
+		if (Boolean.getBoolean("gow.debug") && !ambient.isEmpty()) {
+			System.out.println("반복 재생 배치: " + ambientNames());
+		}
+	}
+
+	private final Map<String, devple.gow.tools.anim.AnimationSet> animSets = new HashMap<>();
+
+	/** 배치 오브젝트의 ANM 세트 (그룹 참조 ANM_x, 레벨 WAD 안). 없거나 읽지 못하면 null. */
+	private devple.gow.tools.anim.AnimationSet animSet(LevelLayout.Placement p) {
+		List<String> anm = p.object().refs("ANM_");
+		if (anm.isEmpty() || p.object().skeleton() == null) {
+			return null;
+		}
+		return animSets.computeIfAbsent(anm.getFirst(), n -> {
+			try {
+				return devple.gow.tools.anim.AnimationSet.load(assets.wad(), n);
+			} catch (RuntimeException ex) {
+				return null;
+			}
+		});
+	}
+
+	/** 시작 act 자세로 구운 배치 수 (ANM 이 있는 배치). */
+	public int startPosedCount() {
+		return startPosed;
+	}
+
+	/** 반복 재생하는 배치 이름 (소문자). */
+	public List<String> ambientNames() {
+		return ambient.stream().map(Ambient::key).toList();
 	}
 
 	/**
@@ -418,9 +519,13 @@ public final class LevelScene implements Scene {
 		tmp.identity();
 		// 원작처럼 모든 인스턴스의 불투명 패스 뒤에 반투명 패스 (Renderer.drawPass). GOW_PASSORDER=model 이면 이전 (모델마다 두 패스)
 		for (int pass = MODEL_PASSES ? 1 : 0; pass < 2; pass++) {
+			if (pass == 1 && !MODEL_PASSES) {
+				renderMirrors(e, cam); // 불투명 뒤, 반투명 (거울 바닥 자체 포함) 앞
+			}
 			for (Instance i : instances) {
 				String key = i.name().toLowerCase(Locale.ROOT);
-				if (!i.sky() && !fx.hidden(i) && !removed.contains(key) && !posed.containsKey(key) && !dbgHidden(key)) {
+				if (!i.sky() && !fx.hidden(i) && !removed.contains(key) && !posed.containsKey(key) && !ambientKeys.contains(key)
+						&& !dbgHidden(key) && !(MIRRORS && !MODEL_PASSES && mirrorKeys.contains(key))) {
 					if (MODEL_PASSES) {
 						e.renderer().draw(i.model(), tmp);
 					} else {
@@ -447,9 +552,116 @@ public final class LevelScene implements Scene {
 		}
 	}
 
+	/** 비교용: GOW_MIRROR=off 이면 SCR_Mirror 반사를 그리지 않는다 (이전 동작). */
+	private static final boolean MIRRORS = !"off".equals(System.getenv("GOW_MIRROR"));
+
+	/**
+	 * SCR_Mirror 반사 (Mirrors 주석): 거울 화소 스텐실 → 그 화소 깊이를 먼 값으로 → VP·R 로 하늘·레벨 인스턴스 (평면 뒤 자름) →
+	 * 거울 깊이 복원. 거울 화소가 하나도 안 보이면 조건부 렌더로 반사 장면을 건너뛴다.
+	 */
+	private void renderMirrors(Engine e, Camera cam) {
+		if (mirrors.isEmpty() || !MIRRORS) {
+			return;
+		}
+		devple.gow.engine.render.Shader basic = e.renderer().basic();
+		Matrix4f vp = new Matrix4f(cam.viewProj(e.window().aspect()));
+		if (mirrorQuery == 0) {
+			mirrorQuery = glGenQueries();
+			if (Boolean.getBoolean("gow.debug")) {
+				System.out.println("스텐실 비트: " + glGetFramebufferAttachmentParameteri(GL_DRAW_FRAMEBUFFER, GL_STENCIL,
+						GL_FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE));
+			}
+		}
+		for (Mirrors.Mirror m : mirrors) {
+			Instance mi = null;
+			for (Instance i : instances) {
+				if (i.name().equalsIgnoreCase(m.key())) {
+					mi = i;
+					break;
+				}
+			}
+			if (mi == null || removed.contains(m.key()) || fx.hidden(mi) || dbgHidden(m.key())) {
+				continue;
+			}
+			basic.use();
+			basic.set("uViewProj", vp);
+			// 1) 거울 화소 표시 (보이는 곳만: 깊이 검사, 색·깊이 쓰기 끔)
+			glClearStencil(0);
+			glClear(GL_STENCIL_BUFFER_BIT);
+			glEnable(GL_STENCIL_TEST);
+			glStencilMask(0xFF);
+			glStencilFunc(GL_ALWAYS, 1, 0xFF);
+			glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+			glColorMask(false, false, false, false);
+			glDepthMask(false);
+			glDepthFunc(GL_LEQUAL);
+			glBeginQuery(GL_ANY_SAMPLES_PASSED, mirrorQuery);
+			e.renderer().drawShape(mi.model(), tmp.identity());
+			glEndQuery(GL_ANY_SAMPLES_PASSED);
+			// 2) 그 화소의 깊이를 먼 값으로
+			glStencilFunc(GL_EQUAL, 1, 0xFF);
+			glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+			glDepthMask(true);
+			glDepthFunc(GL_ALWAYS);
+			glDepthRange(1, 1);
+			e.renderer().drawShape(mi.model(), tmp.identity());
+			glDepthRange(0, 1);
+			glDepthFunc(GL_LESS);
+			glColorMask(true, true, true, true);
+			// 3) 반사 장면 (원작 0x12A4E8: 카메라를 평면에 대해 반사)
+			glBeginConditionalRender(mirrorQuery, GL_QUERY_WAIT);
+			Matrix4f rvp = new Matrix4f(vp).mul(m.reflection());
+			float[] cp = m.clipPlane(cam.eye);
+			Vector3f reye = m.reflect(cam.eye);
+			fx.beginWorld(e, cam, true);
+			basic.set("uViewProj", rvp);
+			glDepthMask(false);
+			for (Instance i : instances) {
+				if (i.sky() && !dbgHidden("sky")) {
+					tmp.translation(reye.x - i.offset().x, reye.y - i.offset().y, reye.z - i.offset().z);
+					e.renderer().draw(i.model(), tmp);
+				}
+			}
+			glDepthMask(true);
+			fx.beginWorld(e, cam, false);
+			basic.set("uViewProj", rvp);
+			basic.set("uClipPlane", cp[0], cp[1], cp[2], cp[3]);
+			glEnable(GL_CLIP_DISTANCE0);
+			tmp.identity();
+			for (int pass = 0; pass < 2; pass++) {
+				for (Instance i : instances) {
+					String key = i.name().toLowerCase(Locale.ROOT);
+					if (!i.sky() && i != mi && !fx.hidden(i) && !removed.contains(key) && !dbgHidden(key)) {
+						e.renderer().drawPass(i.model(), tmp, pass);
+					}
+				}
+			}
+			glDisable(GL_CLIP_DISTANCE0);
+			basic.set("uClipPlane", 0f, 0f, 0f, 0f);
+			glEndConditionalRender();
+			// 4) 거울 깊이 복원 (뒤에 그리는 캐릭터·이펙트가 거울 면에 가려지도록)
+			basic.set("uViewProj", vp);
+			glColorMask(false, false, false, false);
+			glDepthFunc(GL_ALWAYS);
+			e.renderer().drawShape(mi.model(), tmp.identity());
+			glColorMask(true, true, true, true);
+			glDisable(GL_STENCIL_TEST);
+			// 5) 거울 모델 자체 (원작은 일반 그리기에서 빼고 거울 렌더러가 그림, 0x129820 bit 61): 반사 위에 두 패스 —
+			//    불투명 파트는 반사를 덮고 (ATHN04B 대리석 타일), 반투명 파트 (OLYMP02 대리석 알파) 는 그 위에 블렌드
+			glDepthFunc(GL_LEQUAL);
+			e.renderer().drawPass(mi.model(), tmp.identity(), 0);
+			e.renderer().drawPass(mi.model(), tmp.identity(), 1);
+			glDepthFunc(GL_LESS);
+		}
+		basic.set("uViewProj", vp);
+	}
+
 	/** 디버그: GOW_HIDE=인스턴스,… 를 그리지 않는다 ("*" = 하늘 밖 전부, "sky" = 하늘). 화면을 덮는 메시 찾기용 (43 문서). */
 	private static final java.util.Set<String> DBG_HIDE = System.getenv("GOW_HIDE") == null ? java.util.Set.of()
 			: java.util.Set.of(System.getenv("GOW_HIDE").toLowerCase(Locale.ROOT).split(","));
+
+	/** 비교용: GOW_STARTPOSE=off 이면 배치 오브젝트를 바인드 자세로 굽고 반복 act 를 재생하지 않는다 (이전 동작). */
+	private static final boolean START_POSE = !"off".equals(System.getenv("GOW_STARTPOSE"));
 
 	/** 비교용: GOW_PASSORDER=model 이면 모델마다 두 패스 (이전 동작). */
 	private static final boolean MODEL_PASSES = "model".equals(System.getenv("GOW_PASSORDER"));
@@ -458,21 +670,58 @@ public final class LevelScene implements Scene {
 		return !DBG_HIDE.isEmpty() && (DBG_HIDE.contains(key) || (!key.equals("sky") && DBG_HIDE.contains("*")));
 	}
 
+	private java.util.Set<String> ambientKeys = java.util.Set.of();
+
 	private void renderPosed(Engine e, Camera cam) {
-		if (posed.isEmpty()) {
+		if (ambientKeys.size() != ambient.size()) {
+			ambientKeys = new java.util.HashSet<>(ambientNames());
+		}
+		if (posed.isEmpty() && ambient.isEmpty()) {
 			return;
 		}
 		if (skinned == null) {
 			skinned = new devple.gow.engine.render.Shader("skinned.vert", "basic.frag");
 		}
+		fx.env().applyFog(skinned, cam, e.window().height()); // 구운 메시와 같은 안개 (basic.frag 공유)
 		for (Map.Entry<String, float[][]> en : posed.entrySet()) {
 			if (removed.contains(en.getKey()) || dbgHidden(en.getKey())) {
 				continue;
 			}
-			devple.gow.engine.asset.AnimatedModel m = posedModels.computeIfAbsent(en.getKey(), this::posedModel);
-			if (m != null) {
-				m.draw(cam, e.window().aspect(), tmp.identity(), en.getValue(), e.renderer().white(), -1f, 1f);
+			drawPosed(e, cam, en.getKey(), en.getValue(), posedHidden.get(en.getKey()));
+		}
+		// 반복 act 배치: 시작 시간 + 레벨 시간 (스크립트 Animator 가 잡으면 posed 가 우선)
+		float now = fx.env().time();
+		for (Ambient a : ambient) {
+			if (posed.containsKey(a.key()) || removed.contains(a.key()) || dbgHidden(a.key()) || fxHidden(a.key())) {
+				continue;
 			}
+			float t = a.start() + now;
+			float[][] lw = a.act().sample(a.skeleton(), t, true).world(a.skeleton());
+			float[][] w = new float[lw.length][];
+			for (int i = 0; i < lw.length; i++) {
+				w[i] = Mat4.mul(lw[i], a.inst());
+			}
+			float len = a.act().duration;
+			drawPosed(e, cam, a.key(), w, a.act().hiddenJoints(a.skeleton(), ((t % len) + len) % len));
+		}
+		FxEnvironment.disableFog(skinned);
+	}
+
+	private boolean fxHidden(String key) {
+		for (Instance i : instances) {
+			if (i.name().equalsIgnoreCase(key)) {
+				return fx.hidden(i);
+			}
+		}
+		return false;
+	}
+
+	private void drawPosed(Engine e, Camera cam, String key, float[][] joints, boolean[] hidden) {
+		devple.gow.engine.asset.AnimatedModel m = posedModels.computeIfAbsent(key, this::posedModel);
+		if (m != null) {
+			m.hiddenJoints = hidden;
+			m.draw(cam, e.window().aspect(), tmp.identity(), joints, e.renderer().white(), -1f, 1f);
+			m.hiddenJoints = null;
 		}
 	}
 

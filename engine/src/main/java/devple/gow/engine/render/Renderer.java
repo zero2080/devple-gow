@@ -90,6 +90,14 @@ public final class Renderer implements AutoCloseable {
 		drawPasses(model, world, pass, pass);
 	}
 
+	/** 모양만 (상태·텍스처·블렌드 변경 없이 모든 파트 메시) — 스텐실 표시·깊이 쓰기용 (SCR_Mirror 반사, Mirrors). */
+	public void drawShape(RenderModel model, Matrix4f world) {
+		basic.set("uModel", world);
+		for (RenderModel.Part p : model.parts()) {
+			p.mesh().draw();
+		}
+	}
+
 	private void drawPasses(RenderModel model, Matrix4f world, int first, int last) {
 		basic.set("uModel", world);
 		for (int pass = first; pass <= last; pass++) {

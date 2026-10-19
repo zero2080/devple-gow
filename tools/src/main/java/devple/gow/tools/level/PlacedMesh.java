@@ -28,6 +28,14 @@ public final class PlacedMesh {
 	 * @param jointWorld 관절 월드 행렬 (인스턴스 포함, {@link LevelLayout#jointWorld})
 	 */
 	public static TriMesh build(GowModel gm, Skeleton sk, float[][] jointWorld, int lod) {
+		return build(gm, sk, jointWorld, lod, null);
+	}
+
+	/**
+	 * @param hidden 관절 숨김 (u8 가시성 트랙, {@link devple.gow.tools.anim.Animation#hiddenJoints}) — 파트가 쓰는 관절이 모두 숨김이면
+	 *               그 파트를 빼고 굽는다 (엔진 AnimatedModel 과 같은 규칙). null 이면 모두.
+	 */
+	public static TriMesh build(GowModel gm, Skeleton sk, float[][] jointWorld, int lod, boolean[] hidden) {
 		TriMesh src = TriMesh.of(gm, lod);
 		Map<String, TriMesh.Sub> byKey = new HashMap<>();
 		for (TriMesh.Sub s : src.subs) {
@@ -46,6 +54,9 @@ public final class PlacedMesh {
 			TriMesh.Sub s = byKey.get(k);
 			List<float[]> row = rows.get(k);
 			if (s == null || s.pos.size() != p.pos.size()) {
+				continue;
+			}
+			if (hidden != null && allHidden(p, hidden, mats(jointWorld))) {
 				continue;
 			}
 			float[][] mats = p.jointLocal() ? jointWorld : skinMats;
@@ -88,6 +99,28 @@ public final class PlacedMesh {
 			out.subs.add(d);
 		}
 		return out;
+	}
+
+	private static int mats(float[][] jointWorld) {
+		return jointWorld.length;
+	}
+
+	/** 파트의 모든 정점 관절 (가중치 1 이 아니면 두 번째 관절도) 이 숨김인가. */
+	static boolean allHidden(SkinnedModel.Part p, boolean[] hidden, int n) {
+		if (p.pos.isEmpty()) {
+			return false;
+		}
+		for (int i = 0; i < p.pos.size(); i++) {
+			int[] j = p.joints.get(i);
+			int ja = j[0] < n ? j[0] : j[1];
+			int jb = j[1] < n ? j[1] : ja;
+			ja = ja < n ? ja : 0;
+			jb = jb < n ? jb : 0;
+			if (ja >= hidden.length || !hidden[ja] || p.weights.get(i) < 1f && (jb >= hidden.length || !hidden[jb])) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	private static final float[] ZERO = new float[3];
