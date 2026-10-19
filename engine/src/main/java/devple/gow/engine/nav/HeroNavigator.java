@@ -671,7 +671,7 @@ public final class HeroNavigator {
 				continue;
 			}
 			idle(it, dt);
-			if (it.task().time <= 0 || it.task().done) {
+			if (it.pushType == 4 ? it.task().speed == 0 : it.task().time <= 0 || it.task().done) {
 				i.remove();
 			}
 		}
@@ -682,6 +682,8 @@ public final class HeroNavigator {
 		TaskProgress t = it.task();
 		if (it.kind == Interactables.Kind.LIFT) {
 			send(it, t.lift(false, false, 0, it.liftParams(), dt));
+		} else if (it.pushType == 4) {
+			send(it, t.ring(false, 0, it.ringParams(), dt)); // 링 크랭크: 가장 가까운 멈춤 자리로 (0x2131FC)
 		} else if (it.crank) {
 			// 원작 0x212B08: t > 0 이면 속도 −= 되감기 가속 · dt, 최대 −최대 되감기
 			send(it, t.advance(t.time > 0 ? Math.max(t.speed - it.rewindAcc * dt, -it.maxBack) : 0, dt));
@@ -728,6 +730,13 @@ public final class HeroNavigator {
 				if (it.crank) {
 					if (!held || it.done) {
 						release(it);
+						return;
+					}
+					if (it.pushType == 4) {
+						// 링 크랭크: 스틱 앞 = 정회전, 뒤 = 역회전 (양방향일 때) [근사: 원작은 영웅 이동 방향 · 관절 축 0x2117E0]
+						int input = in.leftY() > 0.3f ? 1 : in.leftY() < -0.3f ? -1 : 0;
+						body.play(input != 0 ? anims.get(input > 0 ? "ANICrankPush" : "ANICrankPull") : it.heroAnim, false);
+						send(it, t.ring(true, input, it.ringParams(), dt));
 						return;
 					}
 					// 크랭크 입력 = 영웅 이동 방향 · 크랭크 관절 축 (0x2117E0) [근사: 축 대신 스틱 크기]

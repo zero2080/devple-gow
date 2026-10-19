@@ -75,19 +75,44 @@
   - 그다음 PAND00D와 203 → 204 → (PAND00C 다시 적재) 202 → 205 → `LeverOn`으로 오간다.
   - 하네스는 크랭크를 한 번씩만 돌리므로 퍼즐을 풀지 못한다. 게임은 두 슬롯이 이벤트 큐를 공유하므로 플레이어가 풀면 그대로 동작한다.
 
-## 5. 테스트
+## 5. 링 크랭크와 PAND00C 고리 퍼즐
+
+**링 크랭크** (Push Type 4 → `0x212998` 모드 2 = `0x212F58`) [확실: 디스어셈블]:
+- 오브젝트 애니가 고리 한 바퀴다 (CoreCrankRing 12 초). 시간은 길이로 감기고 완료가 없다.
+- 붙어 있음: 크랭크 축 방향 입력 > 0 → 속도 += Acc·dt (최대 +0x38), 입력 < 0 이고 +0x108 비트 4 (`#228882e3`, 양방향) → 역회전, 입력 없음 → Dec·dt 로 0 쪽.
+- 놓음 (`0x2131FC`): 비율 f 가 **멈춤 자리 0·¼·½·¾** ± 허용 (+0x40, `#a4c814e9`, 기본 0.03) 안이면 접근 가속(+0x34, `#b6ba95a3`)으로 그 자리까지 (최대 +0x3C) 가서 멈춘다. 밖이면 그 자리에 멈춘다. f ≥ 1 − 허용은 0 자리.
+- 템플릿 기본값 (`0x216788`): Acc 1, Dec 1, +0x34 2, +0x38 1, +0x3C 2, +0x40 0.03, +0x108 0. TWK 덤프는 `count` 개수까지만 유효하다 (Push/051 은 6 개 → 나머지 기본값).
+- 엔진 `TaskProgress.ring` / `detent`, `HeroNavigator` (스틱 앞/뒤 = ±입력 [근사: 원작은 영웅 이동 방향 · 크랭크 관절 축 `0x2117E0`]). 원작은 |목표 − f| < 1e-4 에서 붙이고, 엔진은 프레임 사이에 목표를 지나면 붙인다 [근사].
+
+**오브젝트 자세 = 진행 시간**: R1 오브젝트(레버·크랭크·CSM 문·TAndF)의 관절 자세를 과제 진행 시간으로 정한다 (`Platforms.of(…, posed)` — 충돌 볼륨 없는 오브젝트도, `Platforms.poseAt`, `SceneNav.poseItems`). Marker 가 관절을 따라가고, 렌더도 애니 자세다 (CSM 문이 열리는 모습 등).
+- PAND00C: Marker 101 (`goring1crank` 관절 1) → `R1SouthVol` → LevelData 3, Marker 104 (`goring4`), Marker 103 (`goring3group4`).
+
+**고리 퍼즐 흐름** [확실: 데이터]:
+1. 고리 3 개를 남쪽 자리에 둔다 → LevelData 3/4/7, 레버 112·113 = 100 → LevelData 8/9.
+2. PAND01BB 석상 크랭크에 손잡이 (질문 1005 예) → GlobalData:4.
+3. PAND00D 크랭크 120 → 203 → PAND00C 눈 문 레버가 보임 → 크랭크 22 = 100.
+4. PAND00D 가 202 를 받고 GlobalData:5 면 205 → PAND00C `ElevatorHousing-EventSwitchStatue` → `ElevatorLever-LeverOn`.
+
+**하네스**:
+- 링 크랭크마다 네 자리를 원작 식으로 돌려 보고 (붙잡고 정회전 → 놓아 멈춤 자리로), 참인 LevelData bool 이 가장 많은 자리에 둔다 (`solveRing`) [하네스 탐색]. 보고서 `RING <오브젝트> → k/4`.
+- 2 단계를 결과가 바뀌지 않을 때까지 (최대 3 회) 되풀이한다. 숨김 표시가 남은 레벨 외에, 이웃이 **새로 보낸**, 이 레벨이 듣고 스스로 보내지 않으며 아직 받아 본 적 없는 전역 이벤트가 있는 레벨도 다시 돌린다.
+- 결과는 숨김 표시가 줄거나 보낸 전역 이벤트가 늘면 바꾸되, 원래 실행의 요청(적재·LoadCheck·Goto·Warp·전환)을 합친다 — 퍼즐 전·후 상태가 둘 다 게임에서 가능한 경로이기 때문이다 (PAND00C: 전 = LoadWad 03J, 후 = 03F).
+- 결과: **숨김 상태 상호작용 0** (ATHN01D·PAND01BB·PAND00C 모두 보이는 상태에서 쓰임).
+
+## 6. 테스트
 
 | 테스트 | 내용 |
 |---|---|
 | `verify/TraversalTest.backtrackingNeedsNoForcedEvents` | 세 전환이 강제 없이 열리고, 강제 뒤에만 나온 전환이 하나도 없음 |
-| `verify/TraversalTest.hiddenObjectsNeedOnlyTheRingPuzzle` | 숨김 표시 = PAND00C 엘리베이터 레버뿐. ATHN01D·PAND01BB는 이웃 상태로 다시 돌림 |
 | `game/QuestionMenuTest` | 질문 본문 → 줄·선택지·기본 선택·프레임 12 |
+| `nav/TaskProgressTest.ringCrankSnapsToQuarterDetents` | 링 크랭크 가속·멈춤 자리 복귀·자리 밖 정지·감기·단방향 |
+| `verify/TraversalTest.hiddenObjectsAllRevealed` | 숨김 상태 상호작용 0, PAND00C 링 크랭크 풀이 |
 | `nav/AnimatorModeTest` | 회전방 정방향 → Marker 202 → LevelData:1 참 / 역방향(끝에서 시작) → 거짓 / 0x10 정지·0x11 이어서·0x8 시간 유지 / `$` 무시 |
 
-## 6. 남은 것
+## 7. 남은 것
 
 - ~~1024 실제 버튼~~: R2 [확실], 엔진 반영 (마법 L2, 대시 R1).
 - ~~질문 메뉴 UI·아니오 값~~: 원작 HUD 메뉴 템플릿, 아니오 = 2 (§2).
 - Animator 재생 방식 4/1/2 이름과 0x100A60 내부. 재질 애니(`$…`, 모드 10/11/16)는 미구현.
 - ~~발판 애니 렌더 자세~~: 애니가 한 번이라도 돈 오브젝트는 `LevelScene.poseInstance` → 구운 메시 대신 `AnimatedModel`(관절 월드 = 애니 × 인스턴스)로 그린다 (PAND02AA 회전방 벽·레버 확인).
-- PAND00C 고리 퍼즐 풀이(하네스).
+- ~~PAND00C 고리 퍼즐 풀이(하네스)~~ (§5). 크랭크 입력 축(관절 축 대신 스틱 앞/뒤), 기중기 Type 3.

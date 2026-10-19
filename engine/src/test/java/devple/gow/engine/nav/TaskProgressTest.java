@@ -109,4 +109,43 @@ class TaskProgressTest {
 		assertEquals(100, last.percent());
 		assertEquals(200, last.taskId());
 	}
+
+	/** 링 크랭크 (Push Type 4, 0x212F58): PAND00C CoreCrankRing1 (Acc 1, Dec 2, 접근 2, 최대 0.15, 놓음 최대 0.15, 허용 0.03), 애니 12 초. */
+	@Test
+	void ringCrankSnapsToQuarterDetents() {
+		TaskProgress.RingParams p = new TaskProgress.RingParams(1, 2, 2, 0.15f, 0.15f, 0.03f, false);
+		TaskProgress t = new TaskProgress(21, 12);
+		float dt = 1 / 60f;
+		// 붙잡고 정회전: 최대 0.15 로 가속, ¼ (3 초 위치) 를 조금 넘을 때까지
+		while (t.time < 3.2f) {
+			t.ring(true, 1, p, dt);
+		}
+		assertEquals(0.15f, t.speed, 1e-4f);
+		// 놓음: ¼ ± 0.03 안 → 그 자리로 돌아가 멈춤 (되감지 않음)
+		for (int i = 0; i < 600 && !(i > 0 && t.speed == 0); i++) {
+			t.ring(false, 0, p, dt);
+		}
+		assertEquals(3f, t.time, 1e-3f);
+		assertFalse(t.done, "링은 완료가 없다");
+		// 멈춤 자리 밖에서 놓으면 그 자리에 멈춘다
+		while (t.time < 4.5f) {
+			t.ring(true, 1, p, dt);
+		}
+		t.ring(false, 0, p, dt);
+		assertEquals(0, t.speed);
+		assertTrue(t.time > 4.4f && t.time < 4.6f);
+		// 한 바퀴 넘으면 감긴다 (끝 = 0 자리)
+		t.time = 11.9f;
+		t.speed = 0.15f;
+		for (int i = 0; i < 300 && !(i > 0 && t.speed == 0); i++) {
+			t.ring(false, 0, p, dt);
+		}
+		assertEquals(0f, t.time, 1e-3f);
+		// 양방향 플래그가 없으면 역입력은 감속만
+		t.ring(true, -1, p, dt);
+		assertTrue(t.speed >= 0);
+		assertEquals(0.5f, TaskProgress.detent(0.52f, 0.03f));
+		assertEquals(-1f, TaskProgress.detent(0.4f, 0.03f));
+		assertEquals(0f, TaskProgress.detent(0.99f, 0.03f));
+	}
 }

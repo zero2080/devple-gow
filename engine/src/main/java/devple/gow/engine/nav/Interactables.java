@@ -38,6 +38,8 @@ public final class Interactables {
 	public static final int TANDF_GRAB_ANIM = 0xff5f5921, TANDF_LIFT_ANIM = 0xdc77f412, TANDF_END_ANIM = 0x4e2b8035;
 	/** Push/TAndF 템플릿 속도 키: 최대 (+0x38 / +0x20), 최대 되감기 (+0x3C / +0x24), Push 되감기 가속 (+0x34). Acc/Dec 는 이름 키. */
 	public static final int SPEED_MAX = 0xfe467fe6, SPEED_MAX_BACK = 0xb503fbe4, PUSH_REWIND_ACC = 0xb6ba95a3;
+	/** Push 템플릿 +0x108 비트 4 (양방향 크랭크), +0x40 멈춤 자리 허용 (생성자 0x216370 / 기본값 0x216788) [확실]. */
+	static final int PUSH_TWO_WAY = 0x228882E3, PUSH_DETENT_TOL = 0xA4C814E9;
 
 	public static final class Item {
 		public final Kind kind;
@@ -69,6 +71,19 @@ public final class Interactables {
 		public float acc = 1, dec = 1, maxSpeed = 1, maxBack = 2, rewindAcc = 2, tfTime = 0.25f;
 		/** TAndF 잡기 애니 (ANITandF1). */
 		public String startAnim;
+		/** 오브젝트 애니 act (CSM #fea292e6, null = 가장 긴 act) — 진행 시간으로 오브젝트 관절 자세를 정할 때. */
+		public String objectAnim;
+		/**
+		 * Push "Type" 하위 바이트 (−1 = PushPull 아님): 4 = 링 크랭크 (0x212998 모드 2) — 0·¼·½·¾ 회전에 멈춤 자리, 놓아도 되감지 않고
+		 * 가장 가까운 멈춤 자리로 간다. twoWay = 템플릿 +0x108 비트 4 (#228882e3, 스틱을 반대로 밀면 역회전), detentTol = +0x40 (#a4c814e9, 기본 0.03).
+		 */
+		public int pushType = -1;
+		public boolean twoWay;
+		public float detentTol = 0.03f;
+
+		public TaskProgress.RingParams ringParams() {
+			return new TaskProgress.RingParams(acc, dec, rewindAcc, maxSpeed, maxBack, detentTol, twoWay);
+		}
 
 		/** 과제 진행 상태 (CSM/CHEST = 과제 id, LEVER = PushPull id, LIFT = TAndF id 로 1023 을 보낸다). LIFT 는 위치 0..1. */
 		public TaskProgress task() {
@@ -77,6 +92,11 @@ public final class Interactables {
 				task.stopAtEnd = kind == Kind.LEVER;
 			}
 			return task;
+		}
+
+		/** 과제가 시작됐는지 (진행 상태가 있는지). */
+		public boolean taskStarted() {
+			return task != null;
 		}
 
 		/** 오브젝트 애니 길이를 바꾸고 과제를 새로 만든다 (진행 전에만). */
@@ -146,7 +166,8 @@ public final class Interactables {
 					String label = tw != null ? tw.s(node, "Instance Name", "CSM") : "CSM";
 					Item it = new Item(Kind.CSM, p.instance().name(), pos, b.template(), b.id(), anim,
 							tw != null ? tw.sHash(node, CSM_HERO_ANIM2, null) : null, label, r);
-					float len = animLength(lv, anm, tw != null ? tw.sHash(node, CSM_OBJECT_ANIM, null) : null, -1);
+					it.objectAnim = tw != null ? tw.sHash(node, CSM_OBJECT_ANIM, null) : null;
+					float len = animLength(lv, anm, it.objectAnim, -1);
 					it.lengthKnown = len >= 0;
 					it.length = len >= 0 ? len : it.length;
 					it.hold = tw != null && (tw.rawHash(node, CSM_HOLD_FLAG).orElse(0) & 1) != 0;
@@ -167,7 +188,10 @@ public final class Interactables {
 						it.lengthKnown = len >= 0;
 						it.length = len >= 0 ? len : it.length;
 						it.crank = crank;
+						it.pushType = type;
 						if (tw != null) {
+							it.twoWay = tw.rawHash(node, PUSH_TWO_WAY).orElse(0) != 0;
+							it.detentTol = Float.intBitsToFloat(tw.rawHash(node, PUSH_DETENT_TOL).orElse(Float.floatToIntBits(0.03f)));
 							it.acc = tw.f(node, "Acc", 1f);
 							it.dec = tw.f(node, "Dec", 1f);
 							it.rewindAcc = Float.intBitsToFloat(tw.rawHash(node, PUSH_REWIND_ACC).orElse(Float.floatToIntBits(2f)));

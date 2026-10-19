@@ -49,7 +49,7 @@ public final class Platforms {
 			this.inst = inst;
 			this.anims = anims;
 			this.hull = hull;
-			walkable = new boolean[hull.hulls.size()];
+			walkable = new boolean[hull == null ? 0 : hull.hulls.size()];
 			for (int h = 0; h < walkable.length; h++) {
 				int ni = hull.hulls.get(h).nameIndex();
 				String n = ni >= 0 && ni < hull.names.size() ? hull.names.get(ni) : String.join(",", hull.names);
@@ -97,7 +97,7 @@ public final class Platforms {
 		/** (x, z) 수직선이 hull 들과 만나는 구간의 윗면 중 y+step 이하·y-drop 이상에서 가장 높은 것. 없으면 NaN. hull 관절은 out[0]. */
 		float top(float x, float y, float z, float drop, int[] jointOut) {
 			float best = Float.NaN;
-			for (int h = 0; h < hull.hulls.size(); h++) {
+			for (int h = 0; h < walkable.length; h++) {
 				BallHull.Hull hh = hull.hulls.get(h);
 				if (!walkable[h] || hh.planes().size() < 4) {
 					continue; // 평면 1 개 = 구 (ENV 전용 표기), 발판 아님
@@ -147,10 +147,17 @@ public final class Platforms {
 	 * 레벨에서 발판 후보: CDV 볼륨이 있고 ANM 이 있으며 owners(스크립트 Animator 엔티티가 가리키는 GO) 에 든 오브젝트.
 	 */
 	public static Platforms of(LevelData lv, Collection<String> owners) {
+		return of(lv, owners, java.util.Set.of());
+	}
+
+	/**
+	 * posed = 충돌 볼륨이 없어도 자세만 갖는 오브젝트 (R1 레버·크랭크·문: 진행 시간으로 관절 자세 → Marker·렌더, {@link #poseAt}).
+	 */
+	public static Platforms of(LevelData lv, Collection<String> owners, Collection<String> posed) {
 		Platforms ps = new Platforms();
 		for (LevelLayout.Placement p : lv.layout.placements()) {
 			String name = p.instance().name();
-			if (!owners.contains(name) || p.object().skeleton() == null) {
+			if (!owners.contains(name) && !posed.contains(name) || p.object().skeleton() == null) {
 				continue;
 			}
 			BallHull cdv = null;
@@ -164,7 +171,7 @@ public final class Platforms {
 					anm = r;
 				}
 			}
-			if (cdv == null) {
+			if (cdv == null && !posed.contains(name)) {
 				continue;
 			}
 			AnimationSet set = null;
@@ -249,6 +256,40 @@ public final class Platforms {
 			b.time = (mode & 0x1) != 0 && start <= 0 ? a.duration : Math.min(start, a.duration);
 		}
 		b.playing = true;
+		return true;
+	}
+
+	/**
+	 * 진행 시간으로 자세 (R1 오브젝트: 원작 오브젝트 애니 시간 = 과제 진행 시간, 0x215928 / 0x2118E8). act = null → 가장 긴 act.
+	 *
+	 * @return 자세가 바뀌었으면 true
+	 */
+	public boolean poseAt(String owner, String act, float t) {
+		Body b = body(owner);
+		if (b == null || b.anims == null) {
+			return false;
+		}
+		if (b.anim == null || act != null && !b.anim.name.equalsIgnoreCase(act)) {
+			Animation a = act != null ? b.anims.find(act) : null;
+			if (a == null) {
+				for (Animation x : b.anims.all()) {
+					if (a == null || x.duration > a.duration) {
+						a = x;
+					}
+				}
+			}
+			if (a == null) {
+				return false;
+			}
+			b.anim = a;
+			b.time = -1;
+		}
+		if (Math.abs(b.time - t) < 1e-5f) {
+			return false;
+		}
+		b.time = t;
+		b.playing = false;
+		b.pose();
 		return true;
 	}
 

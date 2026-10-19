@@ -131,16 +131,18 @@ class TraversalTest {
 	}
 
 	/**
-	 * 숨긴 오브젝트를 숨긴 채로만 쓴 곳 (게임에서는 못 함): 이웃 레벨 GlobalData 로 다시 돌린 ATHN01D 선장 문 (열쇠 GlobalData:0 ← ATHN01E)·
-	 * PAND01BB 석상 크랭크 (손잡이 GlobalData:3 ← PAND00C) 는 풀리고, PAND00C 엘리베이터 레버 (고리 퍼즐 정답 + PAND00D 왕복) 만 남는다.
+	 * 숨긴 오브젝트를 숨긴 채로만 쓴 곳이 없다 (게임에서는 못 함, 42 문서 §4·§5): 이웃 레벨 GlobalData·전역 이벤트로 다시 돌려
+	 * ATHN01D 선장 문 (열쇠 GlobalData:0 ← ATHN01E)·PAND01BB 석상 크랭크 (손잡이 GlobalData:3)·PAND00C 엘리베이터 레버
+	 * (링 크랭크 3 개 정렬 + PAND01BB GlobalData:4 + PAND00D 203/202 → 205 → LeverOn) 가 모두 보이는 상태에서 쓰인다.
 	 */
 	@Test
-	void hiddenObjectsNeedOnlyTheRingPuzzle() {
+	void hiddenObjectsAllRevealed() {
 		List<String> hidden = v.results.values().stream().flatMap(r -> r.interactions.stream().filter(x -> x.startsWith(TraversalVerifier.HIDDEN_USE))
 				.map(x -> r.level + " " + x.substring(TraversalVerifier.HIDDEN_USE.length()))).toList();
-		assertEquals(List.of("PAND00C goelevatorlever"), hidden);
+		assertEquals(List.of(), hidden);
 		assertTrue(v.results.get("ATHN01D").withNeighbours.contains("ATHN01E"));
 		assertTrue(v.results.get("PAND01BB").withNeighbours.contains("PAND00C"));
+		assertTrue(v.results.get("PAND00C").interactions.stream().anyMatch(x -> x.startsWith("RING goring1crank")), "링 크랭크 풀이");
 	}
 
 	/** 헤드리스 보스전 (HeadlessBoss): 히드라·메두사 여왕·아레스 1/3 이 원본 데이터 흐름으로 격파된다. */

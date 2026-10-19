@@ -141,6 +141,8 @@ public final class TraversalVerifier {
 		public final Map<Integer, Object> globals = new TreeMap<>();
 		/** 스크립트가 보낸 전역 이벤트 {id, 인자 1, 인자 2} (EventTransmitter 모드 5, 중복 제거). */
 		public final List<Object[]> globalEvents = new ArrayList<>();
+		/** 이 레벨 EventSensor 가 듣는 이벤트 번호 / 이웃에게서 받아 다시 보낸 전역 이벤트 번호. */
+		final Set<Integer> heard = new HashSet<>(), replayed = new HashSet<>();
 		/** 이웃 레벨 상태로 다시 돌렸으면 그 레벨들 (2 단계 실행). */
 		public final Set<String> withNeighbours = new java.util.TreeSet<>();
 
@@ -222,19 +224,57 @@ public final class TraversalVerifier {
 	 * 남는 것: PAND00C 엘리베이터 레버 — 고리 5 개 위치(LevelData 3/4/7/8/9) 정답 회전 + PAND00D 와 203/204/202/205 왕복 (퍼즐 풀이 없음).
 	 */
 	void rerunWithNeighbours() throws IOException {
+		// 앞 레벨의 개선이 뒤 레벨 상태가 된다 (PAND01BB 손잡이 GlobalData:4 → PAND00C 고리 퍼즐 204) → 바뀌지 않을 때까지 (최대 3 회)
+		for (int round = 0; round < 3 && rerunOnce(); round++) {
+		}
+	}
+
+	private boolean rerunOnce() throws IOException {
+		boolean changed = false;
 		for (String l : List.copyOf(results.keySet())) {
 			LevelResult r = results.get(l);
 			long hidden = r.interactions.stream().filter(x -> x.startsWith(HIDDEN_USE)).count();
-			if (hidden == 0) {
+			Neighbours nb = neighbours(l);
+			// 이웃이 새로 보낸 (이 레벨이 듣고, 스스로 보내지 않고, 아직 받아 본 적 없는) 전역 이벤트 — 두 레벨 왕복 (PAND00C 204 → PAND00D → 205)
+			Set<Integer> own = new HashSet<>();
+			r.globalEvents.forEach(e -> own.add((Integer) e[0]));
+			boolean fresh = nb.events().stream().map(e -> (Integer) e[0])
+					.anyMatch(id -> r.heard.contains(id) && !own.contains(id) && !r.replayed.contains(id));
+			if (hidden == 0 && !fresh) {
 				continue;
 			}
-			Neighbours nb = neighbours(l);
 			LevelResult again = run(l, nb);
-			if (again.interactions.stream().filter(x -> x.startsWith(HIDDEN_USE)).count() < hidden) {
+			Set<Integer> before = new HashSet<>(own), after = new HashSet<>();
+			again.globalEvents.forEach(e -> after.add((Integer) e[0]));
+			boolean moreEvents = after.containsAll(before) && after.size() > before.size();
+			if (again.interactions.stream().filter(x -> x.startsWith(HIDDEN_USE)).count() < hidden || moreEvents) {
+				merge(r, again); // 퍼즐 전·후 상태 둘 다 게임에서 가능한 경로 (PAND00C: 전 = LoadWad 03J, 후 = 03F)
 				again.withNeighbours.addAll(nb.levels());
 				results.put(l, again);
+				changed = true;
 			}
 		}
+		return changed;
+	}
+
+	/** 원래 실행의 요청(적재·LoadCheck·Goto·Warp·Load 전환)을 다시 돌린 결과에 합친다: 없는 것은 그대로, 둘 다 있으면 강제가 덜한 쪽. */
+	private static void merge(LevelResult a, LevelResult b) {
+		for (var m : List.of(java.util.Map.entry(a.loads, b.loads), java.util.Map.entry(a.loadChecks, b.loadChecks),
+				java.util.Map.entry(a.gotoFrom, b.gotoFrom))) {
+			for (var e : m.getKey().entrySet()) {
+				m.getValue().merge(e.getKey(), e.getValue(), (nw, old) -> nw.forced() && !old.forced() ? old : nw);
+			}
+		}
+		b.warpLoads.addAll(a.warpLoads);
+		if (b.warp == null || b.warp.forced() && a.warp != null && !a.warp.forced()) {
+			b.warp = a.warp;
+		}
+		for (Edge e : a.edges) {
+			if (b.edges.stream().noneMatch(x -> x.kind() == e.kind() && x.target().equals(e.target()) && (!x.forced() || e.forced()))) {
+				b.edges.add(e);
+			}
+		}
+		a.loadCheckSamples.forEach(b.loadCheckSamples::putIfAbsent);
 	}
 
 	/** 2 걸음 안 이웃의 끝난 GlobalData 합집합과 보낸 전역 이벤트. */
@@ -474,13 +514,20 @@ public final class TraversalVerifier {
 		};
 		ScriptWorld w = new ScriptWorld(lv, new ScriptHost(), listener);
 		wref[0] = w;
-		platforms[0] = devple.gow.engine.nav.Platforms.of(lv, devple.gow.engine.game.SceneNav.animatorOwners(w));
+		levelItems = Interactables.of(lv, levelTweaks);
+		platforms[0] = devple.gow.engine.nav.Platforms.of(lv, devple.gow.engine.game.SceneNav.animatorOwners(w),
+				devple.gow.engine.game.SceneNav.posedOwners(levelItems));
 		levelPlatforms = platforms[0];
 		if (devple.gow.engine.boss.BossDirector.hostsBoss(levelName)) {
 			bossRef[0] = devple.gow.engine.boss.HeadlessBoss.create(levelName, rom, permk, lv.wad, w);
 		}
 		w.onUnbalanced(r.unbalanced::add);
 		r.entities = w.entities().size();
+		for (ScriptEntity e : w.entities()) {
+			if (e.type() == 4) {
+				r.heard.add(intSlot(w, e, "EventId"));
+			}
+		}
 		r.savePointCreators = (int) w.entities().stream().filter(e -> e.type() == 11 && "savepoint".equals(w.slot(e, "Name0"))).count();
 
 		// 시작 지점 (GameScene 과 같은 규칙)
@@ -537,6 +584,7 @@ public final class TraversalVerifier {
 				}
 				movieDone.clear();
 				platforms[0].update(DT);
+				devple.gow.engine.game.SceneNav.poseItems(levelItems, platforms[0], w); // R1 오브젝트 자세 = 진행 시간 (링 크랭크 Marker)
 				for (devple.gow.engine.nav.Platforms.Body b : platforms[0].bodies()) {
 					if (b.playing()) {
 						w.poseOwner(b.owner, b.joints());
@@ -590,7 +638,7 @@ public final class TraversalVerifier {
 		}
 		if (nb != null) {
 			// 이웃 레벨 스크립트가 보낸 전역 이벤트 (원작은 두 슬롯이 큐 하나 — PAND00D 고리 205 → PAND00C). 이 레벨이 듣고 스스로는 안 보내는 것만
-			Set<Integer> own = new HashSet<>(), heard = new HashSet<>();
+			Set<Integer> own = new HashSet<>(), heard = r.heard;
 			r.globalEvents.forEach(e -> own.add((Integer) e[0]));
 			for (ScriptEntity e : w.entities()) {
 				if (e.type() == 4) {
@@ -602,6 +650,7 @@ public final class TraversalVerifier {
 				if (!heard.contains(id) || own.contains(id)) {
 					continue;
 				}
+				r.replayed.add(id);
 				currentSource[0] = "이웃 레벨 이벤트 " + id;
 				w.postEvent(id, e[1], e[2], 0, w.player());
 				for (float t = 0; t < DWELL / 2; t += DT) {
@@ -699,9 +748,10 @@ public final class TraversalVerifier {
 	 */
 	private void interact(LevelData lv, ScriptWorld w, Tweaks tw, LevelCollision col, Map<Target, float[]> points, float[] player,
 			String[] currentSource, Runnable step, LevelResult r) {
-		Interactables items = Interactables.of(lv, tw);
+		Interactables items = levelItems; // 레벨당 하나 (진행 상태·자세 유지)
 		for (ScriptEntity e : w.entities()) {
-			if (e.type() == 11 && "chest".equals(w.slot(e, "Name0")) && e.owner != null) {
+			if (e.type() == 11 && "chest".equals(w.slot(e, "Name0")) && e.owner != null
+					&& items.items().stream().noneMatch(x -> x.owner.equalsIgnoreCase(e.owner.instance().name()))) {
 				float[] gp = e.owner.instance().pos();
 				items.addChest(e.owner.instance().name(), new org.joml.Vector3f(gp[0], gp[1], gp[2]), intSlot(w, e, "unk5"), intSlot(w, e, "unk6"), tw);
 			}
@@ -748,6 +798,12 @@ public final class TraversalVerifier {
 					// 레버·크랭크 (PushPull): 붙잡기 1048 → 애니 재생 동안 1023 (원작 0x2118E8, 인자 1 = PushPull id) → 놓기 1049
 					w.postEvent(devple.gow.engine.game.SceneNav.EVENT_ATTACH, it.id, 0, 0, w.player());
 					step.run();
+					if (it.pushType == 4) {
+						int d = solveRing(w, it, step);
+						addOnce(r.interactions, "RING " + it.owner + " id " + it.id + " → " + d + "/4");
+						w.postEvent(devple.gow.engine.game.SceneNav.EVENT_DETACH, it.id, 0, 0, w.player());
+						break;
+					}
 					runTask(w, it, step);
 					w.postEvent(devple.gow.engine.game.SceneNav.EVENT_DETACH, it.id, 0, 0, w.player());
 					addOnce(r.interactions, "LEVER " + it.owner + " id " + it.id);
@@ -808,6 +864,9 @@ public final class TraversalVerifier {
 	static final String HIDDEN_USE = "숨김 상태 상호작용(두 레벨 퍼즐 미재현) ";
 	/** 이 레벨에서 보이는 상태로 상호작용한 오브젝트. */
 	private final Set<String> usedVisible = new HashSet<>();
+
+	/** 지금 돌리는 레벨의 R1 오브젝트 (진행 상태를 상호작용 회차 사이에 유지). */
+	private Interactables levelItems;
 
 	/** 지금 돌리는 레벨의 Animator 관절 애니 (발판·회전방). */
 	private devple.gow.engine.nav.Platforms levelPlatforms;
@@ -933,6 +992,60 @@ public final class TraversalVerifier {
 				w.postEvent(devple.gow.engine.game.SceneNav.EVENT_TASK, e.percent(), e.taskId(), e.speed100(), w.player());
 			}
 			step.run();
+		}
+	}
+
+	/**
+	 * 링 크랭크 (Push Type 4, 42 문서 §5): 멈춤 자리 0·¼·½·¾ 를 차례로 돌려 보고 (붙잡고 정회전 → 놓아 가장 가까운 자리로, 원작 식 그대로)
+	 * 참인 LevelData bool 이 가장 많은 자리에 둔다 — 고리 관절 Marker 가 정렬 볼륨(R1SouthVol 등)에 들어가 켜는 플래그 [하네스 탐색].
+	 *
+	 * @return 고른 자리 (0..3)
+	 */
+	private int solveRing(ScriptWorld w, Interactables.Item it, Runnable step) {
+		TaskProgress t = it.task();
+		TaskProgress.RingParams p = it.ringParams();
+		int best = -1, bestScore = -1;
+		for (int pass = 0; pass < 2; pass++) {
+			if (pass == 1 && Math.round(t.time / t.length * 4) % 4 == best) {
+				return best;
+			}
+			for (int k = 0; k < 4; k++) {
+				// 한 칸 (¼ 바퀴): 다음 자리 허용 범위에 들어갈 때까지 정회전, 놓고 멈출 때까지
+				float start = t.time / t.length;
+				for (int g = 0; g < 20000; g++) {
+					send(w, t.ring(true, 1, p, DT));
+					step.run();
+					float f = t.time / t.length;
+					float moved = ((f - start) % 1 + 1) % 1;
+					if (moved > 0.15f && TaskProgress.detent(f, p.tol()) >= 0) {
+						break;
+					}
+				}
+				for (int g = 0; g < 20000 && !(g > 0 && t.speed == 0); g++) {
+					send(w, t.ring(false, 0, p, DT));
+					step.run();
+				}
+				for (float s = 0; s < 1; s += DT) {
+					step.run();
+				}
+				int pos = Math.round(t.time / t.length * 4) % 4;
+				if (pass == 0) {
+					int score = (int) w.host().levelData().values().stream().filter(v -> Boolean.TRUE.equals(v)).count();
+					if (score > bestScore) {
+						bestScore = score;
+						best = pos;
+					}
+				} else if (pos == best) {
+					return best;
+				}
+			}
+		}
+		return best;
+	}
+
+	private static void send(ScriptWorld w, TaskProgress.Event e) {
+		if (e != null) {
+			w.postEvent(devple.gow.engine.game.SceneNav.EVENT_TASK, e.percent(), e.taskId(), e.speed100(), w.player());
 		}
 	}
 

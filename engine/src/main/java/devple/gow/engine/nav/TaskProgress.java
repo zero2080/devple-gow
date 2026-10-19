@@ -94,6 +94,71 @@ public final class TaskProgress {
 		return emit(time, length, speed, false);
 	}
 
+	/** 링 크랭크 TWK (Push 템플릿 +0x2C Acc, +0x30 Dec, +0x34 접근 가속 #b6ba95a3, +0x38 최대, +0x3C 최대(놓음), +0x40 허용, +0x108 비트 4 양방향). */
+	public record RingParams(float acc, float dec, float approach, float max, float maxBack, float tol, boolean twoWay) {
+	}
+
+	/**
+	 * 링 크랭크 (Push Type 4, 원작 0x212998 모드 2 = 0x212F58) [확실: 디스어셈블]. 애니가 한 바퀴 — 시간은 길이로 감긴다 (완료 없음).
+	 * <ul>
+	 *   <li>붙어 있음: 입력 &gt; 0 → 속도 += Acc·dt (최대), 입력 &lt; 0 이고 양방향 → −Acc·dt (−최대), 입력 없음 → Dec·dt 로 0 쪽.</li>
+	 *   <li>놓음: 비율 f 가 멈춤 자리 0·¼·½·¾ (끝 1 = 0) ± 허용 안이면 접근 가속으로 그 자리로 (최대 +0x3C), 닿으면 멈춤.
+	 *       밖이면 그 자리에서 멈춘다.</li>
+	 * </ul>
+	 * 원작은 |목표 − f| &lt; 1e-4 일 때 붙인다 — 엔진은 프레임 사이에 목표를 지나면 붙인다 [근사: 같은 결과, 진동 없음].
+	 *
+	 * @param input 크랭크 축 방향 입력 부호 (+1 / −1 / 0)
+	 */
+	public Event ring(boolean attached, int input, RingParams p, float dt) {
+		if (length <= 0) {
+			return null;
+		}
+		float f = time / length;
+		if (attached) {
+			if (input > 0) {
+				speed = Math.min(speed + p.acc() * dt, p.max());
+			} else if (input < 0 && p.twoWay()) {
+				speed = Math.max(speed - p.acc() * dt, -p.max());
+			} else {
+				speed = speed > 0 ? Math.max(speed - p.dec() * dt, 0) : Math.min(speed + p.dec() * dt, 0);
+			}
+		} else {
+			float target = detent(f, p.tol());
+			if (target < 0) {
+				speed = 0;
+				return emit(time, length, 0, false);
+			}
+			float goal = target == 0 && f > 0.5f ? 1 : target;
+			if (Math.abs(goal - f) < 1e-4f) {
+				time = (goal >= 1 ? 0 : goal) * length;
+				speed = 0;
+				return emit(time, length, 0, false);
+			}
+			speed = f < goal ? Math.min(speed + p.approach() * dt, p.maxBack()) : Math.max(speed - p.approach() * dt, -p.maxBack());
+			float next = f + speed * dt / length;
+			if ((goal - f) * (goal - next) <= 0) {
+				time = (goal >= 1 ? 0 : goal) * length;
+				speed = 0;
+				return emit(time, length, 0, false);
+			}
+		}
+		time = ((time + speed * dt) % length + length) % length;
+		return emit(time, length, speed, false);
+	}
+
+	/** 멈춤 자리 (0x21302C): f &lt; tol 또는 f &gt; 1 − tol → 0, |f − ¼|·|f − ½|·|f − ¾| &lt; tol 중 하나 → 그 값, 아니면 −1. */
+	public static float detent(float f, float tol) {
+		if (f < tol || f > 1 - tol) {
+			return 0;
+		}
+		for (float d : new float[]{0.25f, 0.5f, 0.75f}) {
+			if (f > d - tol && f < d + tol) {
+				return d;
+			}
+		}
+		return -1;
+	}
+
 	/** IO_TandF 들어 올리는 문 TWK (TAndF 템플릿 +0x18 Acc, +0x1C Dec, +0x20 #fe467fe6, +0x24 #b503fbe4, +0x28 TF Time). */
 	public record LiftParams(float acc, float dec, float maxUp, float maxDown, float tfTime) {
 	}

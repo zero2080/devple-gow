@@ -75,8 +75,8 @@ public final class SceneNav {
 		this.tweaks = levelTweaks;
 		navWorld = new NavWorld(col);
 		navWorld.ropes().addAll(NavRope.of(level));
-		navWorld.setPlatforms(Platforms.of(level, animatorOwners(world)));
 		items = Interactables.of(level, levelTweaks);
+		navWorld.setPlatforms(Platforms.of(level, animatorOwners(world), posedOwners(items)));
 		navigator = new HeroNavigator(hero.ctl, navWorld, new NavAnims(hero.tweaks));
 		navigator.setItems(items);
 		navigator.setListener(new HeroNavigator.Listener() {
@@ -275,9 +275,38 @@ public final class SceneNav {
 		return b != null;
 	}
 
+	/** 진행 시간으로 자세를 갖는 R1 오브젝트 (레버·크랭크·CSM 문·TAndF): 오브젝트 애니 = 과제 진행 시간. 밀기 상자는 위치로 움직인다. */
+	public static java.util.Set<String> posedOwners(Interactables items) {
+		java.util.Set<String> out = new java.util.HashSet<>();
+		for (Interactables.Item it : items.items()) {
+			if (it.kind != Interactables.Kind.PUSH && it.kind != Interactables.Kind.CHEST) {
+				out.add(it.owner);
+			}
+		}
+		return out;
+	}
+
+	/**
+	 * R1 오브젝트 자세 = 진행 시간 (링 크랭크의 고리 관절 Marker 101 → R1SouthVol → LevelData 3, PAND00C 고리 퍼즐).
+	 * LIFT 는 진행 0..1 → 오브젝트 애니 길이 비율 [추정: 문 ANM 은 길이 0 인 경우가 많다].
+	 */
+	public static void poseItems(Interactables items, Platforms ps, ScriptWorld world) {
+		for (Interactables.Item it : items.items()) {
+			if (it.kind == Interactables.Kind.PUSH || it.kind == Interactables.Kind.CHEST || !it.taskStarted()) {
+				continue;
+			}
+			Platforms.Body b = ps.body(it.owner);
+			float t = it.task().time;
+			if (b != null && ps.poseAt(it.owner, it.objectAnim, it.kind == Interactables.Kind.LIFT && b.anim() != null ? t * b.anim().duration : t)) {
+				world.poseOwner(b.owner, b.joints());
+			}
+		}
+	}
+
 	/** 한 틱: 발판 애니 → Marker 위치, 이웃 스크립트. */
 	public void update(float dt, Vector3f hero) {
 		navWorld.platforms().update(dt);
+		poseItems(items, navWorld.platforms(), world);
 		for (Platforms.Body b : navWorld.platforms().bodies()) {
 			if (b.playing()) {
 				world.poseOwner(b.owner, b.joints());
