@@ -238,8 +238,9 @@ class EnemyNavTest {
 			assertEquals(0f, p.x, 1e-3, "매달린 동안 스틱 0 — 줄 위 제자리");
 		}
 		assertEquals(EnemyNav.Mode.AIR, n.mode(), "수평 80 > 16 → 놓음");
-		// 앞 회전은 45° 안에 들자 멈춤 (정면 = +x 에서 45°) → 반대쪽 45° 안까지 90° 를 π rad/s 로 → 약 30 프레임
-		assertTrue(frames > 25 && frames < 40, "정렬까지 프레임 " + frames);
+		// 매단 줄 위 몸 방향 = 줄 축 4 방향 (0x1C6858): +x → +z → −x 두 번 90° (번호 + 1), 한 번에 보간 22 프레임 (0.1 × 1.1111^k → 1, 0x1E0DC0)
+		// → 첫 회전 22 프레임 + 둘째 회전에서 보이는 몸이 −x 45° 안에 드는 몇 프레임 ≈ 43
+		assertTrue(frames > 36 && frames < 50, "정렬까지 프레임 " + frames);
 		float fx = (float) -Math.sin(n.ropeYaw()), fz = (float) -Math.cos(n.ropeYaw());
 		assertTrue(fx < -0.7f && Math.abs(fz) < 0.72f, "목표 쪽 45° 안 " + fx + "," + fz);
 		for (int i = 0; i < 240 && n.mode() != EnemyNav.Mode.GROUND; i++) {

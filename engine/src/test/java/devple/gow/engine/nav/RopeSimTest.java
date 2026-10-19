@@ -83,4 +83,36 @@ class RopeSimTest {
 		float expect = (float) (2 * Math.PI / Math.sqrt(RopeSim.GRAVITY / (lenM - 0.25f) - gamma * gamma / 4));
 		assertEquals(expect, period, expect * 0.15f, "주기");
 	}
+
+	/**
+	 * 양끝 고정 줄 (수평 줄·짚라인, 0x216FC8 / 0x218488 / 0x217748): 길이 = |끝 − 매단 점|, 처음 곧은 선, 끝 노드는 끝점에 고정,
+	 * 매달림 최대 무게 10 (0x216D84) → 가운데 매달리면 처지고, 놓으면 (무게가 줄어) 다시 곧아진다.
+	 */
+	@Test
+	void fixedRopeHoldsBothEndsAndSagsUnderHero() {
+		Vector3f top = new Vector3f(0, 320, 0), end = new Vector3f(320, 320, 0);
+		RopeSim r = RopeSim.fixed(top, end, 9);
+		assertTrue(r.isFixed());
+		assertEquals(20f, r.length(), 1e-4f);
+		assertEquals(RopeSim.WEIGHT_FIXED, r.maxWeight(), 0);
+		assertEquals(160, r.pointAt(10, new Vector3f()).x, 1e-3f, "처음 곧은 선");
+		assertEquals(320, r.pointAt(10, new Vector3f()).y, 1e-3f);
+		r.attach(10);
+		for (int i = 0; i < 300; i++) {
+			r.setForce(new Vector3f());
+			r.update(DT);
+		}
+		assertEquals(RopeSim.WEIGHT_FIXED, r.weight(), 1e-3f);
+		Vector3f mid = r.pointAt(10, new Vector3f());
+		float sag = 320 - mid.y;
+		assertTrue(sag > 0.5f && sag < 40, "가운데 처짐 " + sag);
+		Vector3f e = r.pointAt(r.length(), new Vector3f());
+		assertEquals(320, e.x, 1e-3f, "끝 노드 고정");
+		assertEquals(320, e.y, 1e-3f);
+		r.detach();
+		for (int i = 0; i < 600; i++) {
+			r.update(DT);
+		}
+		assertTrue(320 - r.pointAt(10, new Vector3f()).y < sag * 0.5f, "놓으면 덜 처짐");
+	}
 }

@@ -36,6 +36,8 @@ import java.util.Map;
  * 0x134 40     0x1C8B48                사다리 미끄럼 멈춤 감속                                [확실]
  * 0x138 1.5    0x1C6578                매단 줄 오르내리기 속도 (× 스틱)                        [확실]
  * 0x13C 0.5    0x1C657C                매단 줄 최소 속도                                    [확실]
+ * 0x140 14     0x1C55F4                매단 줄 × 뛰어내리기 위 속도 (지역 +0x260.y)               [확실]
+ * 0x144 14     0x1C561C                매단 줄 × 뛰어내리기 앞 속도 (지역 +0x260.z, 줄 축 4 방향 중 스틱 쪽) [확실]
  * 0x148 500    0x1C6BE8                매단 줄 흔들기 힘 (줄 질점 시뮬레이션)                  [추정: 엔진은 진자 근사]
  * 0x14C 7.5    0x1C64D8                줄 미끄럼 최대 속도                                   [확실]
  * 0x150 20     0x1C64D4                줄 미끄럼 가속                                       [확실]
@@ -84,7 +86,8 @@ public final class NavTuning {
 			ROPE_SLIDE_ACC = 0x150, ROPE_SLIDE_DEC = 0x154, TRAVERSE = 0x158, TRAVERSE_MIN = 0x15C, ZIP_SPEED = 0x160, ZIP_ACCEL = 0x164,
 			LEDGE_WALK = 0x168, GROUND = 0x178, PUSH_MIN = 0x17C, PUSH_MAX = 0x188, KICK_MIN = 0x194, KICK_MAX = 0x1A0, KICK_CHARGE = 0x1AC, SWIM = 0x1D4, TREAD = 0x1D8, SWIM_MIN = 0x1DC, SWIM_ACCEL = 0x1E0, SWIM_DECEL = 0x1E4,
 			SWIM_TURN = 0x1E8, WATER_LINE = 0x1EC, BUOYANCY = 0x1F0, DASH_CHARGE_MIN = 0x1F8, DASH_CHARGE_MAX = 0x1FC,
-			DASH_MIN = 0x200, DASH_MAX = 0x204, DASH_STEER_MIN = 0x208, DASH_STEER_MAX = 0x20C, EDGE_JUMP_OUT = 0x114, EDGE_JUMP_UP = 0x120, NARROW_SCALE = 0x230, BODY_HALF = 0x234, BODY_HEIGHT = 0x238, BODY_BASE = 0x23C;
+			DASH_MIN = 0x200, DASH_MAX = 0x204, DASH_STEER_MIN = 0x208, DASH_STEER_MAX = 0x20C, EDGE_JUMP_OUT = 0x114, EDGE_JUMP_UP = 0x120, NARROW_SCALE = 0x230, BODY_HALF = 0x234, BODY_HEIGHT = 0x238, BODY_BASE = 0x23C,
+			ROPE_JUMP_UP = 0x140, ROPE_JUMP_OUT = 0x144;
 
 	/** R_PERMK TWK_Sold_000 (크라토스) — 데이터 테스트가 원본과 대조. */
 	public static final NavTuning KRATOS = new NavTuning(Map.ofEntries(
@@ -104,7 +107,8 @@ public final class NavTuning {
 			Map.entry(SWIM_ACCEL, 7.5f), Map.entry(SWIM_DECEL, 7.5f), Map.entry(SWIM_TURN, 0.15f), Map.entry(WATER_LINE, 0.2f),
 			Map.entry(BUOYANCY, 15f), Map.entry(DASH_CHARGE_MIN, 0.5f), Map.entry(DASH_CHARGE_MAX, 1f), Map.entry(DASH_MIN, 11f), Map.entry(DASH_MAX, 22f),
 			Map.entry(DASH_STEER_MIN, 0.01f), Map.entry(DASH_STEER_MAX, 0.1f), Map.entry(EDGE_JUMP_OUT, 10f), Map.entry(EDGE_JUMP_UP, 12f),
-			Map.entry(NARROW_SCALE, 1f), Map.entry(BODY_HALF, 0.6f), Map.entry(BODY_HEIGHT, 2.2f), Map.entry(BODY_BASE, 0.4f)));
+			Map.entry(NARROW_SCALE, 1f), Map.entry(BODY_HALF, 0.6f), Map.entry(BODY_HEIGHT, 2.2f), Map.entry(BODY_BASE, 0.4f),
+			Map.entry(ROPE_JUMP_UP, 14f), Map.entry(ROPE_JUMP_OUT, 14f)));
 
 	private final Map<Integer, Float> values;
 

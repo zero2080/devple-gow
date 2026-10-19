@@ -1,6 +1,7 @@
 package devple.gow.engine.combat;
 
 import devple.gow.engine.level.LevelCollision;
+import devple.gow.engine.nav.HeroNavigator;
 import devple.gow.engine.nav.NavRope;
 import devple.gow.engine.nav.NavWorld;
 import devple.gow.tools.level.SurfaceAttr;
@@ -55,10 +56,15 @@ public final class EnemyNav {
 	 * f3 → 4, 아니면 f1(끝점 고정) → 1 (0x218488), f2 → |2. 잡기 0x1C5DA4: 4 → 0x10000, 1&amp;2 → 0x40000 (짚라인), 1 → 0x20000 (양끝 고정 수평 줄),
 	 * 그 밖(매단 줄) → 하위 비트 없음 (+0x2D8 |= 0x2004000) [확실].
 	 */
-	public record Rope(Vector3f a, Vector3f b, int sub) {
+	public record Rope(Vector3f a, Vector3f b, int sub, Vector3f axis, int dirs) {
 		/** 하위 상태 미지정: 수평이면 수평 줄(0x20000), 아니면 매단 줄 (데이터 없는 테스트용). */
 		public Rope(Vector3f a, Vector3f b) {
 			this(a, b, horizontal(a, b) ? SUB_TRAVERSE : 0);
+		}
+
+		/** 줄 축 +z, 4 방향 (데이터 없는 테스트용). */
+		public Rope(Vector3f a, Vector3f b, int sub) {
+			this(a, b, sub, new Vector3f(0, 0, 1), 0);
 		}
 
 		private static boolean horizontal(Vector3f a, Vector3f b) {
@@ -138,7 +144,7 @@ public final class EnemyNav {
 					case TRAVERSE -> SUB_TRAVERSE;
 					case HANG -> 0;
 				};
-				return new Rope(nr.top(), nr.end(), sub);
+				return new Rope(nr.top(), nr.end(), sub, nr.axis(), nr.dirs());
 			}
 
 			public boolean collide(Vector3f c, float r) {
@@ -166,6 +172,9 @@ public final class EnemyNav {
 	private float ropeT;
 	/** 매단 줄 위 몸 방향 (yaw) — AI 회전 입력 (1,0,0) 으로 대상 쪽으로 돈다 (0x1CFEFC) [추정]. */
 	private float ropeYaw;
+	/** 매단 줄 위 몸 방향 번호 (NavRope.backDirs) 와 보간 가중치 (+0x150) — 영웅과 같은 코드 0x1C6858 / 0x1E0DC0. */
+	private int ropeDir;
+	private float turnBlend = 1;
 	/** 짚라인: 진행 방향 (+1 = a → b) / 속도 (월드 단위/s). */
 	private float zipDir, zipSpeed;
 	private float stuckMs;
@@ -438,6 +447,8 @@ public final class EnemyNav {
 				ropeT = r.closest(hand);
 				mode = Mode.ROPE;
 				ropeYaw = (float) Math.atan2(-heading.x, -heading.z);
+				ropeDir = NavRope.bestDir(r.axis(), r.dirs(), new Vector3f((float) Math.sin(ropeYaw), 0, (float) Math.cos(ropeYaw)));
+				turnBlend = HeroNavigator.TURN_BLEND_START;
 				// 짚라인: 낮은 끝 쪽으로 (0x1C5E04), 잡을 때 줄 방향 속도 0 [추정 — 영웅과 같음]
 				zipDir = r.b().y <= r.a().y ? 1 : -1;
 				zipSpeed = 0;
@@ -567,8 +578,13 @@ public final class EnemyNav {
 		pos.set(p.x, p.y - HAND, p.z);
 	}
 
-	/** 매단 줄 위 회전 속도 (rad/s) — 원작 회전 입력 (1,0,0) 의 줄 위 회전 속도 미분석 [근사]. */
-	public static final float ROPE_TURN = (float) Math.PI;
+	/**
+	 * 매단 줄 위 회전 (원작 내비게이션 0x1C6858, 영웅과 공용) [확실]: 몸 방향은 줄 축 4 방향 (방향 제한 줄은 2) 중 하나로만 있고,
+	 * AI 회전 입력 (1, 0, 0, 1) 의 x · w = 1 &gt; 0.5 → 몸 보간 (+0x150) 이 1 일 때 번호 + 1 (90°). 보간은 0.1 × 1.1111^프레임 (0x1E0DC0) 이라
+	 * 22 프레임 (0.37 초) 에 한 번 돌고, 보이는 몸은 그동안 slerp 로 따라간다 → 90° 당 0.37 초 (평균 ≈ 245 °/초, 전 근사 π rad/s 폐기).
+	 * 방향 제한 줄은 AI 스틱 (0) 에 가장 가까운 후보 = 첫 후보로만 간다.
+	 */
+	public static final int TURN_FRAMES = 22;
 	/** 매단 줄에서 점프로 놓을 때 수평 속도 (영웅 HeroNavigator 매단 줄 점프와 같은 40) [근사]. */
 	public static final float ROPE_JUMP_OUT = 40f;
 	/** 짚라인 끝 여유 0.25 m (0x1C6B1C, 영웅과 같음). */
@@ -643,6 +659,7 @@ public final class EnemyNav {
 	private void hang(Vector3f pos, Vector3f goal, boolean goalOnRope, float dt) {
 		snapRope(pos);
 		if (goalOnRope || goal.y >= pos.y) {
+			turnRope(dt);
 			return;
 		}
 		float gx = goal.x - pos.x, gz = goal.z - pos.z;
@@ -650,6 +667,7 @@ public final class EnemyNav {
 		float fx = (float) -Math.sin(ropeYaw), fz = (float) -Math.cos(ropeYaw);
 		float dot = gl < 1e-3f ? 1f : (gx * fx + gz * fz) / gl;
 		if (dot > COS45) {
+			turnRope(dt);
 			float flatTop = (float) Math.hypot(goal.x - rope.a().x, goal.z - rope.a().z);
 			if (flatTop > ROPE_DROP) {
 				// 점프로 놓기: 몸 정면으로 (영웅 매단 줄 점프 = 정면 40 + 점프 초속 [근사])
@@ -657,12 +675,27 @@ public final class EnemyNav {
 			}
 			return;
 		}
-		float want = (float) Math.atan2(-gx, -gz);
+		// 정렬이 아니면 회전 입력 (1, 0, 0, 1): 이전 회전이 끝났을 때 (+0x150 = 1) 번호 + 1 (방향 제한 줄 = 스틱 0 에 가장 가까운 첫 후보)
+		if (turnBlend >= 1) {
+			int next = rope.dirs() == 0 ? (ropeDir + 1) & 3 : NavRope.bestDir(rope.axis(), rope.dirs(), new Vector3f());
+			if (next != ropeDir) {
+				ropeDir = next;
+				turnBlend = HeroNavigator.TURN_BLEND_START;
+			}
+		}
+		turnRope(dt);
+		moveX = 1; // 돌고 있음 (애니 ANIRopeU 대신 회전 [근사])
+	}
+
+	/** 보이는 몸 = 몸 축 (줄 축 후보) 쪽으로 slerp(+0x150 × f), +0x150 ×= 1 + 0.1111 f (0x1E0C90 / 0x1E0DC0, f = 60 Hz 프레임). */
+	private void turnRope(float dt) {
+		Vector3f back = NavRope.backDirs(rope.axis())[ropeDir];
+		float want = (float) Math.atan2(back.x, back.z);
 		float diff = (float) Math.IEEEremainder(want - ropeYaw, Math.PI * 2);
-		float stepYaw = ROPE_TURN * dt;
-		ropeYaw += Math.max(-stepYaw, Math.min(stepYaw, diff));
+		float f = dt * 60f;
+		ropeYaw += diff * Math.min(1, turnBlend * f);
+		turnBlend = Math.min(1, turnBlend * (1 + (HeroNavigator.TURN_BLEND_GROW - 1) * f));
 		faceYaw = ropeYaw;
-		moveX = Math.signum(diff); // 돌고 있음 (애니 ANIRopeU 대신 회전 [근사])
 	}
 
 	/**

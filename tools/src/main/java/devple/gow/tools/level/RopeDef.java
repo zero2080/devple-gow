@@ -9,14 +9,14 @@ import java.nio.ByteBuffer;
  * 0x00 u32 0x10004  0x04 "SCR_RopeSkinned"   0x1C u32 0x13880000
  * 0x20 u32 kind (18, PAND04G 0x10012)
  * 0x24 u32 template  0 Rope · 1 Chain · 2 RopeEastWest · 3 ZipLine · 4 RopeNorthSouth   (전 레벨 TWK Instance Name 일치)
- * 0x28 f32 각도 (도: 매단 줄의 최대 흔들림 추정 — 6..90)
+ * 0x28 f32 줄 길이 (미터, 4..90) — 실행 파일 0x2170C0 이 시뮬레이션 길이 +0x60 으로 읽음 (매단 줄은 관절 사슬 길이 / 16 과 같음) [확실]. 전엔 "각도" [추정] 이었음
  * 0x2C u32[4] 플래그  f1 = 끝점 고정 (끝점이 의미 있음), f2 = 짚라인(미끄럼), f3 = 짧은 사슬 (관절 3..5)
  * 0x3C vec3 끝점 (미터, ×16 = 월드 유닛). 예 ATHN01D gorope3: 돛대 꼭대기 (-994, 1201, -1762) → (-2656, 788, -593) = ATHN01E 갑판 (시작 지점 옆)
  * </pre>
  * 분류 (전 레벨 27 개): f2 → 짚라인 (ATHN01D/01E, PAND03E, PAND04E), f1 만 → 양끝 고정 수평 줄 (ATHN02B, PAND01D, PAND03D, PAND04C),
  * 그 밖 → 매단 줄 (오르기/흔들기).
  */
-public record RopeDef(String owner, int kind, int template, float angle, int[] flags, float[] end) {
+public record RopeDef(String owner, int kind, int template, float lengthM, int[] flags, float[] end) {
 
 	public enum Type { HANG, TRAVERSE, ZIPLINE }
 
