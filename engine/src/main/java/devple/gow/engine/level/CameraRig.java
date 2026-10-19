@@ -262,6 +262,11 @@ public final class CameraRig {
 		if (h.planes().isEmpty()) {
 			return false;
 		}
+		if (h.planes().size() == 1) { // 평면 1개 = 구 (x, y, z, r) — BallHull.insideHull, 36 문서 §5
+			float[] b = h.planes().getFirst();
+			float dx = p[0] - b[0], dy = p[1] - b[1], dz = p[2] - b[2];
+			return dx * dx + dy * dy + dz * dz <= b[3] * b[3];
+		}
 		for (float[] pl : h.planes()) {
 			if (pl[0] * p[0] + pl[1] * p[1] + pl[2] * p[2] + pl[3] > 0) {
 				return false;

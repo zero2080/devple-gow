@@ -139,6 +139,12 @@ public final class Tweaks {
 				.filter(k -> k.startsWith(prefix)).sorted().findFirst().orElse(null);
 	}
 
+	/** prefix 로 시작하는 노드 이름 전부 (정렬). */
+	public java.util.List<String> nodes(String prefix) {
+		return java.util.stream.Stream.concat(numbers.keySet().stream(), strings.keySet().stream())
+				.filter(k -> k.startsWith(prefix)).distinct().sorted().toList();
+	}
+
 	public int nodeCount() {
 		return numbers.size() + strings.size();
 	}

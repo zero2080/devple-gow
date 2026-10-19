@@ -37,6 +37,8 @@ public final class BallHull {
 	public final int[] ballJoint;
 	/** ball 별 재질 엔트리 번호 (off[3]). */
 	public final int[] ballMaterial;
+	/** ball / hull 별 영역 번호 (off[2] / off[7] u8). ENV 에서는 진입·이탈 센서 엔티티의 영역 ID(원본 0x4A)와 짝 (13 문서 §1, 36 문서 §2). */
+	public final int[] ballRegion, hullRegion;
 	/** 재질 엔트리별 PartType (+0x30, 엔트리 크기 0x34 미만이면 0). 히어로 몸 1, 오른발 7, extra1 9 / 블레이드 2, 쌍 11. */
 	public final int[] materialPart;
 
@@ -71,6 +73,14 @@ public final class BallHull {
 		}
 		ballJoint = new int[ballCount];
 		ballMaterial = new int[ballCount];
+		ballRegion = new int[ballCount];
+		hullRegion = new int[hullCount];
+		for (int b = 0; b < ballCount; b++) {
+			ballRegion[b] = off[2] + b < d.limit() ? d.get(off[2] + b) & 0xFF : 0;
+		}
+		for (int h = 0; h < hullCount; h++) {
+			hullRegion[h] = off[7] + h < d.limit() ? d.get(off[7] + h) & 0xFF : 0;
+		}
 		for (int b = 0; b < ballCount; b++) {
 			if (off[1] + b < d.limit()) {
 				ballJoint[b] = d.get(off[1] + b) & 0xFF;
@@ -119,21 +129,69 @@ public final class BallHull {
 		return find(x, y, z) >= 0;
 	}
 
+	/** 로컬 좌표 p 를 포함하는 ball/hull 의 영역 번호들 (밖이면 빈 집합). */
+	public java.util.Set<Integer> regionsAt(float x, float y, float z) {
+		java.util.Set<Integer> out = new java.util.TreeSet<>();
+		for (int i = 0; i < balls.size(); i++) {
+			float[] b = balls.get(i);
+			float dx = x - b[0], dy = y - b[1], dz = z - b[2];
+			if (dx * dx + dy * dy + dz * dz <= b[3] * b[3]) {
+				out.add(ballRegion[i]);
+			}
+		}
+		for (int h = 0; h < hulls.size(); h++) {
+			if (insideHull(h, x, y, z)) {
+				out.add(hullRegion[h]);
+			}
+		}
+		return out;
+	}
+
+	/** 영역 번호가 이 볼륨에 있는지. */
+	public boolean hasRegion(int region) {
+		for (int r : ballRegion) {
+			if (r == region) {
+				return true;
+			}
+		}
+		for (int r : hullRegion) {
+			if (r == region) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/** 로컬 좌표 p 를 포함하는 첫 hull 번호, 없으면 -1. */
 	public int find(float x, float y, float z) {
 		for (int h = 0; h < hulls.size(); h++) {
-			boolean in = !hulls.get(h).planes.isEmpty();
-			for (float[] p : hulls.get(h).planes) {
-				if (p[0] * x + p[1] * y + p[2] * z + p[3] > 0) {
-					in = false;
-					break;
-				}
-			}
-			if (in) {
+			if (insideHull(h, x, y, z)) {
 				return h;
 			}
 		}
 		return -1;
+	}
+
+	/**
+	 * hull h 안인지. 평면이 1개뿐인 hull 은 평면이 아니라 구 (x, y, z, r) 다 — 그 값이 hull 중심과 같다
+	 * (PAND00B ENV_Warpto00A 의 WarpVol: 중심 (768, -256, -128), r 512). 평면으로 읽으면 반공간이 되어 볼륨 한쪽 전체가 안으로 잡힌다 (36 문서 §5).
+	 */
+	public boolean insideHull(int h, float x, float y, float z) {
+		List<float[]> ps = hulls.get(h).planes;
+		if (ps.size() == 1) {
+			float[] b = ps.getFirst();
+			float dx = x - b[0], dy = y - b[1], dz = z - b[2];
+			return dx * dx + dy * dy + dz * dz <= b[3] * b[3];
+		}
+		if (ps.isEmpty()) {
+			return false;
+		}
+		for (float[] p : ps) {
+			if (p[0] * x + p[1] * y + p[2] * z + p[3] > 0) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/** hull 이 가리키는 이름 (CMV 의 경우 "RCM_" + 카메라 이름). */
