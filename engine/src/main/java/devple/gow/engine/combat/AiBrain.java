@@ -37,6 +37,8 @@ public final class AiBrain {
 	private final AiData.Soldier sold;
 	private final Random rnd;
 	private java.util.function.Supplier<Float> recovery = () -> 1f;
+	/** 조건 25..27 (스크립트/전역 변수, 17 문서 §3.2) 공급자. 기본 0. 예: 히드라 DTre_250 의 26 = 플레이어 +0x88 (이벤트 1054 구역). */
+	private java.util.function.IntUnaryOperator scriptSense = c -> 0;
 
 	private Hittable target;
 	private Combatant targetCombat;
@@ -86,6 +88,18 @@ public final class AiBrain {
 
 	public void onLog(Consumer<String> l) {
 		log = l;
+	}
+
+	/** 조건 25(스크립트 변수)/26(전역 +0x88)/27(전역 +0x64) 값 공급자 (보스 구역 등). */
+	public void setScriptSense(java.util.function.IntUnaryOperator s) {
+		scriptSense = s != null ? s : c -> 0;
+	}
+
+	/** 스크립트가 깨운 보스: 시야 판정 없이 바로 전투 상태로. */
+	public void engage() {
+		if (target != null) {
+			state = State.COMBAT;
+		}
 	}
 
 	public void setPatrol(List<Vector3f> waypoints) {
@@ -532,6 +546,7 @@ public final class AiBrain {
 			case DecisionTree.C_YAW_FROM_TARGET -> yawFromTarget(d);
 			case DecisionTree.C_TARGET_MOVE -> targetCombat != null && targetCombat.active() ? targetCombat.move().id() : -1;
 			case DecisionTree.C_HAS_TOKEN -> hasToken ? 1 : 0;
+			case DecisionTree.C_SCRIPT, 26, 27 -> scriptSense.applyAsInt(cond);
 			default -> 0;
 		};
 	}

@@ -17,6 +17,8 @@ public final class ScriptActor {
 	/** 만든 SpawnEnemy (없으면 null). "부모 == 소유자" 판정(원작 +0x2C → +0x54)에 쓴다. */
 	public final ScriptEntity spawner;
 	final Set<LevelData.PlacedVolume> inside = new HashSet<>();
+	/** (볼륨, 영역 ID) 별 안/밖 (영역이 있는 진입/이탈 센서, 13 문서 §1). */
+	final Set<Object> insideRegion = new HashSet<>();
 	boolean destroyed;
 
 	public ScriptActor(String name, int group, float[] pos, ScriptEntity spawner) {

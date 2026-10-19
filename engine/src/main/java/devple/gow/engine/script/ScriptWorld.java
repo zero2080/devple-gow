@@ -314,6 +314,30 @@ public final class ScriptWorld {
 				a.inside.remove(v);
 			}
 			for (ScriptEntity e : m.getValue()) {
+				if (e.data.baseId() == 0 && (in ? e.type() == 0 : e.type() == 1) && passes(e, a)) {
+					trigger(e, a);
+				}
+			}
+		}
+		// 영역 ID 가 있는 센서 (원작 0x1A88F0: (소유 GO, 영역 ID) 로 엔티티를 찾음 — 같은 ENV 의 hull 마다 다른 센서)
+		for (Map.Entry<LevelData.PlacedVolume, List<ScriptEntity>> m : byVolume.entrySet()) {
+			LevelData.PlacedVolume v = m.getKey();
+			for (ScriptEntity e : m.getValue()) {
+				int r = e.data.baseId();
+				if (r == 0 || (e.type() != 0 && e.type() != 1)) {
+					continue;
+				}
+				Object key = java.util.List.of(v, r);
+				boolean in = v.contains(a.pos[0], a.pos[1], a.pos[2], r);
+				boolean was = a.insideRegion.contains(key);
+				if (in == was) {
+					continue;
+				}
+				if (in) {
+					a.insideRegion.add(key);
+				} else {
+					a.insideRegion.remove(key);
+				}
 				if ((in ? e.type() == 0 : e.type() == 1) && passes(e, a)) {
 					trigger(e, a);
 				}
@@ -349,7 +373,7 @@ public final class ScriptWorld {
 	}
 
 	private static boolean inVolume(ScriptEntity e, ScriptActor a) {
-		return e.volume != null && e.volume.contains(a.pos[0], a.pos[1], a.pos[2]);
+		return e.volume != null && e.volume.contains(a.pos[0], a.pos[1], a.pos[2], e.data.baseId());
 	}
 
 	// ---- 발동 ----

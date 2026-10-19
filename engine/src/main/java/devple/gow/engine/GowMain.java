@@ -22,6 +22,7 @@ import java.nio.file.Path;
  *   ./gradlew :engine:run --args="--ui gow-rom/R_SHELLK.WAD FLP_ShellK [menu|hud|pause|powerup] [--ui-warm n]"   (FLP UI)
  *   ./gradlew :engine:run --args="--level gow-rom/ATHN01A.WAD [--cam N|auto] [--col]"   (레벨 배치 뷰어, 23 문서)
  *   ./gradlew :engine:run --args="--game [ATHN01A] [--auto-run s] [--entry 인스턴스]"   (통합 게임: 레벨 + 크레토스 + 전투 + HUD)
+ *   ./gradlew :engine:run --args="--game ATHN01E --entry gospawndaddyhydra --boss-demo"   (보스전 자동 연출, 37 문서)
  *   ./gradlew :engine:run --args="--movie SEMO01 [--wide] [--movie-start 초] [--mute]"   (컷신 재생, 33 문서)
  * </pre>
  */
@@ -35,6 +36,15 @@ public final class GowMain {
 		// 인자 없이 실행 = 원작처럼 메인 메뉴부터
 		Scene first = java.nio.file.Files.exists(Path.of("gow-rom", "R_SHELLK.WAD"))
 				? new devple.gow.engine.game.ShellScene(Path.of("gow-rom")) : new DebugScene(0.2f);
+		if (java.util.Arrays.asList(args).contains("--boss-demo")) {
+			System.setProperty("gow.boss.demo", "1"); // 보스전 자동 연출 (37 문서)
+		}
+		if (java.util.Arrays.asList(args).contains("--skip-movies")) {
+			System.setProperty("gow.skipmovies", "1"); // 컷신 건너뜀 (끝 이벤트 501 만)
+		}
+		if (java.util.Arrays.asList(args).contains("--no-fx")) {
+			System.setProperty("gow.nofx", "1"); // 비·파티클 끔 (스크린샷 확인용)
+		}
 		for (int i = 0; i < args.length; i++) {
 			if (args[i].equals("--screenshot") && i + 1 < args.length) {
 				shot = args[++i];
@@ -87,7 +97,12 @@ public final class GowMain {
 		try (Engine engine = new Engine("God of War (재구현)", 1280, 720)) {
 			if (shot != null) {
 				int fi = java.util.Arrays.asList(args).indexOf("--frames");
-				engine.captureAfter(fi >= 0 ? Long.parseLong(args[fi + 1]) : 30, Path.of(shot));
+				int ti = java.util.Arrays.asList(args).indexOf("--ticks"); // 로직 틱(1/60초) 기준 — 렌더 속도와 무관
+				if (ti >= 0) {
+					engine.captureAfterTicks(Long.parseLong(args[ti + 1]), Path.of(shot));
+				} else {
+					engine.captureAfter(fi >= 0 ? Long.parseLong(args[fi + 1]) : 30, Path.of(shot));
+				}
 			}
 			engine.run(first);
 		}

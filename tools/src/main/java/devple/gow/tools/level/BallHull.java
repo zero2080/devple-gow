@@ -39,6 +39,8 @@ public final class BallHull {
 	public final int[] ballMaterial;
 	/** 재질 엔트리별 PartType (+0x30, 엔트리 크기 0x34 미만이면 0). 히어로 몸 1, 오른발 7, extra1 9 / 블레이드 2, 쌍 11. */
 	public final int[] materialPart;
+	/** ball / hull 별 영역 ID (스크립트 엔티티 원본 0x4A "영역" 과 같은 번호 — 13 문서 §1): off[2] / off[7] 의 u8. */
+	public final int[] ballRegion, hullRegion;
 
 	public BallHull(String name, ByteBuffer d) {
 		this.name = name;
@@ -79,6 +81,18 @@ public final class BallHull {
 				ballMaterial[b] = d.get(off[3] + b) & 0xFF;
 			}
 		}
+		ballRegion = new int[ballCount];
+		for (int b = 0; b < ballCount; b++) {
+			if (off[2] + b < d.limit()) {
+				ballRegion[b] = d.get(off[2] + b) & 0xFF;
+			}
+		}
+		hullRegion = new int[hullCount];
+		for (int h = 0; h < hullCount; h++) {
+			if (off[7] + h < d.limit()) {
+				hullRegion[h] = d.get(off[7] + h) & 0xFF;
+			}
+		}
 		for (int b = 0; b < ballCount; b++) {
 			int o = off[4] + b * 16;
 			balls.add(new float[]{d.getFloat(o), d.getFloat(o + 4), d.getFloat(o + 8), d.getFloat(o + 12)});
@@ -117,6 +131,60 @@ public final class BallHull {
 			}
 		}
 		return find(x, y, z) >= 0;
+	}
+
+	/** 서로 다른 영역 ID 개수. */
+	public int regionCount() {
+		java.util.Set<Integer> s = new java.util.HashSet<>();
+		for (int r : ballRegion) {
+			s.add(r);
+		}
+		for (int r : hullRegion) {
+			s.add(r);
+		}
+		return s.size();
+	}
+
+	/** 이 영역 ID 의 ball/hull 이 하나라도 있는지. */
+	public boolean hasRegion(int region) {
+		for (int r : ballRegion) {
+			if (r == region) {
+				return true;
+			}
+		}
+		for (int r : hullRegion) {
+			if (r == region) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** 로컬 좌표 p 가 영역 region 의 ball/hull 안인지. */
+	public boolean contains(float x, float y, float z, int region) {
+		for (int i = 0; i < balls.size(); i++) {
+			float[] b = balls.get(i);
+			float dx = x - b[0], dy = y - b[1], dz = z - b[2];
+			if (ballRegion[i] == region && dx * dx + dy * dy + dz * dz <= b[3] * b[3]) {
+				return true;
+			}
+		}
+		for (int h = 0; h < hulls.size(); h++) {
+			if (hullRegion[h] != region || hulls.get(h).planes.isEmpty()) {
+				continue;
+			}
+			boolean in = true;
+			for (float[] p : hulls.get(h).planes) {
+				if (p[0] * x + p[1] * y + p[2] * z + p[3] > 0) {
+					in = false;
+					break;
+				}
+			}
+			if (in) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** 로컬 좌표 p 를 포함하는 첫 hull 번호, 없으면 -1. */

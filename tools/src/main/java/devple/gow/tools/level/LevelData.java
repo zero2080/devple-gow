@@ -26,6 +26,23 @@ public final class LevelData {
 			return hull.contains(l[0], l[1], l[2]);
 		}
 
+		/**
+		 * 영역 ID 가 있는 엔티티(원본 0x4A ≠ 0)의 볼륨 판정: 그 영역의 ball/hull 만.
+		 * 볼륨에 그 영역이 없을 때: 영역이 여럿으로 나뉜 볼륨(예 ATHN01E ENV_bossEnt 51–54 의 "boss zone 5/6" 55/56)이면 밖,
+		 * 영역이 하나뿐이면 볼륨 전체 (전 레벨 진입/이탈 센서 580 개 중 6 개, 데이터 불일치로 보고 기존 동작 유지).
+		 */
+		public boolean contains(float x, float y, float z, int region) {
+			if (region == 0) {
+				return contains(x, y, z);
+			}
+			if (!hull.hasRegion(region)) {
+				return hull.regionCount() < 2 && contains(x, y, z);
+			}
+			float[] l = new float[3];
+			Mat4.transformPoint(inverse, x, y, z, l);
+			return hull.contains(l[0], l[1], l[2], region);
+		}
+
 		/** 월드 좌표 점을 포함하는 hull 번호 (-1 없음). */
 		public int find(float x, float y, float z) {
 			float[] l = new float[3];

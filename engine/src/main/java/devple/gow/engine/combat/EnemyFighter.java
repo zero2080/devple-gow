@@ -51,6 +51,8 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 	public float yaw;
 	private float prevYaw;
 	public float hp;
+	/** 피격으로 내려갈 수 있는 최저 HP (보스: 1 = 스크립트/자기 피해로만 사망, 원작은 EV_DEATH 분기로 기절 등에 들어감). */
+	public float hpFloor;
 	private float think = 1f;
 	private Hittable foe;
 	private float deadTime;
@@ -458,7 +460,7 @@ public final class EnemyFighter implements Hittable, CombatOwner {
 	@Override
 	public boolean applyDamage(float damage) {
 		float before = hp;
-		hp = Math.max(0, hp - damage);
+		hp = Math.max(Math.min(hpFloor, before), hp - damage);
 		return circleHp < 65535 && before > circleHp && hp <= circleHp && hp > 0;
 	}
 }
