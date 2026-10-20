@@ -65,6 +65,12 @@ class CameraRigTest {
 		LevelData d = load("ATHN01A");
 		CameraRig rig = new CameraRig(d);
 		Vector3f hero = new Vector3f(1536, 19.2f, 1956.6f);
+		// 시작 인트로 (ESC_IdleCamGroup / ESC_EnemyIdleCamGroup): 생성 센서가 Idle2Cam 볼륨을 끄고, 시작 지점의 관절 애니 카메라 IdleCam (우선순위 50)
+		rig.setOwnerVolumes("goenemyidlecamgroup", false);
+		rig.update(1 / 60f, hero, 0, false);
+		assertEquals("IdleCam", rig.current());
+		// 9.5 초 뒤 IdleCamGroup-VisOff → 볼륨 카메라 Boat1Cam4
+		rig.setOwnerVolumes("goidlecamgroup", false);
 		rig.update(1 / 60f, hero, 0, false);
 		assertEquals("Boat1Cam4", rig.current());
 		// 갑판을 따라 −z 로 달린다: Boat1Cam1 로 전환(전환표 1.5초), 레일을 따라 같은 거리로 따라간다

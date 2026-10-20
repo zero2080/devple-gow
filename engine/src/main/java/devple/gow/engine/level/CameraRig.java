@@ -23,7 +23,7 @@ import java.util.function.Consumer;
  * <ul>
  *   <li>선택: 플레이어가 든 CMV hull 의 카메라들이 후보. 활성 목록은 후보에서 빠질 때만 지워지고 새 후보는 뒤에 붙는다.
  *       우선순위(CAM 0xBC) 최대, 동순위면 나중에 들어온 것 (전환표 prefer 가 있으면 그것). 후보가 없으면 현재 카메라 유지</li>
- *   <li>상태: 대상 T(영웅 + 24 높이), 요/피치(도), 거리. 눈 = T − 방향(요, 피치)·거리</li>
+ *   <li>상태: 대상 T(영웅 + 24 높이), 요/피치(도), 화면 속 대상 각(데드존), 거리. 눈 = T − 거리·R(요, 피치)·방향(화면 각) (30 문서 §8)</li>
  *   <li>모드 (CAM 0x78 피치 / 0x7A 요): 1 설계 각도, 2 카메라 위치 → T 방향, 3 레일 점 → T 방향 (레일 점은 비용 최소 t 를 지역 탐색)</li>
  *   <li>전환: 기본 시간 CAM 0xB8 또는 전환표(이전 카메라 이름) 시간. 0 이하 = 컷. 상태 공간(T, 각, 거리)에서 Hermite 보간 [근사: 속도항 0]</li>
  * </ul>
@@ -44,13 +44,23 @@ public final class CameraRig {
 	/** 원작 전용 처리 카메라 이름 (0x1F38C8 문자열 비교 → 0x1F67C0). */
 	public static final String ARES_CAMERA = "AresCamera1";
 
-	/** 카메라 매개 상태 (원작 상태 블록 +0x70..0x94 해당). */
+	/**
+	 * 카메라 매개 상태 (원작 상태 블록 +0x70..0x94 해당): 대상 T (+0x70), 카메라 요/피치 (+0x80/+0x84), 화면 속 대상 각 sa/sb (+0x88/+0x8C,
+	 * 카메라 좌표의 요/피치 — 데드존 0x98..0xA4 로 자른 값), 대상까지 거리 (+0x90). 눈 = T − 거리·R(요, 피치)·방향(sa, sb) (0x1F1108).
+	 */
 	public static final class Pose {
 		public final Vector3f target = new Vector3f();
 		public float yaw, pitch, dist, fovDeg = 45f;
+		/** 화면 속 대상 각 (도, +0x88 요 / +0x8C 피치). 0 이면 대상이 화면 가운데. */
+		public float sa, sb;
 
 		public Vector3f eye(Vector3f out) {
-			return dir(yaw, pitch, out).mul(-dist).add(target);
+			return rotate(yaw, pitch, dir(sa, sb, new Vector3f()), out).mul(-dist).add(target);
+		}
+
+		/** 카메라 정면 (−Z). */
+		public Vector3f forward(Vector3f out) {
+			return dir(yaw, pitch, out);
 		}
 
 		void set(Pose o) {
@@ -59,6 +69,8 @@ public final class CameraRig {
 			pitch = o.pitch;
 			dist = o.dist;
 			fovDeg = o.fovDeg;
+			sa = o.sa;
+			sb = o.sb;
 		}
 
 		/** 눈/주시점에서 매개 상태 만들기. */
@@ -68,6 +80,18 @@ public final class CameraRig {
 			dist = v.length();
 			yaw = yawOf(v);
 			pitch = pitchOf(v);
+			sa = sb = 0;
+		}
+
+		/** 눈과 카메라 회전(요, 피치)을 두고 대상 T 의 화면 각·거리를 다시 구한다 (0x1F11A0). */
+		void aim(Vector3f eye, float yaw, float pitch, Vector3f t) {
+			target.set(t);
+			this.yaw = yaw;
+			this.pitch = pitch;
+			Vector3f l = unrotate(yaw, pitch, new Vector3f(t).sub(eye));
+			dist = l.length();
+			sa = dist < 1e-6f ? 0 : yawOf(l);
+			sb = dist < 1e-6f ? 0 : pitchOf(l);
 		}
 	}
 
@@ -106,19 +130,50 @@ public final class CameraRig {
 		AresCamera ares;
 		AresCamera.View aresView;
 		/**
-		 * 레일 t 첫 표본(0x1F20F0)의 기준점을 만드는 이전 화면 (눈, 정면). 원작 기준점 = 상태 +0x30 − +0x20·(+0x90·cos(+0x88)·cos(+0x8C))
-		 * — 0x1F29A0 머리에서 +0x90/+0x88/+0x8C 를 (대상 − 눈) 의 시야 좌표 거리·각으로 다시 채우므로 "대상을 이전 시선 축에 투영한 점"
-		 * 눈 + 정면·((T − 눈)·정면) 이다. 새 상태는 직전 상태 복사(0x1F3A38)라 전환이면 직전 카메라 화면을 쓴다 [확실].
-		 * 리셋(0x1EDF48 → 템플릿 0x1F2500: 원점·단위 행렬)이면 해독대로는 (0, 0, T.z) 인데, 그렇게 하면 실제 Warp 도착(ATHN06C → 06B ExCam2,
-		 * ATRET01C → 01B)에서 눈이 벽 속 레일 끝에 걸린다 — 빠진 단계가 있다고 보고 리셋 때는 대상 T 를 쓴다 (null) [근사].
-		 * 이후 프레임은 지역 탐색(0x1F1AA0) + 감쇠라, 시작 t 가 어느 극소에 머물지를 정한다.
+		 * 원작 상태 행렬 (눈 +0x30, 회전 mYaw/mPitch) 과 저장된 카메라 요/피치 (+0x80/+0x84 = stYaw/stPitch), 화면 각 (+0x88/+0x8C), 거리 +0x90.
+		 * 새 상태(0x1F3A38)는 직전 상태를 복사하고, 리셋(레벨 시작·Warp, 0x1EDF48)은 템플릿 0x1F2500 (단위 행렬, 원점, +0x80 −90, +0x90 200, 화면 각 0).
+		 * 정상 상태에서는 마지막 0x1F1108 이 행렬을 (+0x80, +0x84) 로 다시 만들므로 mYaw = stYaw — 템플릿만 다르다.
 		 */
-		Vector3f viewEye, viewFwd;
-		/** 전환 시간이 있으면(상태 +0x4C &gt; 0) 첫 표본 비용에 −100·(normalize(기준점 − P) · 직전 정면) (0x1F23E0). */
+		final Vector3f stEye = new Vector3f();
+		float mYaw, mPitch, stYaw = -90, stPitch, stSa, stSb, stDist = 200;
+		/** 리셋 템플릿 상태 그대로 (아직 한 번도 갱신 안 됨). */
+		boolean template = true;
+		/** 이번 프레임 머리(0x1F29A0, 데드존 자르기 뒤)의 화면 각과 대상까지 거리, 정면. */
+		float hSa, hSb, hDist;
+		final Vector3f hFwd = new Vector3f(0, 0, -1);
+		/** 전환 시간이 있으면(상태 +0x4C &gt; 0) 첫 표본 비용에 −100·(normalize(기준점 − P) · 정면) (0x1F23E0). */
 		boolean fwdBonus;
 
 		Shot(LevelData.PlacedCamera cam) {
 			this.cam = cam;
+		}
+
+		/** 직전 상태 복사 (0x1F3A38). 직전이 엔진 Follow 면 그 화면에서. */
+		void copyState(Shot o, Pose view) {
+			if (o.cam == null) {
+				commit(view);
+				return;
+			}
+			stEye.set(o.stEye);
+			mYaw = o.mYaw;
+			mPitch = o.mPitch;
+			stYaw = o.stYaw;
+			stPitch = o.stPitch;
+			stSa = o.stSa;
+			stSb = o.stSb;
+			stDist = o.stDist;
+			template = o.template;
+		}
+
+		/** 이번 프레임 결과를 상태 행렬로 (마지막 0x1F1108). */
+		void commit(Pose p) {
+			p.eye(stEye);
+			mYaw = stYaw = p.yaw;
+			mPitch = stPitch = p.pitch;
+			stSa = p.sa;
+			stSb = p.sb;
+			stDist = p.dist;
+			template = false;
 		}
 	}
 
@@ -262,6 +317,48 @@ public final class CameraRig {
 		return cur.eye(new Vector3f());
 	}
 
+	private int heroBits = 0x1;
+	private boolean heroCombat;
+
+	/**
+	 * 영웅 이동 상태 (원작 영웅 +0x174 하위 11 비트: 0x1/0x2 지상, 0x4 점프 공중, 0x8 떨어짐(놓음·발밑 없음), 0x10 턱 매달리기, 0x20 벽(오르기·좁은 턱·사다리),
+	 * 0x40 날기, 0x80/0x100/0x200 물, 0x400 줄) 과 전투 (영웅이 적 무리(0x1B5D00, 영웅 대상 슬롯 +8)에 들어 있고 그 무리의 적 수 +0x1A0 &gt; 0).
+	 */
+	public void setHeroState(int bits174, boolean combat) {
+		heroBits = bits174;
+		heroCombat = combat;
+	}
+
+	/**
+	 * 0x1EE510: 카메라 후보 마스크. bit0 = 전투, 0x2 = 지상, 0x4 = 줄, 0x8 = 벽·턱, 0x10 = 날기, 0x20 = 물, 0x40 = 점프, 0x80 = 떨어짐.
+	 * CAM 플래그 하위 바이트와 AND 가 0 이면 그 카메라는 후보에서 빠진다 (예: FallCam 0x80, LadderCam 0x08, camRopes 0x04, SwimCam 0x20).
+	 */
+	public static int stateMask(int b, boolean combat) {
+		int m = combat ? 1 : 0;
+		if ((b & 0x3) != 0) {
+			m |= 0x2;
+		}
+		if ((b & 0x400) != 0) {
+			m |= 0x4;
+		}
+		if ((b & 0x30) != 0) {
+			m |= 0x8;
+		}
+		if ((b & 0x40) != 0) {
+			m |= 0x10;
+		}
+		if ((b & 0x380) != 0) {
+			m |= 0x20;
+		}
+		if ((b & 0x4) != 0) {
+			m |= 0x40;
+		}
+		if ((b & 0x8) != 0) {
+			m |= 0x80;
+		}
+		return m;
+	}
+
 	/** Internal 0x9: CMV 볼륨 질의 켜기/끄기 (전역 0x29F138). 끄면 스크립트 요청 카메라만 후보가 된다. */
 	public void setVolumeQuery(boolean on) {
 		volumeQuery = on;
@@ -325,6 +422,7 @@ public final class CameraRig {
 		shots.clear();
 		Shot s = new Shot(h.current() == null ? null : camera(h.current(), h.currentLevel()));
 		s.pose.set(h.pose());
+		s.commit(s.pose);
 		s.t = h.railT();
 		s.init = true;
 		shots.add(s);
@@ -437,7 +535,7 @@ public final class CameraRig {
 		Pose p = new Pose();
 		blend(prev, cur, alpha, p);
 		p.eye(c.eye);
-		c.target.set(p.target);
+		p.forward(c.target).mul(Math.max(1, p.dist)).add(c.eye); // 시선 = 카메라 정면 (대상은 화면 sa/sb 자리)
 		c.fovDeg = p.fovDeg;
 	}
 
@@ -492,8 +590,8 @@ public final class CameraRig {
 						if (inside(h.hulls.get(i), l)) {
 							String n = h.nameOf(i);
 							LevelData.PlacedCamera c = n == null ? null : lv.camera(n) != null ? lv.camera(n) : camera(n);
-							// ANM 관절 카메라(IdleCam 인트로 팬)는 관절 애니메이션 미지원이라 정지 화면이 엉뚱해 후보에서 뺀다 [미구현]
-							if (c != null && !c.def().p().animated() && !cand.contains(c)) {
+							// ANM 관절 카메라도 볼륨 후보 (ATHN01A IdleCam/Idle2Cam 인트로 팬 — 스크립트 Vis Attr11_1 이 9.5/13 초에 볼륨을 끈다, 30 §8)
+							if (c != null && !cand.contains(c)) {
 								cand.add(c);
 							}
 						}
@@ -512,7 +610,11 @@ public final class CameraRig {
 		LevelData.PlacedCamera best = null;
 		int bestPri = Integer.MIN_VALUE;
 		boolean bestPrefer = false;
+		int mask = stateMask(heroBits, heroCombat);
 		for (LevelData.PlacedCamera c : active) {
+			if ((c.def().p().flags() & mask) == 0) {
+				continue; // 0x1EEC9C: CAM 플래그 하위 바이트 & 영웅 상태 마스크 0x1EE510 = 0 이면 이번 선택에서 건너뜀 (활성 목록에는 남는다)
+			}
 			int pri = c.def().p().priority();
 			boolean prefer = transition(c, curName) != null && transition(c, curName).prefer();
 			if (pri > bestPri || pri == bestPri && (prefer || !bestPrefer)) {
@@ -547,9 +649,8 @@ public final class CameraRig {
 		}
 		CameraDef.Transition tr = transition(best, curName);
 		s.blend = curShot == null ? 0 : tr != null ? tr.blend() : best.def().p().blend();
-		if (curShot != null) { // 리셋(레벨 시작·Warp, 0x1EDF48) 이면 기준점 = 대상 그대로 [근사, 아래 Shot.viewEye 주석]
-			s.viewEye = cur.eye(new Vector3f());
-			s.viewFwd = dir(cur.yaw, cur.pitch, new Vector3f());
+		if (curShot != null) { // 새 상태 = 직전 상태 복사 (0x1F3A38). 리셋(레벨 시작·Warp, 0x1EDF48)이면 템플릿 그대로 (Shot 기본값)
+			s.copyState(curShot, cur);
 			s.fwdBonus = s.blend > 0;
 			if (curShot.cam != null && curShot.t >= 0 && best.rail() != null && best.rail() == curShot.cam.rail()) {
 				s.t = curShot.t; // 같은 레일이면 t 를 이어받는다 (0x1F3A38: +0x44 레일이 같으면 +0x48 유지)
@@ -590,6 +691,11 @@ public final class CameraRig {
 	// ---- 카메라 하나 풀기 (0x1F3768 / 0x1F29A0) ----
 
 	private void solve(Shot s, Vector3f t, float heroYaw, float dt) {
+		solveShot(s, t, heroYaw, dt);
+		s.commit(s.pose);
+	}
+
+	private void solveShot(Shot s, Vector3f t, float heroYaw, float dt) {
 		t = multiTarget(s, t);
 		Pose p = s.pose;
 		if (s.cam == null) {
@@ -624,28 +730,31 @@ public final class CameraRig {
 			aresSolve(s, p);
 			return;
 		}
+		Vector3f ref = head(s, t, cp);
+		// 모드 1 거리 = 함수 머리 이전 상태의 깊이 +0x90·cos(+0x88)·cos(+0x8C) (0x1F2A40, 리셋 템플릿 200)
+		float depth0 = (float) (s.stDist * Math.cos(Math.toRadians(s.stSa)) * Math.cos(Math.toRadians(s.stSb)));
 		if (railMode && s.cam.rail() != null) {
-			s.t = railParam(s, t, dYaw, dPitch, limited, dt);
+			s.t = railParam(s, ref, dYaw, dPitch, limited, dt);
 			float[] r = new float[3];
 			s.cam.rail().eval(s.t, r);
 			pivot.set(r[0], r[1], r[2]);
 		}
 		if (System.getProperty("gow.debug.cam") != null && !s.init) {
-			System.out.printf(java.util.Locale.ROOT, "[카메라 풀기] %s pos %s fwd %s distScale %.3f rail [%.1f, %.1f] dist [%.1f, %.1f] yaw %.1f±%.1f pitch %.1f±%.1f%n",
+			System.out.printf(java.util.Locale.ROOT, "[카메라 풀기] %s pos %s fwd %s distScale %.3f rail [%.1f, %.1f] dist [%.1f, %.1f] yaw %.1f±%.1f pitch %.1f±%.1f 데드존 %s 기준점 %s 화면각 (%.1f, %.1f)%n",
 					s.cam.def().shortName(), camPos, fwd, cp.distScale(), cp.railMin(), cp.railMax(), cp.distMin(), cp.distMax(), dYaw, cp.yawRange(),
-					dPitch, cp.pitchRange());
+					dPitch, cp.pitchRange(), java.util.Arrays.toString(cp.deadZone()), ref, s.hSa, s.hSb);
 		}
-		Vector3f v = new Vector3f(t).sub(pivot);
+		// 모드 2·3 의 요/피치·거리는 대상이 아니라 기준점에서 잰다 (0x1F2FD4: 0x2B0 기준점 − 0x2F0 피벗)
+		Vector3f v = new Vector3f(ref).sub(pivot);
 		if (cp.distScale() < 0) {
 			v.negate();
 		}
 		float pivotYaw = yawOf(v), pivotPitch = pitchOf(v);
-		p.target.set(t);
-		p.yaw = switch (ym) {
+		float yaw = switch (ym) {
 			case 2, 3 -> pivotYaw;
 			default -> dYaw;
 		};
-		p.pitch = switch (pm) {
+		float pitch = switch (pm) {
 			case 2, 3 -> pivotPitch;
 			default -> dPitch;
 		};
@@ -658,28 +767,77 @@ public final class CameraRig {
 			}
 			dist = d - keep;
 		} else {
-			dist = s.init ? p.dist : camPos.distance(t);
+			dist = depth0;
 		}
 		if (cp.distScale() >= 0) {
 			dist = Math.max(cp.distMin(), Math.min(cp.distMax(), dist));
 		}
-		p.dist = Math.abs(dist);
-		if (limited) {
+		dist = Math.abs(dist); // 0x1F3324: 깊이 (정면 축 방향 거리)
+		Vector3f d0 = dir(s.hSa, s.hSb, new Vector3f());
+		if (!limited) {
+			// 0x1F36D0: +0x90 = 깊이 / (cos sa · cos sb) → 0x1F1108: 눈 = T − +0x90·R·방향(sa, sb) — 대상이 화면 (sa, sb) 자리, 정면 깊이 = dist
+			double c = Math.cos(Math.toRadians(s.hSa)) * Math.cos(Math.toRadians(s.hSb));
+			p.target.set(t);
+			p.yaw = yaw;
+			p.pitch = pitch;
+			p.sa = s.hSa;
+			p.sb = s.hSb;
+			p.dist = (float) (dist / Math.max(1e-3, c));
+		} else {
+			// 0x1F3640 / 0x1F3354: 눈 = T − 깊이·R·방향(sa, sb) 를 먼저 정하고, 카메라 회전만 설계 각 ± 범위로 자른다 — 눈은 움직이지 않는다
+			Vector3f eye = rotate(yaw, pitch, d0, new Vector3f()).mul(-dist).add(t);
 			Vector3f[] frame = railMode ? railFrame(s.cam.rail(), s.t, cp) : null;
 			if (frame != null) {
-				// 0x1F3354: 시선을 레일 접선 좌표계로 옮겨 설계 각 ± 범위로 자른 뒤 되돌린다
-				Vector3f l = toLocal(frame, dir(p.yaw, p.pitch, new Vector3f()));
+				Vector3f l = toLocal(frame, dir(yaw, pitch, new Vector3f()));
 				float ly = clampAngle(yawOf(l), dYaw, cp.yawRange());
 				float lp = Math.max(dPitch - cp.pitchRange(), Math.min(dPitch + cp.pitchRange(), pitchOf(l)));
 				Vector3f w2 = toWorld(frame, dir(ly, lp, new Vector3f()));
-				p.yaw = yawOf(w2);
-				p.pitch = pitchOf(w2);
+				yaw = yawOf(w2);
+				pitch = pitchOf(w2);
 			} else {
-				p.yaw = clampAngle(p.yaw, dYaw, cp.yawRange());
-				p.pitch = Math.max(dPitch - cp.pitchRange(), Math.min(dPitch + cp.pitchRange(), p.pitch));
+				yaw = clampAngle(yaw, dYaw, cp.yawRange());
+				pitch = Math.max(dPitch - cp.pitchRange(), Math.min(dPitch + cp.pitchRange(), pitch));
 			}
+			p.aim(eye, yaw, pitch, t); // 0x1F11A0: 화면 각·거리를 새 회전에서 다시
+		}
+		if (System.getProperty("gow.debug.cam2") != null) { // 매 프레임 풀기 (기준점·화면 각)
+			System.out.printf(java.util.Locale.ROOT, "[풀기2] %s t=%.3f pivot=%s ref=%s yaw0=%.1f pitch0=%.1f -> yaw=%.1f pitch=%.1f sa=%.1f sb=%.1f dist=%.1f eye=%s%n",
+					s.cam.def().shortName(), s.t, pivot, ref, pivotYaw, pivotPitch, p.yaw, p.pitch, p.sa, p.sb, p.dist, p.eye(new Vector3f()));
 		}
 		s.init = true;
+	}
+
+	/**
+	 * 0x1F29A0 머리 (0x1F2A34–0x1F2BBC, 0x1F2C50): 상태 행렬로 본 대상 T 의 화면 각 (sa = atan2(−x, −z), sb = 피치, 0x1F0DC8) 과 거리를
+	 * 구하고, 새 카메라의 화면 데드존 (세로 [atan(0.75·tan(f/2)·0x9C), atan(0.75·tan(f/2)·0x98)], 가로 [−atan(tan(f/2)·0xA4), −atan(tan(f/2)·0xA0)],
+	 * f = 카메라 가로 화각 GO+0xF8) 밖이면 각을 자르고 0x1F1108 로 행렬을 저장된 (+0x80, +0x84) 회전으로 다시 만들어 눈 = T − 거리·R·방향(sa, sb)
+	 * 로 옮긴다. 기준점 = 눈 + 정면·(거리·cos sa·cos sb) — 레일 첫 표본·지역 탐색과 모드 2·3 의 각·거리가 이 점을 쓴다.
+	 * 데드존이 0 이면 (CAM 의 대부분) 기준점 = T. 리셋 템플릿 (단위 행렬, 원점) 도 같은 규칙이라 데드존 0 이면 T 다.
+	 */
+	private Vector3f head(Shot s, Vector3f t, CameraDef.Params cp) {
+		Vector3f l = unrotate(s.mYaw, s.mPitch, new Vector3f(t).sub(s.stEye));
+		float d0 = l.length();
+		float a = d0 < 1e-6f ? 0 : yawOf(l), b = d0 < 1e-6f ? 0 : pitchOf(l);
+		double tan = Math.tan(cp.fovRad() / 2);
+		// 리셋 템플릿(원점·단위 행렬)이면 해독대로는 |T| 에 비례해 기준점이 밀린다 (HDES01A |T| 9600, 데드존 −0.2 → 위로 약 740) — 실제 Warp 도착에서
+		// 레일 t 가 엉뚱한 곳에 잡혀 영웅이 화면 밖이라 데드존 0 일 때의 결과(기준점 = T)를 쓴다 [근사]. 이후 프레임은 해독 그대로.
+		float[] dz = s.template ? new float[4] : cp.deadZone();
+		float bHi = (float) Math.toDegrees(Math.atan(0.75 * tan * dz[0])), bLo = (float) Math.toDegrees(Math.atan(0.75 * tan * dz[1]));
+		float aHi = (float) -Math.toDegrees(Math.atan(tan * dz[2])), aLo = (float) -Math.toDegrees(Math.atan(tan * dz[3]));
+		Vector3f eye = s.stEye;
+		float ry = s.mYaw, rp = s.mPitch;
+		if (b < bLo || b > bHi || a < aLo || a > aHi) {
+			b = Math.max(bLo, Math.min(bHi, b));
+			a = Math.max(aLo, Math.min(aHi, a));
+			ry = s.stYaw;
+			rp = s.stPitch;
+			eye = rotate(ry, rp, dir(a, b, new Vector3f()), new Vector3f()).mul(-d0).add(t);
+		}
+		s.hSa = a;
+		s.hSb = b;
+		s.hDist = d0;
+		dir(ry, rp, s.hFwd);
+		return new Vector3f(s.hFwd).mul((float) (d0 * Math.cos(Math.toRadians(a)) * Math.cos(Math.toRadians(b)))).add(eye);
 	}
 
 	/** AresCamera1 (0x1F67C0): 원작 비용 함수로 레일 t·붐·방향을 풀어 상태에 넣는다 ({@link AresCamera}). */
@@ -739,10 +897,7 @@ public final class CameraRig {
 		CameraDef.Params cp = s.cam.def().p();
 		RailCost kind = RailCost.of(cp);
 		if (s.t < 0) {
-			Vector3f aim = t;
-			if (s.viewEye != null) {
-				aim = new Vector3f(s.viewFwd).mul(new Vector3f(t).sub(s.viewEye).dot(s.viewFwd)).add(s.viewEye);
-			}
+			Vector3f aim = t; // 기준점 (head)
 			float best = 0, bc = Float.MAX_VALUE;
 			int n = Math.max(1, rail.knots.length * 4);
 			float[] r = new float[3];
@@ -760,7 +915,7 @@ public final class CameraRig {
 					rail.eval(u, r);
 					Vector3f nv = new Vector3f(aim.x - r[0], aim.y - r[1], aim.z - r[2]);
 					if (nv.lengthSquared() > 1e-6f) {
-						c -= 100 * nv.normalize().dot(s.viewFwd);
+						c -= 100 * nv.normalize().dot(s.hFwd);
 					}
 				}
 				if (c < bc) {
@@ -907,6 +1062,8 @@ public final class CameraRig {
 		out.pitch = a.pitch + (b.pitch - a.pitch) * h;
 		out.dist = a.dist + (b.dist - a.dist) * h;
 		out.fovDeg = a.fovDeg + (b.fovDeg - a.fovDeg) * h;
+		out.sa = a.sa + (b.sa - a.sa) * h;
+		out.sb = a.sb + (b.sb - a.sb) * h;
 	}
 
 	/** 원작 FOV(라디안, 4:3 가로) → 세로 FOV(도): 세로 반폭 = tan(f/2)·0.75 (0x1F2AC4) [추정]. */
@@ -922,6 +1079,25 @@ public final class CameraRig {
 	/** 피치(도): atan2(y, 수평 길이). */
 	public static float pitchOf(Vector3f v) {
 		return (float) Math.toDegrees(Math.atan2(v.y, Math.sqrt(v.x * v.x + v.z * v.z)));
+	}
+
+	/**
+	 * 카메라 좌표 벡터 → 월드: R(요, 피치) = X 축 피치 회전 뒤 Y 축 요 회전 (0x1F1000: 단위 행렬 → 0x1847E0 롤 → 0x184600 피치 → 0x1846F0 요).
+	 * rotate(요, 피치, (0, 0, −1)) = dir(요, 피치).
+	 */
+	static Vector3f rotate(float yaw, float pitch, Vector3f l, Vector3f out) {
+		double p = Math.toRadians(pitch), y = Math.toRadians(yaw);
+		double cp = Math.cos(p), sp = Math.sin(p), cy = Math.cos(y), sy = Math.sin(y);
+		double x1 = l.x, y1 = l.y * cp - l.z * sp, z1 = l.y * sp + l.z * cp;
+		return out.set((float) (x1 * cy + z1 * sy), (float) y1, (float) (-x1 * sy + z1 * cy));
+	}
+
+	/** 월드 벡터 → 카메라 좌표 (rotate 의 역, 0x185048 역행렬). */
+	static Vector3f unrotate(float yaw, float pitch, Vector3f v) {
+		double p = Math.toRadians(pitch), y = Math.toRadians(yaw);
+		double cp = Math.cos(p), sp = Math.sin(p), cy = Math.cos(y), sy = Math.sin(y);
+		double x1 = v.x * cy - v.z * sy, z1 = v.x * sy + v.z * cy, y1 = v.y;
+		return new Vector3f((float) x1, (float) (y1 * cp + z1 * sp), (float) (-y1 * sp + z1 * cp));
 	}
 
 	/** 요/피치 → 바라보는 방향 단위 벡터. */

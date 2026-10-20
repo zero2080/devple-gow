@@ -126,4 +126,65 @@ class StartCameraTest {
 		assertEquals(cam, rc.current());
 		assertTrue(rc.eye().distance(eye) < 4, rc.eye() + " vs " + eye);
 	}
+
+	/** 0x1EE510 영웅 상태 마스크 비트 (CAM 플래그 하위 바이트와 AND). */
+	@Test
+	void heroStateMaskBits() {
+		assertEquals(0x2, CameraRig.stateMask(0x1, false)); // 지상
+		assertEquals(0x3, CameraRig.stateMask(0x2, true)); // 지상 + 전투
+		assertEquals(0x4, CameraRig.stateMask(0x400, false)); // 줄
+		assertEquals(0x8, CameraRig.stateMask(0x10, false)); // 턱
+		assertEquals(0x8, CameraRig.stateMask(0x20, false)); // 벽
+		assertEquals(0x10, CameraRig.stateMask(0x40, false)); // 날기
+		assertEquals(0x20, CameraRig.stateMask(0x80, false)); // 물
+		assertEquals(0x40, CameraRig.stateMask(0x4, false)); // 점프
+		assertEquals(0x80, CameraRig.stateMask(0x8, false)); // 떨어짐
+	}
+
+	/**
+	 * 상태 마스크로 후보 거르기: ATHN02A LadderCam (플래그 하위 0x08 = 벽 전용, 우선순위 20) 볼륨 안에서 지상이면 다른 카메라, 벽(+0x174 0x20)이면 LadderCam.
+	 */
+	@Test
+	void ladderCameraOnlyOnWall() throws Exception {
+		LevelData d = load("ATHN02A");
+		Vector3f p = null;
+		for (LevelData.PlacedVolume v : d.volumes) {
+			for (int i = 0; i < v.hull().hulls.size(); i++) {
+				if ("RCM_LadderCam".equalsIgnoreCase(v.hull().nameOf(i)) || "LadderCam".equalsIgnoreCase(v.hull().nameOf(i))) {
+					float[] c = v.hull().hulls.get(i).center();
+					float[] w = new float[3];
+					devple.gow.tools.anim.Mat4.transformPoint(v.world(), c[0], c[1], c[2], w);
+					p = new Vector3f(w[0], w[1] - CameraRig.TARGET_HEIGHT, w[2]);
+				}
+			}
+		}
+		assertNotNull(p, "LadderCam 볼륨");
+		CameraRig ground = new CameraRig(d);
+		ground.update(1 / 60f, p, 0, false);
+		assertNotEquals("LadderCam", ground.current());
+		CameraRig wall = new CameraRig(d);
+		wall.setHeroState(0x20, false);
+		wall.update(1 / 60f, p, 0, false);
+		assertEquals("LadderCam", wall.current());
+	}
+
+	/**
+	 * 화면 데드존 (CAM 0x98..0xA4, 0x1F29A0 머리): HDES01A PillarCam1 은 세로 [−0.2, −0.2] — 영웅을 화면 가운데보다 아래
+	 * (세로 반화면 × 0.2) 에 둔다. 각도 범위 없는 카메라라 눈 = T − 거리·R·방향(sa, sb).
+	 */
+	@Test
+	void deadZoneFramesHeroBelowCentre() throws Exception {
+		LevelData d = load("HDES01A");
+		LevelCollision col = new LevelCollision(d.sheets);
+		CameraRig rig = settle(new CameraRig(d), startFeet(d, col));
+		assertEquals("PillarCam1", rig.current());
+		float fov = d.camera("PillarCam1").def().p().fovRad();
+		float want = (float) Math.toDegrees(Math.atan(0.75 * Math.tan(fov / 2) * -0.2));
+		CameraRig.Pose p = rig.pose();
+		assertEquals(want, p.sb, 0.2f);
+		assertEquals(0, p.sa, 0.2f);
+		Vector3f eye = rig.eye(), f = p.forward(new Vector3f()), v = new Vector3f(p.target).sub(eye);
+		float up = v.dot(new Vector3f(f).cross(0, 1, 0).cross(f).normalize()) / v.dot(f);
+		assertEquals(Math.tan(Math.toRadians(want)), up, 0.01); // 대상이 시선 축 아래
+	}
 }

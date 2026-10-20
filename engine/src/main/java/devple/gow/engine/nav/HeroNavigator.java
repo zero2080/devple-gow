@@ -242,6 +242,13 @@ public final class HeroNavigator {
 		return world;
 	}
 
+	/** AIR 상태가 뛰어서(벽 등 점프·줄 점프·물 점프) 생겼는지 (원작 +0x174 0x4), 아니면 놓아서 떨어짐 (0x1E9030 → 0x8). */
+	public boolean airJump() {
+		return state == NavState.AIR && airJump;
+	}
+
+	private boolean airJump;
+
 	public NavState state() {
 		return state;
 	}
@@ -2137,6 +2144,7 @@ public final class HeroNavigator {
 
 	/** 줄/벽을 놓고 공중으로. */
 	private void leave(Vector3f launch, float vy, String anim) {
+		airJump = !"ANIFall".equals(anim);
 		releaseRope();
 		state = NavState.AIR;
 		rope = null;

@@ -267,6 +267,11 @@ public final class HeroController implements NavBody {
 		vy = v;
 	}
 
+	/** 점프로 뜬 공중인지 (원작 +0x174 0x4, 점프 0x1E9950/0x1E9A38). 아니면 걸어 떨어짐·놓음 0x8 (0x1EA3B0, 0x1E9168). */
+	public boolean jumped() {
+		return !grounded && jumps > 0;
+	}
+
 	@Override
 	public boolean grounded() {
 		return grounded;
