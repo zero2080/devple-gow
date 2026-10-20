@@ -46,7 +46,7 @@ public final class AresFight extends BossFight {
 		// (예전 605–625 는 아레스 610 BARSTANDIDLE ↔ 영웅 610 HITLAND 같은 비동기 기술까지 묶었다) 정렬은 원작 0x204BF0 만 —
 		// 아레스 600 [0–0.35] · 608 MAIBARGRABWIN [0–0.52] 의 이벤트 22 가 영웅을 끈다 (영웅 = 아레스 정면 31, 마주 봄).
 		// 605/606/607/609 는 이벤트 19 (동기 유지만) → 위치 정렬 없음 (예전 BOSS_TO_HERO "같은 원점·같은 방향" 은 폐기, 37 문서 §11)
-		sync = new BossSync(id -> id == 600 || id >= 605 && id <= 609 || id >= 620 && id <= 623, BossSync.Align.NONE);
+		sync = new BossSync(id -> id == 600 || id >= 605 && id <= 609 || id >= 620 && id <= 623);
 	}
 
 	public int stage() {

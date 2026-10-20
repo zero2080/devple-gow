@@ -234,6 +234,7 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 				nav.update(pos, ZERO, null, true, dt);
 			}
 			anim.update(dt);
+			rootMotion();
 			return;
 		}
 		if (brain.tree != null) {
@@ -281,6 +282,34 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 		} else if (!combat.active()) {
 			anim.update(dt);
 		}
+		rootMotion();
+	}
+
+	/** 루트 모션 (원작 0x1F7110 → 0x1EBD78, 영웅과 같은 규칙) — 동기 상대가 끄는 중이면 없음. */
+	private final devple.gow.engine.anim.RootMotion root = new devple.gow.engine.anim.RootMotion();
+	/** 동기 상대가 이 적을 끄는 중 (0x204BF0 의 끌리는 쪽: D = 단위, 0x1EC058). 동기 코드가 매 틱 정한다. */
+	public boolean rootHold;
+	/** 루트 모션을 쓰지 않음 (클래스 코드가 위치를 직접 정하는 보스 등). */
+	public boolean rootMotionOff;
+
+	/**
+	 * 전투 기술 중에만 (0x1EBEF0: combatant +0x4C ≠ 0) zeroJoint 델타를 적용: 요는 바로, 수평 이동은 위치에 더한다 — 다음 틱 내비게이션
+	 * (EnemyNav 지상: 벽 충돌·바닥 붙이기) 이 원작 이동 함수처럼 처리. 수직 변위는 버린다 [근사: 원작은 3D 변위를 지상 이동에 넘김 → 바닥에 붙음].
+	 */
+	private void rootMotion() {
+		if (rootMotionOff || !combat.active()) {
+			root.reset();
+			return;
+		}
+		root.step(anim, scale, yaw, rootHold);
+		pos.x += root.dx;
+		pos.z += root.dz;
+		yaw += root.dyaw;
+	}
+
+	/** 마지막 루트 모션 (월드 변위·요 변화) — 테스트·보스 클래스. */
+	public devple.gow.engine.anim.RootMotion rootMotionState() {
+		return root;
 	}
 
 	/**

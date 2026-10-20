@@ -55,14 +55,13 @@ class EvilKratosFightTest {
 		r.fight.contact(EvilKratosFight.GRAB_STANCE, 0); // ○ GRAB → 가족 M1 EV_HIT_REACT tag 200 → 865, 영웅 HIT_CONFIRM tgt=660 → 865
 		assertTrue(until(r, 1, () -> r.fight.sync().active() && r.fight.sync().pairedMove() == EvilKratosFight.HUG_START),
 				"포옹 동기: hero " + r.heroMoves + " fam " + move(fam));
+		Vector3f at = new Vector3f(r.ctl.position);
+		float yaw0 = r.ctl.yaw;
 		r.run(0.3f); // 자세 섞임(페이드) 뒤
-		// 동기 정렬 = synchJoint 위치 겹침·같은 방향 (관절 접촉 검사, 37 문서 §11): 가족 (0,0,−16) / 영웅 (0,0,−32) → 영웅 원점이 가족 원점 16 뒤
-		Vector3f back = new Vector3f((float) Math.sin(fam.yaw), 0, (float) Math.cos(fam.yaw)).mul(16).add(fam.pos);
-		assertEquals(0, new Vector3f(r.ctl.position.x, 0, r.ctl.position.z).distance(back.x, 0, back.z), 1f, "영웅 위치 " + r.ctl.position);
-		assertEquals(0, Math.abs(Math.IEEEremainder(r.ctl.yaw - fam.yaw, Math.PI * 2)), 1e-3, "같은 방향");
-		// 포옹 중 영웅 손목이 가족 관절에 닿음 (예전 "정면 48 마주 봄" 은 20 이상 떨어짐)
-		float reach = BossSyncContact.handGap(r.ctl.animator(), r.ctl.world(new org.joml.Matrix4f(), 1), fam.animator(), fam.world(new org.joml.Matrix4f(), 1));
-		assertTrue(reach < 8, "손목 ↔ 가족 관절 " + reach);
+		// 원작: 865–867 은 이벤트 19 만 (끌기 없음) → 잡은 자리 + 루트 모션. MAIEVIHug* 는 두 쪽 zeroJoint 가 고정 → 영웅은 잡은 자리 그대로
+		// (예전 엔진 대체 SYNCH 는 영웅을 가족 16 뒤·같은 방향으로 옮겼다, 37 문서 §11.4)
+		assertEquals(0, new Vector3f(r.ctl.position.x, 0, r.ctl.position.z).distance(at.x, 0, at.z), 1f, "영웅 위치 " + r.ctl.position + " ← " + at);
+		assertEquals(0, Math.abs(Math.IEEEremainder(r.ctl.yaw - yaw0, Math.PI * 2)), 1e-3, "방향 그대로");
 		r.pad.down.add(devple.gow.engine.input.PadButton.CIRCLE);
 		for (int i = 0; i < 90; i++) {
 			r.pad.down.add(devple.gow.engine.input.PadButton.CIRCLE); // 866 루프: ○ 유지
@@ -143,8 +142,12 @@ class EvilKratosFightTest {
 		assertTrue(until(r, 3, () -> fight.cloneSync().active() && fight.cloneSync().pairedMove() == EvilKratosFight.CLONE_GRAB_LOOP),
 				"860 → 861 쌍: hero " + r.heroMoves + " clone " + move(clone));
 		assertSame(clone, fight.grabber());
-		var off = BossSync.synchOffset(clone, r.ctl.animator());
-		assertEquals(0, new org.joml.Vector3f(clone.pos).add(off).distance(r.ctl.position), 1e-2f, "분신 = 영웅 − synchJoint 차 (BOSS_TO_HERO)");
+		// 원작: 860–863 은 이벤트 19 만 → 분신을 영웅 쪽으로 옮기지 않는다 (예전 BOSS_TO_HERO 대체 규칙 제거). 루프 861 은 두 쪽 zeroJoint 고정
+		Vector3f c0 = new Vector3f(clone.pos), h0 = new Vector3f(r.ctl.position);
+		r.run(0.5f);
+		assertEquals(0, clone.pos.distance(c0), 1f, "분신 제자리 (861 루프)");
+		assertEquals(0, r.ctl.position.distance(h0), 1f, "영웅 제자리 (861 루프)");
+		System.out.printf("분신 잡기 861: 영웅–분신 거리 %.1f%n", new Vector3f(clone.pos).sub(r.ctl.position).setComponent(1, 0).length());
 		assertTrue(fight.heroLocked());
 		// 스틱 흔들기 → 게이지 > 2 → "AUTO fall>2" → 862 탈출, 분신도 862 (EVIGRABHEROWIN, 분신 사망 연출)
 		for (int i = 0; i < 120 && !r.heroMoves.contains(EvilKratosFight.CLONE_GRAB_WIN); i++) {

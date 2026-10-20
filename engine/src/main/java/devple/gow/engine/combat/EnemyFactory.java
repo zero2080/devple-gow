@@ -131,6 +131,17 @@ public final class EnemyFactory {
 				anm = a;
 			}
 		}
+		if (best != null && skeleton != null && !bestNamed) {
+			// 템플릿 Instance Name 과 같은 오브젝트가 없음 (ATHN01C AI1 252 "hydra enc2"): CombatFileSet 기술 애니를 가장 많이 가진 스켈레톤 [추정]
+			Skeleton byClips = byCombatClips(wad, permk, own, assets);
+			if (byClips != null) {
+				best = byClips;
+				bestNamed = true;
+				List<String> refs = Skeleton.groupRefs(wad, best.name);
+				mdl = refs.stream().filter(r -> r.startsWith("MDL_")).findFirst().orElse(null);
+				anm = refs.stream().filter(r -> r.startsWith("ANM_")).findFirst().orElse(null);
+			}
+		}
 		if (best == null || skeleton != null && !bestNamed) {
 			throw new IllegalArgumentException("적 스켈레톤 없음: " + wadPath + (skeleton != null ? " " + skeleton : ""));
 		}
@@ -174,6 +185,53 @@ public final class EnemyFactory {
 		AiTargets.setHeroSoldier(ai.soldier(0));
 		return new Kind(assets, tw, best, set, mdl, ai1, files, attacks.stream().mapToInt(Integer::intValue).toArray(), block,
 				idle, walk, animNode != null ? animNode : "/Animation/go" + best.name + "/", ai);
+	}
+
+	/** 레벨 WAD 의 첫 CombatFileSet 기술 애니 해시를 가장 많이 가진 (모델 있는) 스켈레톤 — 없으면 null. */
+	private static Skeleton byCombatClips(WadFile wad, WadFile permk, Tweaks own, WadAssets assets) {
+		String setNode = own.firstNode("/TweakTemplates/CombatFileSet/");
+		if (setNode == null) {
+			return null;
+		}
+		Tweaks tw = new Tweaks();
+		tw.load(permk);
+		tw.load(wad);
+		java.util.Set<String> files = new java.util.HashSet<>();
+		for (int i = 0; i < 8; i++) {
+			int f = tw.i16(setNode, "File " + i, -1);
+			if (f >= 0) {
+				files.add(String.format("TWK_CombatFile_%03d", f));
+			}
+		}
+		java.util.Set<Integer> hashes = new java.util.HashSet<>();
+		for (CombatFile cf : CombatFile.fromWad(wad)) {
+			if (files.contains(cf.name())) {
+				cf.moves().forEach(m -> hashes.add(m.animHash()));
+			}
+		}
+		Skeleton best = null;
+		int bestHits = 0;
+		for (Skeleton s : Skeleton.loadAll(wad)) {
+			List<String> refs = Skeleton.groupRefs(wad, s.name);
+			String m = refs.stream().filter(r -> r.startsWith("MDL_")).findFirst().orElse(null);
+			String a = refs.stream().filter(r -> r.startsWith("ANM_")).findFirst().orElse(null);
+			if (m == null || a == null || assets.gowModel(m) == null) {
+				continue;
+			}
+			int hits = 0;
+			for (AnimationSet.Group g : AnimationSet.load(wad, a).groups) {
+				for (Animation an : g.acts) {
+					if (hashes.contains(devple.gow.tools.tweak.TweakFile.hashUpper(an.name))) {
+						hits++;
+					}
+				}
+			}
+			if (hits > bestHits) {
+				best = s;
+				bestHits = hits;
+			}
+		}
+		return best;
 	}
 
 	private static String clip(AnimationSet set, String... prefs) {
