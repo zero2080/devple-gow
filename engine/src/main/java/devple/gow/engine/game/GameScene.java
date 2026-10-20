@@ -1672,6 +1672,7 @@ public final class GameScene implements Scene {
 			};
 		}
 		EnemyFighter target = nearestEnemy();
+		bodyTick++;
 		if (!grab.active()) {
 			hero.combat.setTarget(target);
 			hero.update(in, camYaw, dt, target != null ? target.pos : null);
@@ -1957,9 +1958,10 @@ public final class GameScene implements Scene {
 	private void collectBodies() {
 		bodies.clear();
 		if (heroBody == null) {
-			heroBody = new devple.gow.engine.combat.BodyPush.HeroBody(hero.ctl, () -> !hero.ctl.grounded, hero.combat);
+			heroBody = new devple.gow.engine.combat.BodyPush.HeroBody(hero.ctl, () -> !hero.ctl.grounded, hero.combat,
+					() -> nav != null ? nav.navigator.state() : null);
 		}
-		heroBody.refresh(); // 관절 상자 0x1E6DF0 (머리)
+		heroBody.refresh(bodyTick); // 관절 상자 0x1E6DF0 (머리, 틱마다 한 번 — 조건 비트 32 문서)
 		bodies.add(heroBody);
 		for (Enemy en : enemies) {
 			bodies.add(en.fighter()); // 생물 범주 1|2 = 모든 적 (보스 포함, 32 문서 §생물끼리 밀어내기 — 보스)
@@ -1967,6 +1969,8 @@ public final class GameScene implements Scene {
 	}
 
 	private devple.gow.engine.combat.BodyPush.HeroBody heroBody;
+	/** 영웅 관절 상자 갱신 틱 (collectBodies 가 한 틱에 여러 번 불려도 0x1E6DF0 은 한 번). */
+	private long bodyTick;
 
 	/**
 	 * 영웅 몸 질의 면 제외 마스크 ({@link devple.gow.engine.nav.NavWorld#bodyExclude}): 이 경로는 지상·공중 (0x1EA5F0, 벽이 아님) 또는

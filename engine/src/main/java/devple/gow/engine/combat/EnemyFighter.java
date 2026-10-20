@@ -145,9 +145,6 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 		this.nav = new EnemyNav(tmpl.moveCaps, ai != null ? ai.motion(tmpl.soldier) : null, tmpl.pauseMoveMs);
 		AiData.Body soldBody = ai != null ? ai.body(tmpl.soldier) : null;
 		nav.setBody(soldBody, scale);
-		this.boxJoint = soldBody != null && soldBody.joint() != null ? anim.skeleton().indexOf(soldBody.joint()) : -1;
-		this.zeroJoint = anim.skeleton().indexOf("zeroJoint");
-		jointBox.radius = nav.bodyRadius();
 		nav.setRide(ai != null ? ai.ride(tmpl.soldier) : null);
 		collectLocoClips(set);
 		DecisionTree tree = ai != null ? ai.tree(tmpl.decisionTree) : null;
@@ -220,6 +217,7 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 				stone = false;
 				freezeMeter = freezeMax;
 			}
+			nav.rootMoved = false;
 			if (nav.world() != null) {
 				nav.update(pos, ZERO, null, true, dt); // 돌도 떨어진다 (벽·줄이면 붙은 채)
 			}
@@ -242,8 +240,8 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 			return;
 		}
 		if (holdAi) {
-			// AI 정지 (시험·HeroTestScene 배치용): 스틱 0 으로 내비게이션 이동 단계는 돈다 — 원작은 AI 가 서 있어도 0x1EBD78 이 매 프레임
-			// 생물 밀어내기 0x1E2DD8 을 부른다 (자유 이동 기술이면 nav.free 가 처리)
+			// AI 정지 (시험·HeroTestScene 배치용): 스틱 0 으로 내비게이션 이동 단계는 돈다 — 서 있으면 (속도·변위 0) 원작처럼 자기는 밀지 않고
+			// (0x1EBB38 정지 → 0x1E9470), 기술 루트 모션으로 움직이거나 자유 이동 기술이면 민다
 			nav.update(pos, ZERO, null, combat.active(), dt);
 		} else if (brain.tree != null) {
 			brain.update(dt);
@@ -308,17 +306,18 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 	 * (중력 없는 0x1E5F90 + 충돌 0x1EA200). stateMask 7 기술은 지상 이동이 바닥에 붙이므로 버린다.
 	 */
 	private void rootMotion() {
-		refreshBox();
 		if (rootMotionOff || !combat.active()) {
 			root.reset();
 			nav.free = false;
 			nav.moveFlags = -1;
+			nav.rootMoved = false;
 			return;
 		}
 		root.step(anim, scale, yaw, rootHold);
 		pos.x += root.dx;
 		pos.z += root.dz;
 		yaw += root.dyaw;
+		nav.rootMoved = root.dx != 0 || root.dz != 0; // 다음 이동 단계의 변위 (0x1EC6D8) — 정지 판정 0x1EBB38
 		// 수직: 자유 이동 기술 (stateMask & 0x1C == 0, 0x1EC350) 은 3D 변위를 그대로 (중력 없음, 다음 틱 내비가 바닥 아래만 막음).
 		// 그 밖 (stateMask 7) 은 지상 이동 0x1EAEC8 이 바닥에 붙인다 → 수직 버림
 		int mask = combat.move().stateMask();
@@ -339,6 +338,7 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 		}
 		yaw -= root.dyaw;
 		root.dx = root.dy = root.dz = root.dyaw = 0;
+		nav.rootMoved = false;
 	}
 
 	/** 마지막 루트 모션 (월드 변위·요 변화) — 테스트·보스 클래스. */
@@ -446,45 +446,20 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 		return pos;
 	}
 
+	/**
+	 * 캡슐 반지름 = Sold 상자 (0x1E6D58). 관절 상자 0x1E6DF0 은 0x1EBD78 이 owner+0x174 비트 31 (플레이어 — 내비 생성 0x1E7E20 의 t0,
+	 * Player 0x1D636C 만 1) 일 때만 부르므로 적·보스는 Sold +0xA4 관절 (BMI·히드라 머리) 이 있어도 늘 Sold 상자 [확실].
+	 */
 	@Override
 	public float bodyRadius() {
-		return boxJoint >= 0 ? jointBox.radius : nav.bodyRadius();
+		return nav.bodyRadius();
 	}
 
+	/** 밀기 질의 후보 = 자기 CDV 구 (부착 무기 GO 제외). */
 	@Override
-	public float refX() {
-		return boxJoint >= 0 ? jointBox.offX : 0;
-	}
-
-	@Override
-	public float refZ() {
-		return boxJoint >= 0 ? jointBox.offZ : 0;
-	}
-
-	/** 관절 상자 관절 (Sold +0xA4, 없으면 −1 = 루트 → Sold 상자) 과 상자 (0x1E6DF0, {@link BodyPush.JointBox}). */
-	private final int boxJoint, zeroJoint;
-	private final BodyPush.JointBox jointBox = new BodyPush.JointBox();
-
-	/** 0x1EBD78 → 0x1E6DF0: 이번 자세로 상자를 다시 만든다 (Sold +0xA4 관절이 있는 몸만 — 크라토스 001·BMI·히드라). */
-	private void refreshBox() {
-		if (boxJoint < 0) {
-			return;
-		}
-		float r = nav.bodyRadius(), h = nav.bodyHeight();
-		if (anim.current() == null) {
-			jointBox.update(r, h, 0, 0, yaw, false, false);
-			return;
-		}
-		float[][] w = anim.pose().world(anim.skeleton());
-		org.joml.Matrix4f m = new org.joml.Matrix4f().set(w[boxJoint]);
-		if (zeroJoint >= 0) {
-			m = new org.joml.Matrix4f().set(w[zeroJoint]).invert().mul(m);
-		}
-		Vector3f j = m.getTranslation(new Vector3f()).mul(scale);
-		devple.gow.tools.combat.CombatFile.Move mv = combat.active() ? combat.move() : null;
-		boolean sync = mv != null && (mv.flags() & 0x60) != 0;
-		boolean joint = nav.mode() == EnemyNav.Mode.GROUND || (nav.mode() == EnemyNav.Mode.AIR && mv != null);
-		jointBox.update(r, h, j.x, j.z, yaw, sync, joint);
+	public java.util.List<float[]> pushSpheres() {
+		HitVolumes hv = combat.hitVolumes();
+		return hv != null && !hv.isEmpty() ? hv.ownSpheres() : null;
 	}
 
 	@Override
