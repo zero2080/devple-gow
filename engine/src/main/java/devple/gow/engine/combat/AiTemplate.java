@@ -70,44 +70,49 @@ public final class AiTemplate {
 	public final int circleHp;
 
 	public AiTemplate(Tweaks tw, int id) {
+		this(tw, id, AiOverrides.NONE);
+	}
+
+	/** 모드 덮어쓰기 ({@code ai.properties} 의 tmpl.&lt;필드&gt;, 49 문서 §13) 를 얹어 읽는다. */
+	public AiTemplate(Tweaks tw, int id, AiOverrides o) {
 		this.id = id;
 		this.node = String.format("/TweakTemplates/AI1/%03d/", id);
-		soldier = i32(tw, 0x68503EDC, id);
-		decisionTree = i32(tw, 0xC086E0B4, -1);
-		blockMod = s16(tw, 0xE9B40E3D, -1);
-		hitPoints = i32(tw, 0xEC2E4776, 100);
-		maxHitPoints = i32(tw, 0x5938A592, hitPoints);
-		damageMult = f(tw, 0x4AD50B52, 1f);
-		mode = s16(tw, 0xD2AF2A3B, 0);
-		tokenRadius = u16(tw, 0xB9FFCBE2, 4);
-		waitRadius = u16(tw, 0x758CABEE, 10);
-		flags = bit(tw, 0x7EA1EC2E, 0x1) | bit(tw, 0xC1C01F59, 0x4) | bit(tw, 0xBBBC439A, 0x8) | bit(tw, 0xDBB472C3, 0x2)
+		soldier = o.i("tmpl.soldier", i32(tw, 0x68503EDC, id));
+		decisionTree = o.i("tmpl.decisionTree", i32(tw, 0xC086E0B4, -1));
+		blockMod = o.i("tmpl.blockMod", s16(tw, 0xE9B40E3D, -1));
+		hitPoints = o.i("tmpl.hitPoints", i32(tw, 0xEC2E4776, 100));
+		maxHitPoints = o.i("tmpl.maxHitPoints", i32(tw, 0x5938A592, hitPoints));
+		damageMult = o.f("tmpl.damageMult", f(tw, 0x4AD50B52, 1f));
+		mode = o.i("tmpl.mode", s16(tw, 0xD2AF2A3B, 0));
+		tokenRadius = o.i("tmpl.tokenRadius", u16(tw, 0xB9FFCBE2, 4));
+		waitRadius = o.i("tmpl.waitRadius", u16(tw, 0x758CABEE, 10));
+		flags = o.i("tmpl.flags", bit(tw, 0x7EA1EC2E, 0x1) | bit(tw, 0xC1C01F59, 0x4) | bit(tw, 0xBBBC439A, 0x8) | bit(tw, 0xDBB472C3, 0x2)
 				| bit(tw, 0xFC037268, 0x40) | bit(tw, 0xCB247958, 0x100) | bit(tw, 0x55637E92, 0x80)
 				| bit(tw, 0xF17492AE, 0x200) | bit(tw, 0x500A656C, 0x400) | bit(tw, 0x8EB6AF1B, 0x10)
-				| bit(tw, 0xFF0DAF8F, 0x800) | bit(tw, 0x918DE416, 0x1000);
-		moveCaps = bit(tw, 0x1C2DA9B5, CAP_CLIMB) | bit(tw, 0xFAD969DC, CAP_BALANCE) | bit(tw, 0x00117053, CAP_FLY)
+				| bit(tw, 0xFF0DAF8F, 0x800) | bit(tw, 0x918DE416, 0x1000));
+		moveCaps = o.i("tmpl.moveCaps", bit(tw, 0x1C2DA9B5, CAP_CLIMB) | bit(tw, 0xFAD969DC, CAP_BALANCE) | bit(tw, 0x00117053, CAP_FLY)
 				| bit(tw, 0x0A3FBA28, CAP_SWIM) | bit(tw, 0x08677814, CAP_DIVE) | bit(tw, 0xABFACEA6, CAP_DIVE)
 				| bit(tw, 0x0925F0AE, CAP_JUMP) | bit(tw, 0x112AF47F, CAP_40) | bit(tw, 0x0A1E8412, CAP_ROPE)
 				| bit(tw, 0x09DFFF18, CAP_POLE) | bit(tw, 0x087BC8D5, CAP_ZIPLINE) | bit(tw, 0x27F351D1, CAP_800)
 				| bit(tw, 0x974039AF, CAP_SLIDE) | bit(tw, 0x82C42E3F, CAP_SLIDE) | bit(tw, 0xFF971F92, CAP_USE)
-				| bit(tw, 0x7AA8082A, CAP_WALL_PULLUP) | bit(tw, 0x4ED25AC3, 0x40000) | bit(tw, 0x8CA8E85C, 0x400000);
-		pauseMoveMs = u16(tw, 0xA2C359E9, 1000);
-		block = f(tw, 0x0CADA0CD, 0f);
-		block2 = f(tw, 0xA7082DB6, 0f);
-		dwellMs = u16(tw, 0xA3C5272C, 2000);
-		repickTokenMs = u16(tw, 0xB36FF1C2, 2000);
-		repickWaitMs = u16(tw, 0x41E08A53, 5000);
-		anyAttackDist = f(tw, 0xC3A12B87, -1f);
-		minRepickDist = f(tw, 0x2C2B1E13, 4f);
-		sightRange = f(tw, 0x4672BFB2, 80f);
-		alertRadius = f(tw, 0x400232CE, 10f);
-		sightFov = f(tw, 0xD37B884C, 180f);
-		speedPct = f(tw, 0x72949419, 100f);
-		speedPctAlt = f(tw, 0xCD7DA53A, 50f);
-		leashRange = f(tw, 0x4949C244, 80f);
-		scaleCenter = f(tw, 0x884F26FF, 100f);
-		scaleRange = f(tw, 0xCCF3A893, 0f);
-		circleHp = tw.i(node, "Circle Health Threshold", 65535) & 0xFFFF;
+				| bit(tw, 0x7AA8082A, CAP_WALL_PULLUP) | bit(tw, 0x4ED25AC3, 0x40000) | bit(tw, 0x8CA8E85C, 0x400000));
+		pauseMoveMs = o.i("tmpl.pauseMoveMs", u16(tw, 0xA2C359E9, 1000));
+		block = o.f("tmpl.block", f(tw, 0x0CADA0CD, 0f));
+		block2 = o.f("tmpl.block2", f(tw, 0xA7082DB6, 0f));
+		dwellMs = o.i("tmpl.dwellMs", u16(tw, 0xA3C5272C, 2000));
+		repickTokenMs = o.i("tmpl.repickTokenMs", u16(tw, 0xB36FF1C2, 2000));
+		repickWaitMs = o.i("tmpl.repickWaitMs", u16(tw, 0x41E08A53, 5000));
+		anyAttackDist = o.f("tmpl.anyAttackDist", f(tw, 0xC3A12B87, -1f));
+		minRepickDist = o.f("tmpl.minRepickDist", f(tw, 0x2C2B1E13, 4f));
+		sightRange = o.f("tmpl.sightRange", f(tw, 0x4672BFB2, 80f));
+		alertRadius = o.f("tmpl.alertRadius", f(tw, 0x400232CE, 10f));
+		sightFov = o.f("tmpl.sightFov", f(tw, 0xD37B884C, 180f));
+		speedPct = o.f("tmpl.speedPct", f(tw, 0x72949419, 100f));
+		speedPctAlt = o.f("tmpl.speedPctAlt", f(tw, 0xCD7DA53A, 50f));
+		leashRange = o.f("tmpl.leashRange", f(tw, 0x4949C244, 80f));
+		scaleCenter = o.f("tmpl.scaleCenter", f(tw, 0x884F26FF, 100f));
+		scaleRange = o.f("tmpl.scaleRange", f(tw, 0xCCF3A893, 0f));
+		circleHp = o.i("tmpl.circleHp", tw.i(node, "Circle Health Threshold", 65535) & 0xFFFF);
 	}
 
 	public boolean usesToken() {

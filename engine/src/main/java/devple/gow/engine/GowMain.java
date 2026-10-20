@@ -40,6 +40,7 @@ public final class GowMain {
 		Path level = null;
 		// 인자 없이 실행 = 원작처럼 메인 메뉴부터
 		Path romDir = Content.romDir(); // gow.properties rom= / -Dgow.rom (49 문서 §2)
+		devple.gow.engine.mod.Plugins.start(); // 플러그인 (META-INF/services, 계층의 plugins/*.jar — 49 문서 §13)
 		Scene first = java.nio.file.Files.exists(Content.file(romDir, Region.of(romDir).shell()))
 				? new devple.gow.engine.game.ShellScene(romDir) : new DebugScene(0.2f);
 		if (java.util.Arrays.asList(args).contains("--boss-demo")) {

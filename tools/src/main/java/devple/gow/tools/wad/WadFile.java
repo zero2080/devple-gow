@@ -81,6 +81,11 @@ public final class WadFile {
 		return tags;
 	}
 
+	/** 태그 스트림 전체 (읽기용 사본 뷰). */
+	public ByteBuffer bytes() {
+		return buf.duplicate().order(ByteOrder.LITTLE_ENDIAN);
+	}
+
 	public List<WadTag> resources() {
 		return tags.stream().filter(t -> t.tag() == WadTagType.RESOURCE && t.hasData()).toList();
 	}

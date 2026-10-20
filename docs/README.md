@@ -82,7 +82,12 @@ Shift L3 + 오른쪽 Shift R3 = 신들의 분노, Enter = START(일시정지).
 
 ```bash
 ./gradlew :tools:run --args="iso-info P2_gow_kor.iso"
+./gradlew :tools:run --args="disc:info P2_gow_kor.iso"             # 부트 실행 파일(SYSTEM.CNF)·지역·PAK·언어 접미사 (다른 판도, 49 문서 §15)
+./gradlew :tools:run --args="disc:setup P2_gow_kor.iso gow-rom"    # 추출 + gow.properties rom=·iso=(·region=) 합쳐 고침 (--all 동영상 포함, --dry-run)
 ./gradlew :tools:run --args="pak-extract P2_gow_kor.iso gow-rom"   # 동영상 제외 추출 (~1.4GB)
+./gradlew :tools:run --args="wad:get gow-rom/ATHN01A.WAD TXR_floor out.bin"             # WAD 태그 데이터 꺼내기 (모드 wad/ 형식)
+./gradlew :tools:run --args="wad:put gow-rom/ATHN01A.WAD TXR_floor in.bin out.WAD"      # 태그 오프라인 교체 (엔진 적재와 같은 규칙)
+./gradlew :tools:run --args="mod:new mymod"                         # mods/mymod/ 뼈대 (README·rom/·wad/·plugins/·ai.properties)
 ./gradlew :tools:run --args="wad-ls gow-rom/ATHN01A.WAD"
 ./gradlew :tools:run --args="texture:export gow-rom/R_HERO0.WAD work/textures/R_HERO0"   # TXR → PNG
 ./gradlew :tools:run --args="model:export gow-rom/R_HERO0.WAD work/models/R_HERO0 --preview"   # OBJ+MTL(+PNG 미리보기)

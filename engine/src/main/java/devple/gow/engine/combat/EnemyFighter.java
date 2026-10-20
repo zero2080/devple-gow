@@ -32,6 +32,9 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 	private final int classId;
 	private final AiTemplate tmpl;
 	private final AiBrain brain;
+	/** 플러그인 대체 제어 (49 문서 §13) / 모드 열쇠. */
+	private final devple.gow.engine.mod.EnemyController controller;
+	private final List<String> modKeys;
 	private final Tweaks tw;
 	private final float maxHp;
 	private final float circleHp;
@@ -112,7 +115,13 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 						AiData ai) {
 		this.classId = ai1;
 		this.tw = tw;
-		this.tmpl = new AiTemplate(tw, ai1);
+		// 모드 수치 덮어쓰기 (ai.properties, 49 문서 §13) — AI1·Sold 값이 정해지는 유일한 자리. 표가 없으면 원래 값
+		this.modKeys = AiOverrides.keys(ai1, tw.s(String.format("/TweakTemplates/AI1/%03d/", ai1), "Instance Name", null), wad != null ? wad.name() : null);
+		AiOverrides ov = AiOverrides.of(modKeys);
+		if (!ov.isEmpty()) {
+			System.out.println("[mods] ai " + ai1 + ": " + ov);
+		}
+		this.tmpl = new AiTemplate(tw, ai1, ov);
 		this.maxHp = Math.max(tmpl.hitPoints, tmpl.maxHitPoints) & 0xFFFF;
 		this.hp = tmpl.hitPoints & 0xFFFF;
 		this.aiDamageMult = tmpl.damageMult;
@@ -142,17 +151,17 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 		this.rnd = new Random(seed);
 		this.scale = tmpl.scaleCenter / 100f + tmpl.scaleRange / 100f * (0.5f - rnd.nextFloat());
 		this.combat = new Combatant(new CombatData(wad, combatFiles, set), anim, this);
-		this.nav = new EnemyNav(tmpl.moveCaps, ai != null ? ai.motion(tmpl.soldier) : null, tmpl.pauseMoveMs);
-		AiData.Body soldBody = ai != null ? ai.body(tmpl.soldier) : null;
+		this.nav = new EnemyNav(tmpl.moveCaps, ai != null ? ov.apply("motion", ai.motion(tmpl.soldier)) : null, tmpl.pauseMoveMs);
+		AiData.Body soldBody = ai != null ? ov.apply("body", ai.body(tmpl.soldier)) : null;
 		nav.setBody(soldBody, scale);
-		nav.setRide(ai != null ? ai.ride(tmpl.soldier) : null);
+		nav.setRide(ai != null ? ov.apply("ride", ai.ride(tmpl.soldier)) : null);
 		collectLocoClips(set);
 		DecisionTree tree = ai != null ? ai.tree(tmpl.decisionTree) : null;
-		AiData.Soldier sold = ai != null ? ai.soldier(tmpl.soldier) : null;
+		AiData.Soldier sold = ai != null ? ov.apply("soldier", ai.soldier(tmpl.soldier)) : null;
 		this.brain = new AiBrain(this, tmpl, tree, AiData.blockMod(tw, tmpl.blockMod), sold, seed);
 		setDifficulty(1);
 		anim.play(idleClip, true);
-		AiData.Stone stn = ai != null ? ai.stone(tmpl.soldier) : null;
+		AiData.Stone stn = ai != null ? ov.apply("stone", ai.stone(tmpl.soldier)) : null;
 		this.freezeMax = stn != null ? stn.resist() : 30f;
 		this.stoneMove = stn != null ? stn.move() : 160;
 		this.freezeMeter = freezeMax;
@@ -160,6 +169,7 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 		this.stoneTime = (sm.isPresent() ? sm.getAsInt() : 5000) / 1000f;
 		var us = tw.raw("/GlobGame/", "Unfreeze Speed");
 		this.unfreezeRate = (us.isPresent() ? us.getAsInt() & 0xFFFF : 50) * 60f;
+		this.controller = devple.gow.engine.mod.Plugins.controllerFor(this, modKeys); // 플러그인 AI 대체 (49 문서 §13), 없으면 null
 	}
 
 	/** 난이도 0..3 (Easy..Impossible): "AI Recovery Time Mult" 를 공격 후 대기에 적용. */
@@ -170,6 +180,21 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 
 	public AiBrain brain() {
 		return brain;
+	}
+
+	/** 플러그인이 등록한 대체 제어 (없으면 null = 원래 AI). */
+	public devple.gow.engine.mod.EnemyController controller() {
+		return controller;
+	}
+
+	/** 모드 열쇠 (*, WAD 이름, Instance Name, AI1 번호 — 낮음 → 높음, {@link AiOverrides#keys}). */
+	public List<String> modKeys() {
+		return modKeys;
+	}
+
+	/** 현재 적 (setFoe, 없으면 null). */
+	public Hittable foe() {
+		return foe;
 	}
 
 	public AiTemplate template() {
@@ -243,6 +268,8 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 			// AI 정지 (시험·HeroTestScene 배치용): 스틱 0 으로 내비게이션 이동 단계는 돈다 — 서 있으면 (속도·변위 0) 원작처럼 자기는 밀지 않고
 			// (0x1EBB38 정지 → 0x1E9470), 기술 루트 모션으로 움직이거나 자유 이동 기술이면 민다
 			nav.update(pos, ZERO, null, combat.active(), dt);
+		} else if (controller != null) {
+			controller.update(this, dt); // 플러그인 AI (49 문서 §13)
 		} else if (brain.tree != null) {
 			brain.update(dt);
 			boolean busy = combat.active();
@@ -289,6 +316,25 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 			anim.update(dt);
 		}
 		rootMotion();
+	}
+
+	/**
+	 * 플러그인 제어용 이동 ({@link devple.gow.engine.mod.EnemyController}): 원래 AI 와 같은 내비게이션 단계 (바닥·벽·줄) + 바라보기 + 이동 애니.
+	 *
+	 * @param stick 월드 방향 × 속도 배율 0..1 (원래 AI 의 {@link AiBrain#move})
+	 * @param face  바라볼 yaw (NaN = 유지)
+	 */
+	public void steer(Vector3f stick, float face, float dt) {
+		boolean busy = combat.active();
+		nav.update(pos, stick, null, null, busy, dt);
+		if (!Float.isNaN(nav.faceYaw())) {
+			yaw = nav.faceYaw();
+		} else if (!busy && !Float.isNaN(face)) {
+			yaw = turn(yaw, face, TURN_RATE * dt);
+		}
+		if (!busy) {
+			locomotionAnim();
+		}
 	}
 
 	/** 루트 모션 (원작 0x1F7110 → 0x1EBD78, 영웅과 같은 규칙) — 동기 상대가 끄는 중이면 없음. */
