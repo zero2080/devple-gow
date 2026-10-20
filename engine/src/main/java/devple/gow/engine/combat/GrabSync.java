@@ -196,17 +196,17 @@ public final class GrabSync {
 	}
 
 	/**
-	 * 동기 정렬 + 영웅 루트 모션 (결합 중 영웅 이동 갱신은 장면이 건너뛰므로 여기서). 이벤트 22 창: 원작 0x204BF0 (적 기술 → 영웅을, 영웅 기술 → 적을 끈다) —
-	 * 끌리는 쪽은 루트 모션 없음 (0x1EC058). 영웅 기술 진행률 = 영웅 애니 시간 / 길이. 이벤트 22 창 밖 (이벤트 19 만인 처형 — 사이클롭스·미노타우로스·
-	 * 하피·고르곤·메두사 …) 은 원작처럼 위치를 맞추지 않는다: 잡기 적중 자리 + 두 쪽 루트 모션 (이동·회전, 37 문서 §11.4).
+	 * 동기 정렬 + 영웅 루트 모션 (결합 중 영웅 이동 갱신은 장면이 건너뛰므로 여기서). 이벤트 22 <b>또는 19</b> 창: 원작 0x204BF0 (적 기술 → 영웅을,
+	 * 영웅 기술 → 적을 끈다 — 0x2441E0(+0x1AC, 0x24) 의 0x4 = 이벤트 19) — 끌리는 쪽은 루트 모션 없음 (0x1EC058). 영웅 기술 진행률 = 영웅 애니 시간 / 길이.
+	 * 창 밖은 잡기 적중 자리 + 두 쪽 루트 모션 (이동·회전, 37 문서 §11.4–11.5).
 	 */
 	private void align() {
 		pulling = 0;
 		CombatFile.Move hm = heroCombat.active() ? heroCombat.move() : null;
 		Animation cur = heroAnim.current();
 		float hp = cur != null && cur.duration > 0 ? Math.min(1f, heroAnim.time() / cur.duration) : 0;
-		boolean enemyPulls = SyncPull.pullWindow(partner.combat()) != null;
-		boolean heroPulls = !enemyPulls && hm != null && SyncPull.pullWindow(hm, hp) != null;
+		boolean enemyPulls = SyncPull.linkedPullWindow(partner.combat()) != null;
+		boolean heroPulls = !enemyPulls && hm != null && SyncPull.linkedPullWindow(hm, hp) != null;
 		// 영웅 루트 모션: 물리가 꺼져 있어 수직도 (사이클롭스 등에 올라탐), 잡은 자리 바닥 아래로는 내려가지 않게 [근사]
 		hero.prevPosition.set(hero.position);
 		hero.rootHold = enemyPulls;

@@ -22,8 +22,8 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 원작 루트 모션 (0x1F7110 → 0x1EBD78, 37 문서 §11.4): 적·영웅 기술 중 zeroJoint 델타 = 이동·회전, 이벤트 19 만인 처형은 정렬 없음,
- * 이벤트 22 창은 끄는 쪽이 상대를 0x204BF0 로 (아기 히드라 ATHN01C 821–825, 침대 ATHN01F 846–853).
+ * 원작 루트 모션 (0x1F7110 → 0x1EBD78, 37 문서 §11.4): 적·영웅 기술 중 zeroJoint 델타 = 이동·회전, 결합 처형의 이벤트 19/22 창은
+ * 끄는 쪽이 상대를 0x204BF0 로 (일반 적 처형 §11.5, 아기 히드라 ATHN01C 821–825, 침대 ATHN01F 846–853).
  */
 class RootMotionTest {
 
@@ -141,8 +141,8 @@ class RootMotionTest {
 	}
 
 	/**
-	 * 메두사 머리 잡기 MAIMEWGRAB (이벤트 19 만): 정렬 없음 — 영웅 zeroJoint 가 0 → 180° 돌아 영웅이 루트 회전으로 돌아서고 synchJoint 는 월드에 고정
-	 * (예전 엔진 대체: 고르곤을 영웅 위치·방향에 겹침).
+	 * 메두사 머리 잡기 MAIMEWGRAB: 이벤트 19 창이 처음에 잡은 자리의 어긋남을 끌어 맞춘 뒤 (0x204BF0) 영웅 zeroJoint 가 0 → 180° 돌아 영웅이
+	 * 루트 회전으로 돌아서고 synchJoint 는 월드에 고정 (예전 엔진 대체: 고르곤을 영웅 위치·방향에 겹침).
 	 */
 	@Test
 	void medusaGrabRootRotation() throws Exception {
@@ -167,7 +167,8 @@ class RootMotionTest {
 				}
 				maxTurn = Math.max(maxTurn, (float) Math.abs(Math.IEEEremainder(r.ctl().yaw - yawAtLink, Math.PI * 2)));
 				Vector3f s = synchWorld(r.ctl());
-				if (synch0 == null && r.ctl().animator().time() > 0.2f) {
+				// 결합 처음 0.4 초쯤은 이벤트 19 끌기 (0x204BF0, 비율 0.1 → ×1.1) 가 잡은 자리의 어긋남을 메우므로 그 뒤부터 잰다
+				if (synch0 == null && r.ctl().animator().time() > 0.5f) {
 					synch0 = s;
 				} else if (synch0 != null) {
 					synchDrift = Math.max(synchDrift, new Vector3f(s).sub(synch0).setComponent(1, 0).length());

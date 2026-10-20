@@ -112,6 +112,8 @@ public final class BossSync {
 			pull.link(); // 0x209830: 동기 연결이 새로 생길 때 +0x1BC = 0.1 (자기·상대)
 			linkFloor = ctl.position.y;
 		}
+		// 원작 0x2441E0(+0x1AC, 0x24) 는 이벤트 19 (0x4) 창도 끈다 (일반 적 처형은 GrabSync 가 적용, 37 문서 §11.5). 보스 동기 (아레스 605–609, 악령 크라토스
+		// 포옹·분신 잡기 등) 는 아직 이벤트 22 만 [근사: 미적용 — 악령 크라토스 포옹은 끌기 목표가 수백 단위 밖으로 나와 따로 확인 필요]
 		boolean bossPulls = SyncPull.pullWindow(bc) != null;
 		boolean heroPulls = !bossPulls && SyncPull.pullWindow(hero) != null;
 		// 끌리는 쪽은 루트 모션 없음 (0x1EC058). 원작은 상대 이벤트 창을 같은 프레임에 갱신해 (0x1EBF8C → 0x206030) 끌리는 첫 프레임부터
@@ -140,7 +142,7 @@ public final class BossSync {
 			boss.prevPos.set(boss.pos);
 			pulling = 2;
 		} else {
-			// 원작: 정렬 없음 (이벤트 19 = 동기 유지만) — 두 쪽 루트 모션 (0x1F7110 → 0x1EBD78: 이동·회전). 영웅 수평·회전은 HeroController,
+			// 이벤트 22 창 밖: 두 쪽 루트 모션 (0x1F7110 → 0x1EBD78: 이동·회전). 영웅 수평·회전은 HeroController,
 			// 보스는 EnemyFighter, 영웅 수직은 여기서 (동기 중 물리가 꺼져 있다 — 608 창 뒤 zeroJoint y 62 → 0 로 내려옴, BMI 올라타기 0 → 212).
 			// 동기 시작 높이 아래로는 내려가지 않게 (BMI 실패 454 는 zeroJoint 가 바닥 아래로) [근사: 원작은 지상 이동이 바닥에 붙임]
 			ctl.position.y = Math.max(linkFloor, ctl.position.y + ctl.rootDy());

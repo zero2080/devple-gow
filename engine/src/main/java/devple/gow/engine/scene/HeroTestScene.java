@@ -280,13 +280,13 @@ public final class HeroTestScene implements Scene {
 			st.add(new ScriptedInput.Step(4.0f, 0.05f, PadButton.TRIANGLE));
 			scripted = new ScriptedInput(e.window().handle(), st);
 		} else if (auto == Auto.GRAB && enemy != null) {
-			// 적 HP = 잡기 원 아래, AI 정지. 배치 = 처형 설계 관계가 나오는 자리 (37 문서 §11.5, GrabRelation): 원작은 이벤트 19 처형에서 위치를
-			// 맞추지 않고 GRAB 이 처음 닿은 자리 + 루트 모션이 관계를 만든다. 미니게임은 자동 입력 (AutoPad) 으로 성공 분기
+			// 적 HP = 잡기 원 아래, AI 정지. 배치 = GRAB 첫 접촉이 처형 설계 관계에 가장 가까운 자리 (37 문서 §11.5, GrabRelation) — 그 밖의
+			// 어긋남은 처형 기술의 이벤트 19/22 창 (0x204BF0) 이 끌어 맞춘다. 미니게임은 자동 입력 (AutoPad) 으로 성공 분기
 			enemy.hp = 5;
 			enemy.holdAi = true;
 			ctl.yaw = 0;
 			var fin = devple.gow.engine.combat.GrabRelation.finisher(heroData, enemy.classId(), enemy.hp);
-			// 시작 거리: 같은 데이터로 헤드리스 모의 (새 영웅·적) 를 돌려 결합 0.5 초 뒤 synchJoint 오차가 가장 작은 거리
+			// 시작 거리: 같은 데이터로 헤드리스 모의 (새 영웅·적) 를 돌려 결합 순간 (끌기 전) 오차가 가장 작은 거리
 			Path wpnPath = rom.resolve("R_WPN0_" + Math.max(0, Math.min(5, bladeLevel)) + ".WAD");
 			var kindF = enemyKind;
 			var res = fin == null ? null : devple.gow.engine.combat.GrabRelation.search(() -> devple.gow.engine.combat.GrabRelation.Trial.create(
@@ -306,8 +306,8 @@ public final class HeroTestScene implements Scene {
 				d.rotateY(ey).negate(); // 영웅 기준 적 위치
 				enemy.pos.set(d.x, 0, d.z);
 				enemy.yaw = ey;
-				System.out.printf("처형 %d %s: 설계 관계 %.1f, 시작 거리 %.0f (적중 GRAB %.2f, 결합 거리 %.1f, 오차 %.1f)%n", res.finisher(),
-						heroData.animation(fin).name, res.design(), res.start(), res.hitProgress(), res.link(), res.error());
+				System.out.printf("처형 %d %s: 설계 관계 %.1f, 시작 거리 %.0f (적중 GRAB %.2f, 결합 거리 %.1f, 결합 오차 %.1f → 0.5 초 뒤 %.1f)%n",
+						res.finisher(), heroData.animation(fin).name, res.design(), res.start(), res.hitProgress(), res.link(), res.contact(), res.error());
 			} else {
 				enemy.pos.set(0, 0, -32);
 				enemy.yaw = (float) Math.PI;
