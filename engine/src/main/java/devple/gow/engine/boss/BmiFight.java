@@ -35,7 +35,7 @@ import java.util.List;
  * 올라타기: 203 의 EV_HIT_REACT 태그 200 (영웅 ○) → 450 → 영웅 451/452/453 (TimedPress 206/207, 실패 → 454) → 455 → 208 통나무 기절 (22초)
  *   → 레버(과제 351) LevelData0 = 99 → 통나무 Arrow/060 (피해 1000, Context 456) → 단계 +1 · 210 LOGHIT / 단계 3 (HP ≤ 1000) 245 → ExplodeDeath
  * </pre>
- * 엔진 쪽 근사: 위치는 애니 zeroJoint 변화량(영웅과 같은 규칙). 통나무 = 레버 logAim 투사체 (Arrow/060 golog), 배출구 증기 GO,
+ * 위치는 공용 루트 모션 (원작 0x1F7110 → 0x1EBD78, 37 문서 §11.4). 통나무 = 레버 logAim 투사체 (Arrow/060 golog), 배출구 증기 GO,
  * 갑옷 BRK 조각, 모델 변형 (+0x120), HUD EnemyState, 카메라 대상 슬롯은 원작 해독 (37 문서 §10.1). 피한 통나무가 빗나가는 판정만 근사.
  */
 public final class BmiFight extends BossFight {
@@ -65,8 +65,6 @@ public final class BmiFight extends BossFight {
 	private int stage, count, brokenPieces = 4;
 	private float accum, timer;
 	private boolean onPlatform, firstVent = true, lock;
-	private Animation lastClip;
-	private float lastTime;
 	/** 날고 있는 통나무 (Arrow/060 "golog", 없으면 null). */
 	private Log log;
 	/** 기록 (테스트): 통나무 적중 / 빗나감, 마지막 통나무가 멈춘 곳·이유. */
@@ -96,7 +94,7 @@ public final class BmiFight extends BossFight {
 		kinds.put(TEMPLATE, kind);
 		silent.addAll(List.of(202, 257)); // AB2/AMISoundbankLoad
 		bossTemplates.add(TEMPLATE);
-		sync = new BossSync(id -> id >= RIDE_MOUNT && id <= RIDE_WIN, BossSync.Align.ZERO);
+		sync = new BossSync(id -> id >= RIDE_MOUNT && id <= RIDE_WIN);
 		Tweaks tw = kind.tweaks();
 		ventDamage = tw.f(NODE, "Damage Per Vent Stage", 100);
 		armorDamage = tw.f(NODE, "Damage Per Armor Stage", 150);
@@ -197,7 +195,6 @@ public final class BmiFight extends BossFight {
 			anchor.set(m[12], f.pos.y, m[14]);
 		}
 		f.damageHook = this::takeDamage;
-		lastClip = null;
 		meterState(true); // 생성자 sub_1C1958(this, 1): 단계 0 → 1
 		EffectSystem fx = arena.effects();
 		if (fx != null) {
@@ -223,7 +220,7 @@ public final class BmiFight extends BossFight {
 	@Override
 	protected void tick(Input in, float dt) {
 		EnemyFighter f = boss;
-		rootMotion(f);
+		// 위치: 공용 루트 모션 (EnemyFighter, 원작 0x1F7110 → 0x1EBD78 — 기술 중 zeroJoint 델타, 회전 포함)
 		if (log != null) {
 			flyLog(f, dt);
 		}
@@ -360,33 +357,6 @@ public final class BmiFight extends BossFight {
 			}
 			timer = idleTime;
 		}
-	}
-
-	/** 기술 애니 zeroJoint 변화량 = 몸 이동 (영웅과 같은 규칙, 25 문서). 클립이 바뀐 프레임은 이동 없음 (BMI 애니는 zeroJoint 가 절대 위치). */
-	private void rootMotion(EnemyFighter f) {
-		var an = f.animator();
-		Animation clip = an.current();
-		float t = an.time();
-		var sk = an.skeleton();
-		int zj = sk.indexOf("zeroJoint");
-		if (clip != null && clip == lastClip && zj >= 0 && clip.hasSkeletalData()) {
-			float z0 = zero(clip, sk, lastTime, zj), z1 = zero(clip, sk, t, zj);
-			float dz = t >= lastTime ? z1 - z0 : (zero(clip, sk, clip.duration, zj) - z0) + (z1 - zero(clip, sk, 0, zj));
-			float x0 = zeroX(clip, sk, lastTime, zj), x1 = zeroX(clip, sk, t, zj);
-			float dx = t >= lastTime ? x1 - x0 : 0;
-			Vector3f v = new Vector3f(dx, 0, dz).mul(f.scale).rotateY(f.yaw);
-			f.pos.add(v);
-		}
-		lastClip = clip;
-		lastTime = t;
-	}
-
-	private static float zero(Animation a, devple.gow.tools.anim.Skeleton sk, float t, int zj) {
-		return a.sample(sk, Math.min(t, a.duration), false).pos[zj][2];
-	}
-
-	private static float zeroX(Animation a, devple.gow.tools.anim.Skeleton sk, float t, int zj) {
-		return a.sample(sk, Math.min(t, a.duration), false).pos[zj][0];
 	}
 
 	// ---------------- TakeDamage 0x1C1838 ----------------

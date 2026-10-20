@@ -15,8 +15,8 @@ import devple.gow.tools.combat.CombatFile;
  *   <li>정렬: 어느 쪽 기술이든 이벤트 22 창 안이면 원작 0x204BF0 ({@link SyncPull}) — 그 쪽이 상대를 끈다
  *       (영웅 221 MAISKB02 [0–0.76], 421 MAISIRKILL [0.44–0.91] = 영웅이 적을). 그런 기술의 창 밖은 원작처럼 위치를 건드리지 않는다.
  *       이벤트 22 가 없는 처형 (사이클롭스·미노타우로스·하피·고르곤·메두사 … 디스크 전체 조사, 37 문서 §11) 은 원작도 정렬이 없다
- *       (이벤트 19 = 동기 유지만 — 잡기 적중 위치 + 두 쪽 루트 모션). 엔진은 적 루트 모션·처형 애니(적 세트에 없음)가 없어
- *       같은 기준점(영웅 위치·방향)에 둔다 [근사]</li>
+ *       (이벤트 19 = 동기 유지만 — 잡기 적중 위치 + 두 쪽 루트 모션 {@link devple.gow.engine.anim.RootMotion}, 37 문서 §11.4).
+ *       결합 중 영웅 루트 모션 (수직 포함) 은 여기서, 적은 자기 갱신에서. 결합 없는 적 기술 끌기는 {@link #lonePull}</li>
  *   <li>적 기술에 SCRIPT SCR_RepeatPress + 재생 속도 0 → {@link RepeatPressQte} (idx = 템플릿)</li>
  *   <li>적 기술에 SCRIPT SCR_TimedPress → 이벤트 창마다 {@link TimedPressQte} (버튼 / 스틱 회전, 사이클롭스·고르곤 처형).
  *       실패(틀린 버튼, 창 만료) → 적 기술의 같은 창 REQUEST0 분기 (실패 기술) — 영웅은 같은 이름 애니로 따라감</li>
@@ -84,6 +84,24 @@ public final class GrabSync {
 		return qte;
 	}
 
+	/** 동기 기술 플래그 (CombatFile 기술 +0x0E): 0x20 = 시작 시 공격 대상과 동기 연결 (적·보스 쪽), 0x40 = 연결만 받음 (영웅 쪽) — 0x209790. */
+	static final int SYNC_FLAGS = 0x60;
+
+	/** 결합 시작: 두 쪽 MAI* 애니, 또는 적 기술 (플래그 0x20) 과 같은 ID 의 영웅 기술 (아기 히드라 821–824 ↔ 영웅 006 의 821–824). */
+	private static boolean linkable(Combatant hero, Combatant enemy) {
+		String hc = hero.clipName(), ec = enemy.clipName();
+		if (hc != null && ec != null && hc.toLowerCase().startsWith("mai") && ec.toLowerCase().startsWith("mai")) {
+			return true;
+		}
+		return hero.active() && enemy.active() && (enemy.move().flags() & 0x20) != 0 && hero.move().id() == enemy.move().id();
+	}
+
+	/** 결합 유지: 적 MAI* 애니 또는 동기 플래그 기술 (원작: 0x60 이 없는 기술이 시작되면 +0x84 = 0, 0x2050D8). */
+	private static boolean stillLinked(Combatant enemy) {
+		String ec = enemy.clipName();
+		return ec != null && (ec.toLowerCase().startsWith("mai") || enemy.active() && (enemy.move().flags() & SYNC_FLAGS) != 0);
+	}
+
 	/** @return 결합 중이면 true (게임 쪽은 영웅 이동/전투 갱신을 건너뛴다) */
 	public boolean update(Input in, EnemyFighter target, Tweaks targetTweaks, float dt) {
 		String hc = heroCombat.clipName();
@@ -91,31 +109,32 @@ public final class GrabSync {
 			// 적 세트에 없는 처형 애니(예 사이클롭스 MAICYW*)는 영웅 세트의 같은 애니로 시간·이름을 맞춘다
 			target.combat().setClipFallback(heroCombat::animationByHash);
 		}
-		if (partner == null && hc != null && hc.toLowerCase().startsWith("mai") && target != null) {
-			String ec = target.combat().clipName();
-			if (ec != null && ec.toLowerCase().startsWith("mai")) {
-				partner = target;
-				partnerTweaks = targetTweaks;
-				lastEnemyClip = null;
-				lastResult = null;
-				sessionPassed = sessionFailed = 0;
-				pull.link(); // 0x209830: 동기 연결 시작 → 비율 0.1
-			}
+		if (partner == null && target != null && linkable(heroCombat, target.combat())) {
+			partner = target;
+			partnerTweaks = targetTweaks;
+			lastEnemyClip = null;
+			lastResult = null;
+			sessionPassed = sessionFailed = 0;
+			pull.link(); // 0x209830: 동기 연결 시작 → 비율 0.1
+			linkFloor = hero.position.y;
 		}
 		if (partner == null) {
+			lonePull(target);
 			return false;
 		}
 		String ec = partner.combat().clipName();
-		if (ec == null || !ec.toLowerCase().startsWith("mai")) {
+		if (!stillLinked(partner.combat())) {
+			partner.rootHold = false;
 			partner = null;
 			qte = null;
 			timed = null;
 			timedEvent = null;
 			pull.unlink();
 			pulling = 0;
+			hero.rootHold = false;
+			hero.resetRoot();
 			return false;
 		}
-		align();
 		if (!ec.equals(lastEnemyClip)) {
 			lastEnemyClip = ec;
 			Animation a = heroAnim.find(ec);
@@ -137,36 +156,81 @@ public final class GrabSync {
 		} else {
 			heroAnim.update(dt);
 		}
+		align();
 		return true;
 	}
 
 	/**
-	 * 동기 정렬. 이벤트 22 창: 원작 0x204BF0 (적 기술 → 영웅을, 영웅 기술 → 적을 끈다). 영웅 기술 진행률은 결합 중 영웅 전투 갱신이 멈추므로
-	 * 영웅 애니 시간 / 길이. 이벤트 22 를 가진 기술의 창 밖은 그대로, 이벤트 22 가 없는 처형은 같은 기준점 [근사].
+	 * 동기 정렬 + 영웅 루트 모션 (결합 중 영웅 전투 갱신이 멈추므로 여기서). 이벤트 22 창: 원작 0x204BF0 (적 기술 → 영웅을, 영웅 기술 → 적을 끈다) —
+	 * 끌리는 쪽은 루트 모션 없음 (0x1EC058). 영웅 기술 진행률 = 영웅 애니 시간 / 길이. 이벤트 22 창 밖 (이벤트 19 만인 처형 — 사이클롭스·미노타우로스·
+	 * 하피·고르곤·메두사 …) 은 원작처럼 위치를 맞추지 않는다: 잡기 적중 자리 + 두 쪽 루트 모션 (이동·회전, 37 문서 §11.4).
 	 */
 	private void align() {
 		pulling = 0;
 		CombatFile.Move hm = heroCombat.active() ? heroCombat.move() : null;
 		Animation cur = heroAnim.current();
 		float hp = cur != null && cur.duration > 0 ? Math.min(1f, heroAnim.time() / cur.duration) : 0;
-		if (SyncPull.pullWindow(partner.combat()) != null) {
+		boolean enemyPulls = SyncPull.pullWindow(partner.combat()) != null;
+		boolean heroPulls = !enemyPulls && hm != null && SyncPull.pullWindow(hm, hp) != null;
+		// 영웅 루트 모션: 물리가 꺼져 있어 수직도 (사이클롭스 등에 올라탐), 잡은 자리 바닥 아래로는 내려가지 않게 [근사]
+		hero.prevPosition.set(hero.position);
+		hero.rootHold = enemyPulls;
+		hero.applyRoot(true);
+		hero.position.y = Math.max(linkFloor, hero.position.y);
+		partner.rootHold = heroPulls; // 적 루트 모션은 적 갱신 (다음 틱) 에서
+		if (enemyPulls) {
 			float[] y = {hero.yaw};
 			pull.step(SyncPull.target(partner.pos, partner.yaw, partner.animator(), partner.scale, heroAnim, 1f), hero.position, y);
 			hero.yaw = y[0];
 			hero.prevPosition.set(hero.position);
 			pulling = 1;
-		} else if (hm != null && SyncPull.pullWindow(hm, hp) != null) {
+		} else if (heroPulls) {
 			float[] y = {partner.yaw};
 			pull.step(SyncPull.target(hero.position, hero.yaw, heroAnim, 1f, partner.animator(), partner.scale), partner.pos, y);
 			partner.yaw = y[0];
 			partner.prevPos.set(partner.pos);
 			pulling = 2;
-		} else if ((hm == null || !SyncPull.hasPull(hm)) && !(partner.combat().active() && SyncPull.hasPull(partner.combat().move()))) {
-			// 기준점 공유: 적을 영웅 위치·방향에 [근사]
-			partner.pos.set(hero.position);
-			partner.prevPos.set(hero.prevPosition);
-			partner.yaw = hero.yaw;
 		}
+	}
+
+	/** 결합 시작 때 영웅 높이 (루트 모션 수직 하한). */
+	private float linkFloor;
+	/** 결합 없는 끌기의 연결 (적 기술 순번). */
+	private EnemyFighter lonePuller;
+	private int loneSerial = -1;
+
+	/**
+	 * 결합(애니 잠금) 없이 적 기술의 이벤트 22 창이 영웅을 끈다 — 원작은 동기 연결 (+0x84) 이 플래그 0x20 기술 시작 때 공격 대상과 맺어지고
+	 * 영웅 기술과 무관하다 (아기 히드라 825 BHABABYGRAB [0–0.22]: 영웅은 COMBO5A → GRABREJECT). 대상 = 가장 가까운 적 [근사].
+	 */
+	private void lonePull(EnemyFighter target) {
+		pulling = 0;
+		Combatant ec = target != null ? target.combat() : null;
+		boolean on = ec != null && ec.active() && (ec.move().flags() & SYNC_FLAGS) != 0 && !target.dead()
+				&& SyncPull.pullWindow(ec) != null && ec.target() != null
+				&& ec.target().position().distanceSquared(hero.position) < 1f;
+		if (!on) {
+			if (lonePuller != null) {
+				hero.rootHold = false;
+				lonePuller = null;
+				pull.unlink();
+			}
+			return;
+		}
+		if (target != lonePuller || ec.moveSerial() != loneSerial) {
+			if (target != lonePuller) {
+				pull.link(); // 0x209830: 새 연결 → 0.1
+			}
+			lonePuller = target;
+			loneSerial = ec.moveSerial();
+		}
+		float[] y = {hero.yaw};
+		pull.step(SyncPull.target(target.pos, target.yaw, target.animator(), target.scale, heroAnim, 1f), hero.position, y);
+		hero.yaw = y[0];
+		hero.prevPosition.set(hero.position);
+		hero.vy = 0;
+		hero.rootHold = true; // 다음 틱 영웅 루트 모션 없음 (끌리는 쪽)
+		pulling = 1;
 	}
 
 	/** TimedPress: 이벤트 창 진입 → 프롬프트, 틀린 버튼 → 즉시 실패 분기, 창 만료 → 실패 분기. */

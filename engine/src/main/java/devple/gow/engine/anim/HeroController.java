@@ -48,7 +48,11 @@ public final class HeroController implements NavBody {
 	private boolean wasGrounded = true;
 
 	private Animation rootClip;
-	private final Vector3f lastZero = new Vector3f();
+	/** 루트 모션 (원작 0x1F7110, 기술 중) — 이동·회전. */
+	private final RootMotion root = new RootMotion();
+	private float rootDy;
+	/** 동기 상대가 끄는 중 (0x204BF0 의 끌리는 쪽: 루트 모션 D = 단위, 0x1EC058). 동기 코드가 매 틱 정한다. */
+	public boolean rootHold;
 	/** 공중 수평 발사 속도 (줄·벽에서 뛰어내림, 내비게이터가 정함). 착지하면 0. */
 	public final Vector3f launch = new Vector3f();
 	/** 지상 이동 모양 (균형 걷기 등, null = 기본) / 속도 배율. */
@@ -81,7 +85,6 @@ public final class HeroController implements NavBody {
 		Animation cur = anim.current();
 		if (cur != rootClip) {
 			rootClip = cur;
-			lastZero.set(zero());
 			// 기술 시작 시 스틱 방향으로 즉시 회전 (원작 조작감)
 			float sx = in.leftX(), sy = in.leftY();
 			if (Math.hypot(sx, sy) > 0.3) {
@@ -92,12 +95,30 @@ public final class HeroController implements NavBody {
 			}
 		}
 		anim.update(dt);
-		Vector3f z = zero();
-		if (!cur.looping()) {
-			Vector3f d = new Vector3f(z).sub(lastZero).rotateY(yaw);
-			position.add(d.x, 0, d.z);
-		}
-		lastZero.set(z);
+		applyRoot(false);
+	}
+
+	/**
+	 * 루트 모션 한 프레임 ({@link RootMotion}, 원작 0x1F7110 → 0x1EBD78): 수평 변위·요 변화를 적용. 수직 변위는 {@link #rootDy} 에 남기고
+	 * vertical 이면 바로 더한다 (동기 중처럼 물리가 꺼진 경우 — 원작은 변위를 내비게이션 이동에 넘겨 지상이면 바닥에 붙는다).
+	 * {@link #rootHold} 면 (동기 상대가 끄는 중) 변위 없음.
+	 */
+	public void applyRoot(boolean vertical) {
+		root.step(anim, 1f, yaw, rootHold);
+		position.add(root.dx, vertical ? root.dy : 0, root.dz);
+		yaw += root.dyaw;
+		rootDy = root.dy;
+	}
+
+	/** 루트 모션 상태 초기화 (전투 기술이 아닌 프레임 — 원작은 기술 중에만 D 를 적용). */
+	public void resetRoot() {
+		root.reset();
+		rootDy = 0;
+	}
+
+	/** 마지막 루트 모션의 수직 변위 (애니 y, 영웅 배율 1). */
+	public float rootDy() {
+		return rootDy;
 	}
 
 	/** 다른 몸통과 겹치지 않게 밀어낸다 (원작 캐릭터 간 충돌의 단순화). */
@@ -114,14 +135,6 @@ public final class HeroController implements NavBody {
 			position.x = other.x + dx / d * min;
 			position.z = other.z + dz / d * min;
 		}
-	}
-
-	private Vector3f zero() {
-		if (zeroJoint < 0 || anim.current() == null) {
-			return new Vector3f();
-		}
-		float[] p = anim.current().sample(anim.skeleton(), anim.time(), anim.current().looping()).pos[zeroJoint];
-		return new Vector3f(p[0], p[1], p[2]);
 	}
 
 	/**
@@ -151,6 +164,7 @@ public final class HeroController implements NavBody {
 		prevPosition.set(position);
 		prevYaw = yaw;
 		rootClip = null;
+		root.reset();
 		if (!grounded) {
 			airUpdate(in, camYaw, dt);
 			return;
@@ -317,6 +331,7 @@ public final class HeroController implements NavBody {
 
 	/** 내비게이터가 움직인 틱: 보간용 이전 위치 갱신 + 애니 진행. */
 	public void navTick(float dt) {
+		root.reset();
 		anim.update(dt);
 	}
 

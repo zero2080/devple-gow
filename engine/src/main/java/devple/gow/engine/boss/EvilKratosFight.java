@@ -48,7 +48,7 @@ public final class EvilKratosFight extends BossFight {
 	private int demoStep;
 	private float demoWait;
 	/** 분신 잡기 동기 (860–863, 같은 ID 쌍): 분신을 영웅 원점에 (synchJoint 둘 다 (0,0,−32) → 같은 원점). */
-	private final BossSync cloneSync = new BossSync(id -> id >= CLONE_GRAB_START && id <= CLONE_GRAB_LOSE, BossSync.Align.BOSS_TO_HERO);
+	private final BossSync cloneSync = new BossSync(id -> id >= CLONE_GRAB_START && id <= CLONE_GRAB_LOSE);
 	private EnemyFighter grabber;
 	private int heroSerial = -1;
 	/** 분신 잡기 결과 기록 (테스트): 탈출 / 실패. */
@@ -63,7 +63,7 @@ public final class EvilKratosFight extends BossFight {
 		}
 		silent.add(670);
 		bossTemplates.add(FAMILY);
-		sync = new BossSync(id -> id >= HUG_START && id <= HUG_EXIT, BossSync.Align.SYNCH);
+		sync = new BossSync(id -> id >= HUG_START && id <= HUG_EXIT);
 	}
 
 	/** 가족 (보호 대상). */

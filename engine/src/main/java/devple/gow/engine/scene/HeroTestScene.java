@@ -275,9 +275,10 @@ public final class HeroTestScene implements Scene {
 		} else if (auto == Auto.GRAB && enemy != null) {
 			enemy.pos.set(0, 0, -32);
 			enemy.prevPos.set(enemy.pos);
-			enemy.yaw = 0; // 영웅(+z 쪽) 을 봄
+			// 정면 = 모델 −Z (34 문서 §4): 적 요 π → +z (영웅 쪽), 영웅 요 0 → −z (적 쪽). 잡기 정렬이 없으므로 (37 문서 §11.4) 서로 마주 보게
+			enemy.yaw = (float) Math.PI;
 			enemy.hp = 5;
-			ctl.yaw = (float) Math.PI; // -z 의 적을 봄
+			ctl.yaw = 0;
 			grab = new devple.gow.engine.combat.GrabSync(ctl, combat);
 			scripted = new ScriptedInput(e.window().handle(), List.of(new ScriptedInput.Step(0.3f, 0.05f, PadButton.CIRCLE)));
 		} else if (auto == Auto.MAGIC) {

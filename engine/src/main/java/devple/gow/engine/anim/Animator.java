@@ -22,6 +22,8 @@ public final class Animator {
 	private float fade = 1f;
 	private float fadeTime;
 	private float rate = 1f;
+	/** 재생 시작 순번 (같은 클립 재시작도 증가) — 루트 모션 프레임 카운터 리셋 (원작 0x1F7408 이 새 애니에서 +0xC8 = 0). */
+	private int playSerial;
 
 	/** @param twkNode 예: "/Animation/goHero/" */
 	public Animator(Skeleton skeleton, AnimationSet set, Tweaks tweaks, String twkNode) {
@@ -45,6 +47,7 @@ public final class Animator {
 		prevTime = time;
 		current = a;
 		time = 0;
+		playSerial++;
 		fadeTime = tweaks.f(twkNode, a.name + "_Tween", 0.15f);
 		fade = previous == null || fadeTime <= 0 ? 1f : 0f;
 	}
@@ -55,6 +58,7 @@ public final class Animator {
 		prevTime = time;
 		current = a;
 		time = startTime;
+		playSerial++;
 		this.rate = rate;
 		fadeTime = tweaks.f(twkNode, a.name + "_Tween", 0.1f);
 		fade = previous == null || fadeTime <= 0 ? 1f : 0f;
@@ -83,6 +87,11 @@ public final class Animator {
 
 	public float time() {
 		return time;
+	}
+
+	/** 재생 시작 순번 ({@link #play}/{@link #playClip} 마다 증가). */
+	public int playSerial() {
+		return playSerial;
 	}
 
 	/** 한 번 재생 클립이 끝났는지. */
