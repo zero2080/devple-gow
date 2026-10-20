@@ -115,8 +115,9 @@ public final class Platforms {
 		}
 
 		/**
-		 * hull h 가 영웅 몸을 막는지 — 평면 하나라도 {@link #WALL_EXCLUDE} 에 안 걸리면. 몸 질의 0x1E2100 의 제외 마스크는 바닥과 같지만
-		 * GeneralGuide 면 (ATHN01B goplayerblock 등 "플레이어 막이" 이름) 은 따로 막는 질의가 있을 수 있어 밀어내기에는 남긴다 [미확인].
+		 * hull h 가 영웅 몸을 막는지 — 평면 하나라도 {@link #WALL_EXCLUDE} 에 안 걸리면. 몸 질의 0x1E2100 의 고정 마스크는 0x10042 (바닥 0x1E3298 의
+		 * 0x1010042 와 달리 GeneralGuide 없음) 이고 호출 마스크 (0x1EA200 0x8020000 / 0x28020000, 0x1EA5F0 0x20000 | 0x8000000 | 0x20000000) 에도 없다
+		 * → GeneralGuide 면 (ATHN01B goplayerblock "guideMat" 등) 은 몸을 막는다 [확실] (38 §18.4).
 		 */
 		boolean wallHull(int h) {
 			for (long a : planeAttrs[h]) {
@@ -197,7 +198,10 @@ public final class Platforms {
 	public static final long HERO_EXCLUDE = SurfaceAttr.WATER.bit() | SurfaceAttr.DEATH.bit() | SurfaceAttr.AI_BLOCK.bit()
 			| SurfaceAttr.GENERAL_GUIDE.bit() | SurfaceAttr.NO_PLAYER_COLLISION.bit() | SurfaceAttr.CLIMB_GUIDE.bit() | SurfaceAttr.COMBAT_GUIDE.bit();
 
-	/** 벽 (구 밀어내기) 제외 마스크 = {@link #HERO_EXCLUDE} − GeneralGuide [근사]. */
+	/**
+	 * 벽 (구 밀어내기) 제외 마스크 = {@link #HERO_EXCLUDE} − GeneralGuide [확실: 0x1E2224 고정 0x10042]. ClimbGuide 는 벽 상태가 아닐 때만,
+	 * CombatGuide 는 플레이어 전투 기술 (기술 +0x13 = 2) 이 아닐 때만 빠진다 (0x1EA6B4 / 0x1EA6C0) — 엔진은 늘 뺌 [근사].
+	 */
 	public static final long WALL_EXCLUDE = HERO_EXCLUDE & ~SurfaceAttr.GENERAL_GUIDE.bit();
 
 	/** 표면 속성의 면이 영웅 바닥 질의에 걸리는지 ({@link #HERO_EXCLUDE} 에 하나도 안 걸림). */

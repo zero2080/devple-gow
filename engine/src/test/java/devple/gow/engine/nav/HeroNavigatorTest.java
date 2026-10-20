@@ -1508,4 +1508,114 @@ class HeroNavigatorTest {
 		assertEquals(-40 - 16.5f, box.pos.z, 1.5f);
 		assertEquals(List.of("kick 503", "detach"), ev);
 	}
+
+	/**
+	 * 좁은 턱 경로 0x1E3EE8 (38 §18.1): 첫 수직 선분 윗면이 Narrow·NarrowNoBB 면 벽 두 선분 (±9.6) · 머리 선분 대신 턱 − (d + 2) 에서 정면 선분 하나.
+	 * 윗면 (폭 10) 보다 좁은 앞면 (폭 6) 의 기둥: 일반 턱은 양옆 선분이 빗나가 못 잡고, 좁은 턱은 가운데 선분으로 잡는다.
+	 */
+	@Test
+	void narrowLedgeTopHangsWithSingleCenterRay() {
+		for (SurfaceAttr top : new SurfaceAttr[] {SurfaceAttr.GROUND, SurfaceAttr.NARROW, SurfaceAttr.NARROW_NO_BB}) {
+			List<LevelCollision.Tri> t = new ArrayList<>();
+			floor(t, -200, -200, 200, 200, 0, SurfaceAttr.GROUND);
+			floor(t, -5, -30, 5, -20, 100, top);
+			wallZ(t, -20, -3, 3, 80, 100, SurfaceAttr.GROUND);
+			NavWorld w = new NavWorld(LevelCollision.of(t));
+			Body b = new Body();
+			HeroNavigator nav = new HeroNavigator(b, w, null);
+			Vector3f f = v(0, 0, -1);
+			HeroNavigator.Ledge l = nav.probeLedge(v(0, 64.4f, -10), v(0, 65, -10), f, null);
+			if (top == SurfaceAttr.GROUND) {
+				assertNull(l, "일반 턱: 앞면 폭 6 < 양옆 선분 (중심에서 3.4) → 실패");
+				continue;
+			}
+			assertNotNull(l, top + " 윗면 → 좁은 턱 경로");
+			assertEquals(100 - HeroNavigator.HANG, l.feet().y, 1e-3f, "발 = 턱 − 35.2");
+			assertEquals(-20 + HeroNavigator.WALL_OFF, l.feet().z, 1e-3f, "적중점 + 법선 × 9.6");
+			assertEquals(1f, l.n().z, 1e-4f);
+			// 이미 매달림 (+0x174 & 0x30): 위치를 고치지 않는다 — 후보 위치 그대로
+			Vector3f cand = v(0.1f, 63f, -11.5f);
+			HeroNavigator.Ledge k = nav.probeLedge(cand, v(0, 63f, -11.5f), f, v(0, 0, 1));
+			assertNotNull(k);
+			assertEquals(cand, k.feet(), "붙어 있으면 위치 그대로 (0x1E3FE4)");
+			// 공중에서 떨어지다 잡기 (0x1C7C80 → 0x1C75F8)
+			b.grounded = false;
+			b.vy = -10;
+			b.pos.set(0, 64.6f, -10);
+			Pad in = new Pad();
+			tick(nav, b, w, in);
+			assertEquals(NavState.LEDGE_HANG, nav.state(), top + " 기둥에 매달림");
+			assertEquals(100 - HeroNavigator.HANG, b.pos.y, 1e-3f);
+		}
+		// 좁은 턱 경로는 선분이 빗나가면 실패 (일반 경로로 넘어가지 않음): 턱 − 5.2 높이에 벽이 없음 (앞면 96–100, 그 아래 60–90)
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -200, -200, 200, 200, 0, SurfaceAttr.GROUND);
+		floor(t, -50, -30, 50, -20, 100, SurfaceAttr.NARROW);
+		wallZ(t, -20, -50, 50, 96, 100, SurfaceAttr.GROUND);
+		wallZ(t, -20, -50, 50, 60, 90, SurfaceAttr.GROUND); // 턱 − 5.2 = 94.8 높이는 비어 있음
+		HeroNavigator nav = new HeroNavigator(new Body(), new NavWorld(LevelCollision.of(t)), null);
+		assertNull(nav.probeLedge(v(0, 64.4f, -10), v(0, 65, -10), v(0, 0, -1), null), "턱 − (d + 2) 선분이 빗나감 → 실패");
+	}
+
+	/**
+	 * GeneralGuide 면 (38 §18.4): 원작 바닥 질의 0x1E3298 (0x1010042) · 턱/벽 질의 선분 (0x9030042) 은 빼고, 몸 질의 0x1E2100 (0x10042) 은 넣는다
+	 * → 보이지 않는 막이 벽: 몸을 막지만 바닥이 아니고, 벽·턱 선분은 지나간다 [확실].
+	 */
+	@Test
+	void generalGuideBlocksBodyButIsNoFloorOrProbeTarget() {
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -200, -200, 200, 200, 0, SurfaceAttr.GROUND);
+		floor(t, -50, -50, 50, 50, 50, SurfaceAttr.GROUND, SurfaceAttr.GENERAL_GUIDE);
+		wallZ(t, -112, -100, 100, 0, 300, SurfaceAttr.GENERAL_GUIDE);
+		wallZ(t, -120, -100, 100, 0, 300, SurfaceAttr.CLIMBABLE);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		assertEquals(0f, w.groundHeight(0, 60, 0, 100), 1e-3f, "GeneralGuide 윗면은 바닥이 아님 (0x1010042)");
+		assertTrue(LevelCollision.of(t).floorAt(0, 60, 0, 100).y() > 49, "충돌 시트 자체 (렌더·검증용 질의) 는 그대로");
+		Vector3f c = v(0, 20, -105);
+		assertTrue(w.collideSphere(c, 9.6f), "몸 질의 (0x10042) 는 GeneralGuide 에 막힘");
+		assertTrue(c.z > -103, "막이 벽 앞으로 밀림 " + c);
+		HeroNavigator nav = new HeroNavigator(new Body(), w, null);
+		HeroNavigator.WallProbe p = nav.probeWall(v(0, 0, -108), v(0, 0, -1), null);
+		assertNotNull(p, "벽 질의 선분은 GeneralGuide 막이를 지나 뒤의 Climbable 벽을 봄 (0x9030042)");
+		assertEquals(-120 + HeroNavigator.WALL_OFF, p.feet().z, 1e-3f);
+		assertNotNull(w.segment(v(0, 10, -100), v(0, 10, -130)), "기본 선분 (물 등 다른 질의) 은 그대로");
+		assertTrue(w.segment(v(0, 10, -100), v(0, 10, -130), NavWorld.WALL_PROBE_EXCLUDE).tri().has(SurfaceAttr.CLIMBABLE));
+	}
+
+	/**
+	 * 전역 줄 시계 0x29DBF8 (38 §18.2): 누가 잡든 0 (0x1C5D98), 플레이어의 줄 갱신만 더한다 (0x1C54B4).
+	 * 영웅이 수평 줄에 0.5 초 넘게 있어도 그 사이 적이 줄을 잡으면 × 가 다시 0.5 초 동안 먹지 않는다.
+	 */
+	@Test
+	void ropeClockIsSharedAndResetByAnyGrab() {
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -100, -100, 600, 100, -200, SurfaceAttr.GROUND);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		NavRope tr = new NavRope("tr", RopeDef.Type.TRAVERSE, 0, 20, v(0, 200, 0), v(320, 200, 0));
+		w.ropes().add(tr);
+		Body b = new Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		Pad in = new Pad();
+		b.grounded = false;
+		b.pos.set(160, 200 - HeroNavigator.ROPE_HAND, 0);
+		tick(nav, b, w, in);
+		assertEquals(NavState.ROPE_TRAVERSE, nav.state());
+		for (int i = 0; i < 40; i++) {
+			tick(nav, b, w, in);
+		}
+		assertTrue(w.ropeClock() > HeroNavigator.ROPE_JUMP_DELAY, "영웅 줄 갱신이 시계를 더함 " + w.ropeClock());
+		w.ropeGrabbed(); // 적이 (다른) 줄을 잡음
+		in.down.add(PadButton.CROSS);
+		tick(nav, b, w, in);
+		assertEquals(NavState.ROPE_TRAVERSE, nav.state(), "시계 0 → × 무시");
+		for (int i = 0; i < 31; i++) {
+			tick(nav, b, w, in);
+		}
+		in.down.add(PadButton.CROSS);
+		tick(nav, b, w, in);
+		assertEquals(NavState.AIR, nav.state(), "다시 0.5 초 뒤 × = 놓기");
+		float c = w.ropeClock();
+		tick(nav, b, w, in);
+		assertEquals(c, w.ropeClock(), 1e-6f, "줄 밖에서는 시계가 서 있음");
+	}
 }

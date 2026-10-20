@@ -154,10 +154,15 @@ public final class LevelCollision {
 
 	/** {@link #groundHeight} 와 같은 규칙으로 바닥 면까지 (표면 속성 질의). 없으면 null. */
 	public Floor floorAt(float x, float y, float z, float maxDrop) {
+		return floorAt(x, y, z, maxDrop, Tri::solidForPlayer);
+	}
+
+	/** {@link #floorAt} 에서 ok 를 만족하는 면만 바닥으로 본다. */
+	public Floor floorAt(float x, float y, float z, float maxDrop, java.util.function.Predicate<Tri> ok) {
 		float best = Float.NaN;
 		Tri bt = null;
 		for (Tri t : candidates(x, z, x, z)) {
-			if (t.n.y < FLOOR_NY && t.n.y > -FLOOR_NY || !t.solidForPlayer()) {
+			if (t.n.y < FLOOR_NY && t.n.y > -FLOOR_NY || !ok.test(t)) {
 				continue;
 			}
 			float h = heightAt(t, x, z);
