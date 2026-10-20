@@ -55,12 +55,13 @@ public final class HostLevel {
 		List<Candidate> out = new java.util.ArrayList<>();
 		for (Path p : cands) {
 			try {
-				WadFile w = WadFile.load(p);
+				String n = p.getFileName().toString();
+				n = n.substring(0, n.length() - 4).toUpperCase(Locale.ROOT);
+				WadFile w = WadFile.load(devple.gow.tools.content.Stages.wad(rom, n)); // stages.properties redirect (49 문서 §9)
 				if (!loads(w, me)) {
 					continue;
 				}
-				String n = p.getFileName().toString();
-				out.add(new Candidate(n.substring(0, n.length() - 4).toUpperCase(Locale.ROOT), new LevelCollision(new LevelData(w).sheets)));
+				out.add(new Candidate(n, new LevelCollision(new LevelData(w).sheets)));
 			} catch (IOException | RuntimeException ignored) {
 				// 읽지 못하는 WAD 는 건너뜀
 			}

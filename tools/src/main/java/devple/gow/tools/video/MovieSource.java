@@ -89,10 +89,14 @@ public interface MovieSource extends AutoCloseable {
 
 	/**
 	 * 이름(확장자 없이, 대소문자 무관)으로 동영상을 연다. 와이드스크린이면 .PSW 를 먼저 찾는다.
-	 * 순서: romDir/NAME.PS? → iso 의 TOC. 없으면 null.
+	 * 순서: romDir/NAME.PS? (모드 rom/ 우선) → iso 의 TOC. 없거나 movies.properties 에서 skip 이면 null.
+	 * 이름은 movies.properties 로 바뀐다 (49 문서 §10).
 	 */
 	static MovieSource open(String name, Path romDir, Path iso, boolean widescreen) throws IOException {
-		String base = MovieNames.fileBase(name);
+		String base = MovieNames.remap(name);
+		if (base == null) {
+			return null;
+		}
 		String[] exts = widescreen ? new String[]{".PSW", ".PSS"} : new String[]{".PSS", ".PSW"};
 		if (romDir != null) {
 			for (String ext : exts) {

@@ -1,6 +1,7 @@
 package devple.gow.engine.game;
 
 import devple.gow.tools.content.Content;
+import devple.gow.tools.content.Stages;
 import devple.gow.tools.content.Region;
 import devple.gow.engine.asset.AnimatedModel;
 import devple.gow.engine.asset.WadAssets;
@@ -211,7 +212,7 @@ public final class GameScene implements Scene {
 		if (!devple.gow.engine.asset.Loader.async()) {
 			return;
 		}
-		java.nio.file.Path wad = Content.file(session.rom, this.levelName + ".WAD");
+		java.nio.file.Path wad = Stages.wad(session.rom, this.levelName);
 		java.nio.file.Path rom = session.rom;
 		levelPrep = devple.gow.engine.asset.Loader.submit("level " + this.levelName, () -> {
 			LevelScene s = new LevelScene(wad, -2, false).prepare();
@@ -422,7 +423,7 @@ public final class GameScene implements Scene {
 		long enterT0 = System.nanoTime();
 		try {
 			level = preLevel != null ? preLevel : levelPrep != null ? devple.gow.engine.asset.Loader.join(levelPrep, "level " + levelName)
-					: new LevelScene(Content.file(session.rom, levelName + ".WAD"), -2, false);
+					: new LevelScene(Stages.wad(session.rom, levelName), -2, false);
 			levelPrep = null;
 			long ph = devple.gow.engine.core.PerfMonitor.phase(". join", enterT0);
 			level.enter(e); // GL 올리기 (CPU 단계는 페이드 동안 끝났으면 건너뜀)
@@ -553,7 +554,7 @@ public final class GameScene implements Scene {
 		ph = devple.gow.engine.core.PerfMonitor.phase(". wireEffects", ph);
 		hudBinding.castable = hero.magic::has;
 		boolean seamless = arrival != null && (arrival.kind() == LevelLink.Kind.SEAMLESS || arrival.kind() == LevelLink.Kind.WALK);
-		link = new LevelLink(levelName, seamless ? arrival.from() : null, w -> Files.exists(Content.file(session.rom, w + ".WAD")));
+		link = new LevelLink(levelName, seamless ? arrival.from() : null, w -> Stages.exists(session.rom, w));
 		if (link.other() != null) {
 			loadOther(link.other());
 		}
@@ -701,7 +702,7 @@ public final class GameScene implements Scene {
 		for (devple.gow.tools.wad.WadTag t : level.data().wad.tags()) {
 			if (t.hasData() && t.name().startsWith("FLP_") && t.magic() == devple.gow.tools.ui.FlpFile.MAGIC) {
 				try {
-					UiLayer u = new UiLayer(new WadAssets(Content.file(session.rom, levelName + ".WAD")), true, t.name(), session.messages, vars);
+					UiLayer u = new UiLayer(new WadAssets(Stages.wad(session.rom, levelName)), true, t.name(), session.messages, vars);
 					u.acceptInput = false;
 					System.out.println("레벨 HUD: " + t.name());
 					return u;
@@ -794,7 +795,7 @@ public final class GameScene implements Scene {
 		if (!devple.gow.engine.asset.Loader.async() || otherDataPrep.containsKey(wad)) {
 			return;
 		}
-		java.nio.file.Path p = Content.file(session.rom, wad + ".WAD");
+		java.nio.file.Path p = Stages.wad(session.rom, wad);
 		otherDataPrep.put(wad, devple.gow.engine.asset.Loader.submit("otherData " + wad, () -> {
 			LevelData d = new LevelData(devple.gow.tools.wad.WadFile.load(p));
 			try {
@@ -889,7 +890,7 @@ public final class GameScene implements Scene {
 				}
 				otherCol = (LevelCollision) r[1];
 			} else {
-				otherData = new LevelData(devple.gow.tools.wad.WadFile.load(Content.file(session.rom, wad + ".WAD")));
+				otherData = new LevelData(devple.gow.tools.wad.WadFile.load(Stages.wad(session.rom, wad)));
 				otherCol = new LevelCollision(otherData.sheets);
 			}
 			if (lights != null && System.getProperty("gow.noneighbourlights") == null) { // 다른 슬롯 레벨의 LGT 도 같은 서버에 (원작 두 슬롯 상주, 0x151F08)
@@ -1201,8 +1202,8 @@ public final class GameScene implements Scene {
 	 * 스크립트에 종료 이벤트 501(인자 0 = 동영상 이름)을 보낸다 (36 문서: ATHN01D TwinKickDoor-main-movieDone 이 EventArg(0) == "Semo02" 를 검사).
 	 */
 	private void playMovie(Engine e, String name) {
-		if (System.getProperty("gow.skipmovies") != null) {
-			// --skip-movies: 재생 없이 바로 끝 이벤트 (자동 연출·검증용)
+		if (System.getProperty("gow.skipmovies") != null || devple.gow.tools.video.MovieNames.skipped(name)) {
+			// --skip-movies 또는 movies.properties skip (49 문서 §10): 재생 없이 바로 끝 이벤트 (자동 연출·검증용)
 			world.postEvent(7, 0, 0, 0, null);
 			world.postEvent(501, name, 0, 0, world.player());
 			return;
@@ -1426,7 +1427,7 @@ public final class GameScene implements Scene {
 		if (!kinds.containsKey(key)) {
 			EnemyFactory.Kind k = null;
 			try {
-				k = EnemyFactory.load(Content.file(session.rom, levelName + ".WAD"), session.permk, ai1, obj);
+				k = EnemyFactory.load(Stages.wad(session.rom, levelName), session.permk, ai1, obj);
 			} catch (IOException | RuntimeException ex) {
 				System.out.println("레벨 템플릿 " + ai1 + " (" + obj + ") 로드 실패: " + ex.getMessage());
 			}
@@ -2252,7 +2253,7 @@ public final class GameScene implements Scene {
 
 	/** 다른 슬롯 레벨 그리기용 장면의 CPU 단계 시작 (이미 진행 중이면 그대로). */
 	private void prepareOther(String wad) {
-		java.nio.file.Path p = Content.file(session.rom, wad + ".WAD");
+		java.nio.file.Path p = Stages.wad(session.rom, wad);
 		if (otherPrep.containsKey(wad) || !Files.exists(p)) {
 			return;
 		}

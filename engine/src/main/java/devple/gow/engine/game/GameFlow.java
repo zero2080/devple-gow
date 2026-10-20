@@ -11,7 +11,12 @@ import java.util.function.Consumer;
 public final class GameFlow {
 
 	/** 원작 새 게임 시작 레벨 (0x2B9740 "Athn01A"). */
-	public static final String START_LEVEL = "ATHN01A";
+	public static final String START_LEVEL = devple.gow.tools.content.Stages.DEFAULT_START;
+
+	/** 새 게임 시작 레벨: stages.properties start (49 문서 §9), 없으면 {@link #START_LEVEL}. */
+	public static String startLevel() {
+		return devple.gow.tools.content.Stages.start();
+	}
 
 	public enum MenuChoice { NEW_GAME, LOAD, CONTINUE, RESTART_CHECKPOINT, QUIT_TO_SHELL }
 
@@ -58,7 +63,7 @@ public final class GameFlow {
 			case BOOT -> go(GameState.SHELL_LOAD);
 			case SHELL_LOAD -> go(GameState.SHELL_MENU);
 			case NEW_GAME -> {
-				level = START_LEVEL;
+				level = startLevel();
 				loadComplete = false;
 				go(GameState.LEVEL_LOADING);
 			}

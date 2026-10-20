@@ -1,5 +1,6 @@
 package devple.gow.tools.wad;
 
+import devple.gow.tools.content.Stages;
 import devple.gow.tools.content.WadPatches;
 
 import java.io.IOException;
@@ -42,7 +43,8 @@ public final class WadFile {
 
 	public static WadFile load(Path p) throws IOException {
 		String n = p.getFileName().toString();
-		return new WadFile(n, WadPatches.apply(n, ByteBuffer.wrap(Files.readAllBytes(p)))); // 모드 태그 교체 (49 문서 §5)
+		// 모드 태그 교체 (49 문서 §5, 실제 파일 이름 기준). 이름은 논리 레벨 이름 (stages.properties redirect, §9)
+		return new WadFile(Stages.logicalName(p), WadPatches.apply(n, ByteBuffer.wrap(Files.readAllBytes(p))));
 	}
 
 	private List<WadTag> parse() {

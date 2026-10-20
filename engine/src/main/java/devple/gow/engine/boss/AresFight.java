@@ -1,6 +1,6 @@
 package devple.gow.engine.boss;
 
-import devple.gow.tools.content.Content;
+import devple.gow.tools.content.Stages;
 import devple.gow.engine.combat.CombatInput;
 import devple.gow.engine.combat.EnemyFighter;
 import devple.gow.engine.input.Input;
@@ -40,7 +40,7 @@ public final class AresFight extends BossFight {
 		super(level);
 		this.stage = stage;
 		int ai1 = stage == 1 ? 600 : 601;
-		kinds.put(ai1, BossKinds.load(Content.file(rom, level + ".WAD"), permk, List.of(), stage == 1 ? "bar" : "ba2", ai1, ai1));
+		kinds.put(ai1, BossKinds.load(Stages.wad(rom, level), permk, List.of(), stage == 1 ? "bar" : "ba2", ai1, ai1));
 		silent.addAll(java.util.List.of(1, 602, 603, 604, 605, 606, 607));
 		bossTemplates.add(ai1);
 		// 동기 쌍 (기술 플래그 0x20/0x40): 600 BARMAIBLADESHITTHROW (아레스 공격 적중 → 영웅 A600 반응), 605–609 잡기, 620–623 칼 맞대기.

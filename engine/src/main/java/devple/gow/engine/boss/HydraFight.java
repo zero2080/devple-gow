@@ -1,6 +1,7 @@
 package devple.gow.engine.boss;
 
 import devple.gow.tools.content.Content;
+import devple.gow.tools.content.Stages;
 import devple.gow.engine.combat.EnemyFighter;
 import devple.gow.engine.input.Input;
 import devple.gow.engine.script.ScriptActor;
@@ -41,7 +42,7 @@ public final class HydraFight extends BossFight {
 
 	HydraFight(Path rom, WadFile permk) throws IOException {
 		super(LEVEL);
-		Path lv = Content.file(rom, LEVEL + ".WAD");
+		Path lv = Stages.wad(rom, LEVEL);
 		List<Path> extra = new ArrayList<>();
 		if (Files.exists(Content.file(rom, "R_AHA.WAD"))) {
 			extra.add(Content.file(rom, "R_AHA.WAD"));

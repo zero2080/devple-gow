@@ -64,7 +64,7 @@ public final class GowMain {
 			if (args[i].equals("--screenshot") && i + 1 < args.length) {
 				shot = args[++i];
 			} else if (args[i].equals("--game")) {
-				String lvl = i + 1 < args.length && !args[i + 1].startsWith("--") ? args[++i] : "ATHN01A";
+				String lvl = i + 1 < args.length && !args[i + 1].startsWith("--") ? args[++i] : devple.gow.engine.game.GameFlow.startLevel(); // stages.properties start (49 문서 §9)
 				int ri = java.util.Arrays.asList(args).indexOf("--auto-run");
 				int ei = java.util.Arrays.asList(args).indexOf("--entry"); // 시작 인스턴스/오브젝트 이름 (진입점)
 				try {
@@ -86,7 +86,7 @@ public final class GowMain {
 								new devple.gow.engine.game.GameScene.Arrival(kind, a[0].toUpperCase(), p, yaw));
 					} else {
 						first = new devple.gow.engine.game.GameScene(session, lvl,
-								ei >= 0 ? args[ei + 1] : null, ri >= 0 ? Float.parseFloat(args[ri + 1]) : 0);
+								ei >= 0 ? args[ei + 1] : lvl.equalsIgnoreCase(devple.gow.engine.game.GameFlow.startLevel()) ? devple.gow.tools.content.Stages.startEntry() : null, ri >= 0 ? Float.parseFloat(args[ri + 1]) : 0);
 					}
 				} catch (java.io.IOException ex) {
 					throw new java.io.UncheckedIOException(ex);
