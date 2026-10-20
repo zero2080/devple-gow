@@ -229,6 +229,7 @@ public final class GameScene implements Scene {
 			throw new UncheckedIOException(ex);
 		}
 		grab = new devple.gow.engine.combat.GrabSync(hero.ctl, hero.combat);
+		grab.setPullers(() -> enemies.stream().map(Enemy::fighter).toList()); // 결합 없는 끌기 = 공격 대상이 영웅인 적 (0x2097A8)
 		if (System.getProperty("gow.giveAll") != null) {
 			for (int id = 3; id <= 7; id++) {
 				hero.player.addItem(id, 1);

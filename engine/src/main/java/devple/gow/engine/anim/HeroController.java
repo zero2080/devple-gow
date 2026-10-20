@@ -108,6 +108,20 @@ public final class HeroController implements NavBody {
 		position.add(root.dx, vertical ? root.dy : 0, root.dz);
 		yaw += root.dyaw;
 		rootDy = root.dy;
+		rootDyApplied = vertical ? root.dy : 0;
+	}
+
+	private float rootDyApplied;
+
+	/**
+	 * 이번 틱에 적용한 루트 모션을 되돌린다 — 동기 상대가 이번 프레임부터 끄는 중으로 판명됐을 때 (원작 0x1EBF8C 는 상대의 이벤트 창을
+	 * 같은 프레임에 0x206030 으로 갱신한 뒤 0x2441E0 을 보므로 끌리는 첫 프레임부터 D = 단위).
+	 */
+	public void undoRoot() {
+		position.sub(root.dx, rootDyApplied, root.dz);
+		yaw -= root.dyaw;
+		root.dx = root.dy = root.dz = root.dyaw = 0;
+		rootDy = rootDyApplied = 0;
 	}
 
 	/** 루트 모션 상태 초기화 (전투 기술이 아닌 프레임 — 원작은 기술 중에만 D 를 적용). */
@@ -165,6 +179,7 @@ public final class HeroController implements NavBody {
 		prevYaw = yaw;
 		rootClip = null;
 		root.reset();
+		rootDyApplied = 0;
 		if (!grounded) {
 			airUpdate(in, camYaw, dt);
 			return;

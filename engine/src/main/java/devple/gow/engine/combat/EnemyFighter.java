@@ -237,7 +237,9 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 			rootMotion();
 			return;
 		}
-		if (brain.tree != null) {
+		if (holdAi) {
+			// AI·이동 정지 (시험·HeroTestScene 배치용): 전투·애니·루트 모션만
+		} else if (brain.tree != null) {
 			brain.update(dt);
 			boolean busy = combat.active();
 			// 이동 = 공용 내비게이션 (지상 Sold 속도 / 벽 / 줄, EnemyNav). AI 는 스틱(brain.move)과 목표 점만 준다 (0x1CF9D0)
@@ -287,6 +289,8 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 
 	/** 루트 모션 (원작 0x1F7110 → 0x1EBD78, 영웅과 같은 규칙) — 동기 상대가 끄는 중이면 없음. */
 	private final devple.gow.engine.anim.RootMotion root = new devple.gow.engine.anim.RootMotion();
+	/** AI 결정·이동을 멈춘다 (시험·장면 배치용, 원작에 없음). 전투 기술·애니·루트 모션은 그대로. */
+	public boolean holdAi;
 	/** 동기 상대가 이 적을 끄는 중 (0x204BF0 의 끌리는 쪽: D = 단위, 0x1EC058). 동기 코드가 매 틱 정한다. */
 	public boolean rootHold;
 	/** 루트 모션을 쓰지 않음 (클래스 코드가 위치를 직접 정하는 보스 등). */
@@ -294,17 +298,38 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 
 	/**
 	 * 전투 기술 중에만 (0x1EBEF0: combatant +0x4C ≠ 0) zeroJoint 델타를 적용: 요는 바로, 수평 이동은 위치에 더한다 — 다음 틱 내비게이션
-	 * (EnemyNav 지상: 벽 충돌·바닥 붙이기) 이 원작 이동 함수처럼 처리. 수직 변위는 버린다 [근사: 원작은 3D 변위를 지상 이동에 넘김 → 바닥에 붙음].
+	 * (EnemyNav 지상: 벽 충돌·바닥 붙이기) 이 원작 이동 함수처럼 처리. 수직 변위는 자유 이동 기술 (stateMask &amp; 0x1C == 0) 에서만 — 원작 0x1ECD60 경로
+	 * (중력 없는 0x1E5F90 + 충돌 0x1EA200). stateMask 7 기술은 지상 이동이 바닥에 붙이므로 버린다.
 	 */
 	private void rootMotion() {
 		if (rootMotionOff || !combat.active()) {
 			root.reset();
+			nav.free = false;
 			return;
 		}
 		root.step(anim, scale, yaw, rootHold);
 		pos.x += root.dx;
 		pos.z += root.dz;
 		yaw += root.dyaw;
+		// 수직: 자유 이동 기술 (stateMask & 0x1C == 0, 0x1EC350) 은 3D 변위를 그대로 (중력 없음, 다음 틱 내비가 바닥 아래만 막음).
+		// 그 밖 (stateMask 7) 은 지상 이동 0x1EAEC8 이 바닥에 붙인다 → 수직 버림
+		int mask = combat.move().stateMask();
+		nav.free = (mask & 0x1C) == 0;
+		nav.pushInFree = (mask & 2) != 0;
+		if (nav.free && nav.mode() != EnemyNav.Mode.WALL && nav.mode() != EnemyNav.Mode.ROPE) {
+			pos.y += root.dy;
+		}
+	}
+
+	/** 이번 틱에 적용한 루트 모션을 되돌린다 (끌리는 첫 프레임 — {@link devple.gow.engine.anim.HeroController#undoRoot}). */
+	public void undoRootMotion() {
+		pos.x -= root.dx;
+		pos.z -= root.dz;
+		if (nav.free) {
+			pos.y -= root.dy;
+		}
+		yaw -= root.dyaw;
+		root.dx = root.dy = root.dz = root.dyaw = 0;
 	}
 
 	/** 마지막 루트 모션 (월드 변위·요 변화) — 테스트·보스 클래스. */
