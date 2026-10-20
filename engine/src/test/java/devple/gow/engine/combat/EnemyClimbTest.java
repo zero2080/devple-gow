@@ -458,7 +458,7 @@ class EnemyClimbTest {
 		Vector3f hi = zip.top().y >= zip.end().y ? zip.top() : zip.end();
 		Vector3f lo = hi == zip.top() ? zip.end() : zip.top();
 		Vector3f start = new Vector3f(hi).lerp(lo, 0.05f);
-		f.pos.set(start.x, start.y - EnemyNav.HAND - 2, start.z);
+		f.pos.set(start.x, start.y - f.nav().hand() - 2, start.z);
 		f.setNavWorld(EnemyNav.of(lv.nav()));
 		f.update(DT);
 		assertEquals(EnemyNav.Mode.ROPE, f.nav().mode());

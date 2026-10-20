@@ -326,6 +326,10 @@ public final class GameScene implements Scene {
 			public boolean trail(int side) {
 				return hero.trail(side);
 			}
+
+			public float blood(int side, int kind) {
+				return hero.bladeBlood(side, kind);
+			}
 		});
 		wireEffects();
 		hudBinding.castable = hero.magic::has;
@@ -1642,16 +1646,9 @@ public final class GameScene implements Scene {
 			}
 		});
 		magicFx.bladeSliceNative = true;
-		hero.setBladeWalls((from, to, exclude) -> { // 0x1FAFC8 벽 질의: 정적 충돌 면 (제외 마스크 0x0B130000) [근사: CDV GO 몸체 제외]
-			Vector3f d = new Vector3f(to).sub(from);
-			float len = d.length();
-			LevelCollision.Hit h = len > 1e-3f && col != null ? col.raycast(from, d.div(len), len, t -> (t.attrs() & exclude) == 0) : null;
-			if (h == null) {
-				return null;
-			}
-			int fx = h.tri().info() != null ? h.tri().info().sheetFx() : 0;
-			return new float[]{h.point().x, h.point().y, h.point().z, h.tri().n().x, h.tri().n().y, h.tri().n().z, fx};
-		});
+		// 0x1FAFC8 벽 질의 (45 문서 §3.8): 두 슬롯 정적 시트 + CDV GO 몸체 (문·발판) + 적 피격 구 (범주 1|2)
+		hero.setBladeWalls(new BladeWalls(() -> nav != null ? nav.navigator.world() : null,
+				() -> enemies.stream().map(Enemy::fighter).filter(f -> !f.dead()).map(devple.gow.engine.combat.EnemyFighter::hitVolumes).toList()));
 		magicFx.setSurface(new devple.gow.engine.fx.MagicFx.Surface() {
 			public float[] cast(Vector3f from, Vector3f to) {
 				Vector3f d = new Vector3f(to).sub(from);
@@ -1717,6 +1714,16 @@ public final class GameScene implements Scene {
 
 	private devple.gow.engine.combat.BodyPush.HeroBody heroBody;
 
+	/**
+	 * 영웅 몸 질의 면 제외 마스크 ({@link devple.gow.engine.nav.NavWorld#bodyExclude}): 이 경로는 지상·공중 (0x1EA5F0, 벽이 아님) 또는
+	 * 자유 이동 기술 (stateMask &amp; 0x1C = 0 → 0x1EA200). CombatGuide 는 피격 반응 (+0x13 = 2) 이 아닌 전투 기술 중에만 막는다.
+	 */
+	private long heroBodyExclude() {
+		var m = hero.combat.active() ? hero.combat.move() : null;
+		return devple.gow.engine.nav.NavWorld.bodyExclude(true, m != null && (m.stateMask() & 0x1C) == 0, false, m != null,
+				m != null ? m.flags() : 0, m != null ? m.guard() : 0);
+	}
+
 	/** 지면 추종 + 중력 + 벽 밀어내기. 내비게이터가 위치를 정하는 상태(매달림·줄·밀기 …)면 건너뛴다. */
 	private void physics(float dt) {
 		Vector3f p = hero.ctl.position;
@@ -1756,12 +1763,13 @@ public final class GameScene implements Scene {
 			devple.gow.engine.combat.BodyPush.push(heroBody, p, bodies, null);
 		}
 		Vector3f c = new Vector3f(p.x, p.y + 20, p.z);
-		boolean pushed = col.collideSphere(c, 12);
+		long ex = heroBodyExclude(); // 몸 질의 0x1E2100 면 거름 (38 §18.6)
+		boolean pushed = col.collideSphere(c, 12, ex);
 		if (otherCol != null) {
-			pushed |= otherCol.collideSphere(c, 12);
+			pushed |= otherCol.collideSphere(c, 12, ex);
 		}
 		if (nav != null) {
-			pushed |= nav.collideBodies(c, 12); // 문·창살·회전방 CDV (42 문서 §5)
+			pushed |= nav.collideBodies(c, 12, ex); // 문·창살·회전방 CDV (42 문서 §5)
 		}
 		if (pushed) {
 			p.x = c.x;

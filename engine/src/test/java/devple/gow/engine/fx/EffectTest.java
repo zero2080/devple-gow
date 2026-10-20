@@ -276,6 +276,8 @@ class EffectTest {
 			long flames = e.def.emitters().stream().filter(MagicFx::flame).count();
 			assertTrue(flames >= 2, go + " flame6/flame3: " + flames);
 			assertTrue(e.def.emitters().size() > flames, go + " 불티·EG 이미터는 늘 켜짐");
+			// 0x201A08 종류 1 blooddrip / 2 bloodspray: 출시 무기 WAD 에는 그런 파티클이 없다 (45 §3.8.4)
+			assertTrue(e.def.emitters().stream().allMatch(ed -> MagicFx.bladeAttachKind(ed) == 0 || MagicFx.bladeAttachKind(ed) == 3), go);
 		}
 	}
 }

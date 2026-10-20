@@ -351,6 +351,9 @@ public final class HeroRig implements AutoCloseable {
 		for (BladeChain.Side s : chain.sides) {
 			if (blades && !s.sweepTo.isEmpty()) {
 				combat.chainSweep(s.index == 0 ? 2 : 3, s.sweepFrom, s.sweepTo); // 0x1FB158: 왼쪽 부위 2, 오른쪽 3
+				if (combat.chainTouched) {
+					s.bleed(); // 0x1FB2C0: 스윕이 무엇이든 맞으면 +0xA4 = 0
+				}
 			}
 		}
 		ctl.world(bladeTickWorld, 1f);
@@ -399,8 +402,8 @@ public final class HeroRig implements AutoCloseable {
 	}
 
 	/**
-	 * 블레이드 라이트 갱신: 위치 = 블레이드 행렬 위치 − 블레이드 Z 축 × 8 (0x1FB044 – 0x1FB118: (−Z × 0.5) × 16) [확실],
-	 * 세기 = 궤적 (이벤트 17/18) 이면 +4/초, 아니면 −2/초 (0x201C78 / 0x201DD8, 45 문서 §3.5) [확실].
+	 * 블레이드 라이트 갱신: 위치 = <b>당기기 전</b> 블레이드 점 B = slerp 행렬 위치 − Z × 8 (0x1FB044 – 0x1FB118: (−Z × 0.5) × 16, 벽 당김 0x1FB2CC 앞),
+	 * 방향 = 시작점 O (영웅 x, 골반 y, 영웅 z) − B (0x151978) [확실]. 세기 = 궤적 (이벤트 17/18) 이면 +4/초, 아니면 −2/초 (0x201C78 / 0x201DD8, 45 문서 §3.5) [확실].
 	 */
 	private void tickBladeLights(float dt) {
 		Matrix4f bw = new Matrix4f();
@@ -411,7 +414,12 @@ public final class HeroRig implements AutoCloseable {
 			}
 			BladeChain.Side s = chain.sides[side];
 			boolean on = s.valid() && !player.artemisEquipped && trail(side);
-			if (s.valid()) {
+			if (s.lightValid) {
+				l.setPosition(s.lightPoint);
+				if ((l.def.type() & devple.gow.engine.light.LightDef.DIRECTIONAL) != 0 && s.lightDir.lengthSquared() > 1e-8f) {
+					l.dir.set(s.lightDir).normalize(); // 0x151978: 종류 비트 2 면 정규화 방향
+				}
+			} else if (s.valid()) {
 				s.world(bw);
 				l.setPosition(new Vector3f(bw.m30() - 8f * bw.m20(), bw.m31() - 8f * bw.m21(), bw.m32() - 8f * bw.m22()));
 			}
@@ -427,6 +435,11 @@ public final class HeroRig implements AutoCloseable {
 		}
 		s.world(out);
 		return true;
+	}
+
+	/** 블레이드 GO 부착물 종류 1 blooddrip / 2 bloodspray 생성률 배율 (0x1FB508, {@link BladeChain.Side#blood}). */
+	public float bladeBlood(int side, int kind) {
+		return chain.sides[side].blood(kind);
 	}
 
 	/** 궤적 켜짐 (기술 이벤트 17/18). */

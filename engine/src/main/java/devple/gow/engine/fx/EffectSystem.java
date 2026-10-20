@@ -108,6 +108,8 @@ public final class EffectSystem implements AutoCloseable {
 		 * 참이면 그 이미터 생성률 0 (원작 부착물 종류별 켜기/끄기 0x201C78 / 0x201DD8 — 블레이드 "flame*" 파티클은 궤적 중에만, 45 문서 §3).
 		 */
 		public java.util.function.Predicate<EffectLibrary.EmitterDef> emitterOff;
+		/** 이미터별 생성률 배율 (원작 부착물 종류별 +0xB4 — 블레이드 blooddrip / bloodspray 0x201FB0, 45 문서 §3.8). null = 1. */
+		public java.util.function.ToDoubleFunction<EffectLibrary.EmitterDef> emitterRate;
 		/** 시간 정지 (act 0 초 포즈 유지 — BMI 갑옷 조각이 깨지기 전, 원작 0x1C1B10 이 애니를 0 초에 둔다). */
 		public boolean hold;
 		private final List<ParticleSystem.Emitter> emitters = new ArrayList<>();
@@ -246,6 +248,9 @@ public final class EffectSystem implements AutoCloseable {
 				e.rate = (rateOverride >= 0 ? rateOverride : def.rate(act, ed, at)) * lodScale * rateScale;
 				if (emitterOff != null && emitterOff.test(ed)) {
 					e.rate = 0;
+				}
+				if (emitterRate != null) {
+					e.rate *= (float) emitterRate.applyAsDouble(ed);
 				}
 				e.speed = def.param(act, ed, 4, ct, fx.speed()) * 16 * Math.min(s, 4f) * speedScale;
 				e.speedRnd = def.param(act, ed, 5, ct, fx.speedRnd()) * 16 * Math.min(s, 4f) * speedScale;

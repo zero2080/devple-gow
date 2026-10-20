@@ -541,7 +541,10 @@ PAND05B `pBoxPand05B-Marker511` → `semoMovieHaveBox-…-semo08marker511` (Filt
 - 엔진: 줄 시뮬레이션 지도를 `HeroNavigator` 에서 `NavWorld.sim(NavRope)` 로 옮김 (영웅 `sim()` 은 그대로 위임 — GameScene 줄 스키닝도 같은 것). `EnemyNav.Rope.src` = 줄 오브젝트,
   잡을 때 `attach`, 매 틱 수평 줄·짚라인은 `moveAttach(줄 위치)`, 몸 = `pointAt(dist)` − 손 높이, 놓을 때 `detach`. 매단 줄은 `RopeRide.force` (흔들기 창) 를 매 프레임 준다.
   흔들기 상태 (창·축·저역 통과) 는 생물마다 [근사: 원작 창·축은 전역 하나].
-- [근사] 적 손 높이는 여전히 발 + 30 (원작 = 줄 점 − Sold+0x238 키). 한 줄에 영웅·적이 함께 매달리면 매달림 칸 하나를 나눠 쓴다 (원작도 칸 하나 [추정]).
+- ~~[근사] 적 손 높이 발 + 30~~ → **손 높이 = 키 = Sold +0x238 × 16 × 개체 스케일 (내비 +0x120.y)** [확실]: 잡기 0x1C5C20 이 위치 + 위 × +0x120.y 를 줄 찾기 점으로 쓰고
+  (0x1C5C68 `vmuly` · 0x1C5C74 `vadd`), 줄 위 몸 = 줄 점 0x2184E8 − 위 × +0x120.y (0x1C66E4 – 0x1C66F4) — 영웅 `ROPE_HAND` 35.2 와 같은 식.
+  엔진 `EnemyNav.hand()` = `bodyHeight()` (해골 Sold_020 2.8 × 0.87 = 38.98, 미노 3.25 × 16 …). 줄 아래 목표 판정 (`goalOnRope`) 도 같은 값.
+  한 줄에 영웅·적이 함께 매달리면 매달림 칸 하나를 나눠 쓴다 (원작도 칸 하나 [추정]).
 
 ### 18.4 GeneralGuide 면과 영웅 질의 [확실: 디스어셈블]
 질의 제외 마스크 0x3309F4 (면 재질 bitfield0 과 AND, 0 이 아니면 그 면 건너뜀 — 43 §13.10 6) 를 질의마다 다시 읽음:
@@ -553,8 +556,8 @@ PAND05B `pBoxPand05B-Marker511` → `semoMovieHaveBox-…-semo08marker511` (Filt
 | 턱 0x1E3A80 | **0x9030042** \| (+0x258 &amp; 0x4300000) (0x1E3C54) | 뺌 — 선분이 지나감 |
 | 벽 0x1E47E0 · 옆 벽 0x1E53F0 | **0x9030042** \| +0x258 (0x1E492C / 0x1E5530) | 뺌 |
 
-- 몸 질의 호출 마스크: 0x1EA200 = 0x8020000 (전투 기술 플래그 0x60 이면 0x28020000), 0x1EA5F0 = 0x20000 (벽·벽 옆 끝이 아닐 때) | 0x8000000 (플레이어 전투 기술 +0x13 = 2 가 아닐 때)
-  | 0x20000000 (기술 플래그 0x60) — **어디에도 0x1000000 이 없다**. 43 §13.10 6 의 "몸 0x1E2100 = 호출 | 0x1010042" 는 바닥 질의 상수를 옮겨 적은 것 (정정).
+- 몸 질의 호출 마스크: 0x1EA200 = 0x8020000 (전투 기술 플래그 0x60 이면 0x28020000), 0x1EA5F0 = 0x20000 (벽·벽 옆 끝이 아닐 때) | 0x8000000 (플레이어 전투 기술 중이고 +0x13 ≠ 2 일 때만 **빠지지 않음**)
+  | 0x20000000 (기술 플래그 0x60) — **어디에도 0x1000000 이 없다** (세부 §18.6). 43 §13.10 6 의 "몸 0x1E2100 = 호출 | 0x1010042" 는 바닥 질의 상수를 옮겨 적은 것 (정정).
 - 뜻: GeneralGuide = **보이지 않는 막이 벽** (ATHN01B goplayerblock "guideMat", 레벨마다 `*_GeneralGuide` 재질 수천 면) — 몸은 막고, 그 위에 서지는 못하고, 벽 오르기·턱 판정은 그 뒤의 진짜 벽을 본다.
 - 엔진 (정적 충돌 시트):
   - 바닥 `NavWorld.floor` 가 GeneralGuide 면을 뺀다 (`FLOOR_EXCLUDE_STATIC`) — 전 레벨 GeneralGuide 윗면 ≈ 200 (ATHN01D 8, ATHN02B 16, PAND04J 24 …) 에 더는 서지 않음.
@@ -562,7 +565,7 @@ PAND05B `pBoxPand05B-Marker511` → `semoMovieHaveBox-…-semo08marker511` (Filt
   - 벽·턱·옆 벽·위에서 사다리로 선분 = `NavWorld.segment(from, to, WALL_PROBE_EXCLUDE / LEDGE_PROBE_EXCLUDE)` (0x9030042 = Water·Death·AIBlock·ClimbGuide·GeneralGuide·CombatGuide, 벽은 NoPlayerUse 도).
     공중 다이빙 물 선분 등 다른 선분은 그대로.
   - 몸 구 밀어내기 (`LevelCollision.collideSphere`) 는 원래 GeneralGuide 를 막고 있었음 → 그대로 [확실]. CDV hull `Platforms.WALL_EXCLUDE` 도 이미 같은 규칙 ([근사] → [확실]).
-    [근사] 정적 시트 몸 충돌은 NoPlayerCollision 만 빼고 Water·Death·AIBlock·ClimbGuide·CombatGuide 벽은 막는다 (원작은 뺌, ClimbGuide 는 벽에 붙어 있을 때만 막음).
+    ~~[근사] 정적 시트 몸 충돌은 NoPlayerCollision 만 빼고 Water·Death·AIBlock·ClimbGuide·CombatGuide 벽은 막는다~~ → §18.6 상태별 마스크 [확실].
 - 순회 검증 (`work/verify/report.md`): 변경 전후 같음 (TraversalVerifier 의 바닥 칸은 충돌 시트 질의를 직접 써서 이번 변경과 무관, 내비게이터를 쓰는 도착 검사도 그대로).
 
 ### 18.5 테스트
@@ -577,3 +580,41 @@ PAND05B `pBoxPand05B-Marker511` → `semoMovieHaveBox-…-semo08marker511` (Filt
 | `NavDataTest.narrowLedgeTopsCatchFallingHero` | ATHN06B 88/88, PAND03E 59/59, ARENA08 160 |
 
 전체 `:engine:test` 402 (397 + 5).
+
+§18.6 · 적 손 높이 (407 → 413 중):
+
+| 테스트 | 내용 |
+|---|---|
+| `HeroNavigatorTest.bodyQueryMasksFollowStateBits` | 마스크 표 (영웅 기본·공격·방어·피격 반응·적·벽·자유 이동 + flags 0x60), 정적 시트 구 밀어내기: 기술 없는 지상은 ClimbGuide·CombatGuide·Water 지나감, 공격 중 CombatGuide 막힘, 벽 마스크는 ClimbGuide 막힘 |
+| `climbGuideFencesWallClimbing` | 오르는 벽에 수직인 ClimbGuide 막이 x = 20: 오른쪽으로 오르면 x = 20 − 9.6 에서 멈춤, 막이 없으면 계속, `wallBody` 위 선분이 천장 50 에 막혀 발 = 50 − 35.2 |
+| `EnemyNavTest.ropeHandHeightIsSoldHeight` | 해골 몸 (2.8 × 0.87): 손 = 38.98, 잡은 몸 = 줄 − 키 |
+| `ropeCatchMoveAlongAndDropAboveGoal` (수정) | 놓는 수평 거리 = 줄 − 키 |
+
+### 18.6 몸 질의 면 거름 = 상태별 호출 마스크 (docs/43 §13.10 6 후속) [확실: 디스어셈블]
+0x1E2100 의 면 제외 0x3309F4 = **호출 마스크 | 0x10042 | (+0x258 &amp; 0x4300000)** (0x1E221C – 0x1E2240). 면 재질 bitfield0 &amp; 이 값 ≠ 0 이면 지나간다.
+
+| 비트 | 이름 | 언제 빠지나 (지나감) | 근거 |
+|---|---|---|---|
+| 0x2 · 0x40 · 0x10000 | Water · Death · AIBlock | 늘 | 고정 0x10042 |
+| 0x100000 / 0x200000 | NoPlayerCollision / NoAICollision | 영웅 / 적 (각자 하나) | 영웅 +0x258 = 0x500000 (0x1D63E0), AI = 0xA00000 (0x1CEEAC – 0x1CEEB4 [확실]; 다른 AI 생성 경로 [추정]) |
+| 0x20000 | ClimbGuide | 자유 이동 (0x1EA200) 은 늘. 지상·공중·물 (0x1EA5F0) 은 **벽 (+0x174 0x20) 도 벽 옆 끝 점프 (+0x2D8 0x300) 도 아닐 때** (0x1EA6A0 – 0x1EA6B8). 줄 0x1C5848 은 0x300 이 아닐 때 | → 벽에 붙어 있을 때만 막는다 |
+| 0x8000000 | CombatGuide | 0x1EA200 은 늘. 0x1EA5F0 은 플레이어 (+0x174 bit 31) 가 아니거나, 기술이 없거나 (combatant +0x4C = 0), 기술 (+0x54) +0x13 = 2 (피격 반응 HIT*·DEATH) 일 때 (0x1EA6C0 – 0x1EA6F4). 줄은 늘 | → **플레이어의 공격·방어 기술 중에만** 막는다. 적은 늘 지나감 |
+| 0x20000000 | NoCSMCollision | 기술 flags (+0x0E) &amp; 0x60 (동기 기술) 일 때 (0x1EA28C / 0x1EA6FC – 0x1EA724) | 데이터: ATHN01E 바닥 16 면뿐 |
+| 0x1000000 | GeneralGuide | 안 빠짐 (늘 막음) | §18.4 |
+
+- 0x1E2100 은 벽 (+0x174 0x20, 좁은 턱 0x300000 아님) 이면 **벽 위 몸 질의 0x1E25E0** 로 간다: 몸 가운데 c = 내비 위치 + 위 × (+0x140 − 키/2) = 발 + 키/2 에서
+  벽 평면 안 선분 10 개 (오른쪽 축 ± 반폭 × 위 ± 키/2, 위 ± 키/2, 오른쪽 ± 반폭 × 위 ± 키/6 — 앞뒤 성분 0) 를 차례로 쏘고 (0x1E1F28 → 0x11E190 가장 가까운 것),
+  맞을 때마다 c −= n · (n · (끝 − 충돌점)) (끝점이 그 면 위에 오도록). 반환 0x40 / 0x100 (선분별 고정 비트). 호출 마스크는 0x1EA5F0 그대로라 ClimbGuide 가 여기서 막는다.
+  → ClimbGuide = **오르는 벽에 수직으로 선 보이지 않는 막이** (오르기 범위 울타리). 데이터 (벽 면 수): ATHN01D 242 · PAND04E 434 · ATHN02B 111 · PAND01C 118 · ATHN05A 82 …
+  CombatGuide 벽 면: ATHN01D 201 · ATHN05C 64 · SEWR02 44 · SEWR01 38 · ATHN01E 32 (전투 구역 울타리).
+- 엔진:
+  - `NavWorld.bodyExclude(player, free, wall, inMove, moveFlags, guard)` = 위 표. `HERO_BODY_EXCLUDE` (기술 없는 영웅) = 예전 CDV `Platforms.WALL_EXCLUDE` 와 같은 값.
+  - `LevelCollision.collideSphere(c, r, exclude)` · `Platforms.collideSphere(…, exclude)` · `NavWorld.collideSphere / collideBodies(…, exclude)` — 정적 시트도 CDV 와 같은 거름
+    (예전 정적 시트는 NoPlayerCollision 만 뺐다).
+  - 영웅 지상·공중 (`GameScene.physics`): `heroBodyExclude()` = 현재 기술의 stateMask &amp; 0x1C = 0 이면 자유 이동, flags · guard (+0x13) 로 CombatGuide·NoCSMCollision. 물 (`HeroNavigator.swim`) 은 기본 마스크.
+  - 벽 오르기·사다리 (`HeroNavigator.climb`): 후보 위치에 `wallBody` (0x1E25E0 선분 10 개, 벽 마스크 = ClimbGuide 막음). 머리가 위 면에 막혔을 때 그 면이 몸 바로 위 발판이면 올라서는
+    엔진 보조 (예전 꼭대기 보조와 같은 조건, ATHN01D 돛대 꼭대기) [근사].
+  - 적 (`EnemyNav` 지상 0x1EA5F0 / 자유 이동 0x1EA200): `bodyExclude(false, …)` — NoAICollision 지나감 · NoPlayerCollision 막힘 (예전엔 반대였다) · CombatGuide 늘 지나감,
+    기술 flags 는 `EnemyFighter.rootMotion` 이 `nav.moveFlags` 로 넘김. 적 벽 이동은 엔진에 몸 질의가 없어 ClimbGuide 를 보지 않는다 [근사].
+  - Water·Death 면은 이제 몸을 막지 않는다 — 엔진은 물·사망을 바닥 질의로 알아내므로 그대로 동작 (Water·Death 벽면: PAND04E Death 272, PAND03E 6, ARENA* 8 …).
+- 순회 보고서: 변경 전후 같음 (`cmp`).

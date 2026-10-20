@@ -147,11 +147,91 @@ public final class NavWorld {
 		return best;
 	}
 
-	/** 구 벽 밀어내기 (모든 정적 충돌). */
+	/**
+	 * 선분 접촉 (원작 0x11E190 접촉 기록 0x2C8F10): t = 선분 비율, 점, 면 법선, 면 재질 SheetFX, 맞은 개체 (정적 시트 = null, CDV GO = 소유 GO 이름).
+	 */
+	public record Contact(float t, Vector3f point, Vector3f normal, int sheetFx, String owner) {
+	}
+
+	/**
+	 * 정적 시트 (모든 슬롯 레벨) 의 가장 가까운 선분 접촉 (면 속성 &amp; exclude ≠ 0 인 면은 지나감, 양면).
+	 */
+	public Contact staticContact(Vector3f from, Vector3f to, long exclude) {
+		LevelCollision.Hit h = segment(from, to, exclude);
+		if (h == null) {
+			return null;
+		}
+		float len = from.distance(to);
+		int fx = h.tri().info() != null ? h.tri().info().sheetFx() : 0;
+		return new Contact(len > 0 ? h.distance() / len : 0, h.point(), new Vector3f(h.tri().n()), fx, null);
+	}
+
+	/** CDV GO 몸체 (이 레벨 + 다른 슬롯 레벨 발판·문, 충돌 켜진 것) 의 가장 가까운 선분 접촉. */
+	public Contact bodyContact(Vector3f from, Vector3f to, long exclude) {
+		return nearer(platforms.segment(from, to, exclude), neighbour.segment(from, to, exclude));
+	}
+
+	/** 정적 시트 + CDV GO 몸체 중 가장 가까운 선분 접촉 (원작 0x11E190 모드 2). */
+	public Contact contact(Vector3f from, Vector3f to, long exclude) {
+		return nearer(staticContact(from, to, exclude), bodyContact(from, to, exclude));
+	}
+
+	public static Contact nearer(Contact a, Contact b) {
+		return a == null ? b : b == null || a.t() <= b.t() ? a : b;
+	}
+
+	/**
+	 * 몸 질의 0x1E2100 의 면 제외 마스크 (0x3309F4 = 호출 마스크 | 0x10042 | (+0x258 &amp; 0x4300000), 0x1E221C – 0x1E2240) [확실: 디스어셈블].
+	 * <ul>
+	 *   <li>고정 0x10042 = Water · Death · AIBlock. +0x258 &amp; 0x4300000: 영웅 0x500000 → NoPlayerCollision, AI 0xA00000 (0x1CEEAC) → NoAICollision.</li>
+	 *   <li>자유 이동 기술 (0x1EA200 ← 0x1ECCF4 / 0x1ECE30, 기술 stateMask &amp; 0x1C = 0): 0x8020000 (ClimbGuide · CombatGuide),
+	 *       기술 flags &amp; 0x60 이면 0x28020000 (+ NoCSMCollision).</li>
+	 *   <li>지상·공중·벽·물 (0x1EA5F0 ← 0x1EAEC8 / 0x1EB3D8 …): ClimbGuide 0x20000 은 벽 (+0x174 0x20) 도 벽 옆 끝 점프 (+0x2D8 0x300) 도 아닐 때만
+	 *       (0x1EA6A0 – 0x1EA6B8) → <b>ClimbGuide 는 벽에 붙어 있을 때만 막는다</b>. CombatGuide 0x8000000 은 플레이어 (+0x174 bit 31) 가 전투 기술 중
+	 *       (combatant +0x4C ≠ 0) 이고 그 기술 (+0x54) 의 +0x13 (guard) ≠ 2 (피격 반응이 아님) 일 때만 빠지지 않는다 (0x1EA6C0 – 0x1EA6F4)
+	 *       → <b>CombatGuide 는 플레이어의 공격·방어 기술 중에만 막는다</b> (적은 늘 지나감). 기술 flags &amp; 0x60 이면 + NoCSMCollision (0x1EA6FC – 0x1EA724).</li>
+	 *   <li>줄 (0x1C5848): 0x8020000, 벽 옆 끝 점프 (+0x2D8 0x300) 면 0x8000000.</li>
+	 * </ul>
+	 * GeneralGuide (0x1000000) 는 어디에도 없어 늘 막는다 (38 §18.4).
+	 *
+	 * @param player    플레이어 (+0x174 bit 31 — 영웅 내비게이션만, 0x1E7E68)
+	 * @param free      자유 이동 기술 (0x1EA200)
+	 * @param wall      벽에 붙음 (+0x174 0x20) 또는 벽 옆 끝 점프 (+0x2D8 0x300)
+	 * @param inMove    전투 기술 중 (combatant +0x4C)
+	 * @param moveFlags 기술 +0x0E
+	 * @param moveGuard 기술 +0x13 (1 방어, 2 피격 반응)
+	 */
+	public static long bodyExclude(boolean player, boolean free, boolean wall, boolean inMove, int moveFlags, int moveGuard) {
+		long m = SurfaceAttr.WATER.bit() | SurfaceAttr.DEATH.bit() | SurfaceAttr.AI_BLOCK.bit()
+				| (player ? SurfaceAttr.NO_PLAYER_COLLISION.bit() : SurfaceAttr.NO_AI_COLLISION.bit());
+		if (inMove && (moveFlags & 0x60) != 0) {
+			m |= SurfaceAttr.NO_CSM_COLLISION.bit();
+		}
+		if (free) {
+			return m | SurfaceAttr.CLIMB_GUIDE.bit() | SurfaceAttr.COMBAT_GUIDE.bit();
+		}
+		if (!wall) {
+			m |= SurfaceAttr.CLIMB_GUIDE.bit();
+		}
+		if (!(player && inMove && moveGuard != 2)) {
+			m |= SurfaceAttr.COMBAT_GUIDE.bit();
+		}
+		return m;
+	}
+
+	/** 영웅이 기술 없이 서 있거나 떨어질 때의 몸 제외 마스크 (Water · Death · AIBlock · NoPlayerCollision · ClimbGuide · CombatGuide). */
+	public static final long HERO_BODY_EXCLUDE = bodyExclude(true, false, false, false, 0, 0);
+
+	/** 구 벽 밀어내기 (모든 정적 충돌) — 영웅 기본 몸 마스크 {@link #HERO_BODY_EXCLUDE}. */
 	public boolean collideSphere(Vector3f c, float r) {
+		return collideSphere(c, r, HERO_BODY_EXCLUDE);
+	}
+
+	/** 구 벽 밀어내기 (모든 정적 충돌), 면 속성 &amp; exclude ≠ 0 인 면은 지나감 ({@link #bodyExclude}). */
+	public boolean collideSphere(Vector3f c, float r, long exclude) {
 		boolean any = false;
 		for (LevelCollision col : statics) {
-			any |= col.collideSphere(c, r);
+			any |= col.collideSphere(c, r, exclude);
 		}
 		return any;
 	}
@@ -160,8 +240,13 @@ public final class NavWorld {
 	 * 움직이는 오브젝트 CDV hull (문·창살·회전방·발판) 로 구 밀어내기 — 이 레벨 (skip = 붙잡는 오브젝트 제외) + 다른 슬롯 레벨 (이웃 Animator 자세).
 	 */
 	public boolean collideBodies(Vector3f c, float r, java.util.Collection<String> skip) {
-		boolean own = platforms.collideSphere(c, r, skip);
-		return neighbour.collideSphere(c, r, java.util.Set.of()) | own;
+		return collideBodies(c, r, skip, HERO_BODY_EXCLUDE);
+	}
+
+	/** {@link #collideBodies(Vector3f, float, java.util.Collection)} 를 몸 제외 마스크 exclude 로 ({@link #bodyExclude}). */
+	public boolean collideBodies(Vector3f c, float r, java.util.Collection<String> skip, long exclude) {
+		boolean own = platforms.collideSphere(c, r, skip, exclude);
+		return neighbour.collideSphere(c, r, java.util.Set.of(), exclude) | own;
 	}
 
 	// ---- 줄 공유 상태 (영웅·적이 같은 줄 오브젝트를 쓴다) ----

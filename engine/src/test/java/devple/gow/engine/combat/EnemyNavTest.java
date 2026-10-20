@@ -12,6 +12,8 @@ import static org.junit.jupiter.api.Assertions.*;
 class EnemyNavTest {
 
 	static final float DT = 1 / 60f;
+	/** 줄 손 높이 = 기본 몸 (크라토스 Sold +0x238 2.2) 키 35.2 (0x1C5C68 / 0x1C66E4). */
+	static final float HAND = AiData.Body.HERO.height() * 16f;
 	static final AiData.Motion SKEL = new AiData.Motion(8, 80, 80, 8, 3, 0.5f, 2.17f, 3.7f, 2);
 
 	/** 벽 꼭대기 높이 (테스트마다 바꿈). */
@@ -149,15 +151,31 @@ class EnemyNavTest {
 		assertNotEquals(EnemyNav.Mode.WALL, n.mode(), "놓은 직후 다시 잡지 않음");
 	}
 
+	/**
+	 * 줄 손 높이 = 키 (Sold +0x238 × 16 × 개체 스케일 = 내비 +0x120.y) [확실: 잡기 0x1C5C68 / 몸 0x1C66E4]: 해골 Sold_020 2.8 × 스케일 0.87 = 38.976
+	 * (전 근사 "발 + 30" 폐기).
+	 */
+	@Test
+	void ropeHandHeightIsSoldHeight() {
+		EnemyNav n = nav(AiTemplate.CAP_ROPE);
+		n.setBody(new AiData.Body(0.7f, 2.8f, 0.4f, 0, ""), 0.87f);
+		float hand = 2.8f * 16f * 0.87f;
+		assertEquals(hand, n.hand(), 1e-4f);
+		Vector3f p = new Vector3f(0, 130 - hand - 30, 60); // 손 (발 + 키) = 줄 − 30 → 잡기 반경 32 안
+		n.update(p, new Vector3f(), null, false, DT);
+		assertEquals(EnemyNav.Mode.ROPE, n.mode());
+		assertEquals(130 - hand, p.y, 1e-3f, "몸 = 줄 점 − 키");
+	}
+
 	@Test
 	void ropeCatchMoveAlongAndDropAboveGoal() {
 		EnemyNav n = nav(AiTemplate.CAP_ROPE);
-		Vector3f p = new Vector3f(0, 105, 60); // 손 135 → 줄(130) 32 안
+		Vector3f p = new Vector3f(0, 105, 60); // 손 140.2 → 줄(130) 32 안
 		n.update(p, new Vector3f(), null, false, DT);
 		assertEquals(EnemyNav.Mode.ROPE, n.mode());
 		assertEquals(3, n.conditionState(), "조건 4: 줄 = 3");
 		assertEquals(0x80, n.combatMask());
-		assertEquals(130 - EnemyNav.HAND, p.y, 1e-3);
+		assertEquals(130 - HAND, p.y, 1e-3);
 		// 목표도 줄 위 (영웅이 같은 줄) → 줄 따라 그쪽으로, 놓지 않음
 		Vector3f onRope = new Vector3f(120, 100, 60);
 		for (int i = 0; i < 120; i++) {
@@ -165,14 +183,14 @@ class EnemyNavTest {
 		}
 		assertEquals(EnemyNav.Mode.ROPE, n.mode());
 		assertEquals(64f, p.x, 1.5f, "2 m/s × 16 × 2 s");
-		// 목표가 줄 아래 바닥 (발 기준 100 아래) → 줄 따라가다 목표 방향이 45° 보다 가파르면 (수평 < 100) 놓는다 (0x1CFD20: Δy < −16, dir.y < −cos45)
+		// 목표가 줄 아래 바닥 (발 기준 130 − 키 아래) → 줄 따라가다 목표 방향이 45° 보다 가파르면 (수평 < 100) 놓는다 (0x1CFD20: Δy < −16, dir.y < −cos45)
 		Vector3f ground = new Vector3f(190, 0, 60);
 		int frames = 0;
 		while (n.mode() == EnemyNav.Mode.ROPE && frames++ < 600) {
 			n.update(p, new Vector3f(), ground, false, DT);
 		}
 		assertEquals(EnemyNav.Mode.AIR, n.mode());
-		assertEquals(190 - 100, p.x, 3f);
+		assertEquals(190 - (130 - HAND), p.x, 3f, "놓는 곳 = 목표까지 수평 거리 = 높이 차 (발 = 줄 − 키)");
 		for (int i = 0; i < 120 && n.mode() != EnemyNav.Mode.GROUND; i++) {
 			n.update(p, new Vector3f(), null, false, DT);
 		}
@@ -309,7 +327,7 @@ class EnemyNavTest {
 				clock[0] = 0;
 			}
 		});
-		Vector3f p = new Vector3f(0, 130 - EnemyNav.HAND - 4, 60);
+		Vector3f p = new Vector3f(0, 130 - HAND - 4, 60);
 		n.update(p, new Vector3f(), null, false, DT);
 		assertEquals(EnemyNav.Mode.ROPE, n.mode());
 		assertEquals(0f, clock[0], "적이 잡아도 0x29DBF8 = 0");
@@ -320,8 +338,8 @@ class EnemyNavTest {
 		}
 		assertEquals(sim.maxWeight(), sim.weight(), 1e-3, "무게 → 최대 10 (양끝 고정, 0x216D84)");
 		Vector3f hand = sim.pointAt(sim.dist(), new Vector3f()).mul(1);
-		assertEquals(hand.y - EnemyNav.HAND, p.y, 1e-3, "몸 = 시뮬레이션 줄 위 손 − 손 높이");
-		assertTrue(p.y < 130 - EnemyNav.HAND - 0.5f, "가운데가 처짐 y=" + p.y);
+		assertEquals(hand.y - HAND, p.y, 1e-3, "몸 = 시뮬레이션 줄 위 손 − 손 높이");
+		assertTrue(p.y < 130 - HAND - 0.5f, "가운데가 처짐 y=" + p.y);
 		// 목표가 가파르게 아래 → × (0x1CFCE0) → 수평 줄은 비트 31 이 아니라 시간 조건 없이 놓음 (0x1C552C → 0x1E9030(2))
 		n.update(p, new Vector3f(), new Vector3f(p.x, -200, 60), false, DT);
 		assertEquals(EnemyNav.Mode.AIR, n.mode());
@@ -371,7 +389,7 @@ class EnemyNavTest {
 		EnemyNav n = new EnemyNav(AiTemplate.CAP_ZIPLINE, SKEL, 1000);
 		n.setRide(new AiData.Ride(17f, 20f, 10f, 1.5f));
 		n.setWorld(ropeWorld(zip));
-		Vector3f p = new Vector3f(-280, 300 - EnemyNav.HAND - 4, 60);
+		Vector3f p = new Vector3f(-280, 300 - HAND - 4, 60);
 		n.update(p, new Vector3f(), null, false, DT);
 		assertEquals(EnemyNav.Mode.ROPE, n.mode());
 		assertEquals(EnemyNav.ST_ROPE | EnemyNav.SUB_ZIPLINE, n.stateBits());
@@ -397,7 +415,7 @@ class EnemyNavTest {
 		EnemyNav.Rope zip = new EnemyNav.Rope(new Vector3f(-300, 300, 60), new Vector3f(1300, 100, 60), EnemyNav.SUB_ZIPLINE);
 		EnemyNav n = new EnemyNav(AiTemplate.CAP_ZIPLINE, SKEL, 1000);
 		n.setWorld(ropeWorld(zip));
-		Vector3f p = new Vector3f(-280, 300 - EnemyNav.HAND - 4, 60);
+		Vector3f p = new Vector3f(-280, 300 - HAND - 4, 60);
 		n.update(p, new Vector3f(), null, false, DT);
 		for (int i = 0; i < 30; i++) {
 			n.update(p, new Vector3f(), null, false, DT);

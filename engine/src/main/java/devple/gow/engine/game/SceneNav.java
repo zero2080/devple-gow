@@ -443,6 +443,11 @@ public final class SceneNav {
 
 	/** 움직이는 오브젝트 CDV (문·창살·회전방) 로 영웅 구 밀어내기. */
 	public boolean collideBodies(Vector3f c, float r) {
+		return collideBodies(c, r, devple.gow.engine.nav.NavWorld.HERO_BODY_EXCLUDE);
+	}
+
+	/** {@link #collideBodies(Vector3f, float)} 를 몸 제외 마스크로 ({@link devple.gow.engine.nav.NavWorld#bodyExclude}). */
+	public boolean collideBodies(Vector3f c, float r, long exclude) {
 		if (grabbed == null) {
 			grabbed = new java.util.HashSet<>();
 			for (Interactables.Item it : items.items()) {
@@ -451,7 +456,7 @@ public final class SceneNav {
 				}
 			}
 		}
-		return navWorld.collideBodies(c, r, grabbed); // 이 레벨 + 다른 슬롯 레벨 문·발판 (이웃 Animator 자세)
+		return navWorld.collideBodies(c, r, grabbed, exclude); // 이 레벨 + 다른 슬롯 레벨 문·발판 (이웃 Animator 자세)
 	}
 
 	/** 스크립트 Vis Attr11_0 → 충돌 켜고 끄기. */
