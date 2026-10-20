@@ -557,10 +557,10 @@ ATHN07B (화면 전체), ATHN06B (방 안이 흐린 벽), PAND03I (주황 판) �
 **4. 탐침에서 막힌 도착** — 분류
 | 도착 | 엔진 화면 | 분류 |
 |---|---|---|
-| PAND03F / PAND03J ← PAND00C Warp (CoreTubeCam4) | 관 벽 | 카메라 해독 그대로 [근사 의심]: 레일 두 극소 u 9.25 (비용 3.46) / u 14.5 (2.75), 0x400 접선 좌표계 요 −180±60 은 u 14.5 만 만족 → 관 바깥 눈. PAND02B 와 같은 종류 (§8.2) |
-| PAND02A ← PAND00C Warp (Start CameraName Lvl2HallCam2) | `Follow` | 데이터: Lvl2HallCam2 는 PAND00C 카메라. 도착점 x 960 은 camFromWarp (x ≤ 958.6) 와 camWarpTunle (x ≥ 964.2) 사이 5.6 단위 틈. 탐침은 떠나온 레벨을 다른 슬롯에 두어 Lvl2HallCam2 를 찾았다 — Warp 후에도 떠난 레벨을 남기면 OLYMP02 ← OLYMP01 에 OLYMP01 입구·staircam 이 겹쳐 (같은 좌표 공간) 되돌렸다 → 엔진의 "Warp 는 다른 슬롯 없음" 유지, 탐침 쪽 차이 |
+| PAND03F / PAND03J ← PAND00C Warp (CoreTubeCam4) | 관 벽 | **데이터대로 (§13.9)** — 카메라 해독 그대로: 레일 두 극소 u 9.25 (비용 3.46) / u 14.5 (2.75), 0x400 접선 좌표계 요 −180±60 은 u 14.5 만 만족 → 관 바깥 눈. PAND02B 와 같은 종류 (§8.2) |
+| PAND02A ← PAND00C Warp (Start CameraName Lvl2HallCam2) | `Follow` | 데이터: Lvl2HallCam2 는 PAND00C 카메라. 도착점 x 960 은 camFromWarp (x ≤ 958.6) 와 camWarpTunle (x ≥ 964.2) 사이 5.6 단위 틈. 탐침은 떠나온 레벨을 다른 슬롯에 두어 Lvl2HallCam2 를 찾았다 — Warp 후에도 떠난 레벨을 남기면 OLYMP02 ← OLYMP01 에 OLYMP01 입구·staircam 이 겹쳐 (같은 좌표 공간) 되돌렸다 → 엔진의 "Warp 는 다른 슬롯 없음" 유지, 탐침 쪽 차이 (§13.9: 원작도 떠난 레벨 컨텍스트를 끔) |
 | HDES01E ← HDES01D 걷기 | 이전 `Follow` (벽) → **Dcam11** (기둥 위 크레토스) | 도착 상태: 떨어져 들어오는 길 — 바로 위 −1260 에 HDES01D Dcam11. 1 의 씨앗 (수직) 으로 해결 |
-| ATRET01A ← HDES01E Warp (camFrmHades07) | 바로 HDES01E 로 되돌아감 | 도착 위치: Start (5095, 619, 991) 는 무덤 줄 `gorope1` 위, 영웅이 떨어져 `loadHDES01G` 영역 2 (Warp) 에 들어간다. 원작은 줄에 매달린 채 나오는 연출로 보인다 [추정] — 카메라 무관, 미해결 |
+| ATRET01A ← HDES01E Warp (camFrmHades07) | 바로 HDES01E 로 되돌아감 → **§13.9 해결** (줄에 매달려 도착) | 도착 위치: Start (5095, 619, 991) 는 무덤 줄 `gorope1` 위, 영웅이 떨어져 `loadHDES01G` 영역 2 (Warp) 에 들어간다. 원작은 줄에 매달린 채 나오는 연출로 보인다 [추정] — 카메라 무관, 미해결 |
 | OLYMP02 ← OLYMP01 Warp | HallCam1, 정상 | 탐침 차이 (위와 같이 떠난 레벨 충돌을 넣어 막힘) |
 | OLYMP02 ← OLYMP01 걷기 (0, 50, −352) | OLYMP01 `goentrance` 가 가림 | 하네스 인공물: Warp 짝 두 레벨이 같은 좌표를 써서 바닥 겹침이 "걷기" 로 잡힌 것. 실제 경로는 Warp |
 
@@ -573,3 +573,40 @@ ATHN07B (화면 전체), ATHN06B (방 안이 흐린 벽), PAND03I (주황 판) �
   PAND01D ← 01A (같음), HDES01D ← 01C (아래 1024 ClimbCam3 를 골라 나빠져 → 아래 탐색 ≤ 256 으로 줄여 이전 `Follow` 화면). 그 밖 ≤ 29 % (ATHN01F 연출·AI 잡음).
   PAND01B ← 01BB 는 이웃 PAND01BB 스크립트의 Vis·Animator 가 걸려 문 쪽 화면이 바뀜 (스크립트대로).
 시선 탐침은 카메라 선택·풀기 코드를 바꾸지 않아 (씨앗은 `--arrive` 이음 전용) 그대로: 기본 시작 75/105, 도착 120/188. 시험 `ArrivalStateTest` 4 (씨앗 AltCam43, 이웃 1037 → goaxealcwall 숨김, 엘리베이터 시작, 문 상태 넘기기), `StartCameraTest` 7 통과. 엔진 테스트 372.
+
+### 13.9 남은 도착 3 건 (두 극소 재확인 · ATRET01A 무덤 줄 · Warp 슬롯 정책)
+스크린샷 (커밋 안 함): `/Users/obeomsu/.claude/jobs/6f65672f/tmp/cam5/` — `b_*` (수정 전), `a_atret*.png` (ATRET01A 도착), `w_*.png` (도착점이 진입 센서 안인 다른 Warp 도착).
+
+**1. CoreTubeCam4 (PAND03F/03J ← PAND00C) · camFRMCLFFS (PAND02B 기본 시작) — 데이터대로** [확실: 디스어셈블]
+- 이기는 극소를 바꿀 수 있는 것을 전부 다시 읽었다 (30 §7.2 끝): 0x1F20F0 표본 (매듭 × 4 + 1, `c.lt.s` 앞쪽 우선, 비용 함수 = t2 인자 0 → 플래그 규칙),
+  각도 자르기는 비용 0x1F1648 **안** (자른 방향 투영), 눈 회전 자르기는 t 를 정한 뒤, 리셋 (+0x4C = 0) 이라 직전 정면 보너스 없음, 대상 T = 생물 +0xD0 (위치 행, 0x1E09C0) + 24
+  (반경 1.6 끈 0x1F4380 — 떠나온 PAND00C 쪽으로 1.6 끌려도 u 9.25 비용은 3.46 → 3.9 로 오히려 나빠짐). **카메라 갱신 경로에 시선·충돌 질의가 없다** (광선 0x11E190 은 디버그 자유 카메라 0x1F0260 전용).
+  CoreTubeCam4 플래그 0x6B5FE 의 0x2000 은 카메라 대상 덮어쓰기 중 갱신 생략, 0x8000·0x20000 은 카메라 코드가 읽지 않음.
+- 그래서 원작도 u 14.5 (관 바깥, 접선 좌표계 요 57.5° → 120° 로 자른 투영 ≈ 141, 비용 2.75) 를 고르고 회전만 ±60° 로 잘라 영웅이 화면 밖이다 (u 9.25 는 범위 안이지만 |v| 140.5 → 비용 3.46).
+  Start CameraName 도 같은 CoreTubeCam4 (도착점이 볼륨 hull 2 안) 라 요청이 결과를 바꾸지 않는다. PAND02B 는 기본 시작이 원작 경로가 아니다 (§7.5).
+
+**2. ATRET01A ← HDES01E Warp — 무덤 줄 도착** [확실: 0x1E79D0 · 0x1C4FF8 · 0x1C5C20 · 0x1E0A18 · 0x1B3030 · 0x1A7FFC]
+- 데이터: Start `WarpFrmhdes05` (5095, 619, 991, 모드 2, 대상 없음, CameraName camFrmHades07) 는 줄 `gorope1` (꼭대기 699.8, 길이 160) 한가운데이고, 되돌아가는 볼륨 `loadHDES01G`
+  영역 1 (5095, 592, 987, r 192 — LoadForWarp HDES01E) · 영역 2 (5096, 570, 987, r 185 — Warp) 가 줄 전체를 덮는다. 무덤 밖으로 나오면 ExitSensor `frmHadesMpeg-pCube1-idle` → 동영상 a06Mp05.
+  HDES01E 쪽은 rope3 를 올라가다 꼭대기 `warpAtRet01A` 구에서 Warp — **영웅은 줄 위에서 떠난다**.
+- 원작 흐름: Warp_Jump (0x1B2E08) 는 영웅 상태를 지우지 않고 SetMatrix (영웅 vtable 0x2BBC78 +0x2C = **0x1E79D0**) 만 부른다. 0x1E79D0 = 0x1E1D78 (0x1E0A18 행렬) 뒤
+  줄 위 (+0x174 0x400) 면 **0x1C4FF8(1)**: 줄 값 지우고 +0x174 = (… & ~0x7FF) | 0x8 (떨어짐), +0x290 (줄 핸들) = 0. 다음 프레임 공중 (0x4C) 줄 잡기 0x1C5C20 이
+  잡기 점 반경 32 안의 gorope1 을 바로 잡는다 (놓은 줄 제외 0x3067E8 는 GetRope 0x243878 = 0 이라 없음). 별도 도착 스크립트·도착 애니는 없다.
+- 볼륨: 영웅 스크립트 레코드는 +0x30 0x20 (0x1AC310) 이라 일반 점 질의 루프에서 빠지고, 이전 위치 → 지금 위치 **선분** (0x1A7FFC → 0x11E190, 콜백 0x1A8508 진입·이탈) 만 쓴다.
+  순간이동 0x1E0A18 (영웅 +0x174 bit 31) → **0x1B3030** 이 0x29D90C = 1 → 그 프레임은 선분을 건너뛰고 이전 위치 = 도착점. 그래서 도착점을 덮은 loadHDES01G 가 곧바로 되돌리지 않는다
+  (경계를 지날 때만 [추정: 0x11E190 은 경계 교차]). 전 레벨 Warp 도착 Start 중 진입 센서 안인 것 25 곳 (센서 36) — HDES01E fromAtRet01A ⊂ LoadCheckATRNA, PAND00D WarpFrm1BB ⊂ LoadCheckBB,
+  ATHN04A WarpFrom5D ⊂ 엘리베이터 발판 PlayerEntry 처럼 도착 즉시 발동하면 말이 안 되는 것들이라 같은 규칙과 맞는다.
+- 엔진 (이전: 새 장면이 도착점 볼륨을 진입으로 쳐서 LoadForWarp + Warp → 떨어지며 HDES01E 로 되돌아감):
+  `GameScene` Warp 도착은 `placePlayer(…, inside = true)` (이음과 같이 이미 선 볼륨은 "안"), `HeroNavigator.warpArrived()` = 리스폰 잡기 대기 0.3 초 [근사] 없앰 → 첫 틱에 gorope1 (y 618) 에 매달림 (`a_atret.png`).
+  거꾸로 HDES01E ← ATRET01A 도 rope3 (y 103) 를 잡는다. 진입 센서 안 Warp 도착 (`w_athn04a/w_hdes01e/w_pand00d`) 은 도착 즉시 LoadCheck·발판 발동이 없어짐.
+
+**3. Warp 의 다른 슬롯 정책** [확실: 0x1B2CE0 · 0x1BC3A0 · 0x1BC110 · 0x1B0584 / 추정: 꺼진 컨텍스트의 렌더·충돌]
+- Warp_Update 0x1B2CE0: 준비 (0x29D914) + 요청 (0x29D918) + 두 슬롯 로드 (+0x68 & 1) → **0x1BC3A0(새 슬롯)**: 떠나온 슬롯 레벨의 루트 컨텍스트 (+0x5C)
+  가 켜져 있으면 0x1BE688 (하위 컨텍스트 +0x60 끔) + 0x1BEF10 (서버 vt+0x44 끔), 새 레벨 0x1BEEB8 (vt+0x34 켬), 0x1BE4C0 (현재 슬롯). 그 뒤 0x29D910/14/18 초기화.
+  **떠나온 레벨은 메모리에 남지만 꺼진다** — 내려 놓는 것은 다음 LoadWad/LoadForWarp 의 0x1BC110 (그 슬롯 +0x68 & 4 면 0x1BBA20(1) 로 비우고 새로 로드).
+- 꺼진 레벨: 스크립트 루프 (0x1A7D68 `컨텍스트 +4 & 4`) 가 건너뛴다 [확실]. 렌더·충돌·CMV 질의도 컨텍스트 서버를 따라 빠진다 [추정] — 그래서 OLYMP02 ← OLYMP01 (같은 좌표 공간) 에
+  OLYMP01 입구가 보이지 않는다. LoadForWarp(떠나온 레벨) 은 다시 읽지 않고 (0x1BC110 = 1) +0x68 & 4 면 바로 준비 (0x1B0670) — 무덤으로 떨어지면 곧장 HDES01E 로 돌아가는 설계와 맞다.
+- 엔진: Warp 는 다른 슬롯 없이 시작하는 지금 규칙 유지 (꺼진 레벨과 화면·스크립트가 같다). PAND02A ← PAND00C 의 Lvl2HallCam2 (떠나온 레벨 카메라) 는 원작에서도 꺼진 레벨 것이라
+  후보가 아니다 [추정] — 엔진 `Follow` 그대로.
+
+테스트 `WarpArrivalTest` 2 (도착점 볼륨 = 안 → 되돌림 없음 / 대조로 진입 처리면 LoadForWarp HDES01E, Warp 도착 첫 틱 gorope1). 엔진 테스트 380.

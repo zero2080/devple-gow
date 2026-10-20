@@ -322,6 +322,12 @@ public final class GameScene implements Scene {
 		}
 		String arrivalCam = placeSpawn();
 		respawn(spawn);
+		boolean warped = arrival != null && arrival.kind() == LevelLink.Kind.WARP;
+		if (warped) {
+			// Warp_Jump → 영웅 SetMatrix 0x1E79D0: 줄이면 놓기 0x1C4FF8(1) → 떨어짐 (+0x174 0x8), 다음 프레임 공중 줄 잡기 0x1C5C20 이
+			// 도착점 줄을 잡는다 — 잡기 대기 없음 (ATRET01A WarpFrmhdes05 = 무덤 줄 gorope1 한가운데, 43 §13.9)
+			nav.navigator.warpArrived();
+		}
 		checkpoint.set(spawn);
 		cam.fovDeg = 60;
 		cam.near = devple.gow.engine.fx.FxEnvironment.viewNear; // 원작 뷰포트 near (+0x384 = −10, 0x168DC8 — 43 §11)
@@ -331,7 +337,9 @@ public final class GameScene implements Scene {
 			boss.attach(arena());
 		}
 		world.start();
-		world.placePlayer(spawn.x, spawn.y, spawn.z, seamless);
+		// Warp 도 이미 서 있는 볼륨은 "안" 으로: 원작 영웅 볼륨 판정은 이전 위치 → 지금 위치 선분 (0x1A7FFC, 콜백 0x1A8508) 인데 순간이동
+		// (0x1E0A18 → 0x1B3030 → 0x29D90C) 프레임은 선분을 건너뛰고 이전 위치 = 도착점 — 도착점을 덮는 Warp 볼륨이 곧바로 되돌리지 않는다 (43 §13.9)
+		world.placePlayer(spawn.x, spawn.y, spawn.z, seamless || warped);
 		Resident here = resident(arrival, levelName);
 		if (here != null) { // 이음: 들어온 레벨은 원작에서 이미 다른 슬롯에 살아 있었다 → 그 화면 상태 (생성 스크립트 뒤)
 			here.hidden().forEach(level::hideInstance);
