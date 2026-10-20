@@ -157,6 +157,15 @@ public final class WadAssets implements AutoCloseable {
 	 * 첫 레이어 블렌드 분류 (MAT 생성 0x1537C8 의 정렬 플래그 규칙, 16 문서 §3.3):
 	 * 0x48 → ADD, 0x42 → SUB, p28 ≠ 1 · p38 ≠ 1 · TXR flags bit18 → ALPHA, 텍스처 없는 0x44 → OPAQUE, 그 외 → CUTOUT.
 	 */
+	/** 그림자 합성 뒤에 그리는 머티리얼인가 (첫 레이어, 0x155B50 — {@link devple.gow.engine.render.DrawStage#lateMaterial}, 47 §7.4.2). */
+	public static boolean lateStage(MaterialResource mat) {
+		if (mat == null || mat.layers().isEmpty()) {
+			return false;
+		}
+		MaterialResource.Layer l = mat.layers().getFirst();
+		return devple.gow.engine.render.DrawStage.lateMaterial(l.renderFlags(), l.flags2());
+	}
+
 	public RenderModel.Blend classify(MaterialResource mat, boolean textured) {
 		MaterialResource.Layer l = mat.layers().getFirst();
 		switch (l.gsAlpha()) {
@@ -383,8 +392,10 @@ public final class WadAssets implements AutoCloseable {
 			float[] tint = {1, 1, 1, 1};
 			float[] lit = null;
 			MaterialFx fx = null;
+			boolean late = false;
 			if (mat != null && !mat.layers().isEmpty()) {
 				MaterialResource.Layer l = mat.layers().getFirst();
+				late = lateStage(mat);
 				lit = litColor(mat, l);
 				tex = s.hasUv ? texture(l.texture()) : null;
 				blend = classify(mat, tex != null);
@@ -395,7 +406,7 @@ public final class WadAssets implements AutoCloseable {
 				fx = materialFx(mat, s.hasUv, s.hasNormal);
 			}
 			parts.add(new RenderModel.Part(new Mesh(v, idx, GL_TRIANGLES), tex, blend, tint, s.hasNormal, fx,
-					lit != null ? lit : new float[]{tint[0], tint[1], tint[2], 0, 0, 0}));
+					lit != null ? lit : new float[]{tint[0], tint[1], tint[2], 0, 0, 0}, late));
 		}
 		return new RenderModel(p.name(), parts, p.min(), p.max());
 	}

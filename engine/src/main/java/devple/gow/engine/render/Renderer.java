@@ -154,7 +154,7 @@ public final class Renderer implements AutoCloseable {
 			for (RenderModel.Part p : model.parts()) {
 				RenderModel.Blend b = p.blend();
 				boolean solid = b == RenderModel.Blend.OPAQUE || b == RenderModel.Blend.CUTOUT;
-				if (pass == 0 && !solid || pass == 1 && b == RenderModel.Blend.OPAQUE) {
+				if (pass == 0 && !solid || pass == 1 && b == RenderModel.Blend.OPAQUE || DrawStage.skip(p.late())) {
 					continue;
 				}
 				MaterialFx fx = p.fx();
@@ -292,8 +292,21 @@ public final class Renderer implements AutoCloseable {
 		glEnable(GL_DEPTH_TEST);
 	}
 
+	private GpuWarmup warmup;
+
+	/** 페이드 동안 새 레벨을 한 번씩 그려 둘 1×1 화면 밖 FBO (48 문서 §9.7). */
+	public GpuWarmup warmup() {
+		if (warmup == null) {
+			warmup = new GpuWarmup();
+		}
+		return warmup;
+	}
+
 	@Override
 	public void close() {
+		if (warmup != null) {
+			warmup.close();
+		}
 		fullscreen.close();
 		white.close();
 		basic.close();

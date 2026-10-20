@@ -256,6 +256,8 @@ public final class GameScene implements Scene {
 	/** 이름 → 미리 읽은 EnemyFactory.Kind 또는 그 예외 (loadEnemyKinds 가 꺼내 씀). */
 	private final Map<String, Object> preKinds = new HashMap<>();
 	private int preStep;
+	/** 페이드 동안 화면 밖 첫 그리기 (48 §9.7). -Dgow.warm=false 로 끔 (비교용). */
+	private static final boolean WARM = !"false".equals(System.getProperty("gow.warm"));
 	/** 페이드 한 틱에 미리 할 시간 (ms). 한 단계는 쪼개지 않으므로 넘을 수 있다. */
 	private static final long PRELOAD_NS = (long) (Double.parseDouble(System.getProperty("gow.preload.ms", "4")) * 1e6);
 
@@ -354,8 +356,30 @@ public final class GameScene implements Scene {
 						}
 					}
 				}
-				preStep = -1;
+				preStep = WARM ? preStep + 1 : -1;
 				return "enemy kinds";
+			}
+			case 8 -> {
+				// 48 §9.7: 1×1 화면 밖 FBO 에 새 레벨 배치를 한 번씩 그려 드라이버 첫 그리기를 페이드 안으로 (원작에 없는 엔진 전용)
+				if (preLevel.warmGpu(e, deadline)) {
+					preStep++;
+				}
+				return "warm level";
+			}
+			case 9 -> {
+				// HUD 파트 메시·텍스처 (R_PERMK 해독·GL) 미리 — 첫 hud.render 가 만들던 것
+				var w = e.renderer().warmup();
+				w.begin();
+				boolean done;
+				try {
+					done = preHud.warm(e, deadline) && (preLevelHud == null || preLevelHud.warm(e, deadline));
+				} finally {
+					w.end();
+				}
+				if (done) {
+					preStep = -1;
+				}
+				return "warm hud";
 			}
 			default -> {
 				preStep = -1;
@@ -2069,9 +2093,47 @@ public final class GameScene implements Scene {
 			// 주 뷰의 레벨 스키닝 GO (모드 0, SCR_Shadow 면 1) + 적·영웅 (47 문서 §11). 거울 반사 패스는 LevelScene 이 멈춘다
 			shadows.begin();
 		}
-		level.render(e, alpha);
-		renderOtherSlot(e);
-		// 캐릭터에도 레벨 안개 (같은 basic.frag 유니폼)
+		// 원작 층 2 (0x160CC0, 47 §7.4.2): 불투명 단계 (키 [표[2][0]+2, 표[2][2]) — 레벨·이웃 슬롯·레벨 WAD 적) → 그림자 합성 0x160518 →
+		// 반투명 단계 (가산·뺄셈·flags2 0x100 머티리얼 — 영웅 R_HERO·무기 R_WPN 머티리얼은 모두 0x100) → 층 3 (블레이드).
+		// 그림자를 끄면 (-Dgow.noshadow) 예전처럼 한 번에
+		boolean staged = shadows != null && !NO_STAGES;
+		int prevStage = devple.gow.engine.render.DrawStage.set(staged ? devple.gow.engine.render.DrawStage.EARLY : devple.gow.engine.render.DrawStage.ALL);
+		try {
+			level.render(e, alpha);
+			renderOtherSlot(e);
+			drawActors(e, alpha);
+			renderShadows(e.window().aspect(), alpha);
+			if (staged) {
+				devple.gow.engine.render.DrawStage.set(devple.gow.engine.render.DrawStage.LATE);
+				level.renderLate(e);
+				if (otherScene != null) {
+					otherScene.renderNeighbour(e, cam);
+				}
+				drawActors(e, alpha);
+			}
+		} finally {
+			devple.gow.engine.render.DrawStage.set(prevStage);
+		}
+		if (System.getProperty("gow.lightdebug") != null && hero.lastLights() != null && (lightFrame++ % 30) == 0) {
+			System.out.println("영웅 라이트: " + hero.lastLights() + " 블레이드 " + (hero.bladeLight(0) != null ? hero.bladeLight(0).dyn : -1f));
+		}
+		hero.drawChains(cam, e.window().aspect(), alpha, magicFx.godBladesOn()); // 사슬·궤적 (45 문서 §3)
+		if (System.getProperty("gow.nofx") == null) {
+			level.renderEffects(e, cam); // 비·파티클·물은 캐릭터 뒤에 (--no-fx 로 끔: 스크린샷용)
+		}
+		magicFx.render(cam, e.window().aspect(), e.renderer().white());
+		renderCameraFilter();
+		if (levelHud != null) {
+			levelHud.render(e);
+		}
+		hud.render(e);
+	}
+
+	/** 비교용: -Dgow.shadowlate 면 예전 순서 (레벨·캐릭터 전부 뒤에 그림자 합성). */
+	private static final boolean NO_STAGES = System.getProperty("gow.shadowlate") != null;
+
+	/** 적·영웅 (블레이드 포함) — 현재 {@link devple.gow.engine.render.DrawStage} 의 파트만. 캐릭터에도 레벨 안개 (같은 basic.frag 유니폼). */
+	private void drawActors(Engine e, float alpha) {
 		var env = level.fx().env();
 		env.applyFog(hero.shader(), cam, e.window().height());
 		env.applyFog(enemyShader, cam, e.window().height());
@@ -2085,22 +2147,8 @@ public final class GameScene implements Scene {
 					e.renderer().white());
 		}
 		hero.draw(cam, e.window().aspect(), alpha, e.renderer().white());
-		renderShadows(e.window().aspect(), alpha);
-		if (System.getProperty("gow.lightdebug") != null && hero.lastLights() != null && (lightFrame++ % 30) == 0) {
-			System.out.println("영웅 라이트: " + hero.lastLights() + " 블레이드 " + (hero.bladeLight(0) != null ? hero.bladeLight(0).dyn : -1f));
-		}
 		devple.gow.engine.fx.FxEnvironment.disableFog(hero.shader());
-		hero.drawChains(cam, e.window().aspect(), alpha, magicFx.godBladesOn()); // 사슬·궤적 (45 문서 §3)
 		devple.gow.engine.fx.FxEnvironment.disableFog(enemyShader);
-		if (System.getProperty("gow.nofx") == null) {
-			level.renderEffects(e, cam); // 비·파티클·물은 캐릭터 뒤에 (--no-fx 로 끔: 스크린샷용)
-		}
-		magicFx.render(cam, e.window().aspect(), e.renderer().white());
-		renderCameraFilter();
-		if (levelHud != null) {
-			levelHud.render(e);
-		}
-		hud.render(e);
 	}
 
 	/** 캐릭터 그림자 (47 문서 §7). null = 끔. */
@@ -2109,7 +2157,10 @@ public final class GameScene implements Scene {
 	private final devple.gow.engine.light.ShadowVolume.Out shadowTris = new devple.gow.engine.light.ShadowVolume.Out();
 	private int shadowFrame;
 
-	/** 모은 그림자 볼륨을 불투명 캐릭터 뒤, 반투명 (사슬·이펙트) 앞에 그린다. 받는 면 = 현재 + 다른 슬롯 레벨 충돌 (NoShadows 면 제외, 0x1BF658). */
+	/**
+	 * 모은 그림자 볼륨을 층 2 불투명 단계 (레벨·이웃 슬롯·적) 뒤, 반투명 단계 (영웅·물·가산 등)·층 3 (블레이드)·사슬·이펙트 앞에 합성한다 (0x160CC0 → 0x160518,
+	 * 47 §7.4.2). 받는 면 = 현재 + 다른 슬롯 레벨 충돌 (NoShadows 면 제외, 0x1BF658).
+	 */
 	private void renderShadows(float aspect, float alpha) {
 		if (shadows == null) {
 			return;

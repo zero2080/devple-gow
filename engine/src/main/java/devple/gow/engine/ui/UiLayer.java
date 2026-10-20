@@ -95,6 +95,14 @@ public final class UiLayer implements AutoCloseable {
 		renderer.render(player, e.renderer().basic(), white, e.window().width(), e.window().height());
 	}
 
+	/** 페이드 동안 HUD 파트·텍스처를 미리 (48 문서 §9.7, {@link FlpRenderer#warm}). 다 했으면 true. */
+	public boolean warm(Engine e, long deadline) {
+		if (white == null) {
+			white = Texture.white();
+		}
+		return renderer.warm(e.renderer().basic(), white, deadline);
+	}
+
 	@Override
 	public void close() {
 		renderer.close();
