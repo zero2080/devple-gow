@@ -5,6 +5,7 @@ import devple.gow.tools.anim.Animation;
 import devple.gow.tools.anim.AnimationSet;
 import devple.gow.tools.anim.Pose;
 import devple.gow.tools.anim.Skeleton;
+import devple.gow.tools.content.AnimOverrides;
 
 /**
  * 클립 재생 + 크로스페이드. 전환 시간은 원작 TWK {@code /Animation/<오브젝트>/<클립>_Tween} (초).
@@ -22,6 +23,8 @@ public final class Animator {
 	private float fade = 1f;
 	private float fadeTime;
 	private float rate = 1f;
+	/** 모드 속도 배율 (anim.properties speed.*, 49 문서 §12): 지금 클립 / 직전 클립. 재생 시작 때 한 번 조회. */
+	private float curScale = 1f, prevScale = 1f;
 	/** 재생 시작 순번 (같은 클립 재시작도 증가) — 루트 모션 프레임 카운터 리셋 (원작 0x1F7408 이 새 애니에서 +0xC8 = 0). */
 	private int playSerial;
 
@@ -48,6 +51,8 @@ public final class Animator {
 		current = a;
 		time = 0;
 		playSerial++;
+		prevScale = curScale;
+		curScale = speedOf(a);
 		fadeTime = tween(a, 0.15f);
 		fade = previous == null || fadeTime <= 0 ? 1f : 0f;
 	}
@@ -59,6 +64,8 @@ public final class Animator {
 		current = a;
 		time = startTime;
 		playSerial++;
+		prevScale = curScale;
+		curScale = speedOf(a);
 		this.rate = rate;
 		fadeTime = tween(a, 0.1f);
 		fade = previous == null || fadeTime <= 0 ? 1f : 0f;
@@ -82,9 +89,17 @@ public final class Animator {
 		rate = r;
 	}
 
+	/**
+	 * 클립의 모드 속도 배율 (기본 1). 클립 시간 진행에만 곱한다 — 루트 모션 (시간 차분)·전투 진행도 (시간 / 길이)·이벤트가 모두 클립 시간을
+	 * 보므로 같은 비율로 함께 빨라진다.
+	 */
+	public float speedOf(Animation a) {
+		return a == null ? 1f : AnimOverrides.speed(set != null ? set.name : null, a.name);
+	}
+
 	public void update(float dt) {
-		time += dt * rate;
-		prevTime += dt * rate;
+		time += dt * rate * curScale;
+		prevTime += dt * rate * prevScale;
 		if (fade < 1f) {
 			fade = Math.min(1f, fade + dt / fadeTime);
 		}

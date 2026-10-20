@@ -1,6 +1,8 @@
 package devple.gow.engine.audio;
 
 import devple.gow.tools.content.Content;
+import devple.gow.tools.content.SoundOverrides;
+import devple.gow.tools.audio.WavClip;
 import devple.gow.tools.audio.AdpcmClip;
 import devple.gow.tools.audio.SoundBank;
 import devple.gow.tools.audio.SoundEmitter;
@@ -229,7 +231,9 @@ public final class SoundManager implements AutoCloseable {
 		}
 		instances.put(in.handle, in);
 		// 첫 그레인 대기가 0 이면 즉시 실행 (원작은 다음 틱이지만 체감 차이 없음)
-		in.tick();
+		if (!override(in, s.name())) {
+			in.tick();
+		}
 		return in;
 	}
 
@@ -241,7 +245,9 @@ public final class SoundManager implements AutoCloseable {
 		c.far = parent.far;
 		c.music = parent.music;
 		System.arraycopy(parent.regs, 0, c.regs, 0, 4);
-		c.tick();
+		if (!override(c, s.name())) {
+			c.tick();
+		}
 		return c;
 	}
 
@@ -389,7 +395,9 @@ public final class SoundManager implements AutoCloseable {
 		SoundInstance in = new SoundInstance(this, nextHandle++, r.bank(), r.sound(), null);
 		in.music = true;
 		instances.put(in.handle, in);
-		in.tick();
+		if (!override(in, sndName)) {
+			in.tick();
+		}
 		musicHandle = in.handle;
 		musicName = sndName;
 		return in.handle;
@@ -465,6 +473,42 @@ public final class SoundManager implements AutoCloseable {
 		if (!hs.isEmpty()) {
 			groupHandles.put(group, hs.stream().mapToInt(Integer::intValue).toArray());
 		}
+	}
+
+	// ---- 모드 WAV 교체 (49 문서 §11) ----
+
+	/** 읽은 교체 WAV (이름 대문자 + 음악 여부 → 모노 클립 또는 스테레오). 실패는 NONE. */
+	private record WavOverride(AdpcmClip mono, WavClip stereo) {
+	}
+
+	private static final WavOverride NONE = new WavOverride(null, null);
+	private final Map<String, WavOverride> wavOverrides = new HashMap<>();
+
+	/** 계층에 sound/&lt;이름&gt;.wav 가 있으면 in 을 그 WAV 로 시작하고 true. 없으면 false (원래 그레인 경로). */
+	private boolean override(SoundInstance in, String sndName) {
+		Path f = SoundOverrides.find(sndName);
+		if (f == null) {
+			return false;
+		}
+		WavOverride o = wavOverrides.computeIfAbsent(f + (in.music ? "#m" : ""), k -> {
+			try {
+				WavClip w = WavClip.read("wav:" + f.getFileName(), Files.readAllBytes(f));
+				if (w.loopStart() < 0 && SoundOverrides.loop(sndName, in.music)) {
+					w = w.withLoop(0);
+				} else if (w.loopStart() >= 0 && !SoundOverrides.loop(sndName, true)) {
+					w = w.withLoop(-1);
+				}
+				return w.channels() == 1 ? new WavOverride(w.mono(), null) : new WavOverride(null, w);
+			} catch (IOException | RuntimeException e) {
+				System.err.println("[mods] " + f + " 읽기 실패: " + e.getMessage());
+				return NONE;
+			}
+		});
+		if (o == NONE) {
+			return false;
+		}
+		in.playOverride(o.mono(), o.stereo());
+		return true;
 	}
 
 	// ---- 그레인 실행기 콜백 ----

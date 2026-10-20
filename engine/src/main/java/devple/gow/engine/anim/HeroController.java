@@ -246,7 +246,7 @@ public final class HeroController implements NavBody {
 			return 0;
 		}
 		float z = a.sample(anim.skeleton(), 0, true).pos[zeroJoint][2];
-		return Math.abs(z) * ROOT_FPS;
+		return Math.abs(z) * ROOT_FPS * anim.speedOf(a);
 	}
 
 	private static float wrap(float a) {

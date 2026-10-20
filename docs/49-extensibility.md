@@ -102,10 +102,10 @@ config/                   사용자 계층 (늘 맨 위 — 개인 키 설정 �
 | 8 | 텍스트·대사 | `text/messages.properties` (+ `text/msgs.txt`) | 완료 |
 | 9 | 스테이지 | `stages.properties` + `rom/` | 완료 |
 | 10 | 이벤트 씬 (동영상·스크립트) | `movies.properties` + `rom/*.PSS` + `wad/` | 완료 |
-| 11 | 사운드 | `sound/<SND이름>.wav` | 진행 중 |
-| 12 | 애니메이션 | `anim.properties` + `wad/` | 진행 중 |
+| 11 | 사운드 | `sound/<SND이름>.wav` + `sound.properties` | 완료 |
+| 12 | 애니메이션 | `anim.properties` + `wad/` | 완료 |
 | 13 | 적 AI | `ai.properties` + 플러그인 | 진행 중 |
-| 14 | 그래픽 (텍스처 PNG) | `textures/` | 진행 중 |
+| 14 | 그래픽 (텍스처 PNG) | `textures/` + `normalmaps/` | 완료 |
 
 (각 절은 구현과 함께 아래에 채운다.)
 
@@ -267,6 +267,125 @@ a01Mp03=skip
 예: `mods/mymod/wad/ATHN01A/ESC_<이름>.bin` = 고친 ESC 리소스 데이터 (헤더 0x24 + 엔티티 표, 13 문서 형식).
 - 이름이 같은 ESC 태그가 여럿이면 모두 바뀐다.
 - 스크립트 안 메시지 ID 는 §8 표, 동영상 이름은 §10.1 표를 그대로 탄다.
+
+## 11. 사운드
+
+이름 있는 소리 하나를 WAV 로 바꾼다. 효과음 `SND_*` 과 음악 `SND_M_*` 모두 같은 자리다.
+
+```
+mods/mymod/sound/SND_IG_POPUP.wav        메뉴 팝업 효과음
+mods/mymod/sound/SND_M_ATH1C1_4.wav      아테네 음악 (VPK 스트림 대신)
+mods/mymod/sound.properties              (선택) loop.SND_AMB_FIRE=true
+```
+
+- 형식: RIFF PCM 16 비트 (8 비트도 됨), 모노·스테레오, 샘플레이트 자유. 3 채널 이상은 앞 두 채널만.
+- 파일 이름 = SND 이름 + `.wav`. 대소문자 무시. 이름 목록은 `tools audio:sbk <wad>` (뱅크 소리 이름), 음악은 `tools audio:music <gow-rom>`. 원본 소리를 WAV 로 들어 보려면 `audio:sbk <wad> <outDir>`, `audio:wav <VPK>`.
+- 갈아 끼우는 자리: `SoundManager` 가 소리를 시작하는 세 곳.
+  - `play` (이름·TWK 해시·전투 이벤트 해시·SoundController 이미터)
+  - 자식 소리 (`START_CHILD` 그레인)
+  - `music`
+- 교체가 있으면 그레인 프로그램을 돌리지 않는다. 대신 보이스 하나로 WAV 를 재생한다 (`SoundInstance.playOverride`).
+- 원래 경로에서 그대로 쓰는 것:
+  - 볼륨: 핸들러 × 소리 × 볼륨 그룹 × 마스터 (`baseVoice`)
+  - 3D 위치·거리 (`setPosition`/`setRange`)
+  - 물속 피치·감쇠, 인스턴스 제한, `stop`/`kill`, 음악 핸들
+- 모노는 메모리 클립이라 3D 로 들린다. 스테레오는 메모리 스트림이라 위치가 없다 (OpenAL 은 스테레오를 공간화하지 않음). 3D 효과음은 모노로 만든다.
+- 반복:
+  1. WAV `smpl` 청크의 첫 루프 시작부터 반복
+  2. 없으면 `sound.properties` 의 `loop.<SND이름>=true|false`
+  3. 둘 다 없으면 음악은 처음부터 반복, 효과음은 한 번
+  - `loop.<이름>=false` 는 smpl 루프도 끈다.
+- 원작의 무작위 변형 (`RAND_PLAY`)·피치 흔들림 (LFO)·엔벨로프는 WAV 소리에 적용되지 않는다.
+- 읽은 WAV 는 관리자에 캐시한다 (이름당 한 번 디코드). 교체가 없으면 조회 한 번 (빈 표) 뿐이다.
+- 뱅크 안 샘플 자체를 바꾸려면 SND 뱅크 태그 교체 (§5), VAG/VPK 파일 통째는 `rom/` (§3).
+
+코드: `tools/content/SoundOverrides` (경로 표), `tools/audio/WavClip` (WAV 읽기), `engine/audio/MemoryPcmStream`.
+
+## 12. 애니메이션
+
+ANM 세트 안 클립을 이름으로 바꾸거나 재생 속도를 바꾼다. 계층마다 `anim.properties` 를 덮어 합친다.
+
+```properties
+# 크라토스 서 있기를 걷기 클립으로
+replace.standIdle=walkBlend1
+# 모든 세트의 walkBlend2 를 1.5 배 빠르게
+speed.walkBlend2=1.5
+# 한 세트에만: <클립>@<ANM세트> (이름만 쓴 키보다 우선)
+speed.land@ANM_hero=0.5
+replace.idle@ANM_MIN=idle2
+```
+
+- 이름은 대소문자를 가리지 않는다.
+- 세트 지정은 `@` 로 쓴다. `:` 와 `=` 는 properties 의 키·값 구분자라 키에 쓸 수 없다.
+- `replace.<클립>=<다른 클립>`
+  - `AnimationSet.find` 가 이름을 찾을 때 같은 세트의 `<다른 클립>` 을 돌려준다. 그 세트에 없으면 무시한다.
+  - 엔진의 클립 이름 조회 (영웅 이동·전투 기술·적·보스·발판·카메라) 는 모두 여기를 지난다.
+  - 한 단계만 바꾼다 (사슬 없음). 교체 없는 원래 조회는 `findOriginal`.
+  - 주의: 게임 로직이 `current().name` 을 비교하는 자리 (예: 착지 `land` 끝 대기) 는 바꾼 클립 이름을 보게 된다.
+- `speed.<클립>=배율`
+  - `Animator.update` 의 클립 시간 진행에 곱한다. 배율은 재생 시작 때 한 번 조회한다.
+  - 전투 기술 속도 (`playClip` 의 rate) 와 곱해진다. 크로스페이드 중 직전 클립은 자기 배율을 쓴다.
+  - 같은 시간축을 보는 것이 함께 맞춰진다.
+    - 루트 모션: 시간 차분.
+    - 전투 진행도와 이벤트: 클립 시간 / 길이.
+    - 한 번 재생 끝 판정.
+  - 루프 이동 클립의 초당 이동량도 배율을 곱한다 (`HeroController.clipSpeed`, `EnemyFighter.clipSpeed`). 그래서 발이 미끄러지지 않는다.
+  - 클립 없이 시간만 쓰는 기술 (`Combatant` 의 vclip) 과 원작 고정 시간 (TWK 초 단위 값) 은 바뀌지 않는다.
+- 클립 데이터 자체 (새 동작, 다른 길이) 는 ANM 태그 교체로 바꾼다 (§5).
+  - 예: `wad/R_HERO0/ANM_hero.bin`.
+  - 외부 그룹 (`ANM_hero_Athn01A` 등) 은 그 레벨 WAD 의 태그다.
+  - 꺼내기는 `tools wad:get`.
+- 표가 비면 조회는 곧바로 돌아온다. 이름 조회는 빈 표 확인, 재생 시간은 곱셈 하나만 더해진다.
+
+코드: `tools/content/AnimOverrides`, `AnimationSet.find`, `engine/anim/Animator` (`speedOf`).
+
+## 14. 그래픽
+
+텍스처를 PNG 로 바꾼다. WAD 텍스처 해독 (`TextureDecoder`) 결과 대신 쓴다.
+
+```
+mods/mymod/textures/ATHN01A/TXR_Athn01A003.png    그 WAD 에서만 (.WAD 뺀 대문자 이름)
+mods/mymod/textures/TXR_KratosBody.png            모든 WAD
+mods/mymod/textures/ATHN01A/TXR_Water01.2.png     애니메이션 텍스처 프레임 2 만
+mods/mymod/normalmaps/TXR_Athn01A003.png          노멀맵 (44 문서, 선택 기능)
+```
+
+- 같은 이름이 WAD 별과 전역에 다 있으면 WAD 별이 이긴다. 계층 사이에서는 위 계층이 이긴다.
+- 크기는 자유다. 원본과 같은 UV 가 같은 그림을 가리키게 맞춘다 (`TextureOverrides.fit`).
+  - 원본과 같은 크기면 그대로 쓴다 (원본처럼 2 의 거듭제곱으로 패딩).
+  - 원본의 정수배 (2 배·4 배) 면 그 배율의 텍스처로 복사한다.
+  - 2 의 거듭제곱이 아닌 원본도 된다. 예: 512×72 → 업로드 512×128. 1024×144 PNG → 1024×256 의 위 144 줄.
+  - 그 밖의 크기는 같은 비율 자리로 쌍선형 크기 변경.
+- 색·알파는 일반 8 비트 RGBA 다. 해독기가 PS2 알파 (0x80 = 불투명) 를 이미 0..255 로 늘려 내므로 PNG 알파 255 = 불투명이다.
+  - 알파 없는 PNG 는 불투명.
+  - 반투명 판정 (머티리얼·TXR 플래그) 은 원본 그대로라 PNG 알파만 바꿔서는 블렌드 방식이 안 바뀐다.
+- 애니메이션 텍스처 (GFX 프레임 &gt; 1):
+  - `<TXR>.<프레임>.png` 가 있으면 그 프레임.
+  - 없으면 `<TXR>.png` 를 세로 스트립으로 보고 프레임 수로 자른다 (원본 GFX 와 같은 배치).
+- 이름이 겹치는 R_PERM 텍스처 (`textureBefore`, 태그 번호로 고른 사본) 에도 같은 이름 PNG 가 쓰인다.
+- 갈아 끼우는 자리: `WadAssets` 의 `texture` / `textureFrames` / `textureBefore` / 미리 해독 (`predecode`). 엔진의 텍스처 해독은 모두 여기를 지난다 (레벨·캐릭터·이펙트·HUD/FLP).
+- 노멀맵: 바꾼 텍스처의 생성 노멀맵은 PNG 에서 만든다. 덮어쓰기 출처 순서:
+  1. 계층 `normalmaps/<키>.png`
+  2. `work/normalmaps/<키>.png`
+  3. CPU 생성
+  - 키는 `NormalMaps` 와 같다: TXR 이름, 사본 `이름@태그`, 프레임 `이름#프레임`.
+- 내보내기: `tools texture:export <wad> <outDir> --mod`.
+  - `outDir/<WAD>/<TXR>.png` 로, 엔진이 쓰는 항목 (이름별 첫 항목, CLUT 0) 만 쓴다.
+  - `outDir` 를 `mods/<m>/textures` 로 주고 고칠 파일만 남기면 된다.
+  - 예: `tools texture:export gow-rom/ATHN01A.WAD mods/hd/textures --mod`
+- GFX/PAL/TXR 데이터 자체 (형식·팔레트) 를 바꾸려면 태그 교체 (§5).
+- 교체가 없으면 텍스처마다 빈 표 확인 한 번뿐이다 (텍스처는 처음 올릴 때만 조회).
+
+코드: `tools/content/TextureOverrides`, `engine/asset/WadAssets` (`textureImage` = CPU 그림, 확인용).
+
+### 11–14 테스트
+
+`ModOverridesTest`: 5개.
+- PNG 크기 맞춤 (같은 크기·정수배·2 의 거듭제곱 아닌 원본·임의 배율).
+- R_HERO0 실제 TXR 의 WAD 별·전역 PNG 교체 (반투명 알파 그대로), 다른 WAD 디렉터리 무시, 모드 없으면 해독 그대로.
+- ANM_hero 의 `replace` (대소문자 무시, 없는 대상 무시), `speed` (이름·세트 지정, 전투 rate 와 곱).
+- WAV 읽기 (스테레오·smpl 루프·잘못된 파일).
+- 헤드리스 SoundManager: 효과음 WAV 교체 (3D 클립, 한 번), 다른 소리는 원래 경로, 음악 스테레오 스트림 반복·정지.
 
 ## 15. 도구 · 다른 디스크
 
