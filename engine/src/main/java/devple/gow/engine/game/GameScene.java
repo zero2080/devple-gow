@@ -52,10 +52,22 @@ public final class GameScene implements Scene {
 	 * 다른 레벨에서 넘어올 때의 도착 정보 (36 문서 §3). kind: SEAMLESS/WALK = 위치·방향 유지(pos, yaw),
 	 * WARP = from 레벨 이름으로 도착 Start 를 찾는다. from = 떠나온 레벨 (SEAMLESS/WALK 면 다른 슬롯에 남아 충돌이 유지됨).
 	 */
-	public record Arrival(LevelLink.Kind kind, String from, float[] pos, float yaw, devple.gow.engine.level.CameraRig.Handoff camera) {
+	public record Arrival(LevelLink.Kind kind, String from, float[] pos, float yaw, devple.gow.engine.level.CameraRig.Handoff camera,
+						  List<Resident> resident) {
 		public Arrival(LevelLink.Kind kind, String from, float[] pos, float yaw) {
-			this(kind, from, pos, yaw, null);
+			this(kind, from, pos, yaw, null, null);
 		}
+
+		public Arrival(LevelLink.Kind kind, String from, float[] pos, float yaw, devple.gow.engine.level.CameraRig.Handoff camera) {
+			this(kind, from, pos, yaw, camera, null);
+		}
+	}
+
+	/**
+	 * 이음 때 두 슬롯 레벨의 상태 — 원작은 LoadCheck 가 "현재 레벨" 표시만 바꾸고 두 레벨은 슬롯에 그대로 산다 (36 §2, 30 §7). 엔진은 두 레벨을
+	 * 새로 읽으므로 화면에 남는 것만 넘긴다: Vis 숨김 인스턴스 + Animator 오브젝트 자세 (열린 문, 43 §13.8) [근사: 스크립트 변수·충돌 켬/끔은 새로].
+	 */
+	public record Resident(String wad, java.util.Set<String> hidden, List<devple.gow.engine.nav.Platforms.State> anims) {
 	}
 
 	/** 스폰된 적 한 마리 (전투 + 렌더 모델 + 스크립트 액터). */
@@ -110,6 +122,10 @@ public final class GameScene implements Scene {
 	/** 떨어지는 중인 적의 수직 속도. */
 	private final java.util.Map<EnemyFighter, Float> enemyFall = new java.util.IdentityHashMap<>();
 	private boolean otherScenePending;
+	/** 다른 슬롯 레벨 스크립트가 Vis 로 숨긴 인스턴스 (소문자, 렌더 스레드가 otherScene 에 건다). 다른 슬롯이 바뀌면 비운다. */
+	private final java.util.Set<String> otherHidden = java.util.concurrent.ConcurrentHashMap.newKeySet();
+	/** 다른 슬롯 레벨 Animator 오브젝트 자세 (이름 → 관절 월드, 숨김 관절) — 렌더 스레드가 otherScene 에 건다. */
+	private final Map<String, Object[]> otherPosed = new java.util.concurrent.ConcurrentHashMap<>();
 	/** 표시 중인 메시지 번호 (-1 없음): 닫힐 때 이벤트 1040(번호) 를 플레이어가 보낸다 (원작 0x1B8ECC/0x1B8F98/0x1B9170). */
 	private int messageId = -1;
 	/** 열린 질문 메시지 번호 (Internal 0xB, −1 = 없음), 선택지 수, 지금 선택 (1 부터). */
@@ -293,6 +309,15 @@ public final class GameScene implements Scene {
 		buildRopeVisuals();
 		if (otherName != null) {
 			nav.setOther(otherName, otherData, otherCol, nav.neighbourListener());
+			Resident left = resident(arrival, otherName);
+			if (left != null) { // 이음: 떠나온 레벨 = 다른 슬롯 그대로 (생성 스크립트 결과보다 넘긴 상태가 우선)
+				otherHidden.clear();
+				otherHidden.addAll(left.hidden());
+				nav.neighbourPlatforms().restore(left.anims());
+				if (System.getProperty("gow.debug") != null) {
+					System.out.println("다른 슬롯 상태 넘겨받음 " + otherName + ": 숨김 " + left.hidden().size() + ", 애니 " + left.anims());
+				}
+			}
 		}
 		String arrivalCam = placeSpawn();
 		respawn(spawn);
@@ -306,11 +331,31 @@ public final class GameScene implements Scene {
 		}
 		world.start();
 		world.placePlayer(spawn.x, spawn.y, spawn.z, seamless);
+		Resident here = resident(arrival, levelName);
+		if (here != null) { // 이음: 들어온 레벨은 원작에서 이미 다른 슬롯에 살아 있었다 → 그 화면 상태 (생성 스크립트 뒤)
+			here.hidden().forEach(level::hideInstance);
+			nav.restorePlatforms(here.anims());
+		}
+		// 검증: --arrive 이음 재현에는 슬롯 상태가 없다 → -Dgow.arrive.open=오브젝트[:애니],… 를 애니 끝 자세로 (열린 문, 43 §13.8)
+		String open = System.getProperty("gow.arrive.open");
+		if (open != null && seamless && arrival.resident() == null) {
+			for (String o : open.split(",")) {
+				String[] f = o.split(":");
+				String an = f.length > 1 ? f[1] : "!0";
+				boolean ok = nav.neighbourPlatforms().play(f[0], an, 0, 1, 1e9f) || nav.playPlatform(f[0], an, 0, 1, 1e9f);
+				System.out.println("도착 재현: " + f[0] + " 애니 끝 자세 " + ok);
+			}
+		}
 		// 시작 카메라는 생성 시 스크립트(CreationSensor → Vis Attr11_1 CMV 끔, 예 ATHN02D MedusaHeadCam) 뒤에 고른다 — 원작은 레벨이
 		// 이웃 슬롯에 먼저 올라와 있다가 들어오므로 그 시점엔 생성 스크립트가 이미 돌았다 [추정]. Warp_Jump 순서: 볼륨 선택(0x1EFC98 →
 		// 0x1EDF48(0)) 뒤 Start 의 CameraName 을 SwitchCamera (0x1A8E10).
 		if (seamless && arrival.camera() != null) {
 			cameraRig.resume(arrival.camera());
+		} else if (seamless && arrival.from().equals(otherName)) { // --arrive 이음 재현: 떠나온 레벨에서 쓰던 카메라 대신 (43 §13.8) [근사: 하네스]
+			Vector3f sp = cameraRig.seedApproach(hero.ctl.position, hero.ctl.yaw, otherData);
+			if (sp != null) {
+				System.out.printf("도착 카메라 씨앗: %s (%.0f, %.0f, %.0f)%n", cameraRig.current(), sp.x, sp.y, sp.z);
+			}
 		}
 		cameraRig.update(0, hero.ctl.position, hero.ctl.yaw, false);
 		if (!arrivalCam.isEmpty()) {
@@ -502,6 +547,8 @@ public final class GameScene implements Scene {
 			lights.removeSource(otherName); // 이전 다른 슬롯 레벨의 라이트 빼기 (47 문서 §8)
 		}
 		otherName = wad;
+		otherHidden.clear();
+		otherPosed.clear();
 		otherScenePending = true; // 렌더 스레드에서 지오메트리 적재 (render)
 		otherCol = null;
 		otherData = null;
@@ -559,6 +606,18 @@ public final class GameScene implements Scene {
 			@Override
 			public void message(int id, float seconds) {
 				showMessage(id, seconds);
+			}
+
+			@Override
+			public void neighbourVisible(List<String> objects, boolean show) {
+				for (String o : objects) {
+					String k = o.toLowerCase(java.util.Locale.ROOT);
+					if (show) {
+						otherHidden.remove(k);
+					} else {
+						otherHidden.add(k);
+					}
+				}
 			}
 
 			@Override
@@ -834,6 +893,31 @@ public final class GameScene implements Scene {
 		pendingEngine.scenes().transitionTo(new GameScene(session, wad, entryName, 0));
 	}
 
+	/** 이음 넘기기용 두 슬롯 화면 상태. */
+	private List<Resident> residents() {
+		List<Resident> out = new ArrayList<>();
+		if (nav == null) {
+			return out;
+		}
+		out.add(new Resident(levelName, level.removedInstances(), nav.platformStates()));
+		if (otherName != null) {
+			out.add(new Resident(otherName, new java.util.HashSet<>(otherHidden), nav.neighbourPlatforms().states()));
+		}
+		return out;
+	}
+
+	private static Resident resident(Arrival a, String wad) {
+		if (a == null || a.resident() == null || wad == null) {
+			return null;
+		}
+		for (Resident r : a.resident()) {
+			if (r.wad().equalsIgnoreCase(wad)) {
+				return r;
+			}
+		}
+		return null;
+	}
+
 	private void goToLevel(String wad, Arrival a) {
 		if (leaving) {
 			return;
@@ -841,7 +925,8 @@ public final class GameScene implements Scene {
 		leaving = true;
 		System.out.println("레벨 전환 → " + wad + " (" + a.kind() + ", " + a.from() + " 에서)");
 		if (a.kind() != LevelLink.Kind.WARP && a.camera() == null && cameraRig != null) {
-			a = new Arrival(a.kind(), a.from(), a.pos(), a.yaw(), cameraRig.handoff()); // 이음: 카메라 상태 유지 (30 문서 §7)
+			a = new Arrival(a.kind(), a.from(), a.pos(), a.yaw(), cameraRig.handoff(), // 이음: 카메라 상태 유지 (30 문서 §7)
+					residents()); // 두 슬롯 화면 상태 (떠나는 레벨 → 다른 슬롯, 들어가는 레벨 → 현재)
 		}
 		pendingEngine.scenes().transitionTo(new GameScene(session, wad, a));
 	}
@@ -1261,6 +1346,11 @@ public final class GameScene implements Scene {
 		for (var b : nav.platformBodies()) {
 			if (b.anim() != null) {
 				level.poseInstance(b.owner, b.joints(), b.hidden()); // 움직인 발판·문·회전방은 애니 자세로 (관절 숨김 포함: DMC 결계)
+			}
+		}
+		for (var b : nav.neighbourPlatforms().bodies()) { // 다른 슬롯 레벨 문·발판 (43 §13.8)
+			if (b.anim() != null) {
+				otherPosed.put(b.owner, new Object[]{b.joints(), b.hidden()});
 			}
 		}
 		breakables.update(hero.combat, world, this::onBreak);
@@ -1711,6 +1801,8 @@ public final class GameScene implements Scene {
 			}
 		}
 		if (otherScene != null) {
+			otherScene.setRemoved(otherHidden); // 이웃 스크립트 Vis 숨김 (SceneNav.Host.neighbourVisible)
+			otherPosed.forEach((k, v) -> otherScene.poseInstance(k, (float[][]) v[0], (boolean[]) v[1]));
 			otherScene.renderNeighbour(e, cam);
 		}
 	}

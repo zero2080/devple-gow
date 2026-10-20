@@ -60,6 +60,13 @@ public final class SceneNav {
 		 */
 		default void neighbourCamera(String name, Boolean query, List<String> owners, boolean on) {
 		}
+
+		/**
+		 * 이웃 레벨 스크립트의 Vis Visible (슬롯 0: 1 보임 / 2 숨김) — 원작은 두 슬롯 GO 가 같은 렌더 서버에 있어 이웃 스크립트의 숨김도 그대로 화면에 걸린다
+		 * (예 PAND01A AxeAlcWall-CamSensor1: 이벤트 1037 카메라 AltCam43 등이면 goaxealcwall 숨김, 43 §13.8).
+		 */
+		default void neighbourVisible(List<String> objects, boolean show) {
+		}
 	}
 
 	private final LevelData level;
@@ -73,6 +80,11 @@ public final class SceneNav {
 	/** 이웃 레벨 (다른 슬롯) 스크립트 — 원작은 두 레벨 엔티티가 같이 돈다 (36 문서 §6 한계 → 38 문서 §4). */
 	private String neighbourName;
 	private ScriptWorld neighbour;
+	/**
+	 * 이웃 레벨 Animator 오브젝트 (문·발판) — 원작은 두 슬롯이 같이 살아 있어 이웃 스크립트의 Animator 도 그 레벨 오브젝트를 움직이고, 이음으로 떠나온
+	 * 레벨의 열린 문도 그대로 남는다 (43 §13.8). 렌더 자세만 (충돌은 이웃 정적 충돌 그대로 [근사]).
+	 */
+	private Platforms neighbourPlatforms = new Platforms();
 	private final ScriptHost mainHost;
 
 	public SceneNav(LevelData level, LevelCollision col, HeroRig hero, ScriptWorld world, ScriptHost mainHost, Tweaks levelTweaks, Host host) {
@@ -163,12 +175,15 @@ public final class SceneNav {
 		}
 		neighbourName = name;
 		neighbour = null;
+		neighbourPlatforms = new Platforms();
 		world.linkEvents(null);
 		if (data == null) {
 			return;
 		}
 		try {
 			ScriptWorld nw = new ScriptWorld(data, ScriptHost.neighbour(mainHost), neighbourListener);
+			Set<String> owners = animatorOwners(nw);
+			neighbourPlatforms = Platforms.of(data, owners, owners);
 			nw.start();
 			Vector3f p = world.player() != null ? new Vector3f(world.player().pos[0], world.player().pos[1], world.player().pos[2]) : new Vector3f();
 			nw.placePlayer(p.x, p.y, p.z, true); // 이미 서 있는 볼륨은 "안" 으로 (들어올 때 발동하지 않음)
@@ -217,6 +232,18 @@ public final class SceneNav {
 			}
 
 			@Override
+			public void animate(ScriptEntity source, List<String> objects, String anim) {
+				int[] mode = new int[1];
+				float[] speed = {1}, start = new float[1];
+				if (source != null && neighbour != null) {
+					animatorArgs(neighbour, source, mode, speed, start);
+				}
+				for (String o : objects) {
+					neighbourPlatforms.play(o, anim, mode[0], speed[0], start[0]);
+				}
+			}
+
+			@Override
 			public void internal(int func, List<Object> args) {
 				if (func == 0x9 && !args.isEmpty()) {
 					Object a = args.get(0);
@@ -226,7 +253,16 @@ public final class SceneNav {
 
 			@Override
 			public void vis(ScriptEntity source, List<String> objects, int[] values) {
+				if (values.length > 0 && (values[0] == 1 || values[0] == 2)) {
+					if (System.getProperty("gow.trace.vis") != null) {
+						System.out.println("VIS(이웃) " + source.name() + " " + (values[0] == 1 ? "ON " : "OFF ") + objects);
+					}
+					host.neighbourVisible(objects, values[0] == 1);
+				}
 				if (values.length > 4 && values[4] != 0) {
+					if (System.getProperty("gow.trace.vis") != null) {
+						System.out.println("VIS(이웃) " + source.name() + " CMV " + (values[4] == 1 ? "ON " : "OFF ") + objects);
+					}
 					host.neighbourCamera(null, null, objects, values[4] == 1);
 				}
 			}
@@ -340,6 +376,7 @@ public final class SceneNav {
 	/** 한 틱: 발판 애니 → Marker 위치, 이웃 스크립트. */
 	public void update(float dt, Vector3f hero) {
 		navWorld.platforms().update(dt);
+		neighbourPlatforms.update(dt);
 		poseItems(items, navWorld.platforms(), world);
 		for (Platforms.Body b : navWorld.platforms().bodies()) {
 			if (b.playing()) {
@@ -360,6 +397,26 @@ public final class SceneNav {
 	/** 스크립트 Animator 가 움직이는 발판·문 (렌더 자세용). */
 	public List<Platforms.Body> platformBodies() {
 		return navWorld.platforms().bodies();
+	}
+
+	/** 이웃 레벨 Animator 오브젝트 (렌더 자세용). */
+	public Platforms neighbourPlatforms() {
+		return neighbourPlatforms;
+	}
+
+	/** 이음으로 넘겨받은 이 레벨 Animator 오브젝트 상태 (GameScene.Resident). */
+	public void restorePlatforms(List<Platforms.State> states) {
+		navWorld.platforms().restore(states);
+	}
+
+	/** 검증용: 이 레벨 오브젝트 애니 재생 ({@link Platforms#play(String, String, int, float, float)}). */
+	public boolean playPlatform(String owner, String anim, int mode, float speed, float start) {
+		return navWorld.platforms().play(owner, anim, mode, speed, start);
+	}
+
+	/** 이 레벨 Animator 오브젝트 상태 (이음으로 떠날 때 넘긴다). */
+	public List<Platforms.State> platformStates() {
+		return navWorld.platforms().states();
 	}
 
 	/** 붙잡는 오브젝트 (레버·크랭크·밀기 상자) — 영웅이 손잡이에 닿아야 하므로 벽 판정에서 뺀다. */

@@ -520,5 +520,56 @@ ATHN07B (화면 전체), ATHN06B (방 안이 흐린 벽), PAND03I (주황 판) �
 `LightServerTest` +1 (7): VU 식 `LightRig.shade(n, M, A)` — 0.8 × 1.5 = 1.2 + 1/128, 자르기는 M 곱한 뒤, 더할 색; R_HERO0 `MAT_maiFskinh` M = 0.8 · A = 0, R_CNM `MAT_lambert2` A = 1. 엔진 테스트 368.
 
 ### 13.7 남은 것
-- PAND01B ← PAND01A 이음 도착의 카메라 (`Follow` ↔ 탐침 `ShldDrCam`) — 가시 칸이 화면을 비우는 원인.
+- ~~PAND01B ← PAND01A 이음 도착의 카메라 (`Follow` ↔ 탐침 `ShldDrCam`) — 가시 칸이 화면을 비우는 원인.~~ → §13.8
 - 원작 프레임 지움 색 (ATHN03C 칸 4 틈, 거울 뷰 바탕 §12.6), 조명 경로 알파 qw78.w, 그림자 합성 (47 §7.4).
+
+### 13.8 카메라 의심 5 건 정리 (도착 상태 · 이웃 Vis · 두 슬롯 Animator · 발판 시작)
+스크린샷 (커밋 안 함): `/Users/obeomsu/.claude/jobs/6f65672f/tmp/cam4/` — 단건 `p01b_*`, `d0*_*`, `p05b_*`, `a_*`/`b_*`, 전수 `arr/` (도착 188) · `on/` (기본 시작 105).
+
+**1. PAND01B ← PAND01A 이음 (-1028, 0, -1371)** [확실: 스크립트 데이터 / 근사: 재현 씨앗]
+- 탐침 ↔ 엔진 차이: 탐침은 스크립트를 돌리지 않는다. `goshlddrcamnode` (RCM_ShldDrCam) 는 PAND01A `ShldDrCamnode-CreationSensor1` → `-CamOff` (Attr11_1 = 2) 로 꺼지고,
+  켜는 `-CamOn` (#188) 은 대상 목록·바이트코드·문자열 어디에서도 불리지 않는다 (PAND01A/01B 전수) → **원작에서도 ShldDrCam 은 후보가 아니다**. 탐침의 ShldDrCam 이 틀린 쪽.
+- 도착점은 어느 CMV 에도 없다 (동쪽 PAND01A AltCam3/AltCam43, 서쪽 PAND01B SAHallCam2 사이 문틀). 원작은 이음에서 카메라 관리자를 그대로 두고 (30 §7), 0x1EE8E0 은 후보가 0 이면
+  현재 상태를 유지하므로 **걸어 들어오던 AltCam43 이 남는다**. 실제 이음은 `handoff()` 로 이미 그렇게 된다. `--arrive` 재현은 넘겨받을 상태가 없어 `Follow` 였다 →
+  `CameraRig.seedApproach`: 도착점에 후보가 없으면 떠나온 레벨의 가장 가까운 CMV 후보 자리 (수평 고리 ≤ 512, 위 ≤ 1024 · 아래 ≤ 256) 에서 한 번 먼저 고른다 [근사: 하네스 전용].
+- AltCam43 화면을 막던 벽은 `goaxealcwall` — PAND01A `AxeAlcWall-CamSensor1` 이 카메라 전환 이벤트 1037 이름이 AltCam25/3/43/2/44 면 Vis Visible 2 로 숨긴다.
+  엔진은 **이웃 레벨 스크립트의 Vis Visible 을 버리고 있었다** → `SceneNav.Host.neighbourVisible` → `GameScene.otherHidden` → 다른 슬롯 `LevelScene.setRemoved` (원작은 두 슬롯 GO 가 같은 렌더 서버).
+- 가시 칸: AltCam43 눈 (-936, 44, -1259) 은 PAND01A 칸이 bvalcove 를 켜 문 앞 홀이 보인다 (이전 `Follow` 눈은 어느 칸에도 들지 않아 거의 검정).
+- 남는 것: 문 `goshieldoor` 는 방패를 끼워 열린 상태여야 한다 (아래 2). 열린 상태 재현 `-Dgow.arrive.open=goshieldoor` (`p01b_open.png`).
+
+**2. DEST01 ↔ DEST02 이음 — 닫힌 문** [확실: 스크립트 데이터]
+- 도착점 (2429, 516, 6496) 은 DEST01 `goenddoor` (2416, 539, 6432) 바로 뒤, `goloadcheckdsrt2` 안 — 위치는 맞다. 문은 `EndDoor-AnimOpen` (Animator "!0", 조건 LevelData:0 == 3 = 세이렌 셋) 으로 열린다.
+- 엔진은 이음마다 두 레벨을 새로 읽고, 다른 슬롯은 정적 지오메트리만 그렸다 → 열린 문이 닫힌 자세로 돌아왔다 (실제 플레이에서도). 원작은 LoadCheck 가 현재 레벨 표시만 바꾸고 두 슬롯이 그대로 산다.
+  - `GameScene.Resident` (레벨 이름, Vis 숨김, `Platforms.State` 목록) 를 이음/걷기 `Arrival` 로 두 슬롯 모두 넘긴다 → 떠난 레벨 = 다른 슬롯 (`neighbourPlatforms().restore`), 들어간 레벨 = 현재 (생성 스크립트 뒤 `restorePlatforms`·`hideInstance`).
+  - 이웃 스크립트의 Animator 도 이웃 오브젝트를 움직인다 (`SceneNav.neighbourPlatforms`, 렌더 자세만 — 충돌은 이웃 정적 충돌 [근사]). `LevelScene.renderNeighbour` 가 자세 인스턴스를 스키닝으로 그린다.
+  - `Platforms.settleUnder` (Warp 도착 발판 맞추기) 가 맞지 않는 발판의 애니를 지우던 것을 원래 상태로 되돌리게 함 (넘겨받은 열린 문이 지워졌다).
+- 검증: `-Dgow.arrive.open=goenddoor` 로 DEST02 ← DEST01 (`d02_open.png`), DEST01 ← DEST02 → 걷기로 DEST02 (넘겨받은 문 자세, `d01_open.png`) 모두 문 너머 크레토스가 보인다.
+  재현 옵션 없는 `--arrive` 는 여전히 닫힌 문 (상태 없음, 데이터대로).
+
+**3. PAND05B 기본 시작 — 엘리베이터** [확실: 데이터 + 엔진 버그]
+- `startWad-CreationSensor1` → `elevatorGRPpand05B-AnimElevator` ("!0", 모드 0x8) 와 `startWad-start` (Idle, CMV 질의 끔, `camEleEnter`), 11.3 초 뒤 `-release`.
+  엘리베이터 윗면은 t=0 에서 281 (= Start y 282), 11.33 초에 0 으로 내려간다 → **영웅은 꼭대기에서 타고 내려오는 것이 맞다** (Start 위치·발판 데이터 정상).
+- 엔진: Start 아래 정적 바닥이 없어 `settleArrival` → `settleUnder` 가 이미 재생 중인 엘리베이터를 "Start 를 받치는 시각" (0.9 초) 에 **멈췄다** → 영웅이 y 259 에 떠 있고 카메라는 바닥만.
+  수정: 재생 중인 발판이 지금 자세로 도착점을 받치면 그대로 둔다. 이제 영웅이 281 → 0 으로 내려온다 (`p05b_t060/t450/t660.png`).
+- 남는 것 [미확인]: `camEleEnter` (gostartwad 관절 카메라, 0x40000 고정 주시) 는 눈 (1081, 21, 1311) 고정, 관절 −Z 가 피치 +14° → −21° 로 내려가는데 엘리베이터는 눈보다 위에서 내려온다
+  (11 초에 크레토스가 화면 왼쪽 위 끝). 관절 애니 축 규칙 (30 §6.2) 은 다른 레벨에서 맞았으므로 원작 화면 대조 전에는 손대지 않는다.
+
+**4. 탐침에서 막힌 도착** — 분류
+| 도착 | 엔진 화면 | 분류 |
+|---|---|---|
+| PAND03F / PAND03J ← PAND00C Warp (CoreTubeCam4) | 관 벽 | 카메라 해독 그대로 [근사 의심]: 레일 두 극소 u 9.25 (비용 3.46) / u 14.5 (2.75), 0x400 접선 좌표계 요 −180±60 은 u 14.5 만 만족 → 관 바깥 눈. PAND02B 와 같은 종류 (§8.2) |
+| PAND02A ← PAND00C Warp (Start CameraName Lvl2HallCam2) | `Follow` | 데이터: Lvl2HallCam2 는 PAND00C 카메라. 도착점 x 960 은 camFromWarp (x ≤ 958.6) 와 camWarpTunle (x ≥ 964.2) 사이 5.6 단위 틈. 탐침은 떠나온 레벨을 다른 슬롯에 두어 Lvl2HallCam2 를 찾았다 — Warp 후에도 떠난 레벨을 남기면 OLYMP02 ← OLYMP01 에 OLYMP01 입구·staircam 이 겹쳐 (같은 좌표 공간) 되돌렸다 → 엔진의 "Warp 는 다른 슬롯 없음" 유지, 탐침 쪽 차이 |
+| HDES01E ← HDES01D 걷기 | 이전 `Follow` (벽) → **Dcam11** (기둥 위 크레토스) | 도착 상태: 떨어져 들어오는 길 — 바로 위 −1260 에 HDES01D Dcam11. 1 의 씨앗 (수직) 으로 해결 |
+| ATRET01A ← HDES01E Warp (camFrmHades07) | 바로 HDES01E 로 되돌아감 | 도착 위치: Start (5095, 619, 991) 는 무덤 줄 `gorope1` 위, 영웅이 떨어져 `loadHDES01G` 영역 2 (Warp) 에 들어간다. 원작은 줄에 매달린 채 나오는 연출로 보인다 [추정] — 카메라 무관, 미해결 |
+| OLYMP02 ← OLYMP01 Warp | HallCam1, 정상 | 탐침 차이 (위와 같이 떠난 레벨 충돌을 넣어 막힘) |
+| OLYMP02 ← OLYMP01 걷기 (0, 50, −352) | OLYMP01 `goentrance` 가 가림 | 하네스 인공물: Warp 짝 두 레벨이 같은 좌표를 써서 바닥 겹침이 "걷기" 로 잡힌 것. 실제 경로는 Warp |
+
+**5. PAND02B** — 1–4 와 공통 원인 없음 (레일 두 극소 §8.2 는 PAND03F 와 같은 종류로만 기록). 다시 보지 않음.
+
+검증 (전수, 240 틱, `cam4/arr` · `cam4/on` ↔ `qa4/arr` · `qa4/on2`): 
+- 기본 시작 105: 화소 변화 최대 8.6 % (PAND02G 적·파티클), 나머지 ≤ 7.3 % — 회귀 0. PAND05B 는 240 틱에 영웅이 내려오는 중 (화면 차이 작음).
+- 도착 188: 씨앗이 걸린 이음/걷기 10 건 — PAND01B ← 01A (AltCam43, 해결), HDES01E ← 01D (Dcam11, 해결), HDES01A ← 01B (RampCam4), PAND01B ← 01BB (LowCam1),
+  ATHN02A ← 02B (CrtYrdCam6), DEST01 ← 00 (EntryCam3, 영웅이 멀리), PAND03H ← 03I (camera14 — 이전 검정 → 수호자 등, 영웅은 가림), ATHN01B ← 01A (Boat1Cam5, 전후 모두 선창 속),
+  PAND01D ← 01A (같음), HDES01D ← 01C (아래 1024 ClimbCam3 를 골라 나빠져 → 아래 탐색 ≤ 256 으로 줄여 이전 `Follow` 화면). 그 밖 ≤ 29 % (ATHN01F 연출·AI 잡음).
+  PAND01B ← 01BB 는 이웃 PAND01BB 스크립트의 Vis·Animator 가 걸려 문 쪽 화면이 바뀜 (스크립트대로).
+시선 탐침은 카메라 선택·풀기 코드를 바꾸지 않아 (씨앗은 `--arrive` 이음 전용) 그대로: 기본 시작 75/105, 도착 120/188. 시험 `ArrivalStateTest` 4 (씨앗 AltCam43, 이웃 1037 → goaxealcwall 숨김, 엘리베이터 시작, 문 상태 넘기기), `StartCameraTest` 7 통과. 엔진 테스트 372.

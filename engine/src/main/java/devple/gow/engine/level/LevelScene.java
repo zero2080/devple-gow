@@ -199,6 +199,19 @@ public final class LevelScene implements Scene {
 		removed.add(name.toLowerCase(Locale.ROOT));
 	}
 
+	/** 숨긴 인스턴스 (소문자) 사본 — 이음으로 떠날 때 넘긴다 (GameScene.Resident). */
+	public java.util.Set<String> removedInstances() {
+		return new java.util.HashSet<>(removed);
+	}
+
+	/** 숨긴 인스턴스 집합을 통째로 바꾼다 (다른 슬롯 레벨: 이웃 스크립트 Vis, GameScene.otherHidden). */
+	public void setRemoved(java.util.Set<String> names) {
+		if (!removed.equals(names)) {
+			removed.clear();
+			removed.addAll(names);
+		}
+	}
+
 	/** 숨긴 인스턴스를 다시 그린다 (스크립트 Vis Visible 1). */
 	public void showInstance(String name) {
 		removed.remove(name.toLowerCase(Locale.ROOT));
@@ -1055,10 +1068,23 @@ public final class LevelScene implements Scene {
 		tmp.identity();
 		for (int pass = 0; pass < 2; pass++) {
 			for (Instance i : instances) {
-				if (!i.sky() && !fx.hidden(i) && !culled(i.name().toLowerCase(Locale.ROOT)) && inMainView(i.name().toLowerCase(Locale.ROOT))) {
+				String key = i.name().toLowerCase(Locale.ROOT);
+				if (!i.sky() && !fx.hidden(i) && !removed.contains(key) && !posed.containsKey(key) && !culled(key) && inMainView(key)) {
 					e.renderer().drawPass(i.model(), tmp, pass);
 				}
 			}
+		}
+		if (!posed.isEmpty()) { // 이웃 스크립트 Animator·이음으로 넘겨받은 자세 (열린 문, 43 §13.8)
+			if (skinned == null) {
+				skinned = new devple.gow.engine.render.Shader("skinned.vert", "basic.frag");
+			}
+			fx.env().applyFog(skinned, c, e.window().height());
+			for (Map.Entry<String, float[][]> en : posed.entrySet()) {
+				if (!removed.contains(en.getKey()) && !culled(en.getKey()) && inMainView(en.getKey())) {
+					drawPosed(e, c, en.getKey(), en.getValue(), posedHidden.get(en.getKey()));
+				}
+			}
+			FxEnvironment.disableFog(skinned);
 		}
 		FxEnvironment.disableFog(e.renderer().basic());
 	}
