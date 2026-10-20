@@ -42,6 +42,8 @@ uniform vec3 uLgtDir1;
 uniform vec3 uLgtCol0;
 uniform vec3 uLgtCol1;
 uniform vec3 uLgtAmb;
+uniform vec3 uLgtMat;   // 머티리얼 색 M (47 §3.1): 동적 라이트 경로에서는 uTint.rgb 대신 이것이 색 배율
+uniform vec3 uLgtAdd;   // 더할 색 qw 77 / 128
 
 out vec4 oColor;
 
@@ -147,7 +149,8 @@ void main() {
 		}
 	}
 	bool dyn = uLit != 0 && uLgtOn != 0;
-	vec4 c = (dyn ? vec4(1.0, 1.0, 1.0, vColor.a) : vColor) * uTint;
+	// 동적 라이트: 색 = 텍스처 × min(M·L + 1/128, 255/128) (M 은 정점 셰이더 vLgt 에 이미 곱함), 알파는 정점 α × uTint.a
+	vec4 c = dyn ? vec4(1.0, 1.0, 1.0, vColor.a * uTint.a) : vColor * uTint;
 	if (uUseTex != 0) {
 		c *= texture(uTex, vUv);
 	}
@@ -159,7 +162,8 @@ void main() {
 		vec3 lg = vLgt;
 		if (nmLitN) {
 			// 노멀맵 켜짐: 흔든 법선으로 화소 단위 (원작에 없음, 44 문서)
-			lg = min(uLgtAmb + uLgtCol0 * max(dot(nmN, uLgtDir0), 0.0) + uLgtCol1 * max(dot(nmN, uLgtDir1), 0.0), vec3(255.0 / 128.0));
+			lg = min(uLgtAdd + uLgtMat * (uLgtAmb + uLgtCol0 * max(dot(nmN, uLgtDir0), 0.0) + uLgtCol1 * max(dot(nmN, uLgtDir1), 0.0)) + 1.0 / 128.0,
+					vec3(255.0 / 128.0));
 		}
 		c.rgb *= lg;
 	} else if (uLit != 0) {

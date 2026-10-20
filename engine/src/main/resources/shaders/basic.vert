@@ -24,12 +24,15 @@ uniform vec3 uLgtDir1;
 uniform vec3 uLgtCol0;
 uniform vec3 uLgtCol1;
 uniform vec3 uLgtAmb;
+// 머티리얼 색 M (qw 76 = MAT 헤더 색 × 레이어 rgb × 물체 색): VU 커널은 M·128 로 라이트 합을 곱한 뒤 +1 편향, 255 로 자른다 (47 §3.1)
+uniform vec3 uLgtMat;
+uniform vec3 uLgtAdd;   // 더할 색 qw 77 / 128 (MAT 파일 0x18): vf29 = qw77 + 주변·M·128
 out vec3 vLgt;
 
 vec3 vuLight(vec3 n) {
 	float d0 = max(dot(n, uLgtDir0), 0.0);
 	float d1 = max(dot(n, uLgtDir1), 0.0);
-	return min(uLgtAmb + uLgtCol0 * d0 + uLgtCol1 * d1, vec3(255.0 / 128.0));
+	return min(uLgtAdd + uLgtMat * (uLgtAmb + uLgtCol0 * d0 + uLgtCol1 * d1) + 1.0 / 128.0, vec3(255.0 / 128.0));
 }
 
 void main() {
@@ -37,7 +40,7 @@ void main() {
 	vLgt = vec3(1.0);
 	if (uLgtOn != 0) {
 		float ln = dot(vNormal, vNormal);
-		vLgt = ln > 1e-12 ? vuLight(vNormal * inversesqrt(ln)) : uLgtAmb;
+		vLgt = ln > 1e-12 ? vuLight(vNormal * inversesqrt(ln)) : min(uLgtAdd + uLgtMat * uLgtAmb + 1.0 / 128.0, vec3(255.0 / 128.0));
 	}
 	vUv = aUv + uUvOffset;
 	if (uEnvUv != 0) {

@@ -14,7 +14,7 @@ import java.util.List;
  * 0x04 u32    reserved    항상 0
  * 0x08 f32[3] color       기본 0.8,0.8,0.8 (디퓨즈 색으로 추정)
  * 0x14 f32    param14     0 또는 0.5 (스펙큘러/환경 강도로 추정)
- * 0x18 f32[4] reserved    항상 0
+ * 0x18 f32[4] addColor    더할 색 (VU qw 77, 0..128 단위 — 128 = 1 배, 대부분 0, 디스크 237 개: 12.8 / 64 / 128 … 적 발광) [확실: 0x154410]
  * 0x28 f32    param28     항상 1.0
  * 0x2C f32    specPower   0, 2, 20, 64, 100 ... (스펙큘러 지수로 추정)
  * 0x30 u32    param30     거의 1 (0 은 296개)
@@ -23,7 +23,7 @@ import java.util.List;
  * </pre>
  */
 public record MaterialResource(String name, float[] color, float param14, float param28, float specPower,
-							   int param30, List<Layer> layers) {
+							   int param30, List<Layer> layers, float[] addColor) {
 
 	public static final int MAGIC = 0x08;
 	public static final int HEADER = 0x38;
@@ -80,7 +80,7 @@ public record MaterialResource(String name, float[] color, float param14, float 
 					TextureResource.cstr(b, o + 0x10), floats(b, o + 0x28, 4), b.getFloat(o + 0x38)));
 		}
 		return new MaterialResource(t.name(), floats(b, 0x08, 3), b.getFloat(0x14), b.getFloat(0x28),
-				b.getFloat(0x2C), b.getInt(0x30), List.copyOf(layers));
+				b.getFloat(0x2C), b.getInt(0x30), List.copyOf(layers), floats(b, 0x18, 3));
 	}
 
 	private static float[] floats(ByteBuffer b, int off, int n) {

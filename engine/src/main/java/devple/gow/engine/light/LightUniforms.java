@@ -26,6 +26,8 @@ public final class LightUniforms {
 		s.set("uLgtCol0", r.col0.x, r.col0.y, r.col0.z);
 		s.set("uLgtCol1", r.col1.x, r.col1.y, r.col1.z);
 		s.set("uLgtAmb", r.ambient.x, r.ambient.y, r.ambient.z);
+		s.set("uLgtMat", 1f, 1f, 1f); // 파트마다 머티리얼 색으로 덮어씀 (AnimatedModel / Renderer.drawLayer)
+		s.set("uLgtAdd", 0f, 0f, 0f);
 	}
 
 	/**

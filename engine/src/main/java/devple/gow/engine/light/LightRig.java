@@ -35,6 +35,24 @@ public final class LightRig {
 		return out.set(Math.min(out.x, MAX), Math.min(out.y, MAX), Math.min(out.z, MAX));
 	}
 
+	/** VU 편향 1/128 (0x0E8: vf29 += 8388609 = 2²³ + 1). */
+	public static final float BIAS = 1f / 128f;
+
+	/**
+	 * 셰이더와 같은 최종 배율: min(A + M·(주변 + 색0·d0 + 색1·d1) + 1/128, 255/128), M = 머티리얼 색 (qw 76 = 헤더 색 × 레이어 rgb × 물체 색).
+	 * 주 프로그램 0x099–0x0A4: vf7 = qw76 × 128 (VU 플래그 4 일 때, 아니면 128), vf27/28 = 색 × vf7, vf29 = qw77 + 주변 × vf7, A = qw77 / 128 (MAT 더할 색, 대부분 0) [확실].
+	 */
+	public Vector3f shade(Vector3f n, Vector3f m, Vector3f out) {
+		return shade(n, m, new Vector3f(), out);
+	}
+
+	/** add = 더할 색 qw 77 / 128 (MAT 파일 0x18, 대부분 0 — 적 발광 12.8 / 64 / 128). */
+	public Vector3f shade(Vector3f n, Vector3f m, Vector3f add, Vector3f out) {
+		float d0 = Math.max(0f, n.dot(dir0)), d1 = Math.max(0f, n.dot(dir1));
+		out.set(ambient).add(col0.x * d0 + col1.x * d1, col0.y * d0 + col1.y * d1, col0.z * d0 + col1.z * d1).mul(m).add(add).add(BIAS, BIAS, BIAS);
+		return out.set(Math.min(out.x, MAX), Math.min(out.y, MAX), Math.min(out.z, MAX));
+	}
+
 	@Override
 	public String toString() {
 		return String.format(java.util.Locale.ROOT, "amb(%.2f,%.2f,%.2f)×%d L0(%.2f,%.2f,%.2f)·(%.2f,%.2f,%.2f)×%d L1(%.2f,%.2f,%.2f)·(%.2f,%.2f,%.2f)×%d",
