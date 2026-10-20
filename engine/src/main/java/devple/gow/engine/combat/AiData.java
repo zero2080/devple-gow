@@ -67,10 +67,24 @@ public final class AiData {
 	 * @param half   +0x234 반폭 = 캡슐 반지름 (크라토스 0.6)
 	 * @param height +0x238 키 (크라토스 2.2)
 	 * @param base   +0x23C 바닥 높이 (크라토스 0.4)
+	 * @param joint  +0xA4 관절 이름 (0x1E74F0 → owner+0x352, 상자 관절 0x1E6DF0 — {@link BodyPush.JointBox}). 크라토스 head, BMI·히드라 머리/목,
+	 *               일반 적은 빈 문자열 = −1 (루트) [확실]
+	 * @param flags  +0x1C 플래그 — 내비게이션 초기화 0x1E75F0 (0x1E77B0–0x1E782C) 가 owner+0x2D8 로 옮긴다: 비트 0 → 0x04000000,
+	 *               <b>비트 1 → 0x80000000 = 밀기 끔</b> (이동 단계 0x1EA670 / 0x1ECCD8 이 0x1E2DD8 을 부르지 않음), 비트 4 → 0x40000000 [확실].
+	 *               데이터: 일반 적·크라토스 4 (밀기), 히드라 머리 250–253·아기 히드라 252·님프 100·침대 305·악령 크라토스 660 = 비트 1 (32 문서)
 	 */
-	public record Body(float half, float height, float base) {
+	public record Body(float half, float height, float base, int flags, String joint) {
 		/** 크라토스 Sold_000 (데이터 테스트가 대조). */
-		public static final Body HERO = new Body(0.6f, 2.2f, 0.4f);
+		public static final Body HERO = new Body(0.6f, 2.2f, 0.4f, 4, "head");
+
+		public Body(float half, float height, float base) {
+			this(half, height, base, 4, null);
+		}
+
+		/** Sold +0x1C 비트 1 → owner+0x2D8 비트 31: 자기 이동에서 밀어내기를 하지 않는다 (상대에게는 여전히 단단함 — 콜백은 이 비트를 보지 않음). */
+		public boolean noPush() {
+			return (flags & 2) != 0;
+		}
 	}
 
 	/**
@@ -130,7 +144,7 @@ public final class AiData {
 					}
 					ByteBuffer sb = soldStruct(t.data(), 0x240);
 					if (sb != null) {
-						bodies.put(sid, new Body(sb.getFloat(0x234), sb.getFloat(0x238), sb.getFloat(0x23C)));
+						bodies.put(sid, new Body(sb.getFloat(0x234), sb.getFloat(0x238), sb.getFloat(0x23C), sb.getInt(0x1C), cstr(sb, 0xA4)));
 						rides.put(sid, new Ride(sb.getFloat(0xC4), sb.getFloat(0x160), sb.getFloat(0x164), sb.getFloat(0x138)));
 					}
 				}
@@ -170,6 +184,14 @@ public final class AiData {
 	/** 줄·짚라인·점프 필드 (없으면 null). */
 	public Ride ride(int id) {
 		return rides.get(id);
+	}
+
+	private static String cstr(ByteBuffer b, int o) {
+		StringBuilder sb = new StringBuilder();
+		for (int i = o; i < b.limit() && i < o + 24 && b.get(i) != 0; i++) {
+			sb.append((char) b.get(i));
+		}
+		return sb.isEmpty() ? null : sb.toString();
 	}
 
 	/** Sold 구조체 시작 (경로 문자열 NUL 다음) 을 0 으로 둔 버퍼, 크기가 need 보다 작으면 null. */

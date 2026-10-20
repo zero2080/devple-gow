@@ -1019,8 +1019,8 @@ public final class GameScene implements Scene {
 		f.setDifficulty(session.difficulty);
 		if (bossKind == null && f.brain().tree != null && nav != null) {
 			f.setNavWorld(devple.gow.engine.combat.EnemyNav.of(nav.navWorld)); // 바닥·중력·벽·줄 이동 (32 문서 §적 자신의 벽·줄 이동)
-			f.setCrowd(() -> bodies); // 생물끼리 밀어내기 0x1E2DD8
 		}
+		f.setCrowd(() -> bodies); // 생물끼리 밀어내기 0x1E2DD8 — 보스도 (Sold +0x1C 비트 1·BMI Think 이면 자기는 밀지 않음)
 		f.setFoe(hero.hittable());
 		f.brain().setSightBlocked((eye, to) -> { // 인지 시선 가림 (17 문서 §인지)
 			Vector3f d = new Vector3f(to).sub(eye);
@@ -1597,13 +1597,17 @@ public final class GameScene implements Scene {
 	/** 밀어내기 참여 몸: 영웅 (크라토스 Sold_000) + 내비게이션을 쓰는 적. */
 	private void collectBodies() {
 		bodies.clear();
-		bodies.add(devple.gow.engine.combat.BodyPush.hero(hero.ctl.position, () -> !hero.ctl.grounded, hero.combat));
+		if (heroBody == null) {
+			heroBody = new devple.gow.engine.combat.BodyPush.HeroBody(hero.ctl, () -> !hero.ctl.grounded, hero.combat);
+		}
+		heroBody.refresh(); // 관절 상자 0x1E6DF0 (머리)
+		bodies.add(heroBody);
 		for (Enemy en : enemies) {
-			if (en.fighter().nav().world() != null) {
-				bodies.add(en.fighter());
-			}
+			bodies.add(en.fighter()); // 생물 범주 1|2 = 모든 적 (보스 포함, 32 문서 §생물끼리 밀어내기 — 보스)
 		}
 	}
+
+	private devple.gow.engine.combat.BodyPush.HeroBody heroBody;
 
 	/** 지면 추종 + 중력 + 벽 밀어내기. 내비게이터가 위치를 정하는 상태(매달림·줄·밀기 …)면 건너뛴다. */
 	private void physics(float dt) {
@@ -1640,7 +1644,9 @@ public final class GameScene implements Scene {
 		}
 		// 생물끼리 밀어내기 (0x1E2DD8 — 벽 충돌 앞, 영웅도 같은 내비게이션 코드)
 		collectBodies();
-		devple.gow.engine.combat.BodyPush.push(bodies.get(0), p, bodies, null);
+		if (heroBody.pushesSelf()) {
+			devple.gow.engine.combat.BodyPush.push(heroBody, p, bodies, null);
+		}
 		Vector3f c = new Vector3f(p.x, p.y + 20, p.z);
 		boolean pushed = col.collideSphere(c, 12);
 		if (otherCol != null) {

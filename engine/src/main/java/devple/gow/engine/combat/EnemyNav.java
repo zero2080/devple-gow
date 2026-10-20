@@ -200,8 +200,24 @@ public final class EnemyNav {
 	public void setBody(AiData.Body b, float scale) {
 		if (b != null) {
 			body = b;
+			noPush = b.noPush();
 		}
 		this.scale = scale;
+	}
+
+	/**
+	 * owner+0x2D8 비트 31 — 자기 이동에서 생물 밀어내기 0x1E2DD8 을 부르지 않음 (0x1EA664 / 0x1ECCD8 / 0x1ECDF8) [확실].
+	 * 출처: Sold +0x1C 비트 1 (초기화 0x1E77F0, {@link AiData.Body#noPush}) 또는 클래스 갱신 (BMI Think 0x1C0A48 이 매 프레임 세움).
+	 * 다른 생물에게는 여전히 단단하다 (콜백 0x1E28B0 은 상대의 이 비트를 보지 않음).
+	 */
+	private boolean noPush;
+
+	public void setNoPush(boolean v) {
+		noPush = v;
+	}
+
+	public boolean noPush() {
+		return noPush;
 	}
 
 	/** 줄·짚라인·점프 Sold 필드. */
@@ -428,7 +444,9 @@ public final class EnemyNav {
 		pos.fma(speed * dt, heading); // 공중은 수평 속도 유지 (공중 조종 [근사])
 		if (world == null) {
 			mode = Mode.GROUND;
+			float y = pos.y;
 			crowdPush(pos, null);
+			pos.y = y; // 세계 없음 = 지상만: 바닥 붙이기 (0x1E3298) 대신 높이 유지 [근사]
 			return;
 		}
 		crowdPush(pos, null);
@@ -467,7 +485,7 @@ public final class EnemyNav {
 
 	/** 생물끼리 밀어내기 (0x1E2DD8). wallNormal = 벽 오르기 중이면 벽 법선. */
 	private void crowdPush(Vector3f pos, Vector3f wallNormal) {
-		if (self != null && crowd != null) {
+		if (self != null && crowd != null && !noPush) {
 			BodyPush.push(self, pos, crowd.get(), wallNormal);
 		}
 	}
@@ -526,7 +544,7 @@ public final class EnemyNav {
 
 	/** 벽 위 밀어내기: 벽 평면 성분만 (0x1E2CA8), 민 자리도 Climbable 이어야 함 (벽 충돌 0x1E2100 대신 [근사]). */
 	private void wallPush(Vector3f pos) {
-		if (self == null || crowd == null || world == null) {
+		if (self == null || crowd == null || world == null || noPush) {
 			return;
 		}
 		Vector3f p = new Vector3f(pos);

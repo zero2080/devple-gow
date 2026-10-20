@@ -90,6 +90,7 @@ public final class HeroTestScene implements Scene {
 
 	private String enemyWad = "R_MIN";
 	private devple.gow.engine.combat.GrabSync grab;
+	private devple.gow.engine.combat.BodyPush.HeroBody heroBody;
 	private final devple.gow.engine.boss.AutoPad autoPad = new devple.gow.engine.boss.AutoPad();
 	private Tweaks enemyTweaks;
 	private devple.gow.engine.combat.EnemyFactory.Kind enemyKind;
@@ -462,7 +463,18 @@ public final class HeroTestScene implements Scene {
 				}
 			}
 			if (grab == null || !grab.active()) {
-				ctl.separate(enemy.pos, 22);
+				// 생물 밀어내기 0x1E2DD8 (GameScene · GrabRelation 모의와 같은 규칙 — 예전 단순 구 분리 대신)
+				if (heroBody == null) {
+					heroBody = new devple.gow.engine.combat.BodyPush.HeroBody(ctl, () -> false, combat);
+					var only = java.util.List.<devple.gow.engine.combat.BodyPush.Body>of(heroBody);
+					enemy.setCrowd(() -> only);
+				}
+				heroBody.refresh();
+				float y = ctl.position.y;
+				if (heroBody.pushesSelf()) {
+					devple.gow.engine.combat.BodyPush.push(heroBody, ctl.position, java.util.List.of(enemy), null);
+				}
+				ctl.position.y = y;
 			}
 		} else {
 			dummy.update(dt);

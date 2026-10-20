@@ -102,15 +102,30 @@ class GrabRelationTest {
 	}
 
 	/**
-	 * 몸 캡슐 (Sold +0x234) 이 설계 거리보다 큰 적: 사이클롭스 (캡슐 57.6 > 설계 29.7), 하피 (19.6 > 7.9, 뒤에서 잡음) — 엔진 오차 &lt; 15 [미확인].
+	 * 몸 캡슐 (Sold +0x234) 이 설계 거리보다 큰 처형 (37 문서 §11.5): 사이클롭스 (캡슐 합 57.6 &gt; 설계 29.7), 하피 (19.6 &gt; 7.9, 뒤에서).
+	 * <ul>
+	 *   <li>밀기를 빼면 (비교용) GRAB 첫 접촉 = 설계 관계 — 다른 처형과 같이 오차 &lt; 1 (설계가 GRAB 달려듦에 맞춰져 있다).</li>
+	 *   <li>원작 밀기 규칙 [확실: 0x1E2DD8 / 0x1E28B0 / 0x1E6DF0 — GRAB stateMask 7 = 단단함, 잡기 원 상태·동기 연결 +0x84 와 무관,
+	 *       밀기 끔은 Sold +0x1C 비트 1 (둘 다 0) 과 BMI Think 뿐] 으로는 GRAB 이 닿기 전에 서로 밀어 설계 관계에 못 간다:
+	 *       사이클롭스는 캡슐 경계 (결합 ≥ 45), 하피는 날기 (0x40 → 지상 영웅은 안 밀림) 지만 하피가 자기를 민다 (결합 ≥ 13).</li>
+	 * </ul>
 	 */
 	@Test
 	void capsuleLimitedFinishers() throws Exception {
 		for (String w : new String[]{"R_CY2.WAD", "R_HAR.WAD"}) {
 			Assumptions.assumeTrue(Files.exists(rom().resolve(w)));
-			GrabRelation.Result r = GrabRelation.search(trials(w), 10, 130);
-			assertNotNull(r, w);
-			assertTrue(r.error() < 15f, w + ": " + r);
+			Supplier<GrabRelation.Trial> t = trials(w);
+			GrabRelation.Result free = GrabRelation.search(t, 5, 130, false);
+			assertNotNull(free, w);
+			assertTrue(free.error() < 1f, w + " 밀기 없으면 설계 관계: " + free);
+			GrabRelation.Result pushed = GrabRelation.search(t, 5, 130, true);
+			assertTrue(pushed.link() > free.link() + 5, w + " 원작 밀기로 설계 거리에 못 감: " + pushed + " / " + free);
+			assertTrue(pushed.error() > 5f, w + ": " + pushed);
+			if (w.equals("R_CY2.WAD")) {
+				assertTrue(pushed.link() >= 45f, "사이클롭스 캡슐 경계 (영웅 쪽 수평 45.6, 사이클롭스 쪽 56.8): " + pushed);
+			} else {
+				assertTrue(pushed.link() >= 13f, "하피가 자기를 민다 (하피 쪽 수평 17.3): " + pushed);
+			}
 		}
 	}
 
