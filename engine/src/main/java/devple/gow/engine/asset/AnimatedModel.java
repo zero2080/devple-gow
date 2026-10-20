@@ -1,5 +1,7 @@
 package devple.gow.engine.asset;
 
+import devple.gow.engine.light.ShadowCasters;
+import devple.gow.engine.light.ShadowGeometry;
 import devple.gow.engine.render.Camera;
 import devple.gow.engine.render.Shader;
 import devple.gow.engine.render.SkinnedMesh;
@@ -69,7 +71,25 @@ public final class AnimatedModel implements AutoCloseable {
 		this.model = model;
 		build(new SkinnedModel(model, 0, 0), parts);
 		base = parts;
+		ShadowGeometry g = null;
+		if (System.getProperty("gow.noshadow") == null) {
+			try {
+				g = ShadowGeometry.forModel(assets.wad(), model.name); // 같은 WAD 의 SHG_<모델> (47 문서 §7)
+			} catch (RuntimeException ex) {
+				System.out.println("그림자 지오메트리 해석 실패 " + model.name + ": " + ex.getMessage());
+			}
+		}
+		shadow = g;
 	}
+
+	/** 그림자 지오메트리 SHG_ (없으면 null) — 그리기 때 {@link ShadowCasters} 가 모으고 있으면 넘긴다. */
+	public final ShadowGeometry shadow;
+	/** 그림자 모드 (renShadowServer +0x14C): 0 밀어내기 (기본), 1 받는 면 판 (AI 생물), 2 받는 면까지 (영웅). */
+	public int shadowMode = devple.gow.engine.light.ShadowVolume.MODE_EXTRUDE;
+	/** 부모 GO 의 모델 (블레이드 → 영웅): 방향·평면·모드를 부모 것으로 (0x1628E0 부모 사슬, 0x1BF994). */
+	public Object shadowParent;
+	/** 스크립트 이름 (Vis 슬롯 2 / SCR_NoShadow 로 끄기). */
+	public String shadowKey;
 
 	/**
 	 * 모델 변형 고르기 (GL 스레드): v ≥ 0 이면 파트마다 그룹 v (비면 그룹 0) — 원작이 클래스 코드로 모델 컴포넌트 +0x120 을 정하는 경우
@@ -177,6 +197,11 @@ public final class AnimatedModel implements AutoCloseable {
 	/** 관절 월드 행렬을 직접 받아 그린다 (레벨 오브젝트 Animator 애니: 관절 = 애니 월드 × 인스턴스 행렬, world = 단위). */
 	public void draw(Camera cam, float aspect, Matrix4f world, float[][] w, Texture white, float fxTime, float alpha) {
 		float[][] skin = skeleton.skin(w);
+		ShadowCasters sc = shadow != null ? ShadowCasters.current() : null;
+		if (sc != null && sc.collecting()) {
+			sc.submit(this, shadowParent, shadow, w, hiddenJoints, world, devple.gow.engine.light.LightServer.jointSphere(w, world, new org.joml.Vector4f()),
+					shadowMode, shadowKey);
+		}
 		shader.use();
 		shader.set("uViewProj", cam.viewProj(aspect));
 		float[] cp = cam.clipPlane;
