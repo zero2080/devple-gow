@@ -34,6 +34,15 @@ uniform int uNmOn;
 uniform sampler2D uNormalMap;   // 유닛 2, 탄젠트 공간 (+X = +u, +Y = +v)
 uniform vec3 uNmDetail;         // 구운 메시 세부 계수: x = k, y = 하한, z = 상한
 
+// 동적 라이트 (47 문서): 정점 셰이더가 VU1 조명 커널 식으로 구한 배율. uLgtOn = 1 이면 정점 색 대신 이것 (원작 조명 커널은 메시 정점 색을 읽지 않는다)
+in vec3 vLgt;
+uniform int uLgtOn;
+uniform vec3 uLgtDir0;
+uniform vec3 uLgtDir1;
+uniform vec3 uLgtCol0;
+uniform vec3 uLgtCol1;
+uniform vec3 uLgtAmb;
+
 out vec4 oColor;
 
 // 화면 미분 코탄젠트 좌표계 (탄젠트 저장 없음): N 기준으로 dp/duv 를 직교화, UV 거울·회전도 그대로 반영된다
@@ -137,7 +146,8 @@ void main() {
 			}
 		}
 	}
-	vec4 c = vColor * uTint;
+	bool dyn = uLit != 0 && uLgtOn != 0;
+	vec4 c = (dyn ? vec4(1.0, 1.0, 1.0, vColor.a) : vColor) * uTint;
 	if (uUseTex != 0) {
 		c *= texture(uTex, vUv);
 	}
@@ -145,7 +155,14 @@ void main() {
 		discard;
 	}
 	c.rgb *= nmFactor;
-	if (uLit != 0) {
+	if (dyn) {
+		vec3 lg = vLgt;
+		if (nmLitN) {
+			// 노멀맵 켜짐: 흔든 법선으로 화소 단위 (원작에 없음, 44 문서)
+			lg = min(uLgtAmb + uLgtCol0 * max(dot(nmN, uLgtDir0), 0.0) + uLgtCol1 * max(dot(nmN, uLgtDir1), 0.0), vec3(255.0 / 128.0));
+		}
+		c.rgb *= lg;
+	} else if (uLit != 0) {
 		vec3 n = nmLitN ? nmN : normalize(vNormal);
 		float d = max(dot(n, normalize(vec3(0.4, 1.0, 0.3))), 0.0);
 		c.rgb *= 0.35 + 0.65 * d;

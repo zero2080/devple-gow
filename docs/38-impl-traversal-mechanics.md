@@ -447,7 +447,7 @@ PAND05B `pBoxPand05B-Marker511` → `semoMovieHaveBox-…-semo08marker511` (Filt
   → SCR +0x28 은 "최대 흔들림 각도" 가 아니라 **줄 길이**: 전 레벨 매단 줄 관절 사슬 길이 / 16 과 같다 (ATHN03C gorope 15 m = 240 / 239.7, ATHN05C 6 m = 96 / 95.7 …). `RopeDef.lengthM`, `NavRope.simLength()`.
 - 0x216DCC: f3 → +0x374 = 4 (짧은 사슬), f1 → 0x218488(끝점 × 16, 길이): +0x374 & 4 가 아니면 끝 노드 번호 +0x40 = int(길이 / 칸), 끝점 +0x10 = 끝 / 16, +0x374 |= 1. f2 (짚라인) → +0x374 |= 2.
 - 한 단계 0x217478: 적분 뒤 +0x374 & 1 이면 노드 +0x40 위치 = +0x10, 속도 0 (0x217758). 매달림은 힘만 j, j+1 에 나누고 매단 점 스프링 (0x217838 / 0x217954) 은 비트 1 이면 건너뜀. 매달림 최대 무게 10 (0x216D84).
-- 엔진: `RopeSim.fixed(top, end, n)` (끝 노드 n − 1 [추정: int 반올림]), 수평 줄·짚라인 손 = 시뮬레이션 줄 위 점 (`placeOnRope`), 무게 10 으로 처짐 (320 유닛 줄 가운데 몇 유닛). 적 (`EnemyNav`) 은 아직 곧은 선분 [근사]. 줄 스키닝 렌더는 [미구현].
+- 엔진: `RopeSim.fixed(top, end, n)` (끝 노드 n − 1 [추정: int 반올림]), 수평 줄·짚라인 손 = 시뮬레이션 줄 위 점 (`placeOnRope`), 무게 10 으로 처짐 (320 유닛 줄 가운데 몇 유닛). 적 (`EnemyNav`) 은 아직 곧은 선분 [근사]. 줄 스키닝 렌더 → §17.
 
 ### 15.5 물가 올라서기 = 0x1EA5F0 → 0x1CA198 [확실: 디스어셈블]
 - 0x1EA5F0 = 내비게이션 공용 이동 (몸 충돌 0x1E2100 → 상태별 이동 뒤 처리). 물 상태 (0x380) 면 0x1CA198:
@@ -466,7 +466,7 @@ PAND05B `pBoxPand05B-Marker511` → `semoMovieHaveBox-…-semo08marker511` (Filt
 - 엔진: `probeClimbDown` (앞면만 [근사: 엔진 충돌은 양면]), 지상 + 스틱으로 움직임 + 앞 벽 없음 + 착지 프레임 아님. 데이터: 사다리 꼭대기에 위층 바닥이 있는 곳 — ATHN02B 7/7 (테스트), ATHN02A 4/4, ATHN02C 11, PAND04G 6/6 …
 
 ### 15.7 남은 것
-- 줄 스키닝 렌더 (시뮬레이션 노드 → 줄 관절), 적의 양끝 고정 줄 시뮬레이션·적 매단 줄 뛰어내리기 속도 (적 Sold +0x140/+0x144, 전역 0x29DBF8 시간 조건).
+- ~~줄 스키닝 렌더~~ (§17), 적의 양끝 고정 줄 시뮬레이션·적 매단 줄 뛰어내리기 속도 (적 Sold +0x140/+0x144, 전역 0x29DBF8 시간 조건).
 - 매달린 중 턱 질의 실패 → 원작은 떨어짐 (엔진 그 자리), 좁은 턱 경로 0x1E3EE8, 벽 질의 a3 머리 재시도 (0x41), 사다리 가운데 맞춤 (0x1C85A8).
 - 좌우 대응: 원작 +0x50 = 뒤 × 위 = 엔진 −rightOf. 엔진 안에서는 스틱·끝·애니 짝이 일관 [추정: 원작 화면 좌우와 같은지 미확인].
 
@@ -488,3 +488,11 @@ PAND05B `pBoxPand05B-Marker511` → `semoMovieHaveBox-…-semo08marker511` (Filt
 | `EnemyNavTest.hangingRopeReleasesTowardGoalAwayFromAnchor` (수정) | 적 매단 줄 회전 = 90° 두 번 (22 프레임마다) → 정렬까지 ≈ 43 프레임 |
 
 `NavDataTest.heroNavigationTuningIsSold000` 에 Sold +0x140 / +0x144 (14 / 14) 추가. 순회 검증 (`TraversalTest` 15): 강제 뒤에만 나오는 전환 0, 숨김 상호작용 0 그대로. 전체 `:engine:test` 326.
+
+## 17. 줄 스키닝 렌더 (SCR_RopeSkinned 0x216FC8 / 0x217E5C) [확실: 디스어셈블] — 47 문서 §5
+- 노드 ↔ 관절: 줄 오브젝트 관절 0 (매단 점, +0x48) 의 첫 자식부터 형제를 따라 관절 플래그 0x20 인 사슬 관절만, 매단 점에서 가까운 순으로 노드 0, 1, …
+  노드 수 = 사슬 관절 수 (ATHN03C gorope12 41, gorope 61, ATHN05C 25, PAND04E 매단 줄 37·짚라인 105, ATHN06C 41) — `NavRope.joints` 를 사슬 수로 바꿈 (전: 관절 수 [추정]).
+- 관절 = 행 (X, Y, Z, 16·p): Y = normalize(p[i−1] − p[i+1]) (끝은 한쪽 차분), X = normalize(Y × ref), Z = X × Y, ref = 매단 줄 (0,0,1) / 양끝 고정 (0,1,0).
+  잠든 (0.2 초 정지) 줄은 관절을 갱신하지 않는다 (0x217B38).
+- 엔진: `nav/RopeSkin`, `GameScene.buildRopeVisuals` / `poseRopes` → `LevelScene.poseInstance` (스키닝). 레벨의 모든 줄에 시뮬레이션을 만들어 매달리지 않아도 그린다.
+  `-Dgow.norope` 면 예전 정지 자세, `-Dgow.ropedebug` 노드 출력. 테스트 `RopeSkinTest` (4).

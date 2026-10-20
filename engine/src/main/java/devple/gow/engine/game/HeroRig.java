@@ -342,6 +342,62 @@ public final class HeroRig implements AutoCloseable {
 		var m = combat.move();
 		chain.update(this::jointWorld, combat.active(), m != null && (m.flags() & 0x80) != 0, dt);
 		ctl.world(bladeTickWorld, 1f);
+		tickBladeLights(dt);
+	}
+
+	/** LeftBladeLight / RightBladeLight (R_WPN 의 LGT, 47 문서 §4). 무기 WAD 가 없거나 라이트가 없으면 null. */
+	private final devple.gow.engine.light.Light[] bladeLights = new devple.gow.engine.light.Light[2];
+
+	/**
+	 * 무기 WAD 의 블레이드 라이트를 서버에 넣는다 (Blades_Lights 0x1FAA10: "LeftBladeLight" 왼쪽 / "RightBladeLight" 오른쪽, +0xE0 = 0).
+	 * 아르테미스의 검이면 블레이드 GO 가 없으니 켜지지 않는다 [추정].
+	 */
+	public void attachBladeLights(devple.gow.engine.light.LightServer srv) {
+		if (blades == null) {
+			return;
+		}
+		java.util.List<devple.gow.engine.light.LightDef> defs = devple.gow.engine.light.LightDef.load(blades.assets().wad());
+		String[] names = {"LeftBladeLight", "RightBladeLight"};
+		for (int side = 0; side < 2; side++) {
+			for (devple.gow.engine.light.LightDef d : defs) {
+				if (d.name().equalsIgnoreCase(names[side])) {
+					devple.gow.engine.light.Light l = srv.add(d);
+					l.dyn = 0f;
+					l.active = false;
+					bladeLights[side] = l;
+				}
+			}
+		}
+	}
+
+	/** 마지막으로 그린 영웅의 라이트 묶음 (디버그). */
+	public devple.gow.engine.light.LightRig lastLights() {
+		return model.lastLights;
+	}
+
+	public devple.gow.engine.light.Light bladeLight(int side) {
+		return bladeLights[side];
+	}
+
+	/**
+	 * 블레이드 라이트 갱신: 위치 = 블레이드 행렬 위치 − 블레이드 Z 축 × 8 (0x1FB044 – 0x1FB118: (−Z × 0.5) × 16) [확실],
+	 * 세기 = 궤적 (이벤트 17/18) 이면 +4/초, 아니면 −2/초 (0x201C78 / 0x201DD8, 45 문서 §3.5) [확실].
+	 */
+	private void tickBladeLights(float dt) {
+		Matrix4f bw = new Matrix4f();
+		for (int side = 0; side < 2; side++) {
+			devple.gow.engine.light.Light l = bladeLights[side];
+			if (l == null) {
+				continue;
+			}
+			BladeChain.Side s = chain.sides[side];
+			boolean on = s.valid() && !player.artemisEquipped && trail(side);
+			if (s.valid()) {
+				s.world(bw);
+				l.setPosition(new Vector3f(bw.m30() - 8f * bw.m20(), bw.m31() - 8f * bw.m21(), bw.m32() - 8f * bw.m22()));
+			}
+			l.ramp(on, dt);
+		}
 	}
 
 	/** 블레이드 GO 행렬 (사슬이 정한 행렬 × 배율). 아직 계산 전이면 false. */

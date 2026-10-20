@@ -170,6 +170,9 @@ public final class LevelScene implements Scene {
 	/** 시작 자세 (act 를 시작 시간에) 로 구운 배치 수 / 반복 재생 배치 수 — 로그·테스트용. */
 	private int startPosed;
 	private final Map<String, devple.gow.engine.asset.AnimatedModel> posedModels = new HashMap<>();
+	/** 렌더 플래그 0x800 (동적 조명) 정적 인스턴스의 구 중심 (오브젝트 위치)·플래그 (47 문서). */
+	private final Map<String, Vector3f> litCenters = new HashMap<>();
+	private final Map<String, Long> litFlags = new HashMap<>();
 	private devple.gow.engine.render.Shader skinned;
 
 	/**
@@ -265,6 +268,12 @@ public final class LevelScene implements Scene {
 				off.set(j0[12], j0[13], j0[14]);
 			}
 			instances.add(new Instance(p.instance().name(), assets.build(p.instance().name(), tm), sky, off));
+			if (!sky && (gm.renderFlags & devple.gow.engine.light.LightUniforms.LIT) != 0) {
+				// 렌더 플래그 0x800 정적 오브젝트: 원작 0x141EF8 은 구 = (오브젝트 위치, 1) 로 라이트를 모은다 (47 문서)
+				float[] j0 = p.jointWorld()[0];
+				litCenters.put(p.instance().name().toLowerCase(Locale.ROOT), new Vector3f(j0[12], j0[13], j0[14]));
+				litFlags.put(p.instance().name().toLowerCase(Locale.ROOT), gm.renderFlags);
+			}
 			int[] mab = mirrorOwners.get(p.instance().name().toLowerCase(Locale.ROOT));
 			// 뷰 마스크 (0x156820 → 0x1508D0): MDL +0x28 렌더 플래그. 거울 소유자는 bit 61 을 지운다 (0x129820 — 자기 반사 없음)
 			long rf = gm.renderFlags;
@@ -571,10 +580,17 @@ public final class LevelScene implements Scene {
 				String key = i.name().toLowerCase(Locale.ROOT);
 				if (!i.sky() && !fx.hidden(i) && !removed.contains(key) && !posed.containsKey(key) && !ambientKeys.contains(key)
 						&& !dbgHidden(key) && !(MIRRORS && !MODEL_PASSES && mirrorKeys.contains(key)) && inMainView(key)) {
+					Vector3f lc = litCenters.get(key);
+					if (lc != null) {
+						devple.gow.engine.light.LightUniforms.apply(e.renderer().basic(), litFlags.get(key), lc, 1f);
+					}
 					if (MODEL_PASSES) {
 						e.renderer().draw(i.model(), tmp);
 					} else {
 						e.renderer().drawPass(i.model(), tmp, pass);
+					}
+					if (lc != null) {
+						devple.gow.engine.light.LightUniforms.off(e.renderer().basic());
 					}
 				}
 			}

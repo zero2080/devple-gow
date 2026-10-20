@@ -21,6 +21,20 @@ out vec4 vColor;
 uniform int uNmOn;
 out vec3 vWorldPos;
 out vec3 vEye;
+// 동적 라이트 (47 문서): LightServer 0x1521B0 묶음 → VU1 조명 커널 (정점 단위, 255/128 로 자름). uLgtOn = 0 이면 예전 고정 조명
+uniform int uLgtOn;
+uniform vec3 uLgtDir0;
+uniform vec3 uLgtDir1;
+uniform vec3 uLgtCol0;
+uniform vec3 uLgtCol1;
+uniform vec3 uLgtAmb;
+out vec3 vLgt;
+
+vec3 vuLight(vec3 n) {
+	float d0 = max(dot(n, uLgtDir0), 0.0);
+	float d1 = max(dot(n, uLgtDir1), 0.0);
+	return min(uLgtAmb + uLgtCol0 * d0 + uLgtCol1 * d1, vec3(255.0 / 128.0));
+}
 
 void main() {
 	mat4 a = uJoints[int(aJoints.x)];
@@ -28,6 +42,11 @@ void main() {
 	vec4 p = (a * vec4(aPos, 1.0)) * aWeight + (b * vec4(aPos, 1.0)) * (1.0 - aWeight);
 	vec3 n = mat3(a) * aNormal * aWeight + mat3(b) * aNormal * (1.0 - aWeight);
 	vNormal = mat3(uModel) * n;
+	vLgt = vec3(1.0);
+	if (uLgtOn != 0) {
+		float ln = dot(vNormal, vNormal);
+		vLgt = ln > 1e-12 ? vuLight(vNormal * inversesqrt(ln)) : uLgtAmb;
+	}
 	vUv = aUv + uUvOffset;
 	vColor = aColor;
 	vec4 wp = uModel * vec4(p.xyz, 1.0);

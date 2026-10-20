@@ -110,7 +110,7 @@ render  fx.beforeRender(e, cam)                        // FarClip → cam.far, r
 - 여러 SCR_Fog 전환은 소유 GO 최근접으로 대체 (원작은 ESC 추정).
 - 비 볼륨 상자 판정, 눈/먼지/플랑크톤 모양, 표면·커브 이미터, 칼 궤적(0xB), 필드. (~~PTC 크기 단위~~ 16 §2.4)
 - ~~SCR_Mirror~~ (§8 / 43 §9: 값 [0] 후처리·합성 0x12ABA0 미해석), ~~LensFlare~~ (46), GhostTrail, RopeSkinned, cloth 미구현.
-- 반투명 패스 안의 정렬 (원작 정렬 단위 미확인, 지금은 인스턴스 순서). ~~스크립트 Animator 없이 보이는 관절 오브젝트 (PAND03A `godmcdog2`) 는 바인드 자세~~ → 시작 act 자세 (43 §6). LGT 동적 조명 미구현 (캐릭터용).
+- 반투명 패스 안의 정렬 (원작 정렬 단위 미확인, 지금은 인스턴스 순서). ~~스크립트 Animator 없이 보이는 관절 오브젝트 (PAND03A `godmcdog2`) 는 바인드 자세~~ → 시작 act 자세 (43 §6). ~~LGT 동적 조명 (캐릭터용)~~ → 47 문서.
 - 파티클·물은 레벨 렌더 안에서 그려서 이후에 그리는 캐릭터가 덮는다 (GameScene 의 늦은 효과 패스 훅 필요).
 
 ## 8. SCR_Mirror 반사 (`level/Mirrors`, `LevelScene.renderMirrors`) — 16 §1.7

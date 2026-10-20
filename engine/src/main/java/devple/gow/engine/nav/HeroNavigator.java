@@ -1162,7 +1162,7 @@ public final class HeroNavigator {
 	}
 
 	/** 줄 시뮬레이션 (없으면 만든다): 매단 줄 = 매단 점에서 아래로, 양끝 고정 줄 (수평 줄·짚라인) = 두 끝 고정 (0x218488). */
-	RopeSim sim(NavRope r) {
+	public RopeSim sim(NavRope r) {
 		return sims.computeIfAbsent(r, k -> k.type() == devple.gow.tools.level.RopeDef.Type.HANG ? new RopeSim(k.top(), k.simLength(), k.joints())
 				: RopeSim.fixed(k.top(), k.end(), k.joints()));
 	}

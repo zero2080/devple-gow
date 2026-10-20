@@ -18,7 +18,7 @@ import java.util.List;
  * 양끝 고정 줄 (TRAVERSE / ZIPLINE) 은 곧은 선분 그대로 [근사: 원작은 같은 시뮬레이션, 매달림 최대 무게 10].
  *
  * @param lengthM SCR +0x28 = 줄 길이 (미터) — 원작 +0x60 (0x2170C0, 매단 줄 시뮬레이션 길이) [확실: 전 레벨 매단 줄 = 관절 길이 / 16]
- * @param joints 줄 오브젝트 관절 수 (시뮬레이션 노드 수 [추정: 원작은 사슬 관절 수])
+ * @param joints 시뮬레이션 노드 수 = 줄 모델 사슬 관절 수 (0x216FC8 +0x54, {@link RopeSkin#chain}) [확실]
  * @param axis   줄 오브젝트 행렬 z 축 (수평, 원작 줄 +0x20 = 오브젝트 행렬 +0x40 행 — 0x216D2C) — 매단 줄 위 몸 방향·뛰어내리기 방향의 기준
  * @param dirs   매단 줄 방향 제한 = 템플릿 +0xB8 (#b38919fb, 0x216AB8): 0 = 축 4 방향, 1 = ±z (RopeNorthSouth), 2 = ±(z × 위) (RopeEastWest)
  */
@@ -135,7 +135,10 @@ public record NavRope(String owner, RopeDef.Type type, int template, float lengt
 			float[] m = p.instance().matrix();
 			Vector3f axis = new Vector3f(m[8], 0, m[10]);
 			axis = axis.lengthSquared() < 1e-6f ? new Vector3f(0, 0, 1) : axis.normalize();
-			out.add(new NavRope(p.instance().name(), d.type(), d.template(), d.lengthM(), top, end, jw.length, axis, dirs(tw, d.template())));
+			// 노드 수 = 줄 모델 사슬 관절 수 (0x216FC8 +0x54, RopeSkin.chain), 사슬이 없으면 관절 수
+			int[] chain = p.object().skeleton() != null ? RopeSkin.chain(p.object().skeleton(), jw, 0) : new int[0];
+			int nodes = chain.length >= 2 ? chain.length : jw.length;
+			out.add(new NavRope(p.instance().name(), d.type(), d.template(), d.lengthM(), top, end, nodes, axis, dirs(tw, d.template())));
 		}
 		return out;
 	}
