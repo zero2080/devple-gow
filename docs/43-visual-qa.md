@@ -204,6 +204,7 @@ PAND03C 바위 반복 act · 9.25 초, OLYMP02 gomirror 수평 평면 · 반사 
   먼 극소 u 6.61 에서 회전이 설계 ±85° 로 잘려 영웅이 화면 밖이다. 해독상 원작도 같은 t·같은 자르기다 (PAND02B 는 PAND02AA 에서 걸어 들어오는 레벨이라 기본 시작은 원작 경로가 아님).
 - PAND01BB ← PAND00D Warp: ConHallCam5 (모드 2, 고정 위치) 앞을 덮는 것은 z −720 벽 (그것은 충돌 끝면) 이 아니라 `gosandarena` 파트 p20 (탑 외피) 이다.
   → §8.1: 원작 VU1 은 레벨 메시 뒷면을 제거하지 않는다 [확실] — 뒷면 제거는 넣지 않음, 미해결. → §10: 상태 마스크·데드존으로도 ConHallCam1 이 되지 않는다.
+  → **§11 해결**: 가시 칸 컨텍스트 — ConHallCam5 눈 위치 칸이 bvoutside (gosandarena) 를 켜지 않는다.
 - ATRET01C ← ATRET01B Warp: Start CameraName LWRCAM11 은 한 프레임 후보라 볼륨 카메라 LwrCam18 로 돌아간다 (원작 SwitchCamera 와 같은 규칙).
 - ~~리셋(레벨 시작·Warp) 직후 레일 첫 표본 기준점~~ → §10 (30 §8.2): 머리의 데드존 자르기가 눈을 옮기므로 데드존 0 이면 T [확실]. 데드존이 있는 카메라만 리셋 첫 머리를 데드존 0 으로 [근사].
 
@@ -222,7 +223,7 @@ ATHN07B 는 거울 담당 브랜치가 처리 (MDL +0x28 bit 57 = 거울 화면 
   obj+0x10 은 0x10 (46848) / 0 (1980) / 0x50 (671) 이라 대부분 bit 4 가 서 있어 표 4 에 올 수도 없다. 0x80+ 커널은 0x166278/0x168698 (0x810 기준, 별도 패스) 전용.
 - 정적 메시 (type 0x1D) 정점 w 하위 15 비트는 전부 0 (PAND01BB 108618 정점) — 제거 커널이 쓰는 정점별 기대 부호 정보도 없다. 04 §4.4 의 "스트립마다 감김이 제각각" 과 맞다.
 - 결론: 08 문서의 레벨 메시 양면 렌더가 원작과 같다. 뒷면 제거는 넣지 않았다 (`MeshObject.vuOr` = obj+0x10 만 노출).
-- **PAND01BB ← PAND00D (미해결)**: 화면을 덮는 것은 `gosandarena` (`MDL_sandArena` 파트 p20, `MAT_M01stone128Sand04a`) — 바깥에서 보면 탑 (모래 위 기둥,
+- **PAND01BB ← PAND00D (→ §11 해결: 가시 칸 컨텍스트)**: 화면을 덮는 것은 `gosandarena` (`MDL_sandArena` 파트 p20, `MAT_M01stone128Sand04a`) — 바깥에서 보면 탑 (모래 위 기둥,
   꼭대기 석상) 이고 복도 `HallSectionB` 가 그 안을 지나간다. ConHallCam5 는 고정 위치 (−2816, −222.5, −791) — 충돌 끝면 z −720 너머 복도 연장부 안이며,
   p20 외피가 눈 앞 11 (z −780) 과 영웅 뒤 (z −507) 에서 복도를 가로지른다. 선택: T 가 ConHallCam5 hull 안쪽 0.6, ConHallCam1 hull 바깥 6 (경계).
   실험으로 sandArena 만 뒷면 제거하면 영웅이 보이지만 (`exp/cull_back.png`, 엔진 감김 기준) 감김이 일정하지 않아 외피 일부는 남고, 원작 근거가 없다.
@@ -315,7 +316,44 @@ ATHN07B (화면 전체), ATHN06B (방 안이 흐린 벽), PAND03I (주황 판) �
 - `StartCameraTest` 7 (+3: 상태 마스크 비트, ATHN02A LadderCam 벽 전용, HDES01A 데드존 화면 위치), `CameraRigTest.boatRunFramesKratos` 는 IdleCam 인트로부터.
 
 ### 10.3 남은 것
-- PAND01BB ← PAND00D: 마스크 (0xFE, 지상) 와 데드존 (ConHallCam5 는 모드 2 고정 위치라 무관) 으로는 바뀌지 않는다. 선택은 점 질의 0x11E5E8 (반지름 없음) 이고
+- ~~PAND01BB ← PAND00D~~ (§11 가시 칸 컨텍스트로 해결): 마스크 (0xFE, 지상) 와 데드존 (ConHallCam5 는 모드 2 고정 위치라 무관) 으로는 바뀌지 않는다. 선택은 점 질의 0x11E5E8 (반지름 없음) 이고
   리셋 직후 선분 질의 (+0x804 = 0) 도 없어 ConHallCam1 (hull 밖 6) 은 후보가 아니다 — 원작도 ConHallCam5. 외피가 안 보이는 경로는 여전히 미상 (§8.1).
 - 리셋 첫 머리 데드존 [근사], 전투 비트 = AI COMBAT 상태 [추정], 날기 0x40 (영웅 없음).
-- 히드라 잡기 카메라의 크레토스 위치 (37 §4.1, §8) — 이번에 손대지 않음.
+- ~~히드라 잡기 카메라의 크레토스 위치~~ → 37 §4.2 (원작 동기 정렬 0x204BF0).
+
+## 11. 5 차 — 가시 칸 컨텍스트 (PAND01BB 탑 외피) · near 10 · 안개 선택
+스크린샷 (커밋 안 함): `/Users/obeomsu/.claude/jobs/6f65672f/tmp/cam3/` — `pand01bb_before.png` (이전), `vis2_pand01bb.png` (해결), `qa/on|off/<레벨>.png`
+(105 레벨 240 틱, `off` = `GOW_VISCELLS=off`), `qa/fog2|fognear/` (안개 선택 새/이전).
+
+### 11.1 가시 칸 → 컨텍스트 [확실: 0x16B2D0 · 0x16DC60 · 0x16D240 · 0x16D6F8 · 0x152EC8]
+- 레벨 WAD 끝의 `GROUP{ RES CXT_bv<이름> (서버 0x80000001, +0x30 = 번호)  하위 서버들…  RES go… (크기 0) }GROUP` 가 **컨텍스트 소속**이다
+  (예 PAND01BB: bvbstatuefog {gofog}, bvsthdroom, bvladder {goladderdown}, **bvoutside {…gosandarena…}**, bvhall {gohallsectionb}, default). 전 WAD 102 시트 중 99 개가 칸을 가진다.
+- SheetHdr (12 문서 §2.1) 의 숨은 섹션: 0x5C u16 = 칸 수, [10] (+0x8C) = 칸 0x1C B {min, max, u32 레코드 번호}, [1] (+0x68) = 레코드 (u16 단위),
+  [2] (+0x6C) = 컨텍스트 이름 0x18 B × ([3] − [2]) / 0x18 (0x16D9C0 이 레지스트리에서 찾음). 레코드 = u16 머리 (bit0 한 번만 / bit1 씀), u16 항목 수,
+  항목 {u16 형식, u16 n, …}: 0/1 = 비트맵 켬/끔 (전 WAD 비어 있음), **2 = 컨텍스트 켬, 3 = 끔**, 4 → 0x1A·n, 5–7 → 0x18·n (건너뜀).
+- 매 프레임 0x152EC8: 시트마다 마스크 +0x150 = 0 (0x16D6F0) → 활성 뷰포트마다 **카메라 행렬 위치**로 0x16DC60 (포함하는 칸마다 형식 3 먼저, 그다음 0/1/2;
+  경계 포함) → 뷰포트마다 0x16D6F8(뷰 마스크 +0x3AC): 비트가 선 컨텍스트는 항목 (MDL 0xF / PRT 0x13 / 0x1C / SHG 0x27) 의 +0x48 에 그 뷰 비트를 켜고, 아니면 끈다 (0x134980).
+  목록에 없는 컨텍스트 (CXT_default, CXT_<레벨>) 는 건드리지 않아 항상 보인다. 마스크가 0 에서 시작하므로 뷰 하나면 형식 3 은 효과가 없다.
+- **PAND01BB ← PAND00D**: ConHallCam5 눈 (−2816, −222.5, −791) 은 칸 1 (−3120,−320,−880)..(−2192,−32,−160) 안 → bvladder·bvbstatuefog·bvhall 만 켬 →
+  `gosandarena` (bvoutside) 를 그리지 않는다 → 복도 끝 크레토스가 보인다 (§8.1·§10.3 의 미해결). 바깥 칸 6 에서는 반대로 외피가 보이고 복도가 숨는다.
+- 안개 (0x20D220 → 0x20D0D8): SCR_Fog / SCR_LayeredFog 는 소유 GO 의 컨텍스트가 CXT_default 이거나 눈 위치 칸이 그 컨텍스트를 형식 2 로 켤 때만 걸고 (0x16DE18),
+  한 프레임에 하나만 (프레임 번호 0x29F324). 안개 GO 는 거의 다 자기 bvfog… 컨텍스트에 있다 (전 WAD 대조).
+
+### 11.2 엔진 (`CollisionSheet.visContexts/visCells/visibleContextMask`, `LevelLayout.contextOf`, `LevelData.contextHidden/contextActive`)
+- `LevelScene.updateContextVisibility` (렌더마다 눈 위치, 이웃 슬롯 레벨도 같은 눈으로 자기 시트) → 일반·거울·자세/반복 act·하늘 인스턴스를 건너뛴다, 배치 이미터는 생성 정지
+  (`LevelFx.setContextHidden` [근사: 원작은 PRT 그리기 마스크]). 거울 뷰 카메라 위치는 합치지 않는다 [근사]. 비교 `GOW_VISCELLS=off`, 디버그 `-Dgow.debug.vis`.
+- 안개: `FxEnvironment.update` — 켜질 수 있는 안개 중 컨텍스트 소속 목록 순서로 앞의 것 (bv 그룹이 앞, CXT_default 가 뒤 [추정: SCR 갱신 순서]), 아무것도 없으면 이전 안개 유지
+  (처음은 첫 안개). 이전 "소유 GO 가 가장 가까운 Fog" 는 `GOW_FOGPICK=near`. 바뀐 레벨: PAND04E (gofoggerwater 청색 → gofogger 사막색), ATHN01D (돛대 안개 → 궁수 안개),
+  PAND04G·PAND02D·ATHN03D (같은 계열 다른 안개). PAND00C 는 같은 결과 (CXT_default 의 관 안개 gofogtubel3 는 주 안개가 꺼진 곳에서만).
+- near: 엔진 2 → **10** (원작 뷰포트 +0x384, 30 §8.4). 원작 클립은 VU1 에서 6 평면 다각형 자르기 (주 프로그램 0x2E5–0x3CE) 라 삼각형을 통째로 버리지 않는다.
+
+### 11.3 검증
+- 105 레벨 `on`/`off` 비교 (화소 변화 > 60 비율): PAND05B 25% (바닥 거울 반사 속 숨은 컨텍스트 — 원작도 질의는 뷰 카메라 위치), ATHN03C 6% (아래), PAND00A 4%
+  (카메라 앞 벽 조각이 숨어 배경이 보임), HDES01D·ATHN01F·PAND03B 3% 이하 (먼 배경·조명 잡음), 나머지 ≤ 2.5% (비·AI 잡음).
+- **ATHN03C 기본 Start** (`Start03C`, 눈 (−1987, 973, −1821)): 칸 0 (dbvmedusa) · 칸 4 (pcube309, bvall) 만 → **bvsky (하늘 gogroup2) 꺼짐** → 오른쪽 위가 검다.
+  데이터·해독대로의 결과 (실제 진입 ATHN04A 도착 눈 (−3249, 987, −2444) 은 칸 3 이 bvsky 를 켜 하늘이 보인다, `athn03c_from04a.png`). 03A → 03C 는 이음 전환이라 이 Start 는 불러오기 전용.
+- ATHN01A 인트로 뒤 (2200 틱, Boat1Cam4): 눈 (1519, 68.8, 2030) 이 칸 0 (bvstartship)·칸 1 (dbvdeck) 안 → 숨김 0 — 이 메커니즘과 무관.
+  가리는 것은 선미 난간 (gohull*/gomainshipfront*): Boat1Cam4 레일 (1519, 2030)..(1437, 1987) 전체가 시작 지점에서 89–110 이고 요 범위 0 이라 눈이 레일 끝에 고정,
+  해골 넷에게 맞아 **크레토스가 쓰러지면** 난간 뒤로 숨는다 (`vis_athn01a_2200.png`, 서 있으면 상반신이 보임 — 10.1 의 `v2/ATHN01A_2200.png`). near 10 으로도 같음 → 데이터대로 [수정 안 함].
+- 시선 탐침 (§10.2) 은 충돌 기반이라 바뀌지 않는다: 기본 시작 75/105, 도착 120/188 그대로 (카메라 선택·충돌 코드 변경 없음). `StartCameraTest` 7 통과.
+- 시험 `VisCellsTest` 2 (PAND01BB 칸·컨텍스트·안개, ATHN01A 숨김 0). 엔진 테스트 347.

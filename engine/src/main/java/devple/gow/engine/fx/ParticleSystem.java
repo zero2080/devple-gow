@@ -38,6 +38,8 @@ public final class ParticleSystem implements AutoCloseable {
 		/** 카메라를 따라가는 생성 상자 (비/눈): true 면 pos 를 무시하고 카메라 주변에 만든다. */
 		public boolean followCamera;
 		public boolean active = true;
+		/** 레벨 배치 이미터의 소유 인스턴스 (소문자, 가시 칸 컨텍스트로 끈다 — {@link LevelFx#setContextHidden}). null = 없음. */
+		public String owner;
 		/** 원뿔 모드 방향 (월드, 정규화). */
 		public final Vector3f dir = new Vector3f(0, 1, 0);
 		/** LOD (FXC 0xDC/0xE0, ×16 월드): 생성률 × (far − d/16)/(far − near), near &lt; 0 = 끔. */

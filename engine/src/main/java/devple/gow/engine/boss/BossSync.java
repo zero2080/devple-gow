@@ -33,7 +33,10 @@ public final class BossSync {
 	 * ZERO = 영웅 = 보스 + R(요)·(zero_영웅 − zero_보스) (높이 포함, BMI 올라타기 BMIRide*: 영웅 zeroJoint 가 높이 0 → 212 로 등에 기어오름,
 	 * 몸 관절은 제자리 — 같은 원점이면 크레토스가 BMI 다리 사이 바닥에 남는다) [추정: 화면 확인].
 	 */
-	public enum Align { NONE, BOSS_TO_HERO, HERO_TO_BOSS, SYNCH, ZERO }
+	public enum Align { NONE, BOSS_TO_HERO, HERO_TO_BOSS, SYNCH, ZERO, TARGET_SYNCH }
+
+	/** CombatFile 이벤트 22 (덤프 이름 FLAG_24, 0x206BA0): 자기 +0x1AC |= 0x24, 락온 대상 +0x1AC |= 0x4000 → 0x205B28 에서 0x204BF0 정렬. */
+	public static final int EV_SYNC_TARGET = 22;
 
 	private final IntPredicate syncId;
 	private final Align align;
@@ -45,6 +48,9 @@ public final class BossSync {
 	/** 마지막 쌍 (기술 ID, 없으면 -1). */
 	private int paired = -1;
 	private org.joml.Vector3f anchor;
+	/** 0x204BF0 섞기 비율 (대상 combatant +0x1BC): 동기 기술 시작 0.1 (0x209830), 프레임마다 ×1.1, 최대 1. */
+	private float syncBlend = -1;
+	private int syncBlendSerial = -1;
 
 	public BossSync(IntPredicate syncId, Align align) {
 		this.syncId = syncId;
@@ -102,8 +108,10 @@ public final class BossSync {
 		paired = syncId.test(bm) && hm == bm ? bm : -1;
 		if (paired < 0) {
 			qte = null;
-			if (anchor != null) {
-				// 동기 끝: 원래 서 있던 곳으로 (HERO_TO_BOSS — 동기 애니는 보스 원점 기준)
+			syncBlend = -1;
+			if (anchor != null && align != Align.TARGET_SYNCH) {
+				// 동기 끝: 원래 서 있던 곳으로 (HERO_TO_BOSS — 동기 애니는 보스 원점 기준). TARGET_SYNCH 는 원작처럼 되돌리지 않는다
+				// (0x204BF0 이 대상 오브젝트 자체를 옮기고, 뒤는 영웅 루트 모션·내비게이션 몫)
 				ctl.position.set(anchor);
 				ctl.prevPosition.set(anchor);
 				anchor = null;
@@ -138,6 +146,9 @@ public final class BossSync {
 			ctl.prevPosition.set(off);
 			ctl.yaw = yaw;
 			ctl.vy = 0;
+		}
+		if (align == Align.TARGET_SYNCH) {
+			targetSynch(ctl, boss, bc);
 		}
 		if (align == Align.ZERO) {
 			float[] zh = zero(ctl.animator()), zb = zero(boss.animator());
@@ -176,6 +187,52 @@ public final class BossSync {
 		// 타이밍 버튼
 		// TimedPress 는 보통 보스 기술에, BMI 올라타기(451–453)처럼 영웅 기술에만 있으면 영웅 쪽 (실패 → 영웅 REQUEST0 → 454)
 		timedHelper.updateTimed(hasTimed(bc) || !hasTimed(hero) ? bc : hero, tw, in);
+	}
+
+	/**
+	 * 원작 0x204BF0 (0x205B28: 자기 +0x1AC 에 0x24 가 모두 있으면 = 이벤트 22 구간): <b>보스가 락온 대상 (영웅) 을 자기 쪽으로 붙인다</b>.
+	 * 목표 = inv(S_대상) · S_자기 · W_자기 (행벡터), S = synchJoint 행렬을 zeroJoint 기준으로 (0x1F7110 이 모델 행렬 [synchJoint] = S · Z⁻¹,
+	 * [zeroJoint] = 단위로 덮어씀), 위치에 오브젝트 배율 +0x168 · 내비 +0xEC 를 곱한다. 현재 → 목표를 회전 slerp · 위치 lerp 로 비율 t 만큼 (t = +0x1BC:
+	 * 시작 0.1, 프레임마다 ×1.1, 최대 1). 이벤트 22 가 없는 동기 기술 (807 연타 · 809 성공 …) 에는 정렬이 없고 영웅 루트 모션만 [확실: 코드].
+	 * 히드라 806/802/810 (CombatFile 252) 만 이벤트 22 — 영웅은 머리 쪽 synchJoint 에 붙어 높이 682 단상 위 (예전 HERO_TO_BOSS 의 z 뒤집기 [추정] 대체).
+	 */
+	private void targetSynch(HeroController ctl, EnemyFighter boss, Combatant bc) {
+		if (!bc.active() || bc.move().events().stream().noneMatch(e -> e.type() == EV_SYNC_TARGET)) {
+			return;
+		}
+		if (syncBlendSerial != bc.moveSerial()) {
+			syncBlendSerial = bc.moveSerial();
+			syncBlend = 0.1f;
+		}
+		org.joml.Matrix4f des = new org.joml.Matrix4f().translation(boss.pos).rotateY(boss.yaw)
+				.mul(synchRel(boss.animator(), boss.scale)).mul(synchRel(ctl.animator(), 1f).invert());
+		org.joml.Vector3f p = des.getTranslation(new org.joml.Vector3f());
+		org.joml.Vector3f f = des.transformDirection(new org.joml.Vector3f(0, 0, -1));
+		float yaw = (float) Math.atan2(-f.x, -f.z);
+		float t = Math.min(1f, syncBlend);
+		ctl.position.lerp(p, t);
+		ctl.prevPosition.set(ctl.position);
+		float d = yaw - ctl.yaw;
+		d = (float) Math.atan2(Math.sin(d), Math.cos(d));
+		ctl.yaw += d * t;
+		ctl.vy = 0;
+		syncBlend = Math.min(1f, syncBlend * 1.1f);
+	}
+
+	/** zeroJoint 기준 synchJoint 행렬 (열벡터: Z⁻¹ · S), 위치 × 배율. 관절이 없으면 단위. */
+	static org.joml.Matrix4f synchRel(devple.gow.engine.anim.Animator an, float scale) {
+		var sk = an.skeleton();
+		int zj = sk.indexOf("zeroJoint"), sj = sk.indexOf("synchJoint");
+		if (sj < 0 || an.current() == null) {
+			return new org.joml.Matrix4f();
+		}
+		float[][] w = an.pose().world(sk);
+		org.joml.Matrix4f s = new org.joml.Matrix4f().set(w[sj]);
+		if (zj >= 0) {
+			s = new org.joml.Matrix4f().set(w[zj]).invert().mul(s);
+		}
+		org.joml.Vector3f tr = s.getTranslation(new org.joml.Vector3f()).mul(scale);
+		return s.setTranslation(tr);
 	}
 
 	/** 현재 자세의 zeroJoint 로컬 위치 (없으면 0). */

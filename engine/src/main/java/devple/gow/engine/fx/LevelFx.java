@@ -110,6 +110,17 @@ public final class LevelFx implements AutoCloseable {
 		return data.layout.instances.stream().filter(g -> g.name().equals(owner)).map(g -> g.pos()).findFirst().orElse(null);
 	}
 
+	/**
+	 * 가시 칸 컨텍스트로 숨은 인스턴스의 배치 이미터를 끈다 (원작 0x134980 은 PRT 0x13 항목의 뷰 마스크를 끈다 — 여기서는 생성만 멈춘다 [근사]).
+	 */
+	public void setContextHidden(Set<String> hidden) {
+		for (ParticleSystem.Emitter em : particles.emitters()) {
+			if (em.owner != null) {
+				em.active = !hidden.contains(em.owner);
+			}
+		}
+	}
+
 	public FxEnvironment env() {
 		return env;
 	}

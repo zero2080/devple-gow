@@ -53,6 +53,11 @@ public final class FxEnvironment {
 
 	private final EnvParams params;
 	private final Map<String, float[]> ownerPos = new HashMap<>();
+	/** 소유 인스턴스 갱신 순서 (소문자) — 같은 프레임에 켜질 수 있는 안개가 여럿이면 앞의 것 (SCR 갱신 순서 [추정]). */
+	private final Map<String, Integer> ownerOrder = new HashMap<>();
+	private final LevelData data;
+	/** 비교용: GOW_FOGPICK=near 면 이전 선택 (소유 인스턴스가 카메라에 가장 가까운 Fog). */
+	private static final boolean FOG_NEAREST = "near".equals(System.getenv("GOW_FOGPICK"));
 	private EnvParams.Fog fog;
 	private EnvParams.LayeredFog layered;
 	private float time;
@@ -63,8 +68,14 @@ public final class FxEnvironment {
 	public FxEnvironment(WadAssets assets, LevelData data) {
 		this.assets = assets;
 		this.params = new EnvParams(data.wad);
+		this.data = data;
+		// 갱신 순서 [추정] = 컨텍스트 소속 목록 순서 (WAD 끝 CXT_bv… 그룹들이 앞, CXT_default 가 맨 뒤 — GO 생성 순서), 목록에 없으면 그 뒤
+		for (String n : data.layout.contextOf.keySet()) {
+			ownerOrder.putIfAbsent(n, ownerOrder.size());
+		}
 		for (GoInstance g : data.layout.instances) {
 			ownerPos.put(g.name(), g.pos());
+			ownerOrder.putIfAbsent(g.name().toLowerCase(Locale.ROOT), ownerOrder.size());
 		}
 		fog = params.fogs.isEmpty() ? null : params.fogs.getFirst();
 		layered = params.layeredFogs.isEmpty() ? null : params.layeredFogs.getFirst();
@@ -87,9 +98,46 @@ public final class FxEnvironment {
 		return enabled;
 	}
 
-	/** 시간 진행 + 활성 안개 선택: 여러 SCR_Fog 가 있으면 소유 인스턴스가 카메라에 가장 가까운 것 [추정: 원작은 ESC 로 켜고 끔]. */
+	/**
+	 * 시간 진행 + 활성 안개 선택 (43 문서 §11): 원작 SCR_Fog / SCR_LayeredFog 갱신 0x20D220 은 소유 GO 의 컨텍스트가 CXT_default 이거나
+	 * 카메라 위치를 포함하는 가시 칸이 그 컨텍스트를 켤 때만 (0x20D0D8 → 0x16DE18) 안개를 걸고, 한 프레임에 하나만 건다 (프레임 번호 0x29F324).
+	 * 아무것도 걸리지 않은 프레임은 이전 안개가 남는다 (처음은 첫 안개). 여럿이면 컨텍스트 소속 목록 순서로 앞의 것 — CXT_default 안개는 다른 안개가 꺼진 곳에서만 [추정: 갱신 순서].
+	 */
 	public void update(float dt, org.joml.Vector3f eye) {
 		time += dt;
+		if (FOG_NEAREST) {
+			nearestFog(eye);
+			return;
+		}
+		if (params.fogs.size() + params.layeredFogs.size() < 2) {
+			return; // 하나뿐이면 켜질 때마다 같은 안개 — 이전 안개 유지와 같다
+		}
+		int best = Integer.MAX_VALUE;
+		EnvParams.Fog bf = null;
+		EnvParams.LayeredFog bl = null;
+		for (EnvParams.Fog f : params.fogs) {
+			int o = ownerOrder.getOrDefault(f.owner().toLowerCase(Locale.ROOT), Integer.MAX_VALUE - 1);
+			if (o < best && data.contextActive(f.owner(), eye.x, eye.y, eye.z)) {
+				best = o;
+				bf = f;
+				bl = null;
+			}
+		}
+		for (EnvParams.LayeredFog f : params.layeredFogs) {
+			int o = ownerOrder.getOrDefault(f.owner().toLowerCase(Locale.ROOT), Integer.MAX_VALUE - 1);
+			if (o < best && data.contextActive(f.owner(), eye.x, eye.y, eye.z)) {
+				best = o;
+				bf = null;
+				bl = f;
+			}
+		}
+		if (bf != null || bl != null) {
+			fog = bf;
+			layered = bl;
+		}
+	}
+
+	private void nearestFog(org.joml.Vector3f eye) {
 		if (params.fogs.size() > 1) {
 			float best = Float.MAX_VALUE;
 			for (EnvParams.Fog f : params.fogs) {

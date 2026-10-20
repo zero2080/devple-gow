@@ -118,6 +118,11 @@ class HydraFightTest {
 			assertEquals(s1 == 53 ? 806 : 802, grab, "보스 EV_HIT_REACT 태그 200 → BHABOSSGRAB*: s1=" + s1 + " boss " + r.bossMoves + " hero " + r.heroMoves);
 			r.tick();
 			assertEquals(grab, r.hero.move().id(), "영웅 같은 ID 동기: " + r.heroMoves);
+			if (round == 1) {
+				// 0x204BF0: 보스 이벤트 22 기술이 영웅을 synchJoint (zeroJoint 기준) 로 붙인다 — 영웅 zeroJoint 높이 682 = 돛대 단상 (보스 y + 682)
+				r.run(0.6f);
+				assertEquals(b.pos.y + 682, r.ctl.position.y, 3f, "잡기 중 영웅은 단상 위: " + r.ctl.position);
+			}
 			int win = grab == 806 ? 809 : 805;
 			assertTrue(until(r, 12, () -> r.bossMoves.contains(win)), "연타 성공 → " + win + " " + r.bossMoves);
 			assertEquals(RepeatPressQte.State.PASSED, r.fight.sync().lastResult());

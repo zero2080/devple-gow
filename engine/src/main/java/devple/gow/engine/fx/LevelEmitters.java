@@ -61,6 +61,7 @@ public final class LevelEmitters {
 				if (sh.vu() != null && sh.vu().kind == 5 && System.getenv("GOW_PTCVU_LOG") != null) {
 					System.out.printf(Locale.ROOT, "  열기 아지랑이 %s @ (%.0f, %.0f, %.0f)%n", sh.name(), p[0], p[1], p[2]);
 				}
+				e.owner = pl.instance().name().toLowerCase(Locale.ROOT);
 				e.lodNear = em.lodNear();
 				e.lodFar = em.lodFar();
 				n++;

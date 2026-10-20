@@ -57,7 +57,7 @@ public final class HydraFight extends BossFight {
 		} catch (RuntimeException ex) {
 			System.out.println("아기 히드라 로드 실패: " + ex.getMessage());
 		}
-		sync = new BossSync(id -> id >= 802 && id <= 816, BossSync.Align.HERO_TO_BOSS);
+		sync = new BossSync(id -> id >= 802 && id <= 816, BossSync.Align.TARGET_SYNCH);
 	}
 
 	@Override

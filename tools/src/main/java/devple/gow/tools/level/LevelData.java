@@ -169,6 +169,49 @@ public final class LevelData {
 		return null;
 	}
 
+	/**
+	 * 가시 칸 컨텍스트 (43 문서 §11, 0x152EC8 → 0x16D6F0 / 0x16DC60 / 0x16D6F8): 카메라 눈 위치로 시트마다 보이는 컨텍스트 마스크를 만들고,
+	 * 시트의 컨텍스트 목록에 있는데 비트가 꺼진 컨텍스트의 인스턴스 (소문자 이름) 를 돌려준다. 목록에 없는 컨텍스트 (CXT_default 등) 는 그대로 보인다.
+	 */
+	public java.util.Set<String> contextHidden(float x, float y, float z) {
+		java.util.Set<String> hiddenCtx = new java.util.HashSet<>();
+		for (CollisionSheet s : sheets) {
+			long mask = s.visibleContextMask(x, y, z, 0);
+			for (int i = 0; i < s.visContexts.size() && i < 64; i++) {
+				if ((mask & (1L << i)) == 0) {
+					hiddenCtx.add(s.visContexts.get(i).toLowerCase(java.util.Locale.ROOT));
+				}
+			}
+		}
+		if (hiddenCtx.isEmpty()) {
+			return java.util.Set.of();
+		}
+		java.util.Set<String> out = new java.util.HashSet<>();
+		for (Map.Entry<String, String> e : layout.contextOf.entrySet()) {
+			if (hiddenCtx.contains(e.getValue().toLowerCase(java.util.Locale.ROOT))) {
+				out.add(e.getKey());
+			}
+		}
+		return out;
+	}
+
+	/**
+	 * 0x20D0D8 (SCR_Fog / SCR_LayeredFog 갱신 0x20D220): 소유 GO 의 컨텍스트가 CXT_default 면 참, 아니면 눈 위치를 포함하는 칸 중 하나가
+	 * 그 컨텍스트를 형식 2 로 켜야 참 (0x16DE18). 가시 시트가 없으면 참.
+	 */
+	public boolean contextActive(String instance, float x, float y, float z) {
+		String ctx = layout.contextOf.get(instance.toLowerCase(java.util.Locale.ROOT));
+		if (ctx == null || ctx.equalsIgnoreCase("CXT_default") || sheets.isEmpty()) {
+			return true;
+		}
+		for (CollisionSheet s : sheets) {
+			if (s.cellListsContext(x, y, z, ctx)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/** 월드 점이 들어 있는 카메라 볼륨(CMV) → 활성 카메라. 없으면 null. */
 	public PlacedCamera activeCamera(float x, float y, float z) {
 		for (PlacedVolume v : volumes) {
