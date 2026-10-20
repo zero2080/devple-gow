@@ -187,7 +187,7 @@ MFX 템플릿 0x48 바이트 (`/TweakTemplates/MFX/nnn/`):
 - **바닥 피 자국** (§6.1): MFX "Drop Blood" (bit 0x2) 면 sub_00221A50 → 0x1F9278.
 - **Slice Hit Name** (무기가 월드를 칠 때, 0x202248 → 0x221918): 엔진 `MagicFx.weaponWorld` — 공격 창(피해 &gt; 0) 안의 공격 부위 구의 이전→현재 중심 선분을
   이동 방향으로 반지름만큼 늘려 레벨 충돌 레이캐스트 → 면 SheetFX 의 MFX +0x30 GO 를 충돌점·면 법선 방향에, +0x3C 소리 (SND_SWORDHIT_STONE …).
-  (기술, 공격 번호) 당 1번 [추정: 원작 구-시트 접촉 0x13C400 을 선분으로 근사]. ARENA06 □□□ 는 블레이드 구 바닥이 바닥 위 4–10 이라 없음, △ 내려찍기 = goRockSlice 2회 (SheetFX 20 Rock).
+  (기술, 공격 번호) 당 1번 [추정: 원작 구-시트 접촉 0x13C400 을 선분으로 근사]. **블레이드 부위 2/3/11 은 제외** — 원작 0x202248 은 손 밖 블레이드의 사슬 벽 질의 0x1FAFC8 에서 부른다 (45 §3.8, `MagicFx.bladeSpark`). ARENA06 □□□ 는 블레이드 구 바닥이 바닥 위 4–10 이라 없음, △ 내려찍기 = goRockSlice 2회 (SheetFX 20 Rock).
 - **착지** (sub_00221EA8, 0x1FE490/0x1FE518): 발밑 MFX "Jump Land Effect" (+0x2C, Rock → goRockLand, Dirt → goDirtLand …) + Foot Sound 레지스터 3 [확실: 경로].
   엔진: `GameScene.footsteps` 의 착지 순간 `MagicFx.land`.
 

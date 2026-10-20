@@ -654,6 +654,9 @@ public final class MagicFx implements AutoCloseable {
 			if (sliced.contains(key)) {
 				continue;
 			}
+			if (bladeSliceNative && (a.part() == 2 || a.part() == 3 || a.part() == 11)) {
+				continue; // 블레이드는 사슬 벽 질의 (0x1FAFC8 → 0x202248, {@link #bladeSpark}) 가 맡는다
+			}
 			for (float[] sw : c.hitVolumes().sweeps(a.part())) {
 				Vector3f p0 = new Vector3f(sw[0], sw[1], sw[2]), p1 = new Vector3f(sw[3], sw[4], sw[5]);
 				if (p0.distanceSquared(p1) < 1e-4f) {
@@ -689,6 +692,60 @@ public final class MagicFx implements AutoCloseable {
 				}
 				break;
 			}
+		}
+		return played;
+	}
+
+	/**
+	 * 블레이드 부위 (2 / 3 / 11) 의 무기-월드 베기를 {@link #weaponWorld} 근사에서 빼고 {@link #bladeSpark} 로 낸다.
+	 * 원작 0x202248 의 호출자는 0x1FAFC8 (혼돈의 블레이드, 손 밖) · 0x1DB788 (아르테미스의 검 부위 10) · 0x1C3100 (적) 뿐이다.
+	 */
+	public boolean bladeSliceNative;
+	private final EffectSystem.Effect[] sparks = new EffectSystem.Effect[2];
+	private final int[] sparkMfx = new int[2];
+	/** 블레이드 벽 불꽃을 새로 낸 횟수 (테스트). */
+	public int bladeSparks;
+
+	/**
+	 * 블레이드 벽 충돌 불꽃 (0x1FAFC8 → 0x202248, 블레이드 슬롯 +0x24 이펙트 핸들 / +0x2C MFX 번호) [확실: 분기]:
+	 * 슬롯의 이전 이펙트가 아직 살아 있고 같은 MFX 면 그 GO 를 새 충돌점으로 옮기기만 한다 (새 소리 없음).
+	 * 아니면 면 SheetFX 의 MFX "Slice Hit Name" (+0x30) GO 를 새로 내고 (0x221918) "Slice Hit Sound" (+0x3C) 를 낸다 (0x221738).
+	 * → 블레이드가 벽에 닿아 있는 동안 불꽃이 끝날 때마다 다시 난다.
+	 *
+	 * @return 새로 낸 GO 이름 (옮기기만 했거나 없으면 null)
+	 */
+	public String bladeSpark(int side, int sheetFx, Vector3f at, Vector3f normal, java.util.function.BiConsumer<String, Vector3f> sound) {
+		Matrix4f m = new Matrix4f().translation(at);
+		Vector3f nrm = new Vector3f(normal);
+		if (nrm.lengthSquared() > 1e-6f) {
+			m.rotateTowards(nrm.normalize(), Math.abs(nrm.y) > 0.9f ? new Vector3f(0, 0, 1) : new Vector3f(0, 1, 0));
+		}
+		EffectSystem.Effect prev = sparks[side];
+		if (prev != null && !prev.done() && sparkMfx[side] == sheetFx) {
+			prev.setAnchor(EffectSystem.Anchor.of(m)); // 0x20232C: GO 행렬만 갱신 (Y = 면 법선)
+			return null;
+		}
+		sparks[side] = null;
+		sparkMfx[side] = sheetFx;
+		if (sheetFx <= 0) {
+			return null;
+		}
+		String node = String.format("/TweakTemplates/MFX/%03d/", sheetFx);
+		String go = tw.sHash(node, MFX_SLICE, null);
+		String played = null;
+		if (go != null && go.startsWith("go")) {
+			sparks[side] = fx.play(go, EffectSystem.Anchor.of(m));
+			if (sparks[side] != null) {
+				played = go;
+				bladeSparks++;
+			}
+		}
+		String snd = tw.sHash(node, MFX_SLICE_SOUND, null);
+		if (snd != null && snd.toUpperCase().startsWith("SND_") && sound != null) {
+			sound.accept(snd.toUpperCase(), new Vector3f(at));
+		}
+		if (EffectSystem.LOG) {
+			System.out.printf("블레이드 벽 %d SheetFX %d → %s at (%.0f, %.0f, %.0f)%n", side, sheetFx, go, at.x, at.y, at.z);
 		}
 		return played;
 	}

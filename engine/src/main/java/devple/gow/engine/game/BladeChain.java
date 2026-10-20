@@ -3,6 +3,7 @@ package devple.gow.engine.game;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
+import devple.gow.tools.level.SurfaceAttr;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -44,6 +45,29 @@ public final class BladeChain {
 			{"lChain", "lChainW", "lWeapIH", "lWeapOH", "leftBladeBack"},
 			{"rChain", "rChainW", "rWeapIH", "rWeapOH", "rightBladeBack"}};
 
+	/** 골반 관절 (Blades_Init +0x8E): 벽·적 질의의 높이. */
+	public static final String PELVIS = "Pelvis";
+	/** 블레이드 점 = 블레이드 위치 + (0 − Z) × 0.5 × 16 (0x1FB044–0x1FB06C) — 블레이드 라이트와 같은 점. */
+	public static final float BLADE_POINT_BACK = 8f;
+	/** 적 스윕 표본 간격 (0x40CCCCCD = 6.4 단위, 0x1FB230). */
+	public static final float SWEEP_STEP = 6.4f;
+	/**
+	 * 벽 질의 면 제외 마스크 (0x3309F4 = 0x0B130000, 0x1FB2F0) [확실]: AIBlock · ClimbGuide · NoPlayerCollision · GeneralGuide · NoDiving · CombatGuide.
+	 * 영웅 이동 질의와 달리 Water · Death 는 막는다.
+	 */
+	public static final long WALL_EXCLUDE = SurfaceAttr.fromRecord(0x0B130000, 0, 0);
+
+	/** 블레이드 벽 질의 (0x1FAFC8 → 선분 질의 0x11E190, 가장 가까운 충돌 = 모드 2). */
+	@FunctionalInterface
+	public interface Walls {
+		/**
+		 * from → to 의 첫 충돌 면 (면 표면 속성 &amp; exclude ≠ 0 인 면은 건너뜀).
+		 *
+		 * @return {x, y, z, nx, ny, nz, sheetFx} 또는 null
+		 */
+		float[] cast(Vector3f from, Vector3f to, long exclude);
+	}
+
 	/** /Player/ 튜닝 (Player_RegisterTweaks 0x1D5B8C…: 0x29F294…0x29F2B4). */
 	public float damping = 0.4f, scaleBack = 1, scaleIn = 1, scaleOut = 1;
 	/** 미터 (× 16 = 단위). */
@@ -84,6 +108,16 @@ public final class BladeChain {
 		/** 블레이드 Z 축 (정규화): 칼끝 = P3 − Z · Weapon Length. */
 		public final Vector3f bladeZ = new Vector3f(0, 0, 1);
 		boolean init;
+		/** 이번 틱 벽에 막힘 (0x1FAFC8 이 블레이드를 충돌점까지 당김). */
+		public boolean wallHit;
+		/** 벽 충돌점·면 법선·면 SheetFX (wallHit 일 때). */
+		public final Vector3f wallPoint = new Vector3f(), wallNormal = new Vector3f();
+		public int wallSheetFx;
+		/** 블레이드 쪽 +0x50: 당긴 양 (충돌점 − 블레이드 점), 매 틱 0 으로 시작. */
+		public final Vector3f pull = new Vector3f();
+		/** 적 스윕 (0x1FB1B4 – 0x1FB2C0): 시작점 = (영웅 x, 골반 y, 영웅 z), 끝점들 = 이전 → 지금 블레이드 점 사이 (t = 1 부터). 손 밖이 아니면 비어 있음. */
+		public final Vector3f sweepFrom = new Vector3f();
+		public final List<Vector3f> sweepTo = new ArrayList<>();
 		private final Quaternionf rot = new Quaternionf();
 		private final Vector3f pos = new Vector3f();
 
@@ -114,6 +148,18 @@ public final class BladeChain {
 	 * @param keepMode 현재 기술 flags (+0x0E) &amp; 0x80: 상태를 바꾸지 않음
 	 */
 	public void update(Joints j, boolean hasMove, boolean keepMode, float dt) {
+		update(j, hasMove, keepMode, dt, null, null);
+	}
+
+	/**
+	 * 한 틱 + 블레이드 벽 충돌 (0x1FAFC8).
+	 *
+	 * @param root  영웅 GO 위치 (0x243378 → +0x30), null 이면 벽·적 질의 없음
+	 * @param walls 레벨 충돌 질의, null 이면 벽 질의 없음
+	 */
+	public void update(Joints j, boolean hasMove, boolean keepMode, float dt, Vector3f root, Walls walls) {
+		Matrix4f pelvis = new Matrix4f();
+		boolean havePelvis = root != null && j.world(PELVIS, pelvis);
 		Matrix4f chain = new Matrix4f(), chainW = new Matrix4f(), ih = new Matrix4f(), oh = new Matrix4f(), back = new Matrix4f();
 		for (Side s : sides) {
 			String[] n = JOINTS[s.index];
@@ -141,10 +187,20 @@ public final class BladeChain {
 			s.chainVisible = s.mode != BACK; // 0x1FD9F8 / 0x1FDAE8
 			float frames = dt * 60f;
 			float t = step(rate, frames);
+			Vector3f pos0 = new Vector3f(s.pos); // 이전 블레이드 GO 위치 (0x1FB200: GO +0x50, 이번 틱 GO 행렬은 0x1FAFC8 뒤에 쓴다)
 			// 0x184388 slerp (이전 → 목표, t), 위치 선형 (+0x30 += (목표 − 이전) · t)
 			Quaternionf tr = target.getNormalizedRotation(new Quaternionf());
 			s.rot.slerp(tr, t).normalize();
 			s.pos.lerp(target.getTranslation(new Vector3f()), t);
+			Vector3f prevPos = new Vector3f(pos0);
+			s.wallHit = false;
+			s.pull.zero();
+			s.sweepTo.clear();
+			if (havePelvis && s.mode == OUT_HAND) {
+				Vector3f z = new Vector3f(0, 0, 1).rotate(s.rot);
+				Vector3f from = new Vector3f(root.x, pelvis.m31(), root.z);
+				collide(s, from, prevPos, z, walls);
+			}
 			// +0x9C += (+0xA0 − +0x9C) · 0.1 (프레임마다)
 			s.scale += (s.scaleTarget - s.scale) * step(0.1f, frames);
 			s.blade.translationRotate(s.pos.x, s.pos.y, s.pos.z, s.rot);
@@ -156,6 +212,48 @@ public final class BladeChain {
 			Vector3f d0 = chain.getColumn(2, new Vector3f()).normalize().negate();
 			controlPoints(chain.getTranslation(new Vector3f()), d0, end.getTranslation(new Vector3f()), s.endDir, s.ctrl);
 		}
+	}
+
+	/**
+	 * 0x1FAFC8 (상태 2 = 손 밖일 때만, 0x1FB148) [확실: 코드].
+	 * <ol>
+	 *   <li>블레이드 점 B = 블레이드 위치 − Z × 8, 시작점 O = (영웅 x, 골반 y, 영웅 z).</li>
+	 *   <li>적 스윕 끝점: 이전 블레이드 점 (이전 GO 위치 − 지금 Z × 8) → B 를 간격 s = min(1, 6.4 / |B − 이전|) 로,
+	 *       t = 1, 1 − s, … (다음 t − s ≥ 0 인 동안) — 원작 루프 그대로 (t = 0 쪽 마지막 구간은 빠질 수 있다).</li>
+	 *   <li>벽: O → B 선분 질의 (제외 마스크 {@link #WALL_EXCLUDE}, 가장 가까운 면). 맞으면 블레이드 위치 = 충돌점 + Z × 8
+	 *       (= 블레이드 점을 충돌점에 놓음), +0x50 = 충돌점 − B. 블레이드 상태 행렬 (+0x30) 에 쓰므로 다음 틱 slerp 의 시작도 당긴 위치.</li>
+	 * </ol>
+	 */
+	void collide(Side s, Vector3f from, Vector3f prevPos, Vector3f z, Walls walls) {
+		Vector3f back = new Vector3f(z).mul(-BLADE_POINT_BACK);
+		Vector3f b = new Vector3f(s.pos).add(back);
+		Vector3f prev = new Vector3f(prevPos).add(back);
+		s.sweepFrom.set(from);
+		sweepPoints(prev, b, s.sweepTo);
+		if (walls == null) {
+			return;
+		}
+		float[] h = walls.cast(from, b, WALL_EXCLUDE);
+		if (h == null) {
+			return;
+		}
+		s.wallHit = true;
+		s.wallPoint.set(h[0], h[1], h[2]);
+		s.wallNormal.set(h[3], h[4], h[5]);
+		s.wallSheetFx = (int) h[6];
+		s.pull.set(s.wallPoint).sub(b);
+		s.pos.add(s.pull);
+	}
+
+	/** 적 스윕 끝점 (0x1FB200 – 0x1FB2B8): prev → cur 사이, t = 1 부터 s = min(1, 6.4 / 거리) 씩, 다음 t − s ≥ 0 인 동안. */
+	public static void sweepPoints(Vector3f prev, Vector3f cur, List<Vector3f> out) {
+		float d = prev.distance(cur);
+		float s = d > SWEEP_STEP ? SWEEP_STEP / d : 1f;
+		float t = 1f;
+		do {
+			out.add(new Vector3f(prev).lerp(cur, t));
+			t -= s;
+		} while (t - s >= 0f);
 	}
 
 	/** 0x1FB73C 상태 선택. dIH = |lWeapOH − lWeapIH|, dBack = |lWeapOH − 등 관절|. */

@@ -11,6 +11,7 @@ import devple.gow.engine.input.PadButton;
 import devple.gow.engine.input.ScriptedInput;
 import devple.gow.tools.anim.AnimationSet;
 import devple.gow.tools.anim.Skeleton;
+import devple.gow.tools.level.SurfaceAttr;
 import devple.gow.tools.wad.WadFile;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
@@ -121,6 +122,95 @@ class BladeChainTest {
 	}
 
 	@Test
+	void wallQueryMaskAndSweepPoints() {
+		// 0x3309F4 = 0x0B130000 (0x1FB2F0)
+		long m = BladeChain.WALL_EXCLUDE;
+		for (SurfaceAttr a : new SurfaceAttr[]{SurfaceAttr.AI_BLOCK, SurfaceAttr.CLIMB_GUIDE, SurfaceAttr.NO_PLAYER_COLLISION,
+				SurfaceAttr.GENERAL_GUIDE, SurfaceAttr.NO_DIVING, SurfaceAttr.COMBAT_GUIDE}) {
+			assertTrue((m & a.bit()) != 0, a.name());
+		}
+		assertEquals(0, m & (SurfaceAttr.GROUND.bit() | SurfaceAttr.WATER.bit() | SurfaceAttr.DEATH.bit() | SurfaceAttr.CLIMBABLE.bit()));
+		assertEquals(6, Long.bitCount(m));
+		// 적 스윕 끝점: 6.4 이하면 지금 점 하나, 16 이면 s = 0.4 → t = 1, 0.6 (원작 루프: 다음 t − s ≥ 0 인 동안)
+		List<Vector3f> out = new ArrayList<>();
+		BladeChain.sweepPoints(new Vector3f(0, 0, 0), new Vector3f(5, 0, 0), out);
+		assertEquals(1, out.size());
+		assertEquals(5f, out.getFirst().x, 1e-6f);
+		out.clear();
+		BladeChain.sweepPoints(new Vector3f(0, 0, 0), new Vector3f(16, 0, 0), out);
+		assertEquals(2, out.size());
+		assertEquals(16f, out.get(0).x, 1e-5f);
+		assertEquals(9.6f, out.get(1).x, 1e-4f);
+		out.clear();
+		BladeChain.sweepPoints(new Vector3f(0, 0, 0), new Vector3f(25.6f, 0, 0), out);
+		assertEquals(4, out.size(), "s = 0.25 → t = 1, .75, .5, .25");
+		assertEquals(6.4f, out.getLast().x, 1e-3f);
+	}
+
+	/** 합성 관절: 등·손 관절은 영웅 옆, lWeapOH 는 정면 (−Z) 60 → 기술 중이면 손 밖. 벽 x−z 평면 z = −30. */
+	@Test
+	void wallPullsBladeToHitPoint() {
+		Vector3f oh = new Vector3f(0, 20, -60);
+		BladeChain.Joints j = (name, out) -> {
+			switch (name) {
+				case "lWeapOH", "rWeapOH" -> out.translation(oh);
+				case "lChainW", "rChainW" -> out.translation(oh.x, oh.y, oh.z + 3);
+				case "Pelvis" -> out.translation(0, 20, 0);
+				default -> out.translation(0, 20, 5);
+			}
+			return true;
+		};
+		float wallZ = -30;
+		List<Long> masks = new ArrayList<>();
+		BladeChain.Walls walls = (from, to, exclude) -> {
+			masks.add(exclude);
+			if (to.z >= wallZ) {
+				return null;
+			}
+			float t = (wallZ - from.z) / (to.z - from.z);
+			Vector3f h = new Vector3f(from).lerp(to, t);
+			return new float[]{h.x, h.y, h.z, 0, 0, 1, 20};
+		};
+		BladeChain c = new BladeChain();
+		Vector3f root = new Vector3f(0, 0, 0);
+		float dt = 1 / 60f;
+		c.update(j, true, false, dt, root, walls);
+		BladeChain.Side s = c.sides[0];
+		assertEquals(BladeChain.OUT_HAND, s.mode);
+		boolean hit = false;
+		for (int f = 0; f < 60; f++) {
+			c.update(j, true, false, dt, root, walls);
+			Vector3f pos = s.blade.getTranslation(new Vector3f());
+			Vector3f point = new Vector3f(s.bladeZ).mul(-BladeChain.BLADE_POINT_BACK).add(pos);
+			assertTrue(point.z >= wallZ - 1e-3f, "블레이드 점은 벽을 넘지 않는다: " + point.z);
+			if (s.wallHit) {
+				hit = true;
+				assertEquals(wallZ, point.z, 1e-3f, "블레이드 점 = 충돌점 (0x1FB370)");
+				assertEquals(0f, s.wallPoint.distance(point), 1e-3f);
+				assertEquals(20, s.wallSheetFx);
+				assertTrue(s.pull.z > 0, "당김 = 충돌점 − 블레이드 점 (+0x50)");
+				assertEquals(20f, s.sweepFrom.y, 1e-5f, "시작점 높이 = 골반");
+				assertFalse(s.sweepTo.isEmpty());
+			}
+		}
+		assertTrue(hit, "벽 너머로 던진 블레이드가 막힘");
+		assertTrue(masks.stream().allMatch(x -> x == BladeChain.WALL_EXCLUDE));
+		// 벽이 없으면 로케이터까지 따라간다
+		BladeChain free = new BladeChain();
+		for (int f = 0; f < 61; f++) {
+			free.update(j, true, false, dt, root, null);
+		}
+		assertFalse(free.sides[0].wallHit);
+		assertEquals(-60f, free.sides[0].blade.getTranslation(new Vector3f()).z, 0.1f);
+		// 손 밖이 아니면 질의 없음
+		masks.clear();
+		BladeChain idle = new BladeChain();
+		idle.update(j, false, false, dt, root, walls);
+		assertTrue(masks.isEmpty());
+		assertTrue(idle.sides[0].sweepTo.isEmpty());
+	}
+
+	@Test
 	void comboThrowsBladesOnChain() throws Exception {
 		Path rom = Path.of(System.getProperty("gow.rom", "../gow-rom"));
 		Assumptions.assumeTrue(Files.exists(rom.resolve("R_HERO0.WAD")), "gow-rom 없음");
@@ -166,6 +256,17 @@ class BladeChainTest {
 			return true;
 		};
 		float dt = 1 / 60f;
+		// 같은 콤보를 정면 (−Z) 25 앞 벽이 있는 사슬로도 (0x1FAFC8)
+		BladeChain walled = BladeChain.fromTweaks(tw);
+		float wallZ = -25;
+		BladeChain.Walls wall = (from, to, exclude) -> {
+			if (to.z >= wallZ || from.z < wallZ) {
+				return null;
+			}
+			Vector3f h = new Vector3f(from).lerp(to, (wallZ - from.z) / (to.z - from.z));
+			return new float[]{h.x, h.y, h.z, 0, 0, 1, 20};
+		};
+		int wallHits = 0;
 		boolean sawOut = false, sawTrail = false, sawLag = false;
 		float maxSeg = 0;
 		Matrix4f oh = new Matrix4f();
@@ -179,6 +280,14 @@ class BladeChainTest {
 			}
 			var m = c.move();
 			chain.update(joints, c.active(), m != null && (m.flags() & 0x80) != 0, dt);
+			walled.update(joints, c.active(), m != null && (m.flags() & 0x80) != 0, dt, ctl.position, wall);
+			for (BladeChain.Side ws : walled.sides) {
+				Vector3f bp = new Vector3f(ws.bladeZ).mul(-BladeChain.BLADE_POINT_BACK).add(ws.blade.getTranslation(new Vector3f()));
+				if (ws.wallHit) {
+					wallHits++;
+					assertEquals(wallZ, bp.z, 1e-2f, "막힌 블레이드 점 = 벽 위 충돌점");
+				}
+			}
 			if (f == 0) {
 				assertEquals(BladeChain.BACK, chain.sides[0].mode, "처음엔 등 (0x1FA5B0)");
 				assertFalse(chain.sides[0].chainVisible);
@@ -202,5 +311,6 @@ class BladeChainTest {
 		assertTrue(sawOut, "□ 콤보 중 왼쪽 블레이드가 손 밖 (사슬 투척)");
 		assertTrue(sawLag, "블레이드가 무기 로케이터를 늦게 따라감 (Blade Damping)");
 		assertTrue(maxSeg > 4, "던진 사슬은 여러 마디: " + maxSeg);
+		assertTrue(wallHits > 0, "던진 블레이드가 앞 벽에 막힘 (골반 관절 조회 포함)");
 	}
 }

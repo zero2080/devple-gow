@@ -1416,6 +1416,11 @@ public final class GameScene implements Scene {
 		world.tick(dt, p.x, p.y, p.z);
 		hero.tickBlades(dt); // 블레이드 사슬 (0x1FDB18): 이번 틱 자세가 정해진 뒤, 블레이드 GO 앵커보다 먼저
 		magicFx.update(hero.magic, p, hero.ctl.yaw, enemies.stream().map(Enemy::fighter).toList(), dt, cam.eye);
+		for (BladeChain.Side s : hero.chain.sides) { // 블레이드 벽 불꽃 (0x1FAFC8 → 0x202248, 45 문서 §3.7)
+			if (s.wallHit) {
+				magicFx.bladeSpark(s.index, s.wallSheetFx, s.wallPoint, s.wallNormal, (n, at) -> session.sound.play(n, at));
+			}
+		}
 		magicFx.weaponWorld(hero.combat, (n, at) -> session.sound.play(n, at)); // 무기-월드 베기 Slice Hit (40 문서 §6)
 		if (hero.player.hp <= 0) {
 			heroDied();
@@ -1591,6 +1596,17 @@ public final class GameScene implements Scene {
 			public void stop(int h) {
 				session.sound.stop(h);
 			}
+		});
+		magicFx.bladeSliceNative = true;
+		hero.setBladeWalls((from, to, exclude) -> { // 0x1FAFC8 벽 질의: 정적 충돌 면 (제외 마스크 0x0B130000) [근사: CDV GO 몸체 제외]
+			Vector3f d = new Vector3f(to).sub(from);
+			float len = d.length();
+			LevelCollision.Hit h = len > 1e-3f && col != null ? col.raycast(from, d.div(len), len, t -> (t.attrs() & exclude) == 0) : null;
+			if (h == null) {
+				return null;
+			}
+			int fx = h.tri().info() != null ? h.tri().info().sheetFx() : 0;
+			return new float[]{h.point().x, h.point().y, h.point().z, h.tri().n().x, h.tri().n().y, h.tri().n().z, fx};
 		});
 		magicFx.setSurface(new devple.gow.engine.fx.MagicFx.Surface() {
 			public float[] cast(Vector3f from, Vector3f to) {
