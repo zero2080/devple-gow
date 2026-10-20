@@ -70,6 +70,7 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 ```
 조작: WASD 이동, J □(약공) / I △(강공) / L ○(잡기) / K ×(점프) / Q L1(방어) / E R1(대시) / Z L2(마법) / C R2(사용: 상자·문·레버·밀기·세이브, 원작과 같음), 방향키 = 오른쪽 스틱(회피),
 Shift L3 + 오른쪽 Shift R3 = 신들의 분노, Enter = START(일시정지).
+키·패드 버튼 바꾸기: `config/keys.properties` (예 `CROSS=K,SPACE`, `pad.CROSS=A`) — [49 문서 §6](49-extensibility.md#6-키-변경).
 디버그 키: 1 충돌선 / 2 볼륨 / 3 카메라 모드 (레벨 뷰어), 4 환경 효과, **5 노멀맵** (원작에 없음, 기본 꺼짐 — `GOW_NORMALMAP=on` 으로 켜고 시작, 44 문서).
 
 게임패드: 연결하면 자동 인식한다 (슬롯 1–16 중 첫 게임패드, 실행 중 꽂고 빼도 1 초 안에 다시 찾음). GLFW 내장 매핑(Xbox·DualShock 4·DualSense 등)을 쓰고,

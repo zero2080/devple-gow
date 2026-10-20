@@ -97,8 +97,8 @@ config/                   사용자 계층 (늘 맨 위 — 개인 키 설정 �
 
 | § | 종류 | 자리 | 상태 |
 |---|------|------|------|
-| 6 | 키 변경 | `keys.properties` | 진행 중 |
-| 7 | 폰트 | `font.properties` + TTF | 진행 중 |
+| 6 | 키 변경 | `keys.properties` | 완료 (키보드·게임패드 버튼) |
+| 7 | 폰트 | `font.properties` + TTF | 완료 (stb_truetype 동적 아틀라스) |
 | 8 | 텍스트·대사 | `text/messages.properties` | 진행 중 |
 | 9 | 스테이지 | `stages.properties` + `rom/` | 진행 중 |
 | 10 | 이벤트 씬 (동영상·스크립트) | `movies.properties` + `rom/*.PSS` + `wad/` | 진행 중 |
@@ -108,6 +108,61 @@ config/                   사용자 계층 (늘 맨 위 — 개인 키 설정 �
 | 14 | 그래픽 (텍스처 PNG) | `textures/` | 진행 중 |
 
 (각 절은 구현과 함께 아래에 채운다.)
+
+## 6. 키 변경
+
+`engine/input/KeyBindings` 가 계층의 `keys.properties` 를 덮어 합쳐 읽는다 (`Content.properties`). 적지 않은 항목은 기본 배치 그대로다.
+- 기본: J=□ I=△ L=○ K=×, Q=L1 E=R1 Z=L2 C=R2, Enter=START, Tab=SELECT, 방향키 = 방향 버튼이자 오른쪽 스틱, WASD = 왼쪽 스틱, 왼쪽/오른쪽 Shift = L3/R3.
+- 개인 설정은 `config/keys.properties` (사용자 계층, 늘 맨 위). 모드가 배치를 들고 와도 그 위에서 덮는다.
+
+```properties
+# config/keys.properties
+CROSS=K,SPACE          # 여러 키 = 쉼표
+SQUARE=J
+STICK_L_UP=W           # 스틱 방향: STICK_L_/STICK_R_ + UP/DOWN/LEFT/RIGHT
+STICK_R_LEFT=LEFT
+SELECT=                # 빈 값 = 키보드에서 뺌
+pad.CROSS=A            # 게임패드 버튼 (위치 기준 GLFW 이름)
+pad.L2=LEFT_TRIGGER,LEFT_BUMPER
+```
+
+| 항목 | 값 |
+|------|----|
+| 동작 | `PadButton` 이름 (`CROSS CIRCLE SQUARE TRIANGLE L1 R1 L2 R2 L3 R3 START SELECT UP DOWN LEFT RIGHT`), `STICK_L_*`, `STICK_R_*`, 앞에 `pad.` = 게임패드 |
+| 키 이름 | GLFW 키 이름에서 `GLFW_KEY_` 를 뺀 것: `A`–`Z`, `0`–`9`, `F1`–`F25`, `KP_0`–`KP_9`, `SPACE ENTER TAB ESCAPE BACKSPACE UP DOWN LEFT RIGHT LEFT_SHIFT RIGHT_CONTROL …` (대소문자 무관, `KEY_` 접두사 허용) |
+| 패드 이름 | GLFW 게임패드 버튼 이름: `A B X Y` (= `CROSS CIRCLE SQUARE TRIANGLE`), `LEFT_BUMPER RIGHT_BUMPER BACK START GUIDE LEFT_THUMB RIGHT_THUMB DPAD_*`, 그리고 `LEFT_TRIGGER RIGHT_TRIGGER` (절반 이상 당김) |
+
+- 모르는 동작·이름은 `[keys]` 경고를 내고 건너뛴다. 값의 이름이 전부 모르는 것이면 그 항목은 기본을 유지한다.
+- 게임패드 스틱 축은 바꾸지 않는다 (키 스틱 값보다 축이 0.2 넘게 기울면 축).
+- 디버그 키 (1–5, 레벨 뷰어·노멀맵 등) 는 장면 코드에 그대로 있다.
+- 이름은 컴파일 때 박힌 GLFW 상수 표로 푼다 — GLFW 네이티브 없이 해석·테스트된다. `Input` 의 공개 API 는 그대로다.
+- 테스트 `KeyBindingsTest` (4개): 기본 배치 = 원래 하드코딩, 여러 키·스틱·패드 해석, 모르는 이름 경고 후 기본 유지, 계층 덮어 합치기.
+
+## 7. 폰트
+
+UI 글자 (`FlpRenderer` 의 동적 라벨) 를 TrueType 폰트로 그릴 수 있다. `font.properties` 가 없으면 아무것도 만들지 않고 원래 FLP 글리프 메시 경로 그대로다.
+
+```properties
+# mods/myfont/font.properties
+ttf=fonts/NanumGothic.ttf   # 계층 디렉터리 기준 (Content.find, 위 계층 우선) 또는 절대 경로
+index=0                     # .ttc 안 폰트 번호
+scale=1.0                   # FLP 글자 높이(em) 에 대한 배율
+yOffset=0                   # 기준선 이동, em 비율 (+ = 아래)
+mode=missing                # missing = FLP 폰트에 없는 글자만 / all = 모든 글자
+bakeSize=48                 # 아틀라스에 굽는 em 픽셀 크기 (8–256)
+```
+
+- 크기: FLP 라벨의 글자 높이 h (`fontHeight/16`) 를 em 으로 보고, TTF em 도 h × scale 에 맞춘다. 기준선은 FLP 글리프와 같은 자리다.
+- `mode=missing`: FLP 폰트 표 (`Font.glyphOf`) 에 없는 글자만 TTF. 원작 폰트에 없는 한글·기호를 보충할 때.
+- `mode=all`: TTF 에 있는 글자는 전부 TTF, TTF 에 없으면 FLP 글리프.
+- 버튼 태그 (`[CircleButton]` 등) 아이콘은 그대로 FLP 클립.
+- 구현:
+  - `TtfGlyphs`: stb_truetype (lwjgl-stb) 로 코드포인트 하나를 굽는다 (GL 없음).
+  - `TtfFont`: 처음 쓰는 글자를 굽어 1024² 아틀라스 장 (RGBA, 흰색 + 알파) 에 `glTexSubImage2D` 로 올린다. 장이 차면 새 장 (`GlyphPacker` 선반 배치, 1px 간격). 한글처럼 글자가 많아도 쓴 글자만 굽는다.
+  - 라벨 하나의 TTF 글자는 장마다 사각형으로 모아 basic 셰이더로 한 번에 그린다. 색·변환은 FLP 글리프와 같다 (uTint = 라벨색 × 노드색, uModel = 라벨 변환).
+- 실패 (파일 없음·해석 실패·범위 밖 값) 는 `[font]` 경고 후 FLP 그대로 또는 기본값.
+- 한계: 커닝 없음, BMP 밖 문자 (서로게이트 쌍) 없음, 아틀라스 장은 끝날 때까지 유지.
+- 테스트 `TtfFontOverrideTest` (5개): 설정 없음 = null, 위 계층 ttf·옵션, 없는 파일·잘못된 값, 아틀라스 선반 배치 (겹침 없음), 시스템 한글 폰트 굽기 (있을 때). GL 그리기는 컴파일만.
 
 ## 15. 도구 · 다른 디스크
 
