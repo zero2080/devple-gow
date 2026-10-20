@@ -129,7 +129,30 @@ public final class PtcVu {
 			}
 			r++;
 		}
+		// 파티클마다 같은 값 (48 문서 §9): 연산 목록, 항력 사용, T0..T3 이 덮는 상수 슬롯
+		nOps = Math.min(tables[6].length, tables[7].length);
+		boolean drag = false;
+		for (int k = 0; k < nOps; k++) {
+			drag |= tables[6][k] == 8;
+		}
+		usesDrag = drag;
+		java.util.TreeSet<Integer> dirty = new java.util.TreeSet<>();
+		for (int t = 0; t < 4; t++) {
+			for (int a : tables[t]) {
+				if (a >= 0 && a < n) {
+					dirty.add(a);
+				}
+			}
+		}
+		dirtySlots = dirty.stream().mapToInt(Integer::intValue).toArray();
 	}
+
+	/** 연산 수 = min(T6, T7). */
+	private final int nOps;
+	/** 연산 8 (항력) 이 있는가 — 없으면 exp 를 계산하지 않는다 (쓰이지 않는 값). */
+	private final boolean usesDrag;
+	/** T0..T3 이 쓰는 상수 슬롯 (상수 영역 안): eval 마다 이것만 원래 값으로 되돌리면 전부 복사한 것과 같다. */
+	private final int[] dirtySlots;
 
 	/** 속성 k 가 VU 레코드 (스트림 1) 안에 있으면 qword 번호, 아니면 −1. */
 	public int recordQword(int k) {
@@ -176,6 +199,9 @@ public final class PtcVu {
 	/** 한 파티클 계산용 작업 공간 (재사용, 단일 스레드). */
 	public final class Eval {
 		final float[][] s = new float[slots.length + 8][4];
+		/** 상수 슬롯을 한 번 전부 복사했는가 (그 뒤로는 바뀌는 슬롯만, {@link #dirtySlots}). */
+		boolean ready;
+		final PtcVu owner = PtcVu.this;
 		final float[][] res = new float[Math.max(nResults, 1)][4];
 		/** 출력 0x222..0x229 (xyzw). */
 		public final float[][] out = new float[8][4];
@@ -207,8 +233,20 @@ public final class PtcVu {
 	 */
 	public void eval(Eval e, float[][] record, long seed, float age, float dt) {
 		float[][] s = e.s;
-		for (int k = 0; k < slots.length; k++) {
-			System.arraycopy(slots[k], 0, s[k], 0, 4);
+		if (!e.ready || e.owner != this) {
+			for (int k = 0; k < slots.length; k++) {
+				System.arraycopy(slots[k], 0, s[k], 0, 4);
+			}
+			e.ready = e.owner == this;
+		} else {
+			// 연산·출력은 s 를 쓰지 않는다 → 지난 eval 이 바꾼 슬롯 (T0..T3 대상) 만 되돌리면 전부 복사한 것과 같다 (48 문서 §9)
+			for (int k : dirtySlots) {
+				float[] src = slots[k], dst = s[k];
+				dst[0] = src[0];
+				dst[1] = src[1];
+				dst[2] = src[2];
+				dst[3] = src[3];
+			}
 		}
 		if (record != null) {
 			for (int k = 0; k < tables[0].length && k < record.length; k++) {
@@ -239,42 +277,88 @@ public final class PtcVu {
 		}
 		float t = age, t2 = age * age / 2, tp = age - dt, tp2 = tp * tp / 2;
 		float[] s0 = at(s, 0);
-		float drag = (float) Math.exp(-s0[2] * t);
+		float drag = usesDrag ? (float) Math.exp(-s0[2] * t) : 0; // 연산 8 만 쓴다
 		e.uvSet = false;
 		int r = 0;
-		for (int k = 0; k < tables[6].length && k < tables[7].length; k++) {
+		float sx = s0[0];
+		for (int k = 0; k < nOps; k++) {
 			int op = tables[6][k], a = tables[7][k];
 			float[] c0 = at(s, a), c1 = at(s, a + 1), c2 = at(s, a + 2), c3 = at(s, a + 3);
+			// 연산 분기를 성분 루프 밖으로 (48 문서 §9) — 성분마다 같은 식·같은 순서라 값은 같다
 			if (outputs(op) == 2 && r < e.res.length) {
 				float[] p = e.res[r++];
-				for (int i = 0; i < 4; i++) {
-					p[i] = switch (op) {
-						case 1 -> c0[i] - c1[i] * tp;
-						case 11 -> c0[i] + c1[i] * tp;
-						case 12 -> c0[i] + c1[i] * tp + c2[i] * tp2;
-						case 19 -> c0[i] - c1[i] * dt;
-						default -> c0[i];
-					};
+				switch (op) {
+					case 1 -> {
+						for (int i = 0; i < 4; i++) {
+							p[i] = c0[i] - c1[i] * tp;
+						}
+					}
+					case 11 -> {
+						for (int i = 0; i < 4; i++) {
+							p[i] = c0[i] + c1[i] * tp;
+						}
+					}
+					case 12 -> {
+						for (int i = 0; i < 4; i++) {
+							p[i] = c0[i] + c1[i] * tp + c2[i] * tp2;
+						}
+					}
+					case 19 -> {
+						for (int i = 0; i < 4; i++) {
+							p[i] = c0[i] - c1[i] * dt;
+						}
+					}
+					default -> System.arraycopy(c0, 0, p, 0, 4);
 				}
 			}
 			if (r >= e.res.length) {
 				break;
 			}
 			float[] v = e.res[r++];
-			for (int i = 0; i < 4; i++) {
-				v[i] = switch (op) {
-					case 2, 11 -> c0[i] + c1[i] * t;
-					case 3 -> clamp(c0[i] + c1[i] * t);
-					case 4, 12 -> c0[i] + c1[i] * t + c2[i] * t2;
-					case 5 -> clamp(c0[i] + c1[i] * t + c2[i] * t2);
-					case 16 -> c1[i] * c0[i];
-					case 17 -> (c1[i] + c2[i] * t) * c0[i];
-					case 18 -> (c1[i] + c2[i] * t + c3[i] * t2) * c0[i];
-					// 0x0FB: 선형 항력 해 p0 + g·x·t + (v0 − g·x)·x·(1 − e^(−k·t)), x = 슬롯0.x (= 1/k), k = 슬롯0.z
-					case 8 -> c0[i] + c2[i] * s0[0] * t + (c1[i] - c2[i] * s0[0]) * s0[0] * (1 - drag);
-					// 0, 1, 19 = C0; 6/7 (절대 VU 메모리 참조 — 디스크의 PTC 가 쓰지 않음) 는 C0 로
-					default -> c0[i];
-				};
+			switch (op) {
+				case 2, 11 -> {
+					for (int i = 0; i < 4; i++) {
+						v[i] = c0[i] + c1[i] * t;
+					}
+				}
+				case 3 -> {
+					for (int i = 0; i < 4; i++) {
+						v[i] = clamp(c0[i] + c1[i] * t);
+					}
+				}
+				case 4, 12 -> {
+					for (int i = 0; i < 4; i++) {
+						v[i] = c0[i] + c1[i] * t + c2[i] * t2;
+					}
+				}
+				case 5 -> {
+					for (int i = 0; i < 4; i++) {
+						v[i] = clamp(c0[i] + c1[i] * t + c2[i] * t2);
+					}
+				}
+				case 16 -> {
+					for (int i = 0; i < 4; i++) {
+						v[i] = c1[i] * c0[i];
+					}
+				}
+				case 17 -> {
+					for (int i = 0; i < 4; i++) {
+						v[i] = (c1[i] + c2[i] * t) * c0[i];
+					}
+				}
+				case 18 -> {
+					for (int i = 0; i < 4; i++) {
+						v[i] = (c1[i] + c2[i] * t + c3[i] * t2) * c0[i];
+					}
+				}
+				// 0x0FB: 선형 항력 해 p0 + g·x·t + (v0 − g·x)·x·(1 − e^(−k·t)), x = 슬롯0.x (= 1/k), k = 슬롯0.z
+				case 8 -> {
+					for (int i = 0; i < 4; i++) {
+						v[i] = c0[i] + c2[i] * sx * t + (c1[i] - c2[i] * sx) * sx * (1 - drag);
+					}
+				}
+				// 0, 1, 19 = C0; 6/7 (절대 VU 메모리 참조 — 디스크의 PTC 가 쓰지 않음) 는 C0 로
+				default -> System.arraycopy(c0, 0, v, 0, 4);
 			}
 			if (op == 9) {
 				plane1(c0, c1, c2, t, v);

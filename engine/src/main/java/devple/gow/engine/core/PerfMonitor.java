@@ -48,6 +48,12 @@ public final class PerfMonitor {
 	/** 이 이상 걸린 프레임은 한 줄 따로 (`# hitch`). */
 	private static final double HITCH_MS = Double.parseDouble(System.getProperty("gow.perf.hitch", "25"));
 
+	/** 적재 단계 시간 (48 문서 §9): {@link #loadTime} 한 줄을 남기고 지금 시각을 돌려준다 (다음 단계의 시작). */
+	public static long phase(String what, long startNanos) {
+		loadTime(what, startNanos);
+		return System.nanoTime();
+	}
+
 	/** 적재 구간 시간 (48 문서 §8): {@code -Dgow.perf} 일 때만 `# load 시각 이름 ms` 한 줄. */
 	public static void loadTime(String what, long startNanos) {
 		PerfMonitor p = active;

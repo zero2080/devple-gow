@@ -2,6 +2,9 @@
 
 코드: `core/PerfMonitor` (측정), `render/GlStats` (GL 객체 수), `GameScene` 체인 (`-Dgow.chain`), `ScriptedInput` 반복·스틱.
 백그라운드 적재 (§8): `asset/Loader`, `asset/WadAssets` (prefetch · prepare/upload), `level/LevelScene.prepare`, `GameScene` (prefetch · 이웃 장면 캐시).
+전환 프레임·파티클·자세 (§9): `scene/Scene.preload` · `SceneManager`, `GameScene.preload`, `LevelScene.preUpload/exitDeferred`, `render/Shader` (프로그램 풀), `render/GlDeferred`,
+`level/HostLevel.candidates`, `tools/fx/EffectLibrary.preparse` · `WadFile.putDerived`, `fx/ParticleSystem` (VBO orphan · 정의별 색인 · 정점 배열), `tools/fx/PtcVu.eval`,
+`tools/anim/Skeleton.localMatrixInto/worldInto` · `Mat4.*Into` · `Pose.world`, `AnimatedModel` (스키닝 작업 공간), `core/Engine` (`gow.lockstep`), 시험 `fx/HotPathEquivalenceTest`.
 수정: `combat/AiTargets` (정적 슬롯 정리), `level/LevelScene.exit`, `game/GameScene.exit`, `audio/OpenAlBackend`·`SoundManager` (클립 버퍼),
 `fx/MagicFx.unbind`, `anim/Animator.pose` · `tools/anim/Pose.world` (메모), `render/Shader.loc`, `light/ShadowVolume` (작업 공간), `fx/ParticleSystem`.
 테스트 위생: `test/.../StaticStateReset` (+ `junit-platform.properties`, `META-INF/services`), `EnemyNavTest`, `HitVolumesTest`, `TraversalVerifier.run`.
@@ -144,9 +147,8 @@ CPU 상위는 PAND03G 에서 파티클 VU 에뮬레이션 (`renderVu` 27 %, `Ptc
 
 1. ~~**동기 적재 히치**: LoadWad·이음은 메인 스레드에서 WAD 읽기·해석·GL 올리기를 한 번에 한다. DEST01 이웃 교체 50–80 ms 되풀이, 레벨 전환 130–350 ms~~
    → §8 (이웃 재교체 히치 없음, 처음 교체 ≤ 27 ms, 전환 프레임 65–156 ms). 남은 메인 스레드 몫은 §8.5.
-2. PAND03G 프레임 작업 12.8 ms (p99 15.7) — 60 Hz 예산 16.7 ms 에 가깝다. 대부분 파티클 VU 에뮬레이션 (`PtcVu.eval`, 파티클마다 VU 프로그램 해석).
-   VU 프로그램별 미리 컴파일 (식 트리 → 람다) 이 후보.
-3. 애니메이션 샘플 자체 (`Skeleton.localMatrix`·`Mat4.mul` 이 관절마다 `float[16]`) 는 Animator 당 틱 1 회로 줄었지만 남아 있다 — 할당 1 위.
+2. ~~PAND03G 프레임 작업 12.8 ms (p99 15.7) — 대부분 파티클 VU 에뮬레이션~~ → §9.4: 실제로는 파티클 VBO 덮어쓰기의 GPU 동기. 1.9 ms (p99 4.6).
+3. ~~애니메이션 샘플 자체 (`Skeleton.localMatrix`·`Mat4.mul` 이 관절마다 `float[16]`) — 할당 1 위~~ → §9.5 (임시 행렬 없음, 돌려주는 월드 행렬만).
 4. 힙 커밋은 G1 이 돌려주지 않는다 (체인 뒤 600–900 MB). RSS 1.0–1.4 GB.
 5. R_PERMK 공용 소리 뱅크의 클립 캐시는 재생된 소리만큼 자란다 (상한 = 뱅크 크기, 체인 26 회 뒤 ≈ 160).
 6. ATHN02D 헤드리스 메두사의 "영웅 석화" 단계는 씨앗에 따라 나오거나 안 나온다 — 이제 결정적이지만 지금 씨앗에서는 안 나온다
@@ -211,7 +213,103 @@ DEST01 이웃 교체:
   GL tex/buf/vao (PAND03G 106/621/315, DEST01 127/2380/1196, OLYMP02 74/1349/680) 가 같다. 떠나기 직전 측정은 다음 레벨 준비분 (≈ 40 MB, 페이드 동안) 이 더해져 보인다.
 - 시험 399 (+2 `BackgroundLoadTest`) 통과.
 
-### 8.5 남은 메인 스레드 적재 (전환 프레임 40–110 ms)
+### 8.5 남은 메인 스레드 적재 (전환 프레임 40–110 ms) → §9
 레벨 장면 GL 올리기 7–31 · HeroRig (스키닝 모델 GL·튜닝·전투 데이터) 12–16 · HUD FLP 4–30 · `Tweaks.load` (R_PERMK·레벨, 매번 해석) 5–10 · MagicFx (EffectSystem GL) 11–15 ·
 스크립트 시작·도착 배치 0–30 ms. 그리고 이웃 교체의 게임용 데이터 (`other`) 2–6 ms 는 그 틱에 필요해 동기로 둔다. 후보: GL 올리기를 여러 프레임에 나누기 (페이드 인 동안),
 R_PERMK 튜닝·HUD 를 세션에 상주 (레벨마다 같은 내용).
+
+## 9. 전환 프레임 메인 스레드 몫 · PAND03G 파티클 · 자세 샘플 할당 (§7.2·§7.3·§8.5)
+
+원작 동작은 그대로다: 게임 로직·값·순서는 바꾸지 않고, 바뀌는 것은 **어느 프레임·스레드에서 만드는가**, GL 객체를 다시 쓰는가, 같은 값을 덜 계산·덜 할당하는가뿐.
+전 레벨 순회 보고서 `work/verify/report.md` 는 수정 전후 글자 하나 다르지 않고, 파티클 출력은 정점 해시로 (§9.4), 자세·VU 식은 참조 구현과 비트 단위로 (`HotPathEquivalenceTest`) 같다.
+
+### 9.1 계측 추가 (원작에 없음, 기본 꺼짐)
+| 옵션·줄 | 뜻 |
+|---|---|
+| `# load … . 단계 ms` | `GameScene.enter` 단계별 (`. level GL` · `. hero` · `. hud` · `. tweaks` · `. enemy kinds` · `. boss` · `. magicFx` · `. wireEffects` · `. spawn` · `. script start` …) |
+| `# load … exit 레벨` / `first update·render 레벨` | 떠나는 씬 exit, 들어온 씬의 첫 두 틱·그리기 |
+| `# load … pre 단계` | 페이드 동안 미리 한 일 (§9.2) |
+| 게이지 `ptcMs=` | 프레임당 파티클 그리기 ms (모든 `ParticleSystem.render`, CPU + GL 호출) |
+| `-Dgow.lockstep` | 프레임마다 로직 틱 하나·보간 0, LevelFx 그리기 간격 = 1/60, GameScene 난수 씨앗 1 → 벽시계와 무관하게 같은 화면 순서 (출력 비교용) |
+| `-Dgow.ptcHash=파일` | 프레임마다 "프레임 그리기수 정점수 해시" — 파티클 VBO 로 올리는 float 전부 + 그리기 정점 수의 누적 해시 |
+| `-Dgow.shaderPool=false` · `-Dgow.preload.ms=4` | 셰이더 풀 끄기 (비교용) · 페이드 한 틱에 미리 할 시간 |
+
+JFR 은 1 ms 샘플 (`profile.jfc` 에서 `jdk.ExecutionSample`·`NativeMethodSample` period = 1 ms) 로 전환 프레임 (enter·첫 그리기) 스택을 모았다.
+
+### 9.2 전환 프레임 (§8.5) — 수정 전 분석과 수정
+수정 전 10 레벨 체인 (§8.2 시나리오, `-Dgow.perf.hitch=10`) 의 enter 단계 (ms): 레벨 GL 4–27 · 영웅 10–14 · HUD 3–29 (레벨 HUD 가 레벨 WAD 를 메인에서 다시 해석) ·
+튜닝 4–5 · 적 종류 0–6 · 보스 0–15 · MagicFx 8–22 · wireEffects 1–13 · 숙주 찾기 (ATHN02D) 32 · 스크립트 시작 0–71 (레벨 템플릿 적 = 레벨 WAD 다시 해석·모델) · exit 2–8.
+JFR: enter 샘플의 28 % 가 `glCompileShader`/`glLinkProgram` (레벨마다 같은 셰이더 8–10 개: 영웅·적·이펙트 스키닝, 파티클 × 3, 렌즈 플레어, 그림자 …), 16 % 가 텍스처 (밉맵·TexImage), exit 은 VAO·버퍼 지우기.
+
+| 수정 | 내용 |
+|---|---|
+| `Scene.preload` · `SceneManager` | 페이드 아웃 (0.4 초, 이전 씬은 그리기만 하고 갱신 안 됨) 동안 틱마다 다음 씬의 `preload`. 동기 모드 (`gow.syncLoad`, 스크린샷) 는 하지 않는다 |
+| `GameScene.preload` | 틱마다 4 ms 까지 단계별로: 영웅 (`HeroRig` — R_HERO 모델·스켈레톤·애니·전투 데이터·블레이드) → HUD (`UiLayer` FLP_HUDK) → `MagicFx` → god 블레이드 → 레벨 GL (`LevelScene.preUpload`: 렌즈 플레어 → 배치 하나씩 → 와이어 → LevelFx, 예전 enter 와 같은 순서) → 레벨 HUD → 오브 튜닝·Breakables·레벨 영웅 애니 연결 → RSRCS 적 종류 (`EnemyFactory.load`). enter 는 만든 것을 그대로 쓴다. 모두 이 씬만의 새 객체이고 정적 상태·이전 씬을 건드리지 않는다 (소리 뱅크 올리기·튜닝 합치기·적 영웅 애니 연결은 이전 씬 exit 뒤여야 해서 enter 에 둠) |
+| `Shader` 프로그램 풀 | 닫은 프로그램을 (정점, 조각) 쌍별로 두었다가 (쌍마다 ≤ 8) 다음 `new Shader` 가 다시 쓴다. 링크 직후 모든 활성 유니폼 값을 저장해 두고 다시 쓸 때 `glProgramUniform*` 로 되돌린다 → 새로 링크한 프로그램과 상태가 같다 (유니폼 블록·속성 바인딩 없음). 이중 close 는 무시 |
+| `GlDeferred` · `LevelScene.exitDeferred` | 떠난 레벨·이웃 장면 (캐시에서 밀려난 것 포함) 의 GL 해제를 다음 틱들에 1.5 ms 씩 (같은 순서, 배치 32 개씩). GL 해제뿐이라 게임에 보이는 차이 없음 |
+| 레벨 WAD 다시 열기 미리 해석 | 레벨 준비 (적재 스레드) 가 레벨 HUD (FLP_)·보스 (BossDirector)·레벨 AI1 템플릿 오브젝트 수만큼 (합쳐 ≤ 3) `WadAssets.prefetch(레벨)` — 해석 사본은 enter 끝에 버림 |
+| 이펙트 GO 표 미리 | `EffectLibrary.preparse(WadFile)`: `add` 의 해석을 적재 스레드에서 해 그 WadFile 에 붙여 둔다 (`WadFile.putDerived`, 전역 표 없음 — WAD 와 함께 버려짐). 레벨 WAD·RSRCS 적 WAD·MagicFx 의 R_PERMK·레벨 다시 열기 사본 |
+| 숙주 레벨 · 이웃 데이터 | `HostLevel.candidates` (WAD 읽기·스크립트 검사·충돌) 를 레벨 준비에서, `find` 는 점 질의만. enter 안의 `loadOther` (이음 도착 = 떠나온 레벨, 숙주) 가 쓸 LevelData·충돌도 적재 스레드에서 (값·예외 순서 같음, enter 끝에 비움) |
+
+### 9.3 결과 (10 레벨 체인, 같은 시나리오·같은 기계)
+전환 프레임 = 씬 교체 + 첫 틱·그리기 (`# hitch` work, 10 ms 미만이면 기록 안 됨). enter 단계는 수정 뒤 남은 큰 것만.
+
+| 레벨 | 전환 프레임 전 → 뒤 (ms) | swap (exit+enter) 전 → 뒤 | 뒤에 남은 enter 단계 |
+|---|---|---|---|
+| ATHN02A (JIT 덜 데워짐) | 211 → 46 | 180 → 19 | 스크립트 시작 7.6 (레벨 템플릿 적 스폰), 첫 그리기 19 |
+| ATHN02D | 103 → 21 | 90 → 13 | 보스 3.4, 숙주 (이웃 데이터 넣기) 4.0 |
+| PAND03G | 114 → 19 | 100 → 10 | 보스 3.7 |
+| PAND04AA | 83 → 16 | 68 → 5 | — |
+| DEST01 | 108 → 26 | 93 → 14 | 스크립트 시작 6.8 |
+| OLYMP02 | 74 → 22 | 50 → 3 | 첫 그리기 17 |
+| ATHN08B | 101 → 40 | 82 → 27 | 보스 8.4, wireEffects 9.3 (이 회차만, 다른 회차 0.2) |
+| HDES01A | 85 → 26 | 62 → 10 | 스크립트 시작 7.1 |
+| ATHN01A (두 번) | 74 / 73 → 21 / 20 | 47 / 45 → 4 / 4 | — |
+
+- 페이드 아웃 프레임 (미리 하기) 최대 10–18 ms (영웅 한 단계 7–9 ms, LevelFx 5–11 ms), 첫 전환만 34 ms (JIT). 수정 전 페이드 인 프레임에 있던 25–32 ms 프레임은 없어졌다 (최대 23 → 대부분 10 미만).
+- 남은 몫의 가장 큰 것은 **첫 그리기** (적재 직후 첫 render 5–20 ms, 안정 상태 5–8): 드라이버의 첫 그리기 (지연 업로드·셰이더 변형, `glDrawElements` 가 JFR 1 위), HUD `FlpRenderer` 의 텍스처 첫 생성, 파티클 첫 버퍼.
+- 누수 (§2 방식: `ATHN02A,PAND03G,DEST01,OLYMP02` × 2 바퀴, 20 초, 매번 전체 GC): 같은 레벨의 살아 있는 힙 1 → 2 바퀴 PAND03G 267/267, DEST01 267/267, OLYMP02 185/185, ATHN02A 269/269 MB, GL tex/buf/vao 바퀴마다 같다 (예: DEST01 127/2380/1196).
+  수정 전 같은 실행은 258·265·183·267 MB — 차이 +2 (PAND03G +9) 는 파티클 정점 배열 (필요한 만큼 자람, §9.4). 셰이더 프로그램 수 9–11 → 16–17 (풀에서 쉬는 것, 늘지 않음).
+- 시험 409 (+2 `HotPathEquivalenceTest`) 통과, 순회 보고서 동일.
+
+### 9.4 PAND03G 파티클 (§7.2)
+JFR (1 ms) 로 보니 PAND03G 메인 스레드 샘플의 78 % 가 `ParticleSystem.flush` 의 `glBufferSubData(0)` 안 (네이티브 대기) 이었다: 한 프레임에 정의마다 (≈ 50 번) 같은 VBO 의 앞부분을
+다시 쓰므로 바로 앞 그리기가 끝날 때까지 GPU 를 기다린다. VU 식 해석 (`PtcVu.eval`) 은 CPU 쪽 몫 (≈ 10 %).
+
+| 수정 (`fx/ParticleSystem`, `tools/fx/PtcVu`) | 내용 (출력 같음) |
+|---|---|
+| VBO orphan | `glBufferSubData` → `glBufferData(같은 바이트, GL_STREAM_DRAW)` — 드라이버가 새 저장소를 주므로 기다리지 않는다. 올리는 float·그리기 호출·나눠 그리는 경계 (GL 버퍼 용량) 는 같다 |
+| 정점 배열 | 정점마다 `FloatBuffer.put` 9 번 → 자바 배열에 쓰고 올릴 때 한 번에 복사 (배열은 필요한 만큼 자람) |
+| 정의별 색인 | 정의마다 전체 파티클을 훑던 것을 프레임에 한 번 계수 정렬 (정의 객체 동일성별, 색인 순 그대로). 정의 목록의 `contains` (레코드 깊은 equals — `Shape.equals` 가 상위였다) 는 정의 객체마다 한 번. 같은 내용의 다른 정의 객체는 예전처럼 처음 것만 목록에 (그 파티클은 그리지 않는 동작 그대로) |
+| `PtcVu.eval` | 상수 슬롯 전부 복사 → T0..T3 이 쓰는 슬롯만 되돌림 (연산은 슬롯을 쓰지 않으므로 같다; 작업 공간의 첫 eval 은 전부), 연산 분기를 성분 루프 밖으로 (같은 식·순서), 항력 `exp` 는 연산 8 이 있을 때만 (쓰이지 않는 값) |
+
+검증: `-Dgow.lockstep -Dgow.syncLoad -Dgow.ptcHash` 로 수정 전·후 실행의 프레임별 해시가 PAND03G 1800 프레임 (프레임당 ≈ 57 그리기·5.6 만 정점), ATHN01A 1800, DEST01·HDES01A 각 1200 프레임 모두 같다
+(수정 전끼리 두 번도 같음 = 결정적). `HotPathEquivalenceTest`: 6 WAD 의 VU 프로그램 347 개 × 40 회 (작업 공간을 이어 쓰며) 를 예전 eval 과 비트 비교.
+
+| PAND03G 180 초 (§1.2 스크립트) | 수정 전 | 수정 뒤 |
+|---|---|---|
+| 파티클 그리기 `ptcMs` | 9.8–12.3 (평균 11.5) | 0.70–0.81 |
+| 프레임 작업 평균 / p99 / 최대 (ms) | 12.7 / 15.4 / 31.5 | 1.9 / 4.6 / 23.8 |
+| 프레임 간격 평균 | 13.0 ms | 2.2 ms |
+| 살아 있는 힙 30 → 180 초 | 145 → 148 MB | 146 → 150 MB |
+
+(이 기계는 이 실행에서 스왑이 vsync 를 기다리지 않아 프레임 수가 6 배 — GC 횟수 6 → 14 는 프레임당으로는 줄었다.) ATHN01A 60 초도 프레임 작업 7.6 / 10.1 → 3.1 / 8.1 ms (같은 VBO 동기 + §9.5 의 자세 GO).
+
+### 9.5 자세 샘플 할당 (§7.3)
+| 수정 | 내용 (값 같음) |
+|---|---|
+| `Skeleton.localMatrixInto` · `worldInto` · `Mat4.mulInto/fromEulerInto/fromQuatInto/mul3Into` | 관절마다 로컬 행렬 (오일러 = `float[16]` 6 개, 쿼터니언 1–2 개) + 월드 곱 1 개 → 스레드별 작업 공간 (적재 스레드도 자세를 샘플). 행렬 곱은 같은 루프·순서 |
+| `Pose.world` | 로컬은 작업 공간에, 돌려주는 월드 행렬 (메모, 읽기 전용) 만 새로 — 관절당 8 개 → 1 개 |
+| `AnimatedModel.draw` | 스키닝 행렬 (inverse bind · world) 을 모델별 작업 공간에 (그리기 안에서만 쓰임) |
+| `LevelScene.drawPosed` | 모델이 없는 이름도 기억 — `computeIfAbsent` 가 null 을 넣지 않아 그런 GO 는 프레임마다 레벨 전체 배치의 관절 월드 (`placements()` → `GoInstance.matrix`·`bindWorld`) 를 다시 만들었다. ATHN01A 할당 1 위 `Mat4.fromEuler/mul` 의 실제 출처 |
+
+ATHN01A 60 초 JFR 할당 상위: 수정 전 `Mat4.mul` 29 %, `Mat4.identity` 19 %, `Pose.<init>` 6 %, `Skeleton.worldOf` 4 % → 수정 뒤 `Mat4` 없음, `LevelCollision.intersect` 12 %, `Pose.<init>` 9 %, `Pose.world` (돌려주는 월드 행렬) 7 %.
+`HotPathEquivalenceTest`: 영웅 클립 60 개 × 4 시각의 `Pose.world` 와 아이들 로컬이 예전 코드와 비트 같음.
+
+### 9.6 남은 것
+1. 적재 직후 첫 그리기 5–20 ms (드라이버 첫 그리기·HUD 텍스처 첫 생성) — 페이드 동안 화면 밖으로 한 번 그려 두는 방법은 그리기 시간에 따라 진행하는 상태 (LevelFx 등) 가 있어 보류.
+2. 스크립트 시작의 적 스폰 (레벨 템플릿 종류 = `EnemyFactory.load` 튜닝 + 모델 GL) 0–8 ms, 보스 3–9 ms, 첫 전환 (JIT 덜 데워짐) 46 ms. 페이드 중 영웅 한 단계 7–9 ms (CPU 부분은 적재 스레드로 옮길 수 있음).
+3. `BladeChainRenderer.flush` 도 같은 `glBufferSubData` 동기 — PAND03G 수정 뒤 남은 메인 스레드 샘플의 18 %. 사슬 작업과 겹쳐 손대지 않았다 (같은 orphan 한 줄로 해결될 것).
+4. `Pose.<init>` (샘플마다 관절 × 3 배열) 와 `Pose.world` 의 돌려주는 행렬은 남음 — Animator 단위로 Pose 를 다시 쓰려면 이전 Pose·월드 배열을 붙잡는 호출자 (보스 동기 등) 확인이 먼저.
+5. 셰이더 풀은 앱이 끝날 때까지 쉬는 프로그램을 둔다 (쌍마다 ≤ 8, 지금 7 개 남짓).
+6. 페이드 동안 새 레벨 GL 을 먼저 올리고 떠난 레벨 GL 은 교체 뒤에 지우므로 전환 몇 프레임 동안 두 레벨의 GL 자원이 함께 있다 (VRAM 최대치 증가).

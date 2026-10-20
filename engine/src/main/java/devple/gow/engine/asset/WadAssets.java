@@ -66,11 +66,24 @@ public final class WadAssets implements AutoCloseable {
 	 * (같은 파일을 같은 코드로 해석한 값 — 동기와 같음). 없는 파일은 무시.
 	 */
 	public static void prefetch(Path wadPath) {
+		prefetch(wadPath, null);
+	}
+
+	/**
+	 * {@link #prefetch(Path)} + 해석한 WadFile 에 GL 없는 파생 해석을 더 붙인다 (예: 이펙트 GO 표 {@code EffectLibrary::preparse}, 48 문서 §9).
+	 */
+	public static void prefetch(Path wadPath, java.util.function.Consumer<WadFile> derive) {
 		if (!Loader.async() || !java.nio.file.Files.exists(wadPath)) {
 			return;
 		}
 		Path key = wadPath.toAbsolutePath().normalize();
-		var f = Loader.submit("wad " + key.getFileName(), () -> Parsed.of(key));
+		var f = Loader.submit("wad " + key.getFileName(), () -> {
+			Parsed p = Parsed.of(key);
+			if (derive != null) {
+				derive.accept(p.wad());
+			}
+			return p;
+		});
 		synchronized (PREFETCH) {
 			PREFETCH.computeIfAbsent(key, k -> new java.util.ArrayDeque<>()).add(f);
 		}

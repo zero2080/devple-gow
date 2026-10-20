@@ -185,6 +185,7 @@ public final class AnimatedModel implements AutoCloseable {
 	}
 
 	private final float[] colorScale = {1, 1, 1};
+	private float[][] skinOut, skinRows;
 
 	/** 마지막 draw 의 라이트 묶음 (없으면 null) — 디버그 출력용. */
 	public devple.gow.engine.light.LightRig lastLights;
@@ -199,7 +200,11 @@ public final class AnimatedModel implements AutoCloseable {
 
 	/** 관절 월드 행렬을 직접 받아 그린다 (레벨 오브젝트 Animator 애니: 관절 = 애니 월드 × 인스턴스 행렬, world = 단위). */
 	public void draw(Camera cam, float aspect, Matrix4f world, float[][] w, Texture white, float fxTime, float alpha) {
-		float[][] skin = skeleton.skin(w);
+		if (skinOut == null) {
+			skinOut = new float[skeleton.size()][];
+			skinRows = new float[skeleton.size()][];
+		}
+		float[][] skin = skeleton.skin(w, skinOut, skinRows); // 그리기 안에서만 쓰는 작업 공간 (48 문서 §9)
 		ShadowCasters sc = shadow != null ? ShadowCasters.current() : null;
 		if (sc != null && sc.collecting()) {
 			sc.submit(this, shadowParent, shadow, w, hiddenJoints, world, devple.gow.engine.light.LightServer.jointSphere(w, world, new org.joml.Vector4f()),

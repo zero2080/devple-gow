@@ -160,7 +160,7 @@ public final class LevelFx implements AutoCloseable {
 		// 통합 게임 씬은 LevelScene.update 를 부르지 않는다 → 렌더 간격으로 스스로 진행
 		long now = System.nanoTime();
 		if (!updatedSinceRender && lastRenderNanos != 0) {
-			update(e, (now - lastRenderNanos) / 1e9f, cam.eye);
+			update(e, Engine.LOCKSTEP ? Engine.TICK : (now - lastRenderNanos) / 1e9f, cam.eye); // 검증 lockstep 이면 고정 간격
 		}
 		updatedSinceRender = false;
 		lastRenderNanos = now;

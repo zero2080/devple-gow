@@ -12,6 +12,8 @@ import java.util.List;
 public final class SceneManager {
 
 	private static final float FADE_TIME = 0.4f;
+	/** 틱마다 미룬 GL 해제에 쓸 시간. */
+	private static final long DEFER_NS = 1_500_000;
 
 	private final List<Scene> stack = new ArrayList<>();
 	private Scene pending;
@@ -40,6 +42,7 @@ public final class SceneManager {
 	}
 
 	public void update(Engine e, float dt) {
+		devple.gow.engine.render.GlDeferred.drain(DEFER_NS); // 떠난 씬의 미룬 GL 해제 (48 문서 §9)
 		if (fadeDir != 0) {
 			fade += fadeDir * dt / FADE_TIME;
 			if (fade >= 1f && pending != null) {
@@ -55,6 +58,7 @@ public final class SceneManager {
 				fadeDir = 0;
 			}
 			if (pending != null) {
+				pending.preload(e); // 페이드 아웃 동안 다음 씬 미리 올리기 (48 문서 §9)
 				return;
 			}
 		}

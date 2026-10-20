@@ -34,6 +34,9 @@ public final class Engine implements AutoCloseable {
 		this.renderer = new Renderer(this);
 	}
 
+	/** -Dgow.lockstep: 프레임마다 로직 틱 하나 (검증용, 원작에 없음). */
+	public static final boolean LOCKSTEP = Boolean.getBoolean("gow.lockstep");
+
 	public void run(Scene first) {
 		scenes.push(this, first);
 		PerfMonitor perf = PerfMonitor.fromSystem(); // -Dgow.perf=파일 (48 문서)
@@ -46,6 +49,9 @@ public final class Engine implements AutoCloseable {
 			double now = glfwGetTime();
 			acc += Math.min(now - prev, 0.25);
 			prev = now;
+			if (LOCKSTEP) {
+				acc = TICK; // 검증: 프레임마다 틱 정확히 하나, 보간 0 (벽시계와 무관하게 같은 화면 순서, 48 문서 §9)
+			}
 			while (acc >= TICK) {
 				input.poll();
 				scenes.update(this, TICK);
@@ -60,6 +66,7 @@ public final class Engine implements AutoCloseable {
 				captureTick = -1;
 				capture();
 			}
+			devple.gow.engine.fx.ParticleSystem.hashFrame(frames);
 			if (perf != null) {
 				perf.frameEnd(this);
 			}

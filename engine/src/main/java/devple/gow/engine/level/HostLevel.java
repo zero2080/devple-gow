@@ -30,6 +30,17 @@ public final class HostLevel {
 
 	/** 숙주 레벨 이름 (WAD 확장자 없이 대문자), 없으면 null. (x, y, z) = 이 레벨에서 서 있어야 할 점 (시작 위치 등). */
 	public static String find(Path rom, String level, float x, float y, float z) {
+		return find(candidates(rom, level), x, y, z);
+	}
+
+	/** 숙주 후보: 이 레벨을 적재하는 같은 접두사 레벨 (이름 순) 과 그 충돌. */
+	public record Candidate(String name, LevelCollision collision) {
+	}
+
+	/**
+	 * {@link #find} 의 무거운 앞부분 (WAD 읽기·스크립트 검사·충돌 만들기). GL 없음 → 적재 스레드에서 미리 해도 된다 (48 문서 §9). 목록을 못 읽으면 null.
+	 */
+	public static List<Candidate> candidates(Path rom, String level) {
 		String me = level.toUpperCase(Locale.ROOT);
 		String prefix = me.substring(0, Math.min(6, me.length()));
 		List<Path> cands;
@@ -41,19 +52,34 @@ public final class HostLevel {
 		} catch (IOException e) {
 			return null;
 		}
+		List<Candidate> out = new java.util.ArrayList<>();
 		for (Path p : cands) {
 			try {
 				WadFile w = WadFile.load(p);
 				if (!loads(w, me)) {
 					continue;
 				}
-				LevelCollision col = new LevelCollision(new LevelData(w).sheets);
-				if (!Float.isNaN(col.groundHeight(x, y + 32, z, 600))) {
-					String n = p.getFileName().toString();
-					return n.substring(0, n.length() - 4).toUpperCase(Locale.ROOT);
-				}
+				String n = p.getFileName().toString();
+				out.add(new Candidate(n.substring(0, n.length() - 4).toUpperCase(Locale.ROOT), new LevelCollision(new LevelData(w).sheets)));
 			} catch (IOException | RuntimeException ignored) {
 				// 읽지 못하는 WAD 는 건너뜀
+			}
+		}
+		return out;
+	}
+
+	/** 후보 중 (x, y, z) 아래에 바닥이 있는 첫 레벨 (없으면 null). */
+	public static String find(List<Candidate> cands, float x, float y, float z) {
+		if (cands == null) {
+			return null;
+		}
+		for (Candidate c : cands) {
+			try {
+				if (!Float.isNaN(c.collision().groundHeight(x, y + 32, z, 600))) {
+					return c.name();
+				}
+			} catch (RuntimeException ignored) {
+				// 예전과 같이 건너뜀
 			}
 		}
 		return null;

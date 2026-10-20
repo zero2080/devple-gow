@@ -158,7 +158,7 @@ public final class GameScene implements Scene {
 	private Tweaks orbTweaks;
 	private devple.gow.engine.combat.GrabSync grab;
 	private devple.gow.engine.fx.MagicFx magicFx;
-	private final Random rnd = new Random();
+	private final Random rnd = Engine.LOCKSTEP ? new Random(1) : new Random(); // 검증 lockstep 이면 고정 씨앗
 	/** 보스전 (37 문서, 없으면 null) / 전투 ↔ 스크립트 이벤트 다리 (1035/1047/1039/1019/1054). */
 	private devple.gow.engine.boss.BossFight boss;
 	private devple.gow.engine.boss.CombatScriptBridge bridge;
@@ -194,6 +194,7 @@ public final class GameScene implements Scene {
 		if (devple.gow.engine.asset.Loader.async() && arrival != null && arrival.from() != null
 				&& (arrival.kind() == LevelLink.Kind.SEAMLESS || arrival.kind() == LevelLink.Kind.WALK)) {
 			prepareOther(arrival.from().toUpperCase(java.util.Locale.ROOT)); // 이음: 떠나온 레벨 = 다른 슬롯 (그리기용 장면도 미리, LevelLink.norm 과 같은 이름)
+			prepareOtherData(arrival.from().toUpperCase(java.util.Locale.ROOT)); // 게임용 데이터 (loadOther) 도
 		}
 	}
 
@@ -213,12 +214,22 @@ public final class GameScene implements Scene {
 		levelPrep = devple.gow.engine.asset.Loader.submit("level " + this.levelName, () -> {
 			LevelScene s = new LevelScene(wad, -2, false).prepare();
 			for (String name : EnemyFactory.resourceWads(s.data().wad)) {
-				WadAssets.prefetch(rom.resolve(name + ".WAD"));
+				WadAssets.prefetch(rom.resolve(name + ".WAD"), devple.gow.tools.fx.EffectLibrary::preparse); // + wireEffects 의 이펙트 GO 표
+			}
+			devple.gow.tools.fx.EffectLibrary.preparse(s.assets().wad()); // wireEffects (MagicFx.addWad(레벨)) 의 이펙트 GO 표 (48 §9)
+			for (int i = levelWadReopens(s.data().wad, levelName); i > 0; i--) {
+				WadAssets.prefetch(wad, devple.gow.tools.fx.EffectLibrary::preparse); // 레벨 템플릿 적이면 spawn 의 MagicFx.addWad 가 쓴다
+			}
+			boolean addOn = devple.gow.engine.level.HostLevel.addOn(s.data().wad); // ensureHost (덧붙는 레벨의 숙주 찾기) 미리
+			hostPrep = addOn ? devple.gow.engine.level.HostLevel.candidates(rom, levelName) : null;
+			hostAddOn = addOn;
+			if (hostPrep != null) {
+				hostPrep.forEach(c -> prepareOtherData(c.name())); // 숙주가 되면 loadOther 가 쓸 게임용 데이터
 			}
 			return s;
 		});
 		WadAssets.prefetch(session.rom.resolve("R_PERMK.WAD")); // HUD
-		WadAssets.prefetch(session.rom.resolve("R_PERMK.WAD")); // MagicFx 이펙트 GO (EffectSystem)
+		WadAssets.prefetch(session.rom.resolve("R_PERMK.WAD"), devple.gow.tools.fx.EffectLibrary::preparse); // MagicFx 이펙트 GO (EffectSystem)
 		int costume = session.player != null ? session.player.costume : session.costume;
 		WadAssets.prefetch(session.rom.resolve("R_HERO" + costume + ".WAD"));
 		if (session.player != null) { // 블레이드 모델 (HeroRig → BladeModels)
@@ -226,14 +237,170 @@ public final class GameScene implements Scene {
 		}
 	}
 
+	/** 블레이드 god 판 (0x1FA9A0, 45 문서 §2): 영웅 코스튬·블레이드 레벨의 R_WPN 이펙트 GO. */
+	private void setGodBlades(devple.gow.engine.fx.MagicFx fx, HeroRig h) {
+		fx.setGodBlades(session.rom.resolve("R_WPN" + h.player.costume + "_" + Math.max(0, Math.min(5, h.bladeLevel())) + ".WAD"),
+				() -> !h.player.artemisEquipped);
+	}
+
+	/** 페이드 동안 미리 만든 것 (48 문서 §9, null = enter 에서). */
+	private LevelScene preLevel;
+	private HeroRig preHero;
+	private UiVariables preVars;
+	private UiLayer preHud, preLevelHud;
+	private boolean preLevelHudDone, preGodBlades;
+	private devple.gow.engine.fx.MagicFx preFx;
+	private Tweaks preOrbTweaks;
+	private Breakables preBreakables;
+	private boolean preAnimsAttached;
+	/** 이름 → 미리 읽은 EnemyFactory.Kind 또는 그 예외 (loadEnemyKinds 가 꺼내 씀). */
+	private final Map<String, Object> preKinds = new HashMap<>();
+	private int preStep;
+	/** 페이드 한 틱에 미리 할 시간 (ms). 한 단계는 쪼개지 않으므로 넘을 수 있다. */
+	private static final long PRELOAD_NS = (long) (Double.parseDouble(System.getProperty("gow.preload.ms", "4")) * 1e6);
+
+	/**
+	 * 페이드 아웃 동안 (이전 씬은 그려지기만 하고 멈춰 있다) enter 의 GL·생성 작업 일부를 틱마다 PRELOAD_NS 씩 미리 한다 (48 문서 §9):
+	 * 영웅 (R_HERO 모델·스켈레톤·애니·전투 데이터·블레이드), HUD (R_PERMK FLP_HUDK), MagicFx (R_PERMK 이펙트 GO) · god 블레이드, 레벨 장면 GL
+	 * (배치를 하나씩), 레벨 HUD, 오브 튜닝. 모두 이 씬만의 새 객체이고 정적 상태·이전 씬을 건드리지 않으므로 enter 에서 만든 것과 같다 (바뀌는 것은 만든
+	 * 프레임뿐). 동기 모드 (gow.syncLoad, 스크린샷) 는 하지 않는다 — 예전 프레임 순서 그대로.
+	 */
+	@Override
+	public void preload(Engine e) {
+		if (!devple.gow.engine.asset.Loader.async() || preStep < 0) {
+			return;
+		}
+		long t0 = System.nanoTime(), deadline = t0 + PRELOAD_NS;
+		try {
+			while (preStep >= 0 && System.nanoTime() < deadline) {
+				long s0 = System.nanoTime();
+				String what = preloadStep(e, deadline);
+				if (what == null) {
+					break; // 레벨 준비가 아직 (적재 스레드)
+				}
+				devple.gow.engine.core.PerfMonitor.loadTime("pre " + what, s0);
+			}
+		} catch (IOException ex) {
+			throw new UncheckedIOException(ex);
+		}
+	}
+
+	/** 한 단계. 한 일 이름 (기다려야 하면 null). */
+	private String preloadStep(Engine e, long deadline) throws IOException {
+		switch (preStep) {
+			case 0 -> {
+				preHero = new HeroRig(session.rom, session.permk, session.player != null ? session.player.costume : session.costume, session.player);
+				preStep++;
+				return "hero";
+			}
+			case 1 -> {
+				preVars = new UiVariables();
+				preHud = new UiLayer(new WadAssets(session.rom.resolve("R_PERMK.WAD")), true, "FLP_HUDK", session.messages, preVars);
+				preStep++;
+				return "hud";
+			}
+			case 2 -> {
+				preFx = new devple.gow.engine.fx.MagicFx(session.rom);
+				preStep++;
+				return "magicFx";
+			}
+			case 3 -> {
+				setGodBlades(preFx, preHero);
+				preGodBlades = true;
+				preStep++;
+				return "godBlades";
+			}
+			case 4 -> {
+				if (preLevel == null) {
+					if (levelPrep == null || !levelPrep.isDone()) {
+						return null;
+					}
+					preLevel = devple.gow.engine.asset.Loader.join(levelPrep, "level " + levelName);
+					levelPrep = null;
+				}
+				if (preLevel.preUpload(e, deadline)) {
+					preStep++;
+				}
+				return "level GL";
+			}
+			case 5 -> {
+				level = preLevel; // loadLevelHud 가 level.data() 를 본다 (enter 가 같은 장면을 다시 넣는다)
+				preLevelHud = loadLevelHud(preVars);
+				preLevelHudDone = true;
+				preStep++;
+				return "level hud";
+			}
+			case 6 -> {
+				Tweaks t = new Tweaks();
+				t.load(session.permk);
+				t.load(preLevel.data().wad);
+				preOrbTweaks = t;
+				preBreakables = new Breakables(preLevel.data(), t); // enter 와 같은 시점의 튜닝 (영구 + 레벨, 적 종류 전)
+				preHero.attachExternalAnims(preLevel.data().wad); // 레벨별 영웅 애니 — enter 와 같은 순서 (레벨 → 적 종류 → 보스)
+				preAnimsAttached = true;
+				preStep++;
+				return "tweaks+breakables+anims";
+			}
+			case 7 -> {
+				// 레벨 RSRCS 적 종류 (EnemyFactory.load = WAD·튜닝·스켈레톤·애니 해석, GL·소리 없음). 소리 뱅크·튜닝 합치기·영웅 애니 연결은 enter 에서
+				// 예전 순서로 (이전 씬 exit 의 소리 내리기보다 뒤여야 한다)
+				for (String name : EnemyFactory.resourceWads(preLevel.data().wad)) {
+					var path = session.rom.resolve(name + ".WAD");
+					if (!preKinds.containsKey(name) && Files.exists(path)) {
+						try {
+							preKinds.put(name, EnemyFactory.load(path, session.permk, -1));
+						} catch (RuntimeException ex) {
+							preKinds.put(name, ex);
+						}
+					}
+				}
+				preStep = -1;
+				return "enemy kinds";
+			}
+			default -> {
+				preStep = -1;
+				return "done";
+			}
+		}
+	}
+
+	/**
+	 * enter (와 그 안의 스크립트 시작) 이 레벨 WAD 를 따로 다시 여는 횟수 (48 문서 §9) — 그만큼 미리 해석해 둔다: 레벨 HUD (FLP_), 보스 (BossDirector 가
+	 * 레벨 WAD 의 템플릿), 레벨 자체 AI1 템플릿 오브젝트 (levelTemplateKind, 오브젝트마다) — 합쳐 최대 3. 남은 것은 enter 끝에 버려진다.
+	 */
+	private static int levelWadReopens(devple.gow.tools.wad.WadFile w, String level) {
+		int n = 0;
+		for (devple.gow.tools.wad.WadTag t : w.tags()) {
+			if (t.hasData() && t.name().startsWith("FLP_") && t.magic() == devple.gow.tools.ui.FlpFile.MAGIC) {
+				n++;
+				break;
+			}
+		}
+		if (devple.gow.engine.boss.BossDirector.hostsBoss(level)) {
+			n++;
+		}
+		Tweaks lt = new Tweaks();
+		lt.load(w);
+		java.util.Set<String> objs = new java.util.HashSet<>();
+		for (String node : lt.nodes("/TweakTemplates/AI1/")) {
+			String o = lt.s(node, "Instance Name", null);
+			if (o != null && !o.isEmpty()) {
+				objs.add(o.toLowerCase(java.util.Locale.ROOT));
+			}
+		}
+		return Math.min(3, n + objs.size()); // 메모리: 레벨 WAD 해석 사본은 많아야 3 개 (enter 끝에 버림)
+	}
+
 	@Override
 	public void enter(Engine e) {
 		long enterT0 = System.nanoTime();
 		try {
-			level = levelPrep != null ? devple.gow.engine.asset.Loader.join(levelPrep, "level " + levelName)
+			level = preLevel != null ? preLevel : levelPrep != null ? devple.gow.engine.asset.Loader.join(levelPrep, "level " + levelName)
 					: new LevelScene(session.rom.resolve(levelName + ".WAD"), -2, false);
 			levelPrep = null;
+			long ph = devple.gow.engine.core.PerfMonitor.phase(". join", enterT0);
 			level.enter(e); // GL 올리기 (CPU 단계는 페이드 동안 끝났으면 건너뜀)
+			ph = devple.gow.engine.core.PerfMonitor.phase(". level GL", ph);
 			level.setExternalCamera(cam);
 			level.setDeferEffects(true);
 			// SCR_Mirror 반사 패스의 영웅 (원작 0x1DAEC0: 영웅 모델 bit 61, 마스크 0x40 → 거울 뷰 0x80, 값 [4] ≠ 0 인 거울은 뺀다 — 43 문서 §9)
@@ -242,13 +409,16 @@ public final class GameScene implements Scene {
 				hero.draw(rc, e.window().aspect(), renderAlpha, e.renderer().white());
 			});
 			col = level.collision();
-			hero = new HeroRig(session.rom, session.permk, session.player != null ? session.player.costume : session.costume, session.player);
+			hero = preHero != null ? preHero : new HeroRig(session.rom, session.permk, session.player != null ? session.player.costume : session.costume, session.player);
 			hero.difficulty = session.difficulty;
 			session.player = hero.player;
-			UiVariables vars = new UiVariables();
-			hud = new UiLayer(new WadAssets(session.rom.resolve("R_PERMK.WAD")), true, "FLP_HUDK", session.messages, vars);
-			levelHud = loadLevelHud(vars);
+			ph = devple.gow.engine.core.PerfMonitor.phase(". hero", ph);
+			UiVariables vars = preVars != null ? preVars : new UiVariables();
+			hud = preHud != null ? preHud : new UiLayer(new WadAssets(session.rom.resolve("R_PERMK.WAD")), true, "FLP_HUDK", session.messages, vars);
+			levelHud = preLevelHudDone ? preLevelHud : loadLevelHud(vars);
+			ph = devple.gow.engine.core.PerfMonitor.phase(". hud", ph);
 			session.sound.load(level.data().wad);
+			ph = devple.gow.engine.core.PerfMonitor.phase(". sound", ph);
 			hero.combat.onSound((h, p) -> session.sound.play(h, p));
 			vars.addListener((name, value) -> {
 				if (name.regionMatches(true, 0, "PS2_Sound", 0, 9) && value != null && value.startsWith("SND_")) {
@@ -270,17 +440,35 @@ public final class GameScene implements Scene {
 					saveFlow.command(cmd, arg);
 				}
 			});
+			ph = devple.gow.engine.core.PerfMonitor.phase(". hud listeners", ph);
 			enemyShader = new Shader("skinned.vert", "basic.frag");
-			orbTweaks = new Tweaks();
-			orbTweaks.load(session.permk);
-			orbTweaks.load(level.data().wad);
-			breakables = new Breakables(level.data(), orbTweaks);
-			hero.attachExternalAnims(level.data().wad); // 레벨별 영웅 애니 (ANM_hero_Athn01A 등)
+			if (preOrbTweaks != null) {
+				orbTweaks = preOrbTweaks;
+			} else {
+				orbTweaks = new Tweaks();
+				orbTweaks.load(session.permk);
+				orbTweaks.load(level.data().wad);
+			}
+			ph = devple.gow.engine.core.PerfMonitor.phase(". tweaks", ph);
+			breakables = preBreakables != null ? preBreakables : new Breakables(level.data(), orbTweaks);
+			if (!preAnimsAttached) {
+				hero.attachExternalAnims(level.data().wad); // 레벨별 영웅 애니 (ANM_hero_Athn01A 등)
+			}
+			ph = devple.gow.engine.core.PerfMonitor.phase(". breakables+anims", ph);
 			loadEnemyKinds();
+			preKinds.values().forEach(k -> { // 쓰이지 않은 미리 읽은 종류 (없어야 정상) — 자산을 닫는다
+				if (k instanceof EnemyFactory.Kind kk) {
+					kk.assets().close();
+				}
+			});
+			preKinds.clear();
+			ph = devple.gow.engine.core.PerfMonitor.phase(". enemy kinds", ph);
 			loadBoss();
+			devple.gow.engine.core.PerfMonitor.phase(". boss", ph);
 		} catch (IOException ex) {
 			throw new UncheckedIOException(ex);
 		}
+		long ph = System.nanoTime();
 		grab = new devple.gow.engine.combat.GrabSync(hero.ctl, hero.combat);
 		grab.setPullers(() -> enemies.stream().map(Enemy::fighter).toList()); // 결합 없는 끌기 = 공격 대상이 영웅인 적 (0x2097A8)
 		if (System.getProperty("gow.giveAll") != null) {
@@ -299,12 +487,15 @@ public final class GameScene implements Scene {
 			float len = d.length();
 			return len > 1f && col.raycast(eye, d, len - 1f) != null;
 		});
-		magicFx = new devple.gow.engine.fx.MagicFx(session.rom); // 원작 이펙트 GO (40 문서)
+		ph = devple.gow.engine.core.PerfMonitor.phase(". grab+magic", ph);
+		magicFx = preFx != null ? preFx : new devple.gow.engine.fx.MagicFx(session.rom); // 원작 이펙트 GO (40 문서)
 		hero.magic.setSink(magicFx.sink((name, at) -> session.sound.play(name, at)));
 		magicFx.bindHero(hero.combat, hero::jointWorld);
-		magicFx.setGodBlades(session.rom.resolve("R_WPN" + hero.player.costume + "_" + Math.max(0, Math.min(5, hero.bladeLevel())) + ".WAD"),
-				() -> !hero.player.artemisEquipped); // 블레이드 god 판 (0x1FA9A0, 45 문서 §2)
+		if (!preGodBlades) {
+			setGodBlades(magicFx, hero);
+		}
 		hero.hideBlades = magicFx::godBladesOn;
+		ph = devple.gow.engine.core.PerfMonitor.phase(". magicFx", ph);
 		// 동적 라이트 (47 문서): 레벨 WAD 의 LGT_ + 무기 WAD 의 블레이드 라이트. -Dgow.nolights 면 예전 고정 조명 (비교용)
 		if (System.getProperty("gow.nolights") == null) {
 			lights = new devple.gow.engine.light.LightServer();
@@ -327,13 +518,16 @@ public final class GameScene implements Scene {
 				return hero.trail(side);
 			}
 		});
+		ph = devple.gow.engine.core.PerfMonitor.phase(". lights", ph);
 		wireEffects();
+		ph = devple.gow.engine.core.PerfMonitor.phase(". wireEffects", ph);
 		hudBinding.castable = hero.magic::has;
 		boolean seamless = arrival != null && (arrival.kind() == LevelLink.Kind.SEAMLESS || arrival.kind() == LevelLink.Kind.WALK);
 		link = new LevelLink(levelName, seamless ? arrival.from() : null, w -> Files.exists(session.rom.resolve(w + ".WAD")));
 		if (link.other() != null) {
 			loadOther(link.other());
 		}
+		ph = devple.gow.engine.core.PerfMonitor.phase(". other", ph);
 		cameraRig = new devple.gow.engine.level.CameraRig(level.data());
 		cameraRig.setOther(otherData); // 다른 슬롯 레벨의 CMV·카메라도 질의 (원작 두 슬롯 상주)
 		// 카메라 전환 → 전역 이벤트 1037 (인자0 = 카메라 이름, 원작 0x1EEE88)
@@ -342,9 +536,11 @@ public final class GameScene implements Scene {
 				world.postEvent(1037, n, 0, 0, null);
 			}
 		});
+		ph = devple.gow.engine.core.PerfMonitor.phase(". cameraRig", ph);
 		world = new ScriptWorld(level.data(), session.scriptHost, listener());
 		nav = new SceneNav(level.data(), col, hero, world, session.scriptHost, orbTweaks, navHost());
 		buildRopeVisuals();
+		ph = devple.gow.engine.core.PerfMonitor.phase(". script+nav", ph);
 		if (otherName != null) {
 			nav.setOther(otherName, otherData, otherCol, nav.neighbourListener());
 			Resident left = resident(arrival, otherName);
@@ -365,6 +561,7 @@ public final class GameScene implements Scene {
 			// 도착점 줄을 잡는다 — 잡기 대기 없음 (ATRET01A WarpFrmhdes05 = 무덤 줄 gorope1 한가운데, 43 §13.9)
 			nav.navigator.warpArrived();
 		}
+		ph = devple.gow.engine.core.PerfMonitor.phase(". spawn", ph);
 		checkpoint.set(spawn);
 		cam.fovDeg = 60;
 		cam.near = devple.gow.engine.fx.FxEnvironment.viewNear; // 원작 뷰포트 near (+0x384 = −10, 0x168DC8 — 43 §11)
@@ -374,6 +571,7 @@ public final class GameScene implements Scene {
 			boss.attach(arena());
 		}
 		world.start();
+		ph = devple.gow.engine.core.PerfMonitor.phase(". script start", ph);
 		// Warp 도 이미 서 있는 볼륨은 "안" 으로: 원작 영웅 볼륨 판정은 이전 위치 → 지금 위치 선분 (0x1A7FFC, 콜백 0x1A8508) 인데 순간이동
 		// (0x1E0A18 → 0x1B3030 → 0x29D90C) 프레임은 선분을 건너뛰고 이전 위치 = 도착점 — 도착점을 덮는 Warp 볼륨이 곧바로 되돌리지 않는다 (43 §13.9)
 		world.placePlayer(spawn.x, spawn.y, spawn.z, seamless || warped);
@@ -419,6 +617,7 @@ public final class GameScene implements Scene {
 		if (Float.isNaN(col.groundHeight(spawn.x, spawn.y + STEP, spawn.z, 64))) {
 			nav.settleArrival(spawn); // 움직이는 발판 위 도착점 (ATHN05D WarpFrom4A)
 		}
+		devple.gow.engine.core.PerfMonitor.phase(". arrival", ph);
 		String ln = levelName;
 		devple.gow.engine.core.PerfMonitor.gauge("level", () -> ln);
 		devple.gow.engine.core.PerfMonitor.gauge("enemies", enemies::size);
@@ -428,6 +627,7 @@ public final class GameScene implements Scene {
 		System.out.printf("레벨 %s (진입점 %s): 시작 (%.0f, %.0f, %.0f), 적 종류 %s%n", levelName, entry, spawn.x, spawn.y,
 				spawn.z, kinds.keySet());
 		WadAssets.dropPrefetched(); // 쓰지 않은 미리 해석 (예: 소리 전용 RSRCS) 은 버린다
+		otherDataPrep.clear(); // 이후 이웃 교체는 예전처럼 그 틱에 동기로
 		devple.gow.engine.core.PerfMonitor.loadTime("enter " + levelName, enterT0);
 	}
 
@@ -437,7 +637,11 @@ public final class GameScene implements Scene {
 			var path = session.rom.resolve(name + ".WAD");
 			if (!kinds.containsKey(name) && Files.exists(path)) {
 				try {
-					EnemyFactory.Kind k = EnemyFactory.load(path, session.permk, -1);
+					Object pre = preKinds.remove(name);
+					if (pre instanceof RuntimeException ex) {
+						throw ex; // 페이드 동안 해 본 결과 그대로 (소리 전용 WAD)
+					}
+					EnemyFactory.Kind k = pre != null ? (EnemyFactory.Kind) pre : EnemyFactory.load(path, session.permk, -1);
 					kinds.put(name, k);
 					orbTweaks.load(k.assets().wad());
 					session.sound.load(k.assets().wad());
@@ -550,11 +754,38 @@ public final class GameScene implements Scene {
 	 * 바닥을 이웃 레벨에 두는 레벨 (ATHN02D → ATHN02C, {@link devple.gow.engine.level.HostLevel}): 서 있을 점 아래 자기 바닥이 없으면
 	 * 숙주 레벨을 다른 슬롯에 올린다. 원작은 숙주가 이 레벨을 LoadWad 한 뒤 두 레벨이 함께 상주한다.
 	 */
-	private void ensureHost(float x, float y, float z) {
-		if (!Float.isNaN(col.groundHeight(x, y + STEP, z, 600)) || !devple.gow.engine.level.HostLevel.addOn(level.data().wad)) {
+	/**
+	 * enter 안의 loadOther (이음 도착 = 떠나온 레벨, 숙주 레벨) 가 쓸 게임용 이웃 데이터 (LevelData·충돌) 를 적재 스레드에서 미리 (48 문서 §9).
+	 * 값 = {LevelData, LevelCollision 또는 null, 충돌 생성 예외 또는 null} — loadOther 의 동기 경로와 같은 순서·값. enter 끝에 비운다.
+	 */
+	private final Map<String, java.util.concurrent.Future<Object[]>> otherDataPrep = new java.util.concurrent.ConcurrentHashMap<>();
+
+	private void prepareOtherData(String wad) {
+		if (!devple.gow.engine.asset.Loader.async() || otherDataPrep.containsKey(wad)) {
 			return;
 		}
-		String h = devple.gow.engine.level.HostLevel.find(session.rom, levelName, x, y, z);
+		java.nio.file.Path p = session.rom.resolve(wad + ".WAD");
+		otherDataPrep.put(wad, devple.gow.engine.asset.Loader.submit("otherData " + wad, () -> {
+			LevelData d = new LevelData(devple.gow.tools.wad.WadFile.load(p));
+			try {
+				return new Object[]{d, new LevelCollision(d.sheets), null};
+			} catch (RuntimeException ex) {
+				return new Object[]{d, null, ex};
+			}
+		}));
+	}
+
+	/** 레벨 준비 (적재 스레드) 가 미리 본 숙주 레벨 판정 (null = 미리 안 함). */
+	private volatile Boolean hostAddOn;
+	private volatile List<devple.gow.engine.level.HostLevel.Candidate> hostPrep;
+
+	private void ensureHost(float x, float y, float z) {
+		if (!Float.isNaN(col.groundHeight(x, y + STEP, z, 600))
+				|| !(hostAddOn != null ? hostAddOn : devple.gow.engine.level.HostLevel.addOn(level.data().wad))) {
+			return;
+		}
+		String h = hostAddOn != null ? devple.gow.engine.level.HostLevel.find(hostPrep, x, y, z)
+				: devple.gow.engine.level.HostLevel.find(session.rom, levelName, x, y, z);
 		if (h != null) {
 			hostLevel = h;
 			if (!h.equals(otherName)) {
@@ -619,8 +850,18 @@ public final class GameScene implements Scene {
 		otherCol = null;
 		otherData = null;
 		try {
-			otherData = new LevelData(devple.gow.tools.wad.WadFile.load(session.rom.resolve(wad + ".WAD")));
-			otherCol = new LevelCollision(otherData.sheets);
+			java.util.concurrent.Future<Object[]> pre = otherDataPrep.remove(wad);
+			if (pre != null) { // enter 안: 적재 스레드가 미리 읽은 같은 값 (48 §9)
+				Object[] r = devple.gow.engine.asset.Loader.join(pre, "otherData " + wad);
+				otherData = (LevelData) r[0];
+				if (r[2] != null) {
+					throw (RuntimeException) r[2];
+				}
+				otherCol = (LevelCollision) r[1];
+			} else {
+				otherData = new LevelData(devple.gow.tools.wad.WadFile.load(session.rom.resolve(wad + ".WAD")));
+				otherCol = new LevelCollision(otherData.sheets);
+			}
 			if (lights != null && System.getProperty("gow.noneighbourlights") == null) { // 다른 슬롯 레벨의 LGT 도 같은 서버에 (원작 두 슬롯 상주, 0x151F08)
 				System.out.printf("라이트: 다른 슬롯 %s %d%n", wad, lights.addAll(otherData.wad, wad).size());
 			}
@@ -1326,6 +1567,19 @@ public final class GameScene implements Scene {
 
 	@Override
 	public void update(Engine e, float dt) {
+		if (firstUpdates < 2) { // 적재 직후 첫 틱 시간 (48 문서 §9, -Dgow.perf)
+			long t0 = System.nanoTime();
+			updateTick(e, dt);
+			devple.gow.engine.core.PerfMonitor.loadTime("first update " + levelName, t0);
+			firstUpdates++;
+			return;
+		}
+		updateTick(e, dt);
+	}
+
+	private int firstUpdates, firstRenders;
+
+	private void updateTick(Engine e, float dt) {
 		pendingEngine = e;
 		if (session.openingPending && levelName.equals(GameFlow.START_LEVEL)) {
 			session.openingPending = false;
@@ -1789,6 +2043,17 @@ public final class GameScene implements Scene {
 
 	@Override
 	public void render(Engine e, float alpha) {
+		if (firstRenders < 2) { // 적재 직후 첫 그리기 시간 (48 문서 §9, -Dgow.perf)
+			long t0 = System.nanoTime();
+			renderFrame(e, alpha);
+			devple.gow.engine.core.PerfMonitor.loadTime("first render " + levelName, t0);
+			firstRenders++;
+			return;
+		}
+		renderFrame(e, alpha);
+	}
+
+	private void renderFrame(Engine e, float alpha) {
 		renderAlpha = alpha;
 		updateCamera(alpha);
 		level.fx().env().setFogOverride(magicFx.screen.fog()); // 포세이돈 Fog Template (0x195C90, 35 문서 §4.6)
@@ -1950,7 +2215,7 @@ public final class GameScene implements Scene {
 			}
 			while (otherCache.size() > OTHER_CACHE) {
 				var it = otherCache.entrySet().iterator();
-				it.next().getValue().exit(e);
+				it.next().getValue().exitDeferred(e); // GL 해제는 다음 틱들로 (48 §9)
 				it.remove();
 			}
 		}
@@ -1980,6 +2245,7 @@ public final class GameScene implements Scene {
 
 	@Override
 	public void exit(Engine e) {
+		long exitT0 = System.nanoTime();
 		if (lights != null && devple.gow.engine.light.LightServer.current() == lights) {
 			devple.gow.engine.light.LightServer.setCurrent(null);
 		}
@@ -1990,10 +2256,10 @@ public final class GameScene implements Scene {
 			shadowRenderer.close();
 		}
 		if (otherScene != null) {
-			otherScene.exit(e);
+			otherScene.exitDeferred(e);
 			otherScene = null;
 		}
-		otherCache.values().forEach(s -> s.exit(e));
+		otherCache.values().forEach(s -> s.exitDeferred(e)); // GL 해제는 다음 틱들로 (48 §9)
 		otherCache.clear();
 		otherPrep.clear(); // 진행 중인 CPU 단계는 끝나면 버려진다 (GL 없음)
 		if (levelPrep != null) { // enter 없이 버려진 장면 (없어야 정상)
@@ -2028,6 +2294,7 @@ public final class GameScene implements Scene {
 		if (levelHud != null) {
 			levelHud.close();
 		}
-		level.exit(e);
+		level.exitDeferred(e); // GL 해제는 다음 틱들로 (48 §9)
+		devple.gow.engine.core.PerfMonitor.loadTime("exit " + levelName, exitT0);
 	}
 }

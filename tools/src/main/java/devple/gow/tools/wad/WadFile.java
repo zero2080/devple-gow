@@ -26,6 +26,18 @@ public final class WadFile {
 		this.tags = Collections.unmodifiableList(parse());
 	}
 
+	/** 미리 만든 파생 해석 (키 → 값, 한 번 꺼내면 끝) — 적재 스레드가 GL 없는 해석을 미리 붙여 둔다 (엔진 48 문서 §9). WAD 와 수명이 같다. */
+	private final java.util.Map<Object, Object> derived = new java.util.concurrent.ConcurrentHashMap<>();
+
+	public void putDerived(Object key, Object value) {
+		derived.put(key, value);
+	}
+
+	/** 붙여 둔 파생 해석을 꺼낸다 (없으면 null). */
+	public Object takeDerived(Object key) {
+		return derived.remove(key);
+	}
+
 	public static WadFile load(Path p) throws IOException {
 		return new WadFile(p.getFileName().toString(), ByteBuffer.wrap(Files.readAllBytes(p)));
 	}

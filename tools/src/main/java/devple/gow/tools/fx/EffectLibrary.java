@@ -142,6 +142,25 @@ public final class EffectLibrary {
 
 	/** WAD 의 모든 GO 인스턴스를 등록한다. 같은 이름은 나중에 더한 WAD 가 덮는다 (마법 단계 WAD 우선). */
 	public void add(WadFile wad) {
+		@SuppressWarnings("unchecked")
+		List<Parsed> defs = (List<Parsed>) wad.takeDerived(EffectLibrary.class);
+		for (Parsed d : defs != null ? defs : parse(wad)) {
+			byName.put(d.key(), d.def());
+		}
+	}
+
+	private record Parsed(String key, EffectDef def) {
+	}
+
+	/**
+	 * {@link #add} 의 해석을 미리 (GL 없음 → 적재 스레드, 48 문서 §9). 같은 WadFile 의 다음 add 가 결과를 한 번 꺼내 쓴다 — 같은 코드로 만든 같은 값.
+	 */
+	public static void preparse(WadFile wad) {
+		wad.putDerived(EffectLibrary.class, parse(wad)); // WAD 에 붙여 둔다 (WAD 와 함께 버려짐 — 전역 표 없음)
+	}
+
+	private static List<Parsed> parse(WadFile wad) {
+		List<Parsed> out = new ArrayList<>();
 		FxResources fx = new FxResources(wad);
 		Map<String, Skeleton> objects = new HashMap<>();
 		for (Skeleton s : Skeleton.loadAll(wad)) {
@@ -175,9 +194,9 @@ public final class EffectLibrary {
 			if (sk == null) {
 				continue;
 			}
-			EffectDef d = build(wad, fx, gi, sk, anims, semAt, cxtAt);
-			byName.put(t.name().toLowerCase(Locale.ROOT), d);
+			out.add(new Parsed(t.name().toLowerCase(Locale.ROOT), build(wad, fx, gi, sk, anims, semAt, cxtAt)));
 		}
+		return out;
 	}
 
 	private static EffectDef build(WadFile wad, FxResources fx, GoInstance gi, Skeleton sk, Map<String, AnimationSet> anims,
