@@ -40,9 +40,16 @@ public final class Renderer implements AutoCloseable {
 		return basic;
 	}
 
+	/**
+	 * 원작 프레임 지움 색 (43 문서 §13.4) [확실]: 0x161A80 이 프레임 맨 처음 0x29CF64 사각형 노드 (클래스 0x2BE240, 그리기 0x121128) 를 그린다 —
+	 * 0x15F638 이 만든 값 그대로 색 (0, 0, 0, 0), Z 0, TEST 0x30000 (ALWAYS), FBMSK 0, ALPHA 0, ZMSK 0. 다른 쓰기 없음 → 언제나 검정.
+	 * 레벨·안개·컨텍스트 값이 아니다 (배경 안개는 그 위에 따로 칠한다, 16 문서 §1.2).
+	 */
+	public static final float CLEAR_R = 0f, CLEAR_G = 0f, CLEAR_B = 0f;
+
 	public void beginFrame() {
 		glViewport(0, 0, engine.window().width(), engine.window().height());
-		glClearColor(0.05f, 0.04f, 0.04f, 1f);
+		glClearColor(CLEAR_R, CLEAR_G, CLEAR_B, 1f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	}
 

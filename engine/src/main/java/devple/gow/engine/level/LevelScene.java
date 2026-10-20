@@ -830,7 +830,8 @@ public final class LevelScene implements Scene {
 			if (composite == null) {
 				composite = new devple.gow.engine.render.MirrorComposite();
 			}
-			composite.fill(0.05f, 0.04f, 0.04f); // Renderer.beginFrame 지움 색
+			composite.fill(devple.gow.engine.render.Renderer.CLEAR_R, devple.gow.engine.render.Renderer.CLEAR_G,
+					devple.gow.engine.render.Renderer.CLEAR_B); // 원작 지움 색 (검정, 0x29CF64 · 43 §13.4)
 			fx.drawBackground(e, cam);
 			// 4) 반사 장면 (원작 0x12A4E8: 카메라를 평면에 대해 반사) — 거울 뷰 마스크에 맞는 모델만 (정적 월드는 다시 그리지 않음).
 			//    가시 칸 컨텍스트는 거울 뷰 자신의 카메라 위치 (= 반사 눈) 로 (0x152EC8 → 뷰마다 0x16DC60(눈, 뷰 마스크)) [확실]
