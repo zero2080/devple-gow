@@ -1,5 +1,6 @@
 package devple.gow.tools.anim;
 
+import devple.gow.tools.content.AnimOverrides;
 import devple.gow.tools.wad.WadFile;
 import devple.gow.tools.wad.WadTag;
 
@@ -113,8 +114,23 @@ public final class AnimationSet {
 		return r;
 	}
 
-	/** 이름으로 찾기 ("group/name" 또는 "name", 첫 일치). */
+	/**
+	 * 이름으로 찾기 ("group/name" 또는 "name", 첫 일치). 모드 {@code anim.properties} 의 {@code replace.<이름>} 이 있고 그 클립이 이 세트에
+	 * 있으면 그것 (49 문서 §12) — 엔진의 클립 이름 조회가 모두 여기를 지난다.
+	 */
 	public Animation find(String nm) {
+		String r = AnimOverrides.replacement(name, nm);
+		if (r != null) {
+			Animation a = findOriginal(r);
+			if (a != null) {
+				return a;
+			}
+		}
+		return findOriginal(nm);
+	}
+
+	/** 교체 없이 이름으로 찾기. */
+	public Animation findOriginal(String nm) {
 		String grp = null;
 		int slash = nm.indexOf('/');
 		if (slash >= 0) {

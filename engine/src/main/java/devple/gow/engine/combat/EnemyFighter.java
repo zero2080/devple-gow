@@ -360,7 +360,7 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 		if (zj >= 0) {
 			float z = Math.abs(a.sample(sk, 0, true).pos[zj][2]) * devple.gow.engine.anim.HeroController.ROOT_FPS;
 			if (z > 1f) {
-				return z;
+				return z * anim.speedOf(a); // 모드 속도 배율 (49 문서 §12)
 			}
 		}
 		List<Integer> feet = new java.util.ArrayList<>();
@@ -392,7 +392,7 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 			prevFoot = low;
 			prevZ = w[low][14];
 		}
-		return time > 0 ? slide / time : 0;
+		return time > 0 ? slide / time * anim.speedOf(a) : 0;
 	}
 
 	public float walkSpeed() {

@@ -14,6 +14,8 @@ import java.util.stream.Stream;
  * 텍스처 도구.
  * <pre>
  *   texture:export <wad> <outDir>   TXR 전부 → PNG (TXR 이름, 중복 시 _2, 추가 CLUT 은 _clutN)
+ *   texture:export <wad> <outDir> --mod   모드 교체 이름 그대로 (49 문서 §14): outDir/<WAD>/<TXR>.png, 엔진이 쓰는 첫 항목·CLUT 0 만.
+ *                                   outDir = mods/<m>/textures 로 주고 고친 뒤 그대로 쓴다. 애니 텍스처는 세로 스트립 (프레임별은 <TXR>.<f>.png 로 나눠도 됨)
  *   texture:info   <wad>            텍스처 표 (크기/포맷/팔레트/밉)
  *   texture:mat    <wad>            머티리얼 레이어 표
  *   texture:check  <dir>            디렉터리의 모든 WAD 파싱+디코드 검사 (실패 수 집계)
@@ -27,7 +29,13 @@ public final class Cli {
 
 	public static void main(String[] args) throws Exception {
 		switch (args[0]) {
-			case "export" -> export(Path.of(args[1]), Path.of(args[2]), List.of(args).contains("--preview"));
+			case "export" -> {
+				if (List.of(args).contains("--mod")) {
+					exportMod(Path.of(args[1]), Path.of(args[2]));
+				} else {
+					export(Path.of(args[1]), Path.of(args[2]), List.of(args).contains("--preview"));
+				}
+			}
 			case "info" -> info(Path.of(args[1]));
 			case "mat" -> mat(Path.of(args[1]));
 			case "check" -> check(Path.of(args[1]));
@@ -60,6 +68,24 @@ public final class Cli {
 			}
 		}
 		System.out.printf("%s: %d textures → %d png → %s%n", wadPath.getFileName(), lib.textures().size(), n, outDir);
+	}
+
+	/** 모드 교체용 내보내기: 엔진 {@code WadAssets.texture} 와 같은 항목 (이름별 첫 항목, CLUT 0) 을 교체 경로 이름으로. */
+	private static void exportMod(Path wadPath, Path outDir) throws Exception {
+		TextureLibrary lib = new TextureLibrary(WadFile.load(wadPath));
+		Path dir = Files.createDirectories(outDir.resolve(devple.gow.tools.content.TextureOverrides.wadKey(wadPath.getFileName().toString())));
+		java.util.Set<String> seen = new java.util.HashSet<>();
+		int n = 0;
+		for (TextureLibrary.Entry e : lib.textures()) {
+			if (!seen.add(e.txr().name())) {
+				continue;
+			}
+			GfxResource g = e.gfx();
+			ImageIO.write(TextureDecoder.toImage(g.width(), g.height(), TextureDecoder.decode(g, e.pal(), 0)), "png",
+					dir.resolve(e.txr().name() + ".png").toFile());
+			n++;
+		}
+		System.out.printf("%s: %d png → %s%n", wadPath.getFileName(), n, dir);
 	}
 
 	/** 확인용: 알파를 8px 체커보드 위에 합성해 불투명 이미지로 만든다. */

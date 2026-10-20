@@ -15,7 +15,8 @@ import static org.lwjgl.glfw.GLFW.glfwGetKey;
  * 선택 기능 노멀맵 (원작 PS2 에 없음, 44 문서). 기본 꺼짐 — 끄면 셰이더 경로가 그대로라 원작 재현 화면과 같다.
  * <pre>
  * 켜기: 환경 변수 GOW_NORMALMAP=on, 실행 중 5 키로 토글.
- * 출처 (텍스처마다, 처음 그릴 때 한 번): ① work/normalmaps/&lt;텍스처 키&gt;.png (덮어쓰기) ② CPU 생성 ({@link NormalMapGen}).
+ * 출처 (텍스처마다, 처음 그릴 때 한 번): ① 모드 계층 normalmaps/&lt;텍스처 키&gt;.png (49 문서 §14, 위 계층 우선)
+ *   ② work/normalmaps/&lt;텍스처 키&gt;.png (덮어쓰기) ③ CPU 생성 ({@link NormalMapGen}).
  * 텍스처 키 = WadAssets 텍스처 캐시 키: TXR 이름 (예 TXR_Athn04C012), 태그 지정 사본은 "이름@태그", 애니 프레임은 "이름#프레임".
  * </pre>
  */
@@ -55,9 +56,9 @@ public final class NormalMaps {
 		keyPrev = down;
 	}
 
-	/** 덮어쓰기 파일 경로. */
+	/** 덮어쓰기 파일 경로: 모드 계층 normalmaps/ 에 있으면 그것, 아니면 work/normalmaps (없을 수 있음). */
 	public static Path overridePath(String key) {
-		return OVERRIDE_DIR.resolve(key + ".png");
+		return devple.gow.tools.content.Content.find("normalmaps/" + key + ".png").orElse(OVERRIDE_DIR.resolve(key + ".png"));
 	}
 
 	/**

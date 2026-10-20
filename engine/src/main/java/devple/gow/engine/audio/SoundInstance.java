@@ -440,6 +440,25 @@ public final class SoundInstance {
 		return v;
 	}
 
+	/**
+	 * 모드 WAV 교체 (49 문서 §11): 그레인 대신 보이스 하나로 재생. 볼륨 (핸들러 × 소리 × 그룹 × 마스터)·위치·물속 피치·정지 경로는 톤 보이스와 같다.
+	 * 모노는 클립 (3D 위치), 스테레오는 메모리 스트림 (위치 없음 — OpenAL 은 스테레오를 공간화하지 않음).
+	 */
+	void playOverride(AdpcmClip mono, devple.gow.tools.audio.WavClip stereo) {
+		grains = List.of();
+		idx = 0;
+		countdown = 0;
+		done = true;
+		Voice v = baseVoice(127, 0);
+		v.pitch = mgr.underwaterPitch(music ? 1 : sound.volGroup());
+		v.label = name() + " wav";
+		if (mono != null) {
+			addVoice(mgr.backend.play(mono, v), mono.looped());
+		} else {
+			addVoice(mgr.backend.stream(new MemoryPcmStream(stereo), v), stereo.loopStart() >= 0);
+		}
+	}
+
 	void addVoice(int id, boolean looped) {
 		if (id > 0) {
 			voices.add(new int[]{id, looped ? 1 : 0, 127, 0, 0, 0});

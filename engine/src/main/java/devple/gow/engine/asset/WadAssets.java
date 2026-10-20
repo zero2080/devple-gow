@@ -5,6 +5,7 @@ import devple.gow.engine.render.Mesh;
 import devple.gow.engine.render.Texture;
 import devple.gow.tools.fx.MaterialAnim;
 import devple.gow.tools.model.GowModel;
+import devple.gow.tools.content.TextureOverrides;
 import devple.gow.tools.model.TriMesh;
 import devple.gow.tools.texture.MaterialResource;
 import devple.gow.tools.texture.TextureDecoder;
@@ -137,9 +138,23 @@ public final class WadAssets implements AutoCloseable {
 				return null;
 			}
 			int w = e.gfx().width(), fh = e.gfx().height() / e.gfx().frames();
-			int[] argb = TextureDecoder.decode(e.gfx(), e.pal(), 0);
 			Texture[] out = new Texture[e.gfx().frames()];
+			// 모드 PNG (49 문서 §14): 프레임별 <이름>.<f>.png, 없으면 <이름>.png 세로 스트립을 프레임 수로 자름
+			java.awt.image.BufferedImage strip = TextureOverrides.any() ? TextureOverrides.load(wad.name(), n, -1) : null;
+			int[] argb = null;
 			for (int f = 0; f < out.length; f++) {
+				java.awt.image.BufferedImage ov = TextureOverrides.any() ? TextureOverrides.load(wad.name(), n, f) : null;
+				if (ov == null && strip != null) {
+					int sh = Math.max(1, strip.getHeight() / out.length);
+					ov = strip.getSubimage(0, Math.min(f * sh, strip.getHeight() - sh), strip.getWidth(), sh);
+				}
+				if (ov != null) {
+					out[f] = upload(TextureOverrides.fit(ov, w, fh), n + "#" + f);
+					continue;
+				}
+				if (argb == null) {
+					argb = TextureDecoder.decode(e.gfx(), e.pal(), 0);
+				}
 				int[] sub = new int[w * fh];
 				System.arraycopy(argb, f * w * fh, sub, 0, Math.min(sub.length, argb.length - f * w * fh));
 				out[f] = Texture.of(TextureDecoder.toImage(w, fh, sub), true).withNormalSource(n + "#" + f, w, fh, () -> sub);
@@ -225,12 +240,14 @@ public final class WadAssets implements AutoCloseable {
 			return null;
 		}
 		return glTextures.computeIfAbsent(txrName, n -> {
-			java.awt.image.BufferedImage pre = decoded.remove(n);
+			Pre pre = decoded.remove(n);
 			for (TextureLibrary.Entry e : textures.textures()) {
 				if (e.txr().name().equals(n)) {
-					java.awt.image.BufferedImage img = pre != null ? pre
-							: TextureDecoder.toImage(e.gfx().width(), e.gfx().height(), TextureDecoder.decode(e.gfx(), e.pal(), 0));
-					return Texture.of(img, true)
+					Pre p = pre != null ? pre : image(e, n);
+					if (p.override()) {
+						return upload(p.img(), n);
+					}
+					return Texture.of(p.img(), true)
 							.withNormalSource(n, e.gfx().width(), e.gfx().height(), () -> TextureDecoder.decode(e.gfx(), e.pal(), 0));
 				}
 			}
@@ -239,7 +256,31 @@ public final class WadAssets implements AutoCloseable {
 	}
 
 	/** 미리 해독한 텍스처 그림 ({@link #prepare}, 아무 스레드) — {@link #texture} 가 GL 로 올릴 때 꺼내 쓴다. */
-	private final Map<String, java.awt.image.BufferedImage> decoded = new java.util.concurrent.ConcurrentHashMap<>();
+	private final Map<String, Pre> decoded = new java.util.concurrent.ConcurrentHashMap<>();
+
+	/** CPU 그림과 모드 PNG 교체 여부. */
+	private record Pre(java.awt.image.BufferedImage img, boolean override) {
+	}
+
+	/** 텍스처 그림 (CPU): 모드 PNG (49 문서 §14) 가 있으면 원본 자리에 맞춘 그것, 없으면 해독. */
+	private Pre image(TextureLibrary.Entry e, String name) {
+		java.awt.image.BufferedImage ov = TextureOverrides.load(wad.name(), name, -1);
+		if (ov != null) {
+			return new Pre(TextureOverrides.fit(ov, e.gfx().width(), e.gfx().height()), true);
+		}
+		return new Pre(TextureDecoder.toImage(e.gfx().width(), e.gfx().height(), TextureDecoder.decode(e.gfx(), e.pal(), 0)), false);
+	}
+
+	/** {@link #texture} 가 GL 로 올릴 그림 (CPU 만, GL 없음 — 확인·테스트용). 없는 이름이면 null. */
+	public java.awt.image.BufferedImage textureImage(String txrName) {
+		TextureLibrary.Entry e = entry(txrName);
+		return e == null ? null : image(e, txrName).img();
+	}
+
+	/** 교체 그림 업로드: 노멀맵 출처도 교체 그림 (44 문서). */
+	private static Texture upload(java.awt.image.BufferedImage img, String key) {
+		return Texture.of(img, true).withNormalSource(key, img.getWidth(), img.getHeight(), () -> TextureOverrides.pixels(img));
+	}
 
 	/** CPU 만: {@link #texture} 와 같은 첫 항목을 해독해 둔다. */
 	private void predecode(String txrName) {
@@ -248,7 +289,7 @@ public final class WadAssets implements AutoCloseable {
 		}
 		for (TextureLibrary.Entry e : textures.textures()) {
 			if (e.txr().name().equals(txrName)) {
-				decoded.put(txrName, TextureDecoder.toImage(e.gfx().width(), e.gfx().height(), TextureDecoder.decode(e.gfx(), e.pal(), 0)));
+				decoded.put(txrName, image(e, txrName));
 				return;
 			}
 		}
@@ -270,6 +311,10 @@ public final class WadAssets implements AutoCloseable {
 		}
 		TextureLibrary.Entry f = best;
 		return glTextures.computeIfAbsent(txrName + "@" + f.tagIndex(), n -> {
+			java.awt.image.BufferedImage ov = TextureOverrides.load(wad.name(), txrName, -1);
+			if (ov != null) {
+				return upload(TextureOverrides.fit(ov, f.gfx().width(), f.gfx().height()), n);
+			}
 			int[] argb = TextureDecoder.decode(f.gfx(), f.pal(), 0);
 			return Texture.of(TextureDecoder.toImage(f.gfx().width(), f.gfx().height(), argb), true)
 					.withNormalSource(n, f.gfx().width(), f.gfx().height(), () -> TextureDecoder.decode(f.gfx(), f.pal(), 0));
