@@ -169,6 +169,32 @@ public final class HitVolumes {
 		return false;
 	}
 
+	/**
+	 * 선분 a → b 가 이 볼륨의 피격 구 (몸 PartType 1, 없으면 전부) 를 지나는지 — 블레이드 사슬 적 스윕 (0x1FAFC8 → 0x11E190, 질의 0x100003).
+	 * 맞으면 접촉점 (구 중심에서 선분까지 가장 가까운 점) · SheetFX 를 피격 기록에 남긴다 [추정: 피격 구 필터는 {@link #sweptHit} 와 같은 규칙].
+	 */
+	public boolean segmentHit(Vector3f a, Vector3f b) {
+		boolean anyBody = hasPart(PART_BODY);
+		float dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+		float dd = dx * dx + dy * dy + dz * dz;
+		for (int k = 0; k < srcs.size(); k++) {
+			if (anyBody && srcs.get(k).part != PART_BODY) {
+				continue;
+			}
+			float[] c = cur[k];
+			float s = dd > 1e-9f ? Math.max(0, Math.min(1, ((c[0] - a.x) * dx + (c[1] - a.y) * dy + (c[2] - a.z) * dz) / dd)) : 0;
+			float px = a.x + dx * s, py = a.y + dy * s, pz = a.z + dz * s;
+			float ex = px - c[0], ey = py - c[1], ez = pz - c[2];
+			if (ex * ex + ey * ey + ez * ez <= c[3] * c[3]) {
+				lastPoint.set(px, py, pz);
+				lastFx = srcs.get(k).fx;
+				lastValid = true;
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/** 마지막으로 맞은 구의 SheetFX (MFX 템플릿 번호, 피격 기록이 없으면 −1). */
 	public int lastHitFx() {
 		return lastValid ? lastFx : -1;

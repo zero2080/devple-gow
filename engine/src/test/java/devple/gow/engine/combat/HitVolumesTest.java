@@ -74,6 +74,76 @@ class HitVolumesTest {
 		assertEquals(0, swing(40, "behind").hits, "등 뒤 40");
 	}
 
+	/**
+	 * 블레이드 사슬 적 스윕 (0x1FAFC8 → Combatant.chainSweep): 손 기술 판정이 닿지 않는 400 앞 미노타우로스도
+	 * 시작점 → 블레이드 점 선분이 몸 구를 지나면 블레이드 공격 창 안에서 한 번 맞는다. 비켜간 선분·창 밖은 0.
+	 */
+	@Test
+	void chainSweepHitsAlongSegment() throws Exception {
+		Path rom = rom();
+		WadFile heroWad = WadFile.load(rom.resolve("R_HERO0.WAD"));
+		WadFile perm = WadFile.load(rom.resolve("R_PERMK.WAD"));
+		WadFile wpn = WadFile.load(rom.resolve("R_WPN0_2.WAD"));
+		Tweaks tw = new Tweaks();
+		tw.load(perm);
+		tw.load(heroWad);
+		Skeleton sk = Skeleton.loadAll(heroWad).stream().filter(s -> s.name.equals("hero")).findFirst().orElseThrow();
+		AnimationSet set = AnimationSet.load(heroWad, "ANM_hero");
+		Animator animator = new Animator(sk, set, tw, "/Animation/goHero/");
+		HeroController ctl = new HeroController(animator);
+		CombatOwner owner = new CombatOwner() {
+			public float hp() { return 100; }
+			public boolean onGround() { return true; }
+			public int bladeLevel() { return 2; }
+			public boolean godMode() { return false; }
+			public boolean artemisEquipped() { return false; }
+			public int selectedMagic() { return 0; }
+			public int classId() { return -1; }
+			public Vector3f position() { return ctl.position; }
+			public float yaw() { return ctl.yaw; }
+		};
+		Combatant c = new Combatant(new CombatData(perm, CombatData.heroFiles(), set), animator, owner);
+		c.setHitVolumes(HitVolumes.forHero(heroWad, sk, wpn));
+		EnemyFighter min = EnemyFactory.load(rom.resolve("R_MIN.WAD"), perm, -1).spawn();
+		min.pos.set(0, 0, -400);
+		c.setTarget(min);
+		ScriptedInput in = new ScriptedInput(0, List.of(new ScriptedInput.Step(0.1f, 0.05f, PadButton.SQUARE)));
+		float dt = 1 / 60f;
+		Vector3f from = new Vector3f(0, 20, 0);
+		int beforeWindow = 0, miss = 0, hit = 0, again = 0;
+		boolean sawWindow = false;
+		for (float t = 0; t < 1.6f; t += dt) {
+			in.advance(dt);
+			c.update(in, dt);
+			if (c.active()) {
+				ctl.updateCombat(c, in, 0, dt, null);
+			} else {
+				ctl.update(in, 0, dt);
+			}
+			min.update(dt);
+			boolean window = c.activeDamage(HitVolumes.PART_LEFT) != 0 || c.activeDamage(HitVolumes.PART_TWIN) != 0;
+			if (!window) {
+				if (!sawWindow) {
+					beforeWindow += c.chainSweep(HitVolumes.PART_LEFT, from, List.of(new Vector3f(0, 20, -500)));
+				}
+				continue;
+			}
+			if (!sawWindow) {
+				sawWindow = true;
+				miss = c.chainSweep(HitVolumes.PART_LEFT, from, List.of(new Vector3f(300, 20, -500)));
+				hit = c.chainSweep(HitVolumes.PART_LEFT, from, List.of(new Vector3f(300, 20, -100), new Vector3f(0, 20, -500)));
+				again = c.chainSweep(HitVolumes.PART_LEFT, from, List.of(new Vector3f(0, 20, -500)));
+			}
+		}
+		assertTrue(sawWindow, "COMBO 의 블레이드 공격 창");
+		assertEquals(0, beforeWindow, "창 밖 (0x209D00 = 0)");
+		assertEquals(0, miss, "비켜간 선분");
+		assertTrue(hit >= 1, "몸 구를 지나는 끝점");
+		assertEquals(0, again, "같은 (개체, 공격) 은 기술당 한 번");
+		assertEquals(510, min.hitVolumes().lastHitFx(), "맞은 구 SheetFX");
+		assertTrue(min.hitVolumes().lastHitPoint().z < -350);
+	}
+
 	private record Result(int hits, int fx) {
 	}
 

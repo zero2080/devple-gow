@@ -346,9 +346,22 @@ public final class HeroRig implements AutoCloseable {
 	 */
 	public void tickBlades(float dt) {
 		var m = combat.move();
-		chain.update(this::jointWorld, combat.active(), m != null && (m.flags() & 0x80) != 0, dt);
+		boolean blades = !player.artemisEquipped; // 0x1FAFC8: 블레이드 GO +0x4 & 4 (아르테미스의 검이면 블레이드 GO 없음)
+		chain.update(this::jointWorld, combat.active(), m != null && (m.flags() & 0x80) != 0, dt, blades ? ctl.position : null, bladeWalls);
+		for (BladeChain.Side s : chain.sides) {
+			if (blades && !s.sweepTo.isEmpty()) {
+				combat.chainSweep(s.index == 0 ? 2 : 3, s.sweepFrom, s.sweepTo); // 0x1FB158: 왼쪽 부위 2, 오른쪽 3
+			}
+		}
 		ctl.world(bladeTickWorld, 1f);
 		tickBladeLights(dt);
+	}
+
+	/** 블레이드 벽 질의 (0x1FAFC8). null 이면 벽 충돌 없음 (연습 씬 등). */
+	private BladeChain.Walls bladeWalls;
+
+	public void setBladeWalls(BladeChain.Walls w) {
+		bladeWalls = w;
 	}
 
 	/** LeftBladeLight / RightBladeLight (R_WPN 의 LGT, 47 문서 §4). 무기 WAD 가 없거나 라이트가 없으면 null. */

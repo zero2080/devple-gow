@@ -145,7 +145,7 @@ PAND03A WaterCam1/3/4/5·PoolLvrCam·PoolCam12/14/16 (4 bloodGel, 피 웅덩이)
 2. 목표 = 0: 등 관절, 비율 +0x98 = 1, 배율 Blade Scale On Back / 1: lWeapIH, 1, In Hand / 2: **lWeapOH, Blade Damping 0.4**, Out Hand. 0 이면 사슬 숨김 (0x1FDAE8), 1·2 면 보임 (0x1FD9F8).
 3. 이전 블레이드 행렬 (정규직교 0x1853E8) → 쿼터니언 (0x1840D8), 목표도 같이 → **slerp(이전, 목표, clamp(비율·dt·60))** (0x184388), 위치 = 이전 + (목표 − 이전)·같은 t.
    배율 +0x9C += (+0xA0 − +0x9C)·0.1. 결과 행렬 (+0x00) 에 배율을 곱해 **블레이드 GO 행렬** (GO +0x20…) 로 쓴다 — 0x1FAA10 이 GO 를 바꿀 때 복사하는 그 행렬.
-4. 0x1FAFC8: 골반 높이에서 블레이드까지 레이 → 벽에 막히면 블레이드를 당긴다 (Blade Collision Tolerance) — 엔진 미구현 [근사].
+4. 0x1FAFC8 (slerp 결과 행렬을 받아 위치를 고친 뒤 +0x00..+0x30 과 GO 행렬에 씀): 손 밖일 때 골반 높이 → 블레이드 점 선분으로 벽에 막히면 블레이드를 당기고 불꽃, 사슬 선분에 걸린 적은 맞는다 → §3.8.
 
 ### 3.3 사슬 곡선 · 사슬 고리 (0x1FBD04…, 0x1FC870) [확실: 코드]
 - P0 = lChain 위치, d0 = −(lChain Z 축) 정규화. P3 = lChainW 를 lWeapOH 기준으로 옮겨 블레이드 행렬에 붙인 위치 (inv(lWeapOH)·lChainW 를 블레이드에 곱함), d3 = 그 Z 축.
@@ -181,7 +181,7 @@ PAND03A WaterCam1/3/4/5·PoolLvrCam·PoolCam12/14/16 (4 bloodGel, 피 웅덩이)
 - `BladeChainRenderer`: 무기 WAD 의 MAT_chainlink/chainglow/swordtrail (god 이면 MAT_god*), 파티클 셰이더, 깊이 검사만 (쓰기 없음), 컬링 끔. 영웅 다음에 그린다 (거울 패스에는 없음).
 - `MagicFx`: 보통 블레이드도 goMAIblade GO 를 붙여 이미터만 (`hideMesh`, 메시는 BladeModels), god 판과 같이 `emitterOff` = flame 이미터는 `Combatant.trail(side)` 일 때만.
 - `-Dgow.nochain` 사슬·궤적 끔 (비교용).
-- [근사] 0x1FAFC8 블레이드 벽 충돌, 그림자 띠, CombatFileSet "Trail Left/Right" 세트 플래그, GS CLAMP 미확인이라 궤적 V 는 아래 줄 텍셀 중심.
+- [근사] 그림자 띠, CombatFileSet "Trail Left/Right" 세트 플래그, GS CLAMP 미확인이라 궤적 V 는 아래 줄 텍셀 중심.
 
 ### 3.7 검증 (스크래치 `blade/`)
 - `combo_115/125/142.png` (ATHN01A, `-Dgow.script=SQUARE:1.0:0.05,SQUARE:1.35:0.05,SQUARE:1.7:0.05`): 손목에서 던진 블레이드까지 휘는 사슬 고리·빛, 블레이드 불꽃 (궤적 중).
@@ -189,3 +189,58 @@ PAND03A WaterCam1/3/4/5·PoolLvrCam·PoolCam12/14/16 (4 bloodGel, 피 웅덩이)
 - `god5_200.png` / `crop_god5_200.png` (`-Dgow.giveAll -Dgow.script=L3:1:0.2,R3:1:0.2,SQUARE:1.6:0.05,…`): god 판 파란 사슬 (MAT_godchainlink) 과 goMAIgodblade 가 블레이드 행렬을 따름.
 - 테스트 `BladeChainTest` (5): 제어점·번스타인 계수·길이, 마디/표본/옆 벡터·숨김·상한, 궤적 정점 (U·칼끝·f), 상태 전환·Damping, 실제 □ 콤보에서 왼쪽 블레이드 손 밖·로케이터보다 늦음·사슬 여러 마디·이벤트 17.
   `EffectTest.bladeFlameEmittersAreGated`: goMAIblade/goMAIgodblade 에 flame 이미터 ≥ 2, 그 밖 이미터 존재.
+
+### 3.8 블레이드 벽 충돌 · 사슬 적 스윕 (0x1FAFC8) (`BladeChain.collide`, `Combatant.chainSweep`, `MagicFx.bladeSpark`)
+
+#### 3.8.1 원작 [확실: 코드]
+0x1FB460 이 slerp 로 만든 새 블레이드 행렬 (스택, 배율 없음) 을 a1 로 0x1FAFC8 (a0 = 블레이드 객체) 에 넘기고, 돌아온 행렬을 블레이드 상태 (+0x00..+0x30) 와 GO 행렬에 쓴다 (0x1FBB38 – 0x1FBC04).
+그래서 당긴 위치가 다음 프레임 slerp 의 출발점이다. (Blade Collision Tolerance 0.5 튜닝은 이 함수가 읽지 않는다.)
+
+1. 블레이드 객체 +0x50 = 0. 블레이드 GO (영웅 부착 슬롯 +0x90·0x34) 의 +0x4 & 4 (보임) 가 아니면 끝.
+2. **블레이드 점** B = 블레이드 위치 + (0 − Z) × 0.5 × 16 = 위치 − Z × 8 (Z = 새 행렬 셋째 행). **시작점** O = (영웅 GO 위치 x, **골반 관절 (+0x8E) 월드 y**, 영웅 z) (0x243378 → +0x30, 0x136BD8).
+   블레이드 라이트 (+0xAC) 를 B 에 두고 방향 O − B (0x151928 / 0x151978, 47 문서 §4).
+3. 상태 +0x92 ≠ 2 (손 밖이 아님) 이면 끝 — 벽·적 질의는 **던진 블레이드만**.
+4. **적 스윕** (0x1FB154 – 0x1FB2C8): 부위 s = 왼쪽 2 / 오른쪽 3. 0x209D00 (combatant, s) 또는 (…, 11) 이 0 이 아니면
+   (지금 공격 창 안에서 그 부위 첫 공격 레코드의 피해 바이트 × 배율):
+   - 질의 구조체 0x3309F0: +0x00 종류 마스크 0x100003, +0x08 콜백 **0x1FAF40**, +0x14 제외 핸들 = 영웅, +0x20 = s, +0x24 = lChainW 관절.
+   - 이전 블레이드 점 A = 이전 GO 위치 (GO +0x50, 이번 프레임 아직 안 씀) − 지금 Z × 8. 간격 k = |B − A| > 6.4 이면 6.4 / |B − A|, 아니면 1.
+     t = 1, 1 − k, … (다음 t − k ≥ 0 인 동안) 마다 선분 O → A + (B − A)·t 를 0x11E190 으로 질의.
+   - 콜백 0x1FAF40: 걸린 개체·재질·관절로 **OnContact 0x203AF0 를 부위 s 와 11 로 두 번**, 0x337C18 = 1, 0xB (계속) 반환.
+   - 하나라도 걸렸으면 블레이드 +0xA4 = 0 (피 묻은 블레이드 시간: 0x1FB508 이 부착물 1 blooddrip 을 4 초, 2 bloodspray 를 0.1 초에 걸쳐 끈다).
+5. **벽** (0x1FB2CC): 질의 +0x00 = 0xFF9CE00F, **+0x04 면 제외 마스크 0x0B130000** (AIBlock · ClimbGuide · NoPlayerCollision · GeneralGuide · NoDiving · CombatGuide),
+   +0x0C = 2 (가장 가까운 충돌만, 0x11E190 의 +0x20 거리 비교), +0x14 = 영웅. 선분 O → B.
+   - 맞으면 접촉 기록 0x2C8F10 (+0x00 점 H, +0x10 면 법선, +0x24 개체, +0x2C 재질 엔트리).
+     개체가 없거나 (정적 시트) 개체 +0xF4 bit 31 이면: +0x50 = H − B, **블레이드 위치 = H + Z × 8** (블레이드 점을 충돌점에 놓음).
+   - 그리고 언제나 **0x202248** (슬롯, 영웅, MFX = *(재질 엔트리 + SheetFX 오프셋 [0x3376FC]), H, 법선) — 불꽃.
+   - 맞은 개체가 bit 31 이 아니면 종류 마스크 0x80000000 만으로 다시 질의해 맞으면 같은 방식으로 당긴다 (불꽃 없음).
+6. **0x202248** (블레이드 슬롯 +0x24 이펙트 핸들, +0x2C MFX, +0x30 ← [0x3305D8] 갱신 [추정: 프레임 시각]): 핸들이 아직 살아 있고 MFX 가 같으면 **그 이펙트 GO 행렬만 새 점으로**
+   (X = norm((0,0,1) × n) — 짧으면 (0,1,0) × n, Y = n, Z = norm(n × X)). 아니면 MFX "Slice Hit Name" (+0x30) 을 0x221918 로 새로 내고
+   "Slice Hit Sound" 를 0x221738 로. → 벽에 대고 있는 동안 불꽃이 끝날 때마다 다시 터지고 소리도 그때만 난다.
+   같은 0x202248 의 다른 호출자: 0x1DB788 (아르테미스의 검, 부위 10, 칼날 선분, 같은 질의 마스크), 0x1C3100 (적 무기).
+- 되튐 애니·기술 취소·사슬 회수는 **없다** — 당겨진 위치에서 다음 프레임에 다시 애니 로케이터를 따라간다 (Blade Damping 0.4).
+
+#### 3.8.2 엔진
+- `BladeChain.update(…, root, walls)`: slerp·lerp 뒤 손 밖이면 `collide` — O = (`ctl.position` x/z, 골반 `Pelvis` 월드 y), B = 위치 − Z × 8,
+  `sweepPoints` (원작 루프 그대로) 를 `Side.sweepTo` 에, `Walls.cast(O, B, WALL_EXCLUDE)` 가 맞으면 `pos += H − B` (`wallHit`, `wallPoint/Normal/SheetFx`, `pull` = +0x50).
+  `WALL_EXCLUDE = SurfaceAttr.fromRecord(0x0B130000, 0, 0)` [확실]. 기존 `update(…)` 은 질의 없음 (연습 씬·테스트).
+- `HeroRig.tickBlades`: 아르테미스의 검이 아니면 영웅 위치·`setBladeWalls` 를 넘기고, `sweepTo` 가 있으면 `Combatant.chainSweep(2 / 3, O, 끝점들)`.
+- `Combatant.activeDamage(part)` = 0x209D00, `chainSweep`: 부위 s 나 11 의 피해가 0 이 아니면 대상·주변 개체의 피격 구 (`HitVolumes.segmentHit`: 몸 구, 없으면 전부 — 손 판정과 같은 [추정])
+  를 지나는 끝점이 있으면 창 안의 부위 s · 11 공격마다 OnContact (대상은 `contact`, 주변은 `receive`). (개체, 공격 번호) 기술당 한 번은 손 판정과 같은 기록.
+- `GameScene`: `wireEffects` 에서 벽 질의 = 현재 레벨 정적 충돌 (`LevelCollision.raycast`, 면 속성 & 제외 마스크 = 0 인 면, 양면) [근사: 종류 마스크 0xFF9CE00F 의
+  CDV GO 몸체 (문·발판·정박한 배)·다른 슬롯 레벨은 빠짐, 개체 +0xF4 bit 31 / 0x80000000 재질의 의미 미상].
+  틱마다 `wallHit` 인 쪽에 `MagicFx.bladeSpark(side, SheetFX, 점, 법선)` — 0x202248 의 "살아 있고 같은 MFX 면 옮기기만" 규칙, GO 방향은 `weaponWorld` 와 같은 면 법선 축 [근사: 0x221918 의 축].
+- `MagicFx.bladeSliceNative` (GameScene 이 켬): `weaponWorld` 의 구 스윕 근사 (40 문서 §6) 에서 블레이드 부위 2 / 3 / 11 을 뺀다 —
+  원작은 블레이드의 월드 베기를 손 밖 사슬 질의로만 낸다 (손 안·등의 블레이드는 벽에 불꽃을 내지 않음).
+- 미구현: 적 스윕 적중 뒤 blooddrip/bloodspray 부착물 (+0xA4), 블레이드 라이트는 원작처럼 당기기 전 B 가 아니라 당긴 뒤 블레이드 기준 (차이 = 당긴 양만큼).
+- 순회 보고서 (`work/verify/report.md`) 는 변화 없음 — `TraversalVerifier` 는 영웅 리그·전투를 쓰지 않는다.
+
+#### 3.8.3 검증
+- 테스트 (엔진 397 → 400):
+  `BladeChainTest.wallQueryMaskAndSweepPoints` (제외 마스크 6 비트 = 0x0B130000, Water·Death 는 막음, 끝점 간격·개수),
+  `wallPullsBladeToHitPoint` (합성 관절·z = −30 벽: 손 밖 블레이드 점이 벽을 넘지 않고 충돌점에 놓임, +0x50, 시작점 높이 = 골반, 벽 없으면 로케이터까지, 손 밖이 아니면 질의 없음),
+  `comboThrowsBladesOnChain` 에 실제 □ 콤보 + 정면 25 벽 (`Pelvis` 관절 조회 포함, 막힌 점 = 벽 위),
+  `HitVolumesTest.chainSweepHitsAlongSegment` (400 앞 미노타우로스: 창 밖 0, 비켜간 선분 0, 몸 구를 지나는 끝점 ≥ 1 적중·SheetFX 510, 다시 0).
+- 스크린샷 (스크래치 `blade/`, 커밋 안 함): `wall_200/215/230/245.png`, `crop_wall_*.png` (ATHN01A,
+  `-Dgow.script=LS:0.5:2.5:0:-1,SQUARE:3.2:0.05,SQUARE:3.55:0.05,SQUARE:3.9:0.05`, `--ticks`): 갑판 오른쪽 난간으로 걸어가 □ 콤보 — 틱 230 에 난간에 막힌 블레이드 옆 goWoodSlice 먼지
+  (`-Dgow.fxlog`: `블레이드 벽 0/1 SheetFX 30 → goWoodSlice`, 높이 25–27 = 골반 높이 선분이 난간 면에 걸림).
+

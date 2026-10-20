@@ -905,6 +905,83 @@ public final class Combatant {
 		}
 	}
 
+	/**
+	 * 0x209D00: 지금 공격 창 안에서 부위 part 인 첫 공격 레코드의 피해 (없으면 0). 블레이드 사슬 적 스윕의 조건.
+	 */
+	public float activeDamage(int part) {
+		if (!active() || move == null) {
+			return 0;
+		}
+		float t = progress();
+		for (Attack a : move.attacks()) {
+			if (t >= a.start() && t <= a.end() && a.part() == part) {
+				return a.damage();
+			}
+		}
+		return 0;
+	}
+
+	/**
+	 * 블레이드 사슬 적 스윕 (0x1FAFC8 의 0x1FB1B4 – 0x1FB2C0, 45 문서 §3.7) [확실: 조건·부위 / 추정: 피격 구 필터]:
+	 * 손 밖 블레이드의 부위 part (왼쪽 2 / 오른쪽 3) 나 쌍 11 의 피해가 0 이 아니면 (0x209D00 두 번), 시작점 (영웅 x, 골반 y, 영웅 z) →
+	 * 끝점마다 선분 질의 (0x11E190, 질의 0x100003, 콜백 0x1FAF40) 에 걸린 개체에 OnContact (0x203AF0) 를 부위 part 와 11 로 두 번.
+	 * 같은 (개체, 공격 번호) 는 기술당 한 번 (손 기술 판정과 같은 기록).
+	 *
+	 * @return 이번에 새로 맞힌 공격 수
+	 */
+	public int chainSweep(int part, Vector3f from, java.util.List<Vector3f> to) {
+		if (to.isEmpty() || activeDamage(part) == 0 && activeDamage(HitVolumes.PART_TWIN) == 0) {
+			return 0;
+		}
+		int n = 0;
+		java.util.List<Hittable> victims = new ArrayList<>();
+		if (target != null) {
+			victims.add(target);
+		}
+		for (Hittable b : bystanders.get()) {
+			if (b != null && b != target) {
+				victims.add(b);
+			}
+		}
+		float t = progress();
+		for (Hittable v : victims) {
+			HitVolumes hv = v.hitVolumes();
+			if (v.invulnerable() || hv == null || hv.isEmpty()) {
+				continue;
+			}
+			boolean touch = false;
+			for (Vector3f p : to) {
+				if (hv.segmentHit(from, p)) {
+					touch = true;
+					break;
+				}
+			}
+			if (!touch) {
+				continue;
+			}
+			for (int p : new int[]{part, HitVolumes.PART_TWIN}) {
+				for (Attack a : move.attacks()) {
+					if (t < a.start() || t > a.end() || a.part() != p) {
+						continue;
+					}
+					if (!hitLog.add(((long) System.identityHashCode(v) << 16) | a.index())) {
+						continue;
+					}
+					n++;
+					if (v == target) {
+						contact(a);
+					} else {
+						float dmg = a.damage() * damageScale.get();
+						Vector3f knock = new Vector3f(a.impulse()[0], a.impulse()[1], -a.impulse()[2]).rotateY(owner.yaw());
+						Hittable.Result r = v.receive(a, this, dmg, knock);
+						log.accept(String.format("  사슬 휘말림 공격#%d → 피해 %.1f (%s)", a.index(), dmg, r));
+					}
+				}
+			}
+		}
+		return n;
+	}
+
 	/** OnContact (10 문서 §15.4) 공격자 쪽. */
 	private void contact(Attack a) {
 		float dmg = a.damage() * damageScale.get();
