@@ -57,9 +57,24 @@ public final class WadPatches {
 		for (var e : patches.entrySet()) {
 			data.put(e.getKey(), Files.readAllBytes(e.getValue()));
 		}
+		int[] replaced = {0};
+		ByteBuffer out = rewrite(raw, data, replaced);
+		System.out.println("[mods] " + wadFile + ": 태그 " + replaced[0] + "개 교체 " + patches.keySet());
+		return out;
+	}
+
+	/**
+	 * 태그 스트림 다시 짜기 (순수 함수 — 엔진 적재와 {@code tools wad:put} 이 같이 쓴다). data 의 이름과 같은 데이터 태그 (그룹 시작·끝·PARAM 제외,
+	 * 같은 이름 전부) 의 데이터를 바꾸고 헤더 크기를 고친다. 데이터는 16 바이트 정렬로 0 을 채운다. 나머지는 바이트 그대로.
+	 */
+	public static ByteBuffer rewrite(ByteBuffer raw, Map<String, byte[]> data) {
+		return rewrite(raw, data, new int[1]);
+	}
+
+	private static ByteBuffer rewrite(ByteBuffer raw, Map<String, byte[]> data, int[] replaced) {
 		ByteBuffer b = raw.duplicate().order(ByteOrder.LITTLE_ENDIAN);
 		ByteArrayOutputStream out = new ByteArrayOutputStream(b.limit() + 1024);
-		int off = 0, replaced = 0;
+		int off = 0;
 		while (off + HEADER <= b.limit()) {
 			int tag = Short.toUnsignedInt(b.getShort(off));
 			int size = b.getInt(off + 4);
@@ -79,7 +94,7 @@ public final class WadPatches {
 				out.writeBytes(h.array());
 				out.writeBytes(repl);
 				out.writeBytes(new byte[((repl.length + 15) & ~15) - repl.length]);
-				replaced++;
+				replaced[0]++;
 			}
 			off = next;
 		}
@@ -88,8 +103,7 @@ public final class WadPatches {
 			b.get(off, tail);
 			out.writeBytes(tail);
 		}
-		System.out.println("[mods] " + wadFile + ": 태그 " + replaced + "개 교체 " + patches.keySet());
-		return ByteBuffer.wrap(out.toByteArray());
+		return ByteBuffer.wrap(out.toByteArray()).order(ByteOrder.LITTLE_ENDIAN);
 	}
 
 	static String baseName(String file) {

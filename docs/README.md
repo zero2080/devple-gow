@@ -52,7 +52,7 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 | 46 | [구현: 렌즈 플레어 (SCR_LensFlare 단일 가산 스프라이트, 가림 비율)](46-impl-lens-flare.md) | 1차 (테스트 3) |
 | 47 | [구현: 동적 라이트 (LGT, 0x1521B0 슬롯 2 + 주변광, VU 조명 커널, 블레이드 라이트) · 줄 스키닝 렌더](47-impl-lighting.md) | 1차 (테스트 10) |
 | 48 | [검증: 장시간 실행 안정성·성능 (PerfMonitor·GL 객체 수·레벨 체인, 레벨 전환 누수, 프레임 할당 핫스팟, 테스트 순서 의존)](48-perf-stability.md) | 1차 (8 레벨 × 180 초, 체인 24 레벨) |
-| 49 | [확장 구조 (gow.properties 설정 · 지역판 접미사 감지 · 모드 계층 rom/ 교체 · WAD 태그 교체 · 종류별 교체 자리)](49-extensibility.md) | 1차 (핵심 계층, 테스트 4) |
+| 49 | [확장 구조 (gow.properties 설정 · 지역판 접미사 감지 · 모드 계층 rom/ 교체 · WAD 태그 교체 · 키·TTF 폰트·텍스트·스테이지·컷신·사운드 WAV·애니 replace/speed·텍스처 PNG·적 AI 수치·플러그인·디스크 도구)](49-extensibility.md) | 완료 (테스트 32) |
 | 90 | [현황 / 로드맵](90-status-roadmap.md) | 수시 갱신 |
 
 ## 게임 실행
@@ -83,7 +83,12 @@ Shift L3 + 오른쪽 Shift R3 = 신들의 분노, Enter = START(일시정지).
 
 ```bash
 ./gradlew :tools:run --args="iso-info P2_gow_kor.iso"
+./gradlew :tools:run --args="disc:info P2_gow_kor.iso"             # 부트 실행 파일(SYSTEM.CNF)·지역·PAK·언어 접미사 (다른 판도, 49 문서 §15)
+./gradlew :tools:run --args="disc:setup P2_gow_kor.iso gow-rom"    # 추출 + gow.properties rom=·iso=(·region=) 합쳐 고침 (--all 동영상 포함, --dry-run)
 ./gradlew :tools:run --args="pak-extract P2_gow_kor.iso gow-rom"   # 동영상 제외 추출 (~1.4GB)
+./gradlew :tools:run --args="wad:get gow-rom/ATHN01A.WAD TXR_floor out.bin"             # WAD 태그 데이터 꺼내기 (모드 wad/ 형식)
+./gradlew :tools:run --args="wad:put gow-rom/ATHN01A.WAD TXR_floor in.bin out.WAD"      # 태그 오프라인 교체 (엔진 적재와 같은 규칙)
+./gradlew :tools:run --args="mod:new mymod"                         # mods/mymod/ 뼈대 (README·rom/·wad/·plugins/·ai.properties)
 ./gradlew :tools:run --args="wad-ls gow-rom/ATHN01A.WAD"
 ./gradlew :tools:run --args="texture:export gow-rom/R_HERO0.WAD work/textures/R_HERO0"   # TXR → PNG
 ./gradlew :tools:run --args="model:export gow-rom/R_HERO0.WAD work/models/R_HERO0 --preview"   # OBJ+MTL(+PNG 미리보기)

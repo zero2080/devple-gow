@@ -7,8 +7,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 
 /**
  * 실행 설정 (49 문서 §2). 우선순위: 시스템 속성 {@code -Dgow.<키>} → 작업 디렉터리의 {@code gow.properties} → 기본값.
@@ -45,6 +49,58 @@ public final class GameConfig {
 			}
 		}
 		return new GameConfig(p);
+	}
+
+	/**
+	 * 설정 파일의 키를 바꾸거나 끝에 더한다 — 다른 키·주석·순서는 그대로 (tools disc:setup, 49 문서 §15). 파일이 없으면 만든다.
+	 *
+	 * @return 실제로 바뀐 키
+	 */
+	public static List<String> update(Path file, Map<String, String> set) throws IOException {
+		List<String> lines = Files.isRegularFile(file) ? new ArrayList<>(Files.readAllLines(file, StandardCharsets.UTF_8)) : new ArrayList<>();
+		Set<String> found = new HashSet<>();
+		Set<String> changed = new LinkedHashSet<>();
+		for (int i = 0; i < lines.size(); i++) {
+			String t = lines.get(i).strip();
+			int sep = t.isEmpty() || t.startsWith("#") || t.startsWith("!") ? -1 : indexOfSep(t);
+			if (sep < 0) {
+				continue;
+			}
+			String k = t.substring(0, sep).strip();
+			if (!set.containsKey(k)) {
+				continue;
+			}
+			found.add(k); // 같은 키가 여러 줄이면 (Properties 는 마지막이 이김) 전부 고친다
+			String v = escape(set.get(k));
+			if (!t.substring(sep + 1).strip().equals(v)) {
+				lines.set(i, k + "=" + v);
+				changed.add(k);
+			}
+		}
+		for (var e : set.entrySet()) {
+			if (!found.contains(e.getKey())) {
+				lines.add(e.getKey() + "=" + escape(e.getValue()));
+				changed.add(e.getKey());
+			}
+		}
+		if (!changed.isEmpty()) {
+			Files.write(file, lines, StandardCharsets.UTF_8);
+		}
+		return List.copyOf(changed);
+	}
+
+	private static int indexOfSep(String t) {
+		for (int i = 0; i < t.length(); i++) {
+			char c = t.charAt(i);
+			if (c == '=' || c == ':') {
+				return i;
+			}
+		}
+		return -1;
+	}
+
+	private static String escape(String v) {
+		return v.replace("\\", "\\\\");
 	}
 
 	/** -Dgow.KEY → 파일의 KEY → def. */

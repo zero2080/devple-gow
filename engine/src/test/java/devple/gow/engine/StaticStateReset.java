@@ -14,5 +14,6 @@ public final class StaticStateReset implements BeforeEachCallback {
 	public void beforeEach(ExtensionContext context) {
 		devple.gow.engine.combat.EnemyFighter.resetSpawnCount();
 		devple.gow.engine.combat.AiTargets.clear();
+		devple.gow.engine.mod.Plugins.reset(); // 플러그인 등록표 (49 문서 §13 — 테스트 자원의 예제 플러그인이 다른 테스트에 새지 않게)
 	}
 }

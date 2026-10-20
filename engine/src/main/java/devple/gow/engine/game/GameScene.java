@@ -1618,6 +1618,7 @@ public final class GameScene implements Scene {
 			return;
 		}
 		time += dt;
+		devple.gow.engine.mod.Plugins.frame(dt); // 플러그인 매 프레임 훅 (49 문서 §13)
 		if (CHAIN != null && !leaving && time >= CHAIN_SECS) { // 레벨 연속 적재·해제 측정 (-Dgow.chain, 48 문서)
 			devple.gow.engine.core.PerfMonitor.requestReport();
 			String next = CHAIN[++session.chainIndex % CHAIN.length];

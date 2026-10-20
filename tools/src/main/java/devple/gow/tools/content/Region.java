@@ -39,20 +39,26 @@ public record Region(String suffix) {
 		if (s != null) {
 			return new Region(s.equals("-") ? "" : s);
 		}
-		List<String> found = detect(rom);
-		if (found.isEmpty() || found.contains("K")) {
-			return KOREAN;
-		}
-		return new Region(found.getFirst());
+		return choose(detect(rom));
 	}
 
 	/** rom 디렉터리의 R_PERM 접미사 목록 (이름순). */
 	public static List<String> detect(Path rom) {
 		try (Stream<Path> s = Files.list(rom)) {
-			return s.map(p -> PERM.matcher(p.getFileName().toString())).filter(Matcher::matches).map(m -> m.group(1)).sorted().toList();
+			return suffixes(s.map(p -> p.getFileName().toString()).toList());
 		} catch (IOException e) {
 			return List.of();
 		}
+	}
+
+	/** 파일 이름들 (rom 디렉터리·디스크 목차) 의 R_PERM 접미사 (이름순, 중복 없음). */
+	public static List<String> suffixes(java.util.Collection<String> names) {
+		return names.stream().map(PERM::matcher).filter(Matcher::matches).map(m -> m.group(1)).distinct().sorted().toList();
+	}
+
+	/** 감지된 접미사에서 고르기: K 우선, 그다음 이름순 첫째, 없으면 K. */
+	public static Region choose(List<String> found) {
+		return found.isEmpty() || found.contains("K") ? KOREAN : new Region(found.getFirst());
 	}
 
 	/** 공용 자산 WAD (HUD·메시지·효과음). */
