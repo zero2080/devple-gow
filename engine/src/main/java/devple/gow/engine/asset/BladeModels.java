@@ -65,6 +65,11 @@ public final class BladeModels implements AutoCloseable {
 		model.draw(cam, aspect, world, idle, white);
 	}
 
+	/** 블레이드 그림자 (SHG_MAIBlade) 의 부모 GO 모델 (영웅) — 방향·받는 평면·모드를 부모 것으로 (47 문서 §7). */
+	public void setShadowParent(Object parent) {
+		model.shadowParent = parent;
+	}
+
 	/** 무기 WAD (사슬·궤적 머티리얼). */
 	public WadAssets assets() {
 		return assets;

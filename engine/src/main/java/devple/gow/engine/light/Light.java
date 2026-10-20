@@ -16,6 +16,8 @@ public final class Light {
 	public float dyn = 1f;
 	/** 서버 목록에 들어 있는가 (vt+0x30 / vt+0x40). */
 	public boolean active = true;
+	/** 어느 WAD (슬롯 레벨) 의 라이트인가 — 다른 슬롯 레벨이 바뀌면 그 WAD 의 라이트를 뺀다 (47 문서 §8). null = 레벨 밖 (블레이드). */
+	public String source;
 
 	public Light(LightDef def) {
 		this.def = def;

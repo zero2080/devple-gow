@@ -49,6 +49,35 @@ public final class LightServer {
 		return out;
 	}
 
+	/**
+	 * 슬롯 레벨 WAD 의 라이트 (47 문서 §8): 원작은 두 슬롯 레벨이 함께 상주하고, 각 WAD 의 LGT 는 같은 전역 LightServer (0x29CD44) 에
+	 * 들어간다 — 라이트 묶음 그룹 보이기 0x151F08 (참조 수 +0x34 가 0 → 1 이면 묶음의 라이트를 vt+0x30 으로 넣음) / 숨기기 0x151FC0 (1 → 0 이면 vt+0x40 으로 뺌).
+	 * 그래서 이웃 레벨의 라이트도 물체 모으기 0x1521B0 의 후보다 (구-구 겹침만 본다).
+	 */
+	public List<Light> addAll(WadFile wad, String source) {
+		List<Light> out = addAll(wad);
+		for (Light l : out) {
+			l.source = source;
+		}
+		return out;
+	}
+
+	/** source WAD 의 라이트를 모두 뺀다 (슬롯 레벨 내림 — 0x151FC0 의 참조 수 0). 뺀 수. */
+	public int removeSource(String source) {
+		int n = lights.size();
+		lights.removeIf(l -> source != null && source.equalsIgnoreCase(l.source));
+		return n - lights.size();
+	}
+
+	/** source WAD 의 라이트 보이기/숨기기 (그룹 0x151F08 / 0x151FC0 — 서버 목록 넣기·빼기). */
+	public void setSourceActive(String source, boolean on) {
+		for (Light l : lights) {
+			if (source != null && source.equalsIgnoreCase(l.source)) {
+				l.active = on;
+			}
+		}
+	}
+
 	public Light add(LightDef d) {
 		Light l = new Light(d);
 		lights.add(l);

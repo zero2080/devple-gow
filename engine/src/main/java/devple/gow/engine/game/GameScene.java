@@ -254,10 +254,15 @@ public final class GameScene implements Scene {
 		// 동적 라이트 (47 문서): 레벨 WAD 의 LGT_ + 무기 WAD 의 블레이드 라이트. -Dgow.nolights 면 예전 고정 조명 (비교용)
 		if (System.getProperty("gow.nolights") == null) {
 			lights = new devple.gow.engine.light.LightServer();
-			int nl = lights.addAll(level.data().wad).size();
+			int nl = lights.addAll(level.data().wad, levelName).size();
 			hero.attachBladeLights(lights);
 			devple.gow.engine.light.LightServer.setCurrent(lights);
 			System.out.printf("라이트: 레벨 %d, 블레이드 %d%n", nl, lights.lights().size() - nl);
+			// 캐릭터 그림자 (renShadowServer 0x27, 47 문서 §7): 방향 = 비트 4 라이트. -Dgow.noshadow 면 끔
+			if (System.getProperty("gow.noshadow") == null) {
+				shadows = new devple.gow.engine.light.ShadowCasters();
+				devple.gow.engine.light.ShadowCasters.setCurrent(shadows);
+			}
 		}
 		magicFx.bindBlades(new devple.gow.engine.fx.MagicFx.Blades() { // 사슬이 정한 블레이드 행렬·궤적 (45 문서 §3)
 			public boolean world(int side, Matrix4f out) {
@@ -493,6 +498,9 @@ public final class GameScene implements Scene {
 		if (wad.equals(otherName)) {
 			return;
 		}
+		if (lights != null && otherName != null) {
+			lights.removeSource(otherName); // 이전 다른 슬롯 레벨의 라이트 빼기 (47 문서 §8)
+		}
 		otherName = wad;
 		otherScenePending = true; // 렌더 스레드에서 지오메트리 적재 (render)
 		otherCol = null;
@@ -500,6 +508,9 @@ public final class GameScene implements Scene {
 		try {
 			otherData = new LevelData(devple.gow.tools.wad.WadFile.load(session.rom.resolve(wad + ".WAD")));
 			otherCol = new LevelCollision(otherData.sheets);
+			if (lights != null && System.getProperty("gow.noneighbourlights") == null) { // 다른 슬롯 레벨의 LGT 도 같은 서버에 (원작 두 슬롯 상주, 0x151F08)
+				System.out.printf("라이트: 다른 슬롯 %s %d%n", wad, lights.addAll(otherData.wad, wad).size());
+			}
 		} catch (IOException | RuntimeException ex) {
 			System.out.println("이웃 레벨 충돌 로드 실패 " + wad + ": " + ex.getMessage());
 		}
@@ -626,6 +637,12 @@ public final class GameScene implements Scene {
 								it.hidden = !show;
 							}
 						}
+					}
+				}
+				// 슬롯 2 = 타입 0x27 (그림자) 속성 (0x1ABB78 → 0x1B1398) [확실: 디스어셈블]: 1 켬 / 2 끔
+				if (values.length > 2 && (values[2] == 1 || values[2] == 2) && shadows != null) {
+					for (String o : objects) {
+						shadows.setHidden(o, values[2] == 2);
 					}
 				}
 				if (values.length > 3 && values[3] != 0 && nav != null) {
@@ -927,7 +944,10 @@ public final class GameScene implements Scene {
 		if (bossKind == null) {
 			f.startSpawnAction(r.spawnAction()); // 스폰 슬롯 7: SPAWN / SKSWALLSPAWN / 도발 (32 문서 §벽 스폰)
 		}
-		enemies.add(new Enemy(f, kind.buildModel(enemyShader), r.actor(), kind));
+		AnimatedModel em = kind.buildModel(enemyShader);
+		em.shadowMode = devple.gow.engine.light.ShadowVolume.MODE_SLAB; // AI 생물 (0x1C13E0 → 0x1EBD78 → 0x1BF680, +0x174 bit 31 없음), 47 문서 §7
+		em.shadowKey = r.actor() != null ? r.actor().name : null;
+		enemies.add(new Enemy(f, em, r.actor(), kind));
 		if (boss != null) {
 			boss.onSpawn(f, r.actor(), r.templateId(), arena());
 		} else {
@@ -1566,6 +1586,9 @@ public final class GameScene implements Scene {
 		env.applyFog(hero.shader(), cam, e.window().height());
 		env.applyFog(enemyShader, cam, e.window().height());
 		Matrix4f m = new Matrix4f();
+		if (shadows != null) {
+			shadows.begin(); // 주 뷰의 캐릭터만 그림자 (거울 반사 패스는 level.render 안에서 이미 끝남)
+		}
 		for (Enemy en : enemies) {
 			if (en.fighter().shattered()) {
 				continue; // 부서진 석상 (원작은 *stonedbrk 파편 모델) [근사: 숨김]
@@ -1575,6 +1598,7 @@ public final class GameScene implements Scene {
 					e.renderer().white());
 		}
 		hero.draw(cam, e.window().aspect(), alpha, e.renderer().white());
+		renderShadows(e.window().aspect(), alpha);
 		if (System.getProperty("gow.lightdebug") != null && hero.lastLights() != null && (lightFrame++ % 30) == 0) {
 			System.out.println("영웅 라이트: " + hero.lastLights() + " 블레이드 " + (hero.bladeLight(0) != null ? hero.bladeLight(0).dyn : -1f));
 		}
@@ -1590,6 +1614,47 @@ public final class GameScene implements Scene {
 			levelHud.render(e);
 		}
 		hud.render(e);
+	}
+
+	/** 캐릭터 그림자 (47 문서 §7). null = 끔. */
+	private devple.gow.engine.light.ShadowCasters shadows;
+	private devple.gow.engine.render.ShadowRenderer shadowRenderer;
+	private final devple.gow.engine.light.ShadowVolume.Out shadowTris = new devple.gow.engine.light.ShadowVolume.Out();
+	private int shadowFrame;
+
+	/** 모은 그림자 볼륨을 불투명 캐릭터 뒤, 반투명 (사슬·이펙트) 앞에 그린다. 받는 면 = 현재 + 다른 슬롯 레벨 충돌 (NoShadows 면 제외, 0x1BF658). */
+	private void renderShadows(float aspect, float alpha) {
+		if (shadows == null) {
+			return;
+		}
+		hero.submitChainShadows(shadows, alpha);
+		shadowTris.clear();
+		shadows.build(lights, this::shadowReceiver, cam.eye, shadowTris);
+		if (System.getProperty("gow.shadowdebug") != null && (shadowFrame++ % 60) == 0) {
+			System.out.println("그림자: " + shadows.lastCasters + " 물체, 삼각형 " + shadows.lastTriangles + " " + shadows.describe());
+		}
+		if (shadowTris.triangles() > 0) {
+			if (shadowRenderer == null) {
+				shadowRenderer = new devple.gow.engine.render.ShadowRenderer();
+			}
+			shadowRenderer.draw(cam, aspect, shadowTris);
+		}
+	}
+
+	private org.joml.Vector4f shadowReceiver(Vector3f from, Vector3f dir, float max) {
+		java.util.function.Predicate<LevelCollision.Tri> f = t -> !t.has(devple.gow.tools.level.SurfaceAttr.NO_SHADOWS);
+		LevelCollision.Hit h = col.raycast(from, dir, max, f);
+		if (otherCol != null) {
+			LevelCollision.Hit o = otherCol.raycast(from, dir, h != null ? h.distance() : max, f);
+			if (o != null) {
+				h = o;
+			}
+		}
+		if (h == null) {
+			return null;
+		}
+		Vector3f n = h.tri().n();
+		return new org.joml.Vector4f(n.x, n.y, n.z, -n.dot(h.point()));
 	}
 
 	private devple.gow.engine.render.CameraFilterRenderer filterRenderer;
@@ -1653,6 +1718,12 @@ public final class GameScene implements Scene {
 	public void exit(Engine e) {
 		if (lights != null && devple.gow.engine.light.LightServer.current() == lights) {
 			devple.gow.engine.light.LightServer.setCurrent(null);
+		}
+		if (shadows != null && devple.gow.engine.light.ShadowCasters.current() == shadows) {
+			devple.gow.engine.light.ShadowCasters.setCurrent(null);
+		}
+		if (shadowRenderer != null) {
+			shadowRenderer.close();
 		}
 		if (otherScene != null) {
 			otherScene.exit(e);

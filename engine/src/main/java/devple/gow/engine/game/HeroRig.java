@@ -96,6 +96,12 @@ public final class HeroRig implements AutoCloseable {
 		combat.setHitVolumes(HitVolumes.forHero(assets.wad(), sk, java.nio.file.Files.exists(wpn) ? WadFile.load(wpn) : null));
 		blades = devple.gow.engine.asset.BladeModels.load(rom, costume, bladeLevel(), shader);
 		chain = BladeChain.fromTweaks(tweaks);
+		// 그림자 (47 문서 §7): 영웅 = 모드 2 (+0x174 bit 31 = 플레이어, 0x1BF8F8), 블레이드 GO = 영웅의 자식 → 같은 방향·평면 (0x1BF994)
+		model.shadowMode = devple.gow.engine.light.ShadowVolume.MODE_GROUND;
+		model.shadowKey = "hero";
+		if (blades != null) {
+			blades.setShadowParent(model);
+		}
 		this.rom = rom;
 		hittable = new Hittable() {
 			public Vector3f position() {
@@ -438,6 +444,32 @@ public final class HeroRig implements AutoCloseable {
 		String c = "/Player/Costume " + player.costume + "/";
 		float wl = tweaks.f(c, god ? "God Mode Weapon Length" : "Weapon Length", 0.7f) * 16f;
 		chainRenderer.draw(cam, aspect, renderFix(alpha), chain, god, tint, new boolean[]{trail(0), trail(1)}, wl);
+	}
+
+	/**
+	 * 사슬 그림자 (Blades_Init 의 MAT_stencil 띠, 0x1FD218 — 블레이드 +0xA8 bit 1 = 영웅 그림자의 받는 평면이 있을 때) 를 넘긴다:
+	 * 보이는 사슬마다 베지어를 마디 수로 나눈 점 (월드, 47 문서 §7.5).
+	 */
+	public void submitChainShadows(devple.gow.engine.light.ShadowCasters sc, float alpha) {
+		if (sc == null || blades == null || player.artemisEquipped || System.getProperty("gow.nochain") != null) {
+			return;
+		}
+		Matrix4f fix = renderFix(alpha);
+		for (BladeChain.Side s : chain.sides) {
+			if (!s.valid() || !s.chainVisible) {
+				continue;
+			}
+			float n = chain.segments(s.ctrl);
+			if (n <= 1f) {
+				continue;
+			}
+			int k = Math.min(BladeChain.MAX_SAMPLES - 1, (int) Math.ceil(n));
+			Vector3f[] pts = new Vector3f[k + 1];
+			for (int i = 0; i <= k; i++) {
+				pts[i] = fix.transformPosition(BladeChain.bezier(s.ctrl, (float) i / k, new Vector3f()));
+			}
+			sc.submitChain(model, pts);
+		}
 	}
 
 	/** 관절 월드 행렬 (영웅 월드 × 관절, 이펙트 부착용). 없는 관절이면 영웅 원점 + false. */
