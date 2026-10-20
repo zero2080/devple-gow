@@ -44,8 +44,10 @@ public final class SceneManager {
 			fade += fadeDir * dt / FADE_TIME;
 			if (fade >= 1f && pending != null) {
 				fade = 1f;
+				long t0 = System.nanoTime();
 				pop(e);
 				push(e, pending);
+				devple.gow.engine.core.PerfMonitor.loadTime("swap", t0);
 				pending = null;
 				fadeDir = -1;
 			} else if (fade <= 0f) {

@@ -37,13 +37,69 @@ public final class WadAssets implements AutoCloseable {
 	private final Map<String, MaterialAnim.Anim> matAnims;
 
 	public WadAssets(Path wadPath) throws IOException {
-		this.wad = WadFile.load(wadPath);
-		this.textures = new TextureLibrary(wad);
+		Parsed p = takePrefetched(wadPath);
+		if (p == null) {
+			p = Parsed.of(wadPath);
+		}
+		this.wad = p.wad;
+		this.textures = p.textures;
 		for (MaterialResource m : textures.materials()) {
 			materials.putIfAbsent(m.name(), m);
 		}
-		this.gowModels = GowModel.load(wad);
-		this.matAnims = MaterialAnim.load(wad);
+		this.gowModels = p.models;
+		this.matAnims = p.matAnims;
+	}
+
+	/** GL 없는 해석 결과 (WAD 파일·텍스처 목록·MDL·머티리얼 ANM). 한 WadAssets 가 한 번만 쓴다 (나눠 쓰지 않음). */
+	private record Parsed(WadFile wad, TextureLibrary textures, List<GowModel> models, Map<String, MaterialAnim.Anim> matAnims) {
+		static Parsed of(Path wadPath) throws IOException {
+			WadFile w = WadFile.load(wadPath);
+			return new Parsed(w, new TextureLibrary(w), GowModel.load(w), MaterialAnim.load(w));
+		}
+	}
+
+	/** 미리 해석 중인 WAD (경로 → 대기열, 한 번 꺼내면 끝) — 48 문서 §8. */
+	private static final Map<Path, java.util.ArrayDeque<java.util.concurrent.Future<Parsed>>> PREFETCH = new HashMap<>();
+
+	/**
+	 * 레벨 전환 페이드 동안 백그라운드로 해석해 둔다 ({@link Loader}). 다음 {@code new WadAssets(같은 경로)} 가 그 결과를 쓴다
+	 * (같은 파일을 같은 코드로 해석한 값 — 동기와 같음). 없는 파일은 무시.
+	 */
+	public static void prefetch(Path wadPath) {
+		if (!Loader.async() || !java.nio.file.Files.exists(wadPath)) {
+			return;
+		}
+		Path key = wadPath.toAbsolutePath().normalize();
+		var f = Loader.submit("wad " + key.getFileName(), () -> Parsed.of(key));
+		synchronized (PREFETCH) {
+			PREFETCH.computeIfAbsent(key, k -> new java.util.ArrayDeque<>()).add(f);
+		}
+	}
+
+	private static Parsed takePrefetched(Path wadPath) {
+		java.util.concurrent.Future<Parsed> f;
+		synchronized (PREFETCH) {
+			if (PREFETCH.isEmpty()) {
+				return null;
+			}
+			Path key = wadPath.toAbsolutePath().normalize();
+			var q = PREFETCH.get(key);
+			f = q == null ? null : q.poll();
+			if (q != null && q.isEmpty()) {
+				PREFETCH.remove(key);
+			}
+		}
+		if (f == null || (!f.isDone() && Loader.onLoaderThread())) { // 적재 스레드끼리 기다리지 않는다 → 그 자리에서 해석
+			return null;
+		}
+		return Loader.join(f, "wad " + wadPath.getFileName());
+	}
+
+	/** 쓰이지 않은 미리 해석 결과를 버린다 (GL 없음, 힙만). 레벨 진입 끝에 — 다음 레벨까지 붙잡지 않게. */
+	public static void dropPrefetched() {
+		synchronized (PREFETCH) {
+			PREFETCH.clear();
+		}
 	}
 
 	private TextureLibrary.Entry entry(String txrName) {
@@ -147,15 +203,33 @@ public final class WadAssets implements AutoCloseable {
 			return null;
 		}
 		return glTextures.computeIfAbsent(txrName, n -> {
+			java.awt.image.BufferedImage pre = decoded.remove(n);
 			for (TextureLibrary.Entry e : textures.textures()) {
 				if (e.txr().name().equals(n)) {
-					int[] argb = TextureDecoder.decode(e.gfx(), e.pal(), 0);
-					return Texture.of(TextureDecoder.toImage(e.gfx().width(), e.gfx().height(), argb), true)
+					java.awt.image.BufferedImage img = pre != null ? pre
+							: TextureDecoder.toImage(e.gfx().width(), e.gfx().height(), TextureDecoder.decode(e.gfx(), e.pal(), 0));
+					return Texture.of(img, true)
 							.withNormalSource(n, e.gfx().width(), e.gfx().height(), () -> TextureDecoder.decode(e.gfx(), e.pal(), 0));
 				}
 			}
 			return null;
 		});
+	}
+
+	/** 미리 해독한 텍스처 그림 ({@link #prepare}, 아무 스레드) — {@link #texture} 가 GL 로 올릴 때 꺼내 쓴다. */
+	private final Map<String, java.awt.image.BufferedImage> decoded = new java.util.concurrent.ConcurrentHashMap<>();
+
+	/** CPU 만: {@link #texture} 와 같은 첫 항목을 해독해 둔다. */
+	private void predecode(String txrName) {
+		if (txrName == null || txrName.isEmpty() || decoded.containsKey(txrName)) {
+			return;
+		}
+		for (TextureLibrary.Entry e : textures.textures()) {
+			if (e.txr().name().equals(txrName)) {
+				decoded.put(txrName, TextureDecoder.toImage(e.gfx().width(), e.gfx().height(), TextureDecoder.decode(e.gfx(), e.pal(), 0)));
+				return;
+			}
+		}
 	}
 
 	/**
@@ -212,15 +286,27 @@ public final class WadAssets implements AutoCloseable {
 
 	/** 이미 변환된 TriMesh (예: 레벨 배치 후 월드 좌표) 를 이 WAD 의 머티리얼로 GPU 모델화. 캐시하지 않는다. */
 	public RenderModel build(String name, TriMesh tm) {
-		return buildMesh(name, tm);
+		return upload(prepare(name, tm, false));
 	}
 
 	private RenderModel build(GowModel gm) {
-		return buildMesh(gm.name, TriMesh.of(gm, 0));
+		return upload(prepare(gm.name, TriMesh.of(gm, 0), false));
 	}
 
-	private RenderModel buildMesh(String name, TriMesh tm) {
-		List<RenderModel.Part> parts = new ArrayList<>();
+	/** {@link #prepare} 결과: 서브메시별 정점·색인 배열 (GL 전). */
+	public record Prepared(String name, TriMesh tm, List<float[]> vertices, List<int[]> indices, float[] min, float[] max) {
+	}
+
+	/**
+	 * CPU 단계 (GL 없음, 아무 스레드 — 48 문서 §8): 정점 배열·부드러운 법선·색인과 쓸 텍스처 해독. {@link #upload} 가 GL 로 올린다.
+	 * {@code build(name, tm) == upload(prepare(name, tm, false))}.
+	 *
+	 * @param decodeTextures 쓸 텍스처도 해독해 둔다 — 아직 GL 텍스처가 하나도 없는 새 자산을 백그라운드에서 준비할 때만 (해독 결과는 첫
+	 *                       {@link #texture} 가 꺼내 쓴다)
+	 */
+	public Prepared prepare(String name, TriMesh tm, boolean decodeTextures) {
+		List<float[]> vs = new ArrayList<>();
+		List<int[]> is = new ArrayList<>();
 		float[] min = {Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE};
 		float[] max = {-Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE};
 		for (TriMesh.Sub s : tm.subs) {
@@ -254,6 +340,30 @@ public final class WadAssets implements AutoCloseable {
 			for (int i = 0; i < s.tris.size(); i++) {
 				System.arraycopy(s.tris.get(i), 0, idx, i * 3, 3);
 			}
+			vs.add(v);
+			is.add(idx);
+			MaterialResource mat = materials.get(s.material);
+			if (decodeTextures && mat != null && !mat.layers().isEmpty()) { // upload 의 texture() 와 같은 조건·이름
+				if (s.hasUv) {
+					predecode(mat.layers().getFirst().texture());
+				}
+				for (int i = 1; i < mat.layers().size(); i++) {
+					if (s.hasUv || s.hasNormal) {
+						predecode(mat.layers().get(i).texture());
+					}
+				}
+			}
+		}
+		return new Prepared(name, tm, vs, is, min, max);
+	}
+
+	/** GL 단계 (메인 스레드): 머티리얼·텍스처·메시. */
+	public RenderModel upload(Prepared p) {
+		List<RenderModel.Part> parts = new ArrayList<>();
+		for (int si = 0; si < p.tm().subs.size(); si++) {
+			TriMesh.Sub s = p.tm().subs.get(si);
+			float[] v = p.vertices().get(si);
+			int[] idx = p.indices().get(si);
 			MaterialResource mat = materials.get(s.material);
 			Texture tex = null;
 			RenderModel.Blend blend = RenderModel.Blend.OPAQUE;
@@ -274,7 +384,7 @@ public final class WadAssets implements AutoCloseable {
 			parts.add(new RenderModel.Part(new Mesh(v, idx, GL_TRIANGLES), tex, blend, tint, s.hasNormal, fx,
 					lit != null ? lit : new float[]{tint[0], tint[1], tint[2], 0, 0, 0}));
 		}
-		return new RenderModel(name, parts, min, max);
+		return new RenderModel(p.name(), parts, p.min(), p.max());
 	}
 
 	/** 플립북 프레임 / 머티리얼 ANM / 2·3번째 레이어가 있으면 MaterialFx, 없으면 null. */
@@ -322,5 +432,6 @@ public final class WadAssets implements AutoCloseable {
 		glFrames.clear();
 		models.clear();
 		glTextures.clear();
+		decoded.clear();
 	}
 }
