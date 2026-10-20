@@ -205,12 +205,17 @@ AI 스틱 크기 = AI1 0x68 % (평상 100) 또는 0x64 % (ai+0x72 & 0x22, 순찰
 (`<클립>_Cycle` = ANM act +0x14: 미노 walkFront 3.0 / runFront 5.0, 해골 Front 4.0 / runFront 8.5) 이 속도(m/s)와 같은 단위로 보여
 "속도에 가장 가까운 축 값의 클립" [추정] — 미노 3 m/s → walkFront, 해골 8 m/s → runFront, 순찰 50 % 4 m/s → Front.
 
-## 기술 중 루트 모션 (0x1F7110 → 0x1EBD78) [확실: 코드 / 근사: 수직]
+## 기술 중 루트 모션 (0x1F7110 → 0x1EBD78) [확실: 코드]
 - 원작은 영웅과 같은 공용 갱신에서 **전투 기술 중** zeroJoint 델타 D (이동·회전) 를 적용한다 (37 문서 §11.4). 예전 엔진의 적은 기술 중 제자리였다.
 - 엔진 `EnemyFighter.rootMotion` (`anim/RootMotion`): 기술 중 수평 변위 R(요)·(배율 · D.t) 를 위치에, D 의 요를 방향에. 변위는 다음 틱 `EnemyNav` 지상 처리
-  (벽 충돌·바닥 붙이기) 를 거친다 — 원작도 변위를 내비게이션 이동 (0x1EB3D8 등) 에 넘김. 수직 변위는 버림 [근사]. 사망 기술 중에도 적용 (원작: 기술이 있으면).
+  (벽 충돌·바닥 붙이기) 를 거친다 — 원작도 변위를 내비게이션 이동 (0x1EB3D8 등) 에 넘김. 사망 기술 중에도 적용 (원작: 기술이 있으면).
+- **수직** (37 문서 §11.5): 0x1EC31C 가 기술 stateMask (+0x12, 기술 없으면 CombatFileSet +0x38) 를 보고 `& 0x1C == 0` (stateMask 1/3 — 처형 MAI*·피격 띄우기 등)
+  이면 0x1ECD60 경로: 0x1E5F90 (위치 + 3D 변위, **중력 없음**) → 0x1EA200 (밀어내기는 stateMask 비트 2 일 때만, 벽 0x1E2100, 바닥 0x1E3298 — 바닥 아래로만 막음).
+  stateMask 7 (일반 공격) 은 지상 이동 0x1EAEC8 / 0x1EB3D8 이 바닥에 붙인다. 엔진: `EnemyNav.free` (자유 이동 = 중력·지상 속도 없이 벽·바닥 아래만 막음),
+  `EnemyFighter.rootMotion` 이 자유 이동 기술에서만 수직 변위를 더한다 (예전: 항상 버림 [근사]). 바닥 처리 세부 (0x1E3298 반환값 비교) 는 [근사].
 - 동기 상대가 끄는 중 (0x204BF0) 이면 없음 (`rootHold`, 0x1EC058). 결정 트리·이동 규칙은 그대로 — 공격이 앞으로 나아가며 거리가 바뀐다 (예: 미노타우로스 공격, 분신 EVIAttack02 앞으로 ≈ 49).
-- 검증: `RootMotionTest.enemyAttackMovesByZeroJoint`, 기존 `AiBrainTest`·`EnemyNavTest`·`EnemyClimbTest`·`TraversalTest` 통과.
+- 검증: `RootMotionTest.enemyAttackMovesByZeroJoint`, `GrabRelationTest.enemyVerticalRootMotionInFreeMoves` (사티로스 104: 높이 = 배율 × zero y 변화, 한 프레임 늦음),
+  기존 `AiBrainTest`·`EnemyNavTest`·`EnemyClimbTest`·`TraversalTest` 통과.
 
 ## 포위 칸 선택 (0x20BA60 → 0x20BFB0) [확실: 흐름 / 근사: 벽 칸]
 1. 막힌 칸 = 격자 비트맵 +0x40 | +0x50 | +0x60 (엔진: 다른 적 점유 + 대상 칸 + 벽 칸). +0x40 은 0x20B038 이 대상→칸 선분(0x20B870)과 충돌 질의(0x1853E8)로 채움 → 엔진은 대상 눈높이에서 칸 중심까지 레벨 충돌 레이가 막히면 벽 칸 [근사: VU0 매크로 구간 미해석].

@@ -48,7 +48,10 @@ import static org.lwjgl.opengl.GL41C.GL_TRIANGLES;
  */
 public final class HeroTestScene implements Scene {
 
-	/** GRAB: 적 HP 를 낮추고 정면 32 에 둔 뒤 ○ 잡기 → 처형 동기 ({@link devple.gow.engine.combat.GrabSync}, 미니게임 자동 입력 없음 — 스크린샷용). */
+	/**
+	 * GRAB: 적 HP 를 낮추고 (AI 정지) 처형 설계 관계 자리 ({@link devple.gow.engine.combat.GrabRelation}) 에 둔 뒤 ○ 잡기 → 처형 동기
+	 * ({@link devple.gow.engine.combat.GrabSync}). 미니게임 (연타·타이밍·스틱 회전) 은 {@link devple.gow.engine.boss.AutoPad} 가 자동 입력 — 성공 분기 스크린샷용.
+	 */
 	public enum Auto { NONE, RUN, COMBO, MAGIC, GRAB }
 
 	private final Path rom;
@@ -87,7 +90,9 @@ public final class HeroTestScene implements Scene {
 
 	private String enemyWad = "R_MIN";
 	private devple.gow.engine.combat.GrabSync grab;
+	private final devple.gow.engine.boss.AutoPad autoPad = new devple.gow.engine.boss.AutoPad();
 	private Tweaks enemyTweaks;
+	private devple.gow.engine.combat.EnemyFactory.Kind enemyKind;
 	private AnimationSet heroSet;
 	private CombatData heroData;
 
@@ -182,7 +187,7 @@ public final class HeroTestScene implements Scene {
 			}
 
 			public int classId() {
-				return -1;
+				return 0; // 영웅 종류 0 (HeroRig 와 같음 — 적 분기 tgt=0, 예 미노타우로스 A400)
 			}
 
 			public int stanceTag() {
@@ -209,6 +214,7 @@ public final class HeroTestScene implements Scene {
 			skinnedMin = new Shader("skinned.vert", "basic.frag");
 			minModel = kind.buildModel(skinnedMin);
 			enemy = kind.spawn();
+			enemyKind = kind;
 			enemyTweaks = kind.tweaks();
 			heroSet.attachAll(kind.assets().wad()); // 영웅 처형 애니 외부 그룹 (maiCy2 등, 적 WAD 안)
 			heroData.reindexAnimations();
@@ -273,14 +279,46 @@ public final class HeroTestScene implements Scene {
 			st.add(new ScriptedInput.Step(4.0f, 0.05f, PadButton.TRIANGLE));
 			scripted = new ScriptedInput(e.window().handle(), st);
 		} else if (auto == Auto.GRAB && enemy != null) {
-			enemy.pos.set(0, 0, -32);
-			enemy.prevPos.set(enemy.pos);
-			// 정면 = 모델 −Z (34 문서 §4): 적 요 π → +z (영웅 쪽), 영웅 요 0 → −z (적 쪽). 잡기 정렬이 없으므로 (37 문서 §11.4) 서로 마주 보게
-			enemy.yaw = (float) Math.PI;
+			// 적 HP = 잡기 원 아래, AI 정지. 배치 = 처형 설계 관계가 나오는 자리 (37 문서 §11.5, GrabRelation): 원작은 이벤트 19 처형에서 위치를
+			// 맞추지 않고 GRAB 이 처음 닿은 자리 + 루트 모션이 관계를 만든다. 미니게임은 자동 입력 (AutoPad) 으로 성공 분기
 			enemy.hp = 5;
+			enemy.holdAi = true;
 			ctl.yaw = 0;
+			var fin = devple.gow.engine.combat.GrabRelation.finisher(heroData, enemy.classId(), enemy.hp);
+			// 시작 거리: 같은 데이터로 헤드리스 모의 (새 영웅·적) 를 돌려 결합 0.5 초 뒤 synchJoint 오차가 가장 작은 거리
+			Path wpnPath = rom.resolve("R_WPN0_" + Math.max(0, Math.min(5, bladeLevel)) + ".WAD");
+			var kindF = enemyKind;
+			var res = fin == null ? null : devple.gow.engine.combat.GrabRelation.search(() -> devple.gow.engine.combat.GrabRelation.Trial.create(
+					sk, set, tw, data, () -> {
+						try {
+							return devple.gow.engine.combat.HitVolumes.forHero(hero.wad(), sk,
+									java.nio.file.Files.exists(wpnPath) ? WadFile.load(wpnPath) : null);
+						} catch (IOException ex) {
+							throw new UncheckedIOException(ex);
+						}
+					}, kindF), 10, 130);
+			if (res != null) {
+				// 영웅 (원점, 요 0) 기준: 적은 설계 방향의 반대쪽 res.start 거리, 적 요 = −relYaw
+				float ey = -res.relYaw();
+				var rel = devple.gow.engine.combat.GrabRelation.relation(devple.gow.engine.combat.GrabRelation.Trial.create(sk, set, tw, data, null, kindF));
+				Vector3f d = rel.getTranslation(new Vector3f()).setComponent(1, 0).normalize().mul(res.start()); // 적 기준 영웅 위치
+				d.rotateY(ey).negate(); // 영웅 기준 적 위치
+				enemy.pos.set(d.x, 0, d.z);
+				enemy.yaw = ey;
+				System.out.printf("처형 %d %s: 설계 관계 %.1f, 시작 거리 %.0f (적중 GRAB %.2f, 결합 거리 %.1f, 오차 %.1f)%n", res.finisher(),
+						heroData.animation(fin).name, res.design(), res.start(), res.hitProgress(), res.link(), res.error());
+			} else {
+				enemy.pos.set(0, 0, -32);
+				enemy.yaw = (float) Math.PI;
+			}
+			enemy.prevPos.set(enemy.pos);
 			grab = new devple.gow.engine.combat.GrabSync(ctl, combat);
-			scripted = new ScriptedInput(e.window().handle(), List.of(new ScriptedInput.Step(0.3f, 0.05f, PadButton.CIRCLE)));
+			List<ScriptedInput.Step> st = new ArrayList<>(List.of(new ScriptedInput.Step(0.3f, 0.05f, PadButton.CIRCLE)));
+			if (fin != null && fin.branches().stream().anyMatch(b -> b.input() == 2)) {
+				// 처형 중 영웅 입력 분기 (해골병 MAISKB00 [0.4–1] □ → MAISKB02 꿰뚫기): □ 를 누른다
+				st.add(new ScriptedInput.Step(1.0f, 0.05f, PadButton.SQUARE));
+			}
+			scripted = new ScriptedInput(e.window().handle(), st);
 		} else if (auto == Auto.MAGIC) {
 			// ← 메두사 선택 → R2 홀드(광선, 석화) → □□ (석상 파괴) → ↑ 하데스 → R2 (영혼)
 			scripted = new ScriptedInput(e.window().handle(), List.of(new ScriptedInput.Step(0.2f, 0.05f, PadButton.LEFT),
@@ -330,7 +368,7 @@ public final class HeroTestScene implements Scene {
 			}
 
 			public int classId() {
-				return -1;
+				return 0; // 영웅 종류 0 (HeroRig 와 같음 — 적 분기 tgt=0, 예 미노타우로스 A400)
 			}
 
 			public Vector3f position() {
@@ -404,7 +442,24 @@ public final class HeroTestScene implements Scene {
 				System.out.println(enemyWad + " 처치 → 붉은 오브 " + player.redOrbs);
 			}
 			if (grab != null) {
-				grab.update(in, enemy, enemyTweaks, dt);
+				Input gin = in;
+				if (grab.active()) {
+					// 미니게임 중에는 자동 입력, 그 밖에는 장면 입력 (해골병 □ 같은 영웅 입력 분기)
+					autoPad.drive(grab.timed(), grab.qte());
+					if (grab.timed() != null || grab.qte() != null) {
+						gin = autoPad;
+					}
+				}
+				boolean was = grab.active();
+				grab.update(gin, enemy, enemyTweaks, dt);
+				if (was && !grab.active()) {
+					if (grab.executionSucceeded()) {
+						enemy.hp = 0; // GameScene 과 같은 근사 (처형 성공 → 사망)
+					}
+					boolean mini = grab.lastResult() != null || grab.timedPassed + grab.timedFailed > 0;
+					System.out.println("처형 결합 끝: " + (!mini ? "미니게임 없음" : grab.executionSucceeded() ? "성공" : "실패")
+							+ " (타이밍 성공 " + grab.timedPassed + " / 실패 " + grab.timedFailed + ", 연타 " + grab.lastResult() + ")");
+				}
 			}
 			if (grab == null || !grab.active()) {
 				ctl.separate(enemy.pos, 22);

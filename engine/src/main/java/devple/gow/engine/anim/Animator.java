@@ -48,7 +48,7 @@ public final class Animator {
 		current = a;
 		time = 0;
 		playSerial++;
-		fadeTime = tweaks.f(twkNode, a.name + "_Tween", 0.15f);
+		fadeTime = tween(a, 0.15f);
 		fade = previous == null || fadeTime <= 0 ? 1f : 0f;
 	}
 
@@ -60,8 +60,17 @@ public final class Animator {
 		time = startTime;
 		playSerial++;
 		this.rate = rate;
-		fadeTime = tweaks.f(twkNode, a.name + "_Tween", 0.1f);
+		fadeTime = tween(a, 0.1f);
 		fade = previous == null || fadeTime <= 0 ? 1f : 0f;
+	}
+
+	/**
+	 * 전환 시간: TWK {@code <클립>_Tween} 이 있으면 그 값 (0x116BB0 이 act +0x04 를 덮어씀), 없으면 act +0x04 (영웅 처형 애니 0.2 — 적 WAD 의
+	 * 영웅용 애니에는 TWK 가 없다). act 값이 1 초를 넘으면 (적 act 2.0 / 5.0 — 단위 미확인) 기본값 [근사].
+	 */
+	private float tween(Animation a, float def) {
+		float act = a.unk04 >= 0 && a.unk04 <= 1f ? a.unk04 : def;
+		return tweaks.f(twkNode, a.name + "_Tween", act);
 	}
 
 	/** 현재 클립 시간 지정. */

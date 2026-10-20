@@ -114,7 +114,14 @@ public final class BossSync {
 		}
 		boolean bossPulls = SyncPull.pullWindow(bc) != null;
 		boolean heroPulls = !bossPulls && SyncPull.pullWindow(hero) != null;
-		// 끌리는 쪽은 루트 모션 없음 (0x1EC058) — 두 쪽 갱신이 이미 끝났으므로 다음 틱부터 [근사: 한 틱 늦음]
+		// 끌리는 쪽은 루트 모션 없음 (0x1EC058). 원작은 상대 이벤트 창을 같은 프레임에 갱신해 (0x1EBF8C → 0x206030) 끌리는 첫 프레임부터
+		// D = 단위 — 엔진은 두 쪽 갱신이 끝난 뒤라 이번 틱 루트 모션을 되돌리고 다음 틱부터는 rootHold 로 막는다
+		if (bossPulls && !ctl.rootHold) {
+			ctl.undoRoot();
+		}
+		if (heroPulls && !boss.rootHold) {
+			boss.undoRootMotion();
+		}
 		ctl.rootHold = bossPulls;
 		boss.rootHold = heroPulls;
 		if (bossPulls) {

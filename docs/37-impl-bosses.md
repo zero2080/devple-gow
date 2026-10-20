@@ -397,30 +397,82 @@ SCR: BMITurnOffVents(b) = 배출구 수 −b, 누적 0 (204/207/209/222/227 — 
 - 데이터로 확인 (헤드리스 덤프): 몸통은 제자리이고 zeroJoint 만 움직인다 → 루트 모션으로 오브젝트가 움직이면 **월드 synchJoint 가 고정**된다
   (Z⁻¹·S 에서 Z 변화가 W 이동과 상쇄). 예: 영웅 maiMin01 zero z 4 → −88 (앞으로 92), synch 상대값 −18 → +74; 영웅 maiMewGrab zero 요 0 → 180°;
   사이클롭스 처형 영웅 MAICYWMini02 zero 높이 0 → 74 (등에 올라탐), 적 쪽 zero z 0 → 105. MAIEVIHug* 는 두 쪽 zero 고정.
-- **엔진** (`anim/RootMotion`): 현재 클립 (가장 무거운 층 대신) 의 zeroJoint 모델 행렬로 같은 D (첫 프레임 유지, 루프가 돈 프레임은 끝→처음 이어 붙임,
+- **층 목록** [확실: 코드]: +0xCC.. 은 애니를 틀 때 (전투 0x1F6FC8, 내비 0x1F7408) 0x1006F8 → 0x107200 이 채운다 — 채널 블렌드 노드 중 **새 애니와 같은 act**
+  를 가리키고 페이드아웃·종료 (+0x10 / +0x2C & 0x90) 가 아닌 층만. 크로스페이드로 사라지는 옛 애니는 목록에 없으므로 "가장 무거운 층" 은 새 애니의 인스턴스
+  (블렌드 그룹 등) 중 고르는 것이고 옛 클립 → 새 클립 zeroJoint 도약은 없다. 엔진의 "현재 클립" 이 곧 이 목록 (인스턴스 하나) 이라 바꿀 것이 없다.
+  (가설 "크로스페이드 앞 절반 = 옛 층" 을 시험했지만 미노타우로스 axeAttack2 — zero z −228 상수, 골반 0 — 가 274 순간이동해 기각.)
+- **엔진** (`anim/RootMotion`): 현재 클립의 zeroJoint 모델 행렬로 같은 D (첫 프레임 유지, 루프가 돈 프레임은 끝→처음 이어 붙임 [근사],
   `Animator.playSerial` 이 새 재생 = 카운터 리셋). 변위 = R(요)·(배율 · D.t), 요 변화 = D 회전의 요.
   - 영웅 (`HeroController.applyRoot`): 전투 기술 중 수평 변위 + **요 회전** (예전: 수평 zero 차이만, 회전 없음, 루프 클립 제외, 첫 프레임 0).
     수직 변위는 `rootDy` 에 남기고 동기 중 (물리 꺼짐) 에만 더한다 (`BossSync`, `GrabSync`).
-  - 적·보스 (`EnemyFighter.rootMotion`): 전투 기술 중 수평 변위 + 요 회전 (예전: 없음 — 적은 기술 중 제자리). 수직은 버린다 [근사: 원작은 3D 변위를
-    지상 이동에 넘겨 바닥에 붙음]. 변위는 다음 틱 `EnemyNav` 지상 처리 (벽 충돌·바닥) 를 거친다. BMI 의 자체 zeroJoint 이동 코드는 공용으로 대체.
+  - 적·보스 (`EnemyFighter.rootMotion`): 전투 기술 중 수평 변위 + 요 회전 (예전: 없음 — 적은 기술 중 제자리). 변위는 다음 틱 `EnemyNav` 지상 처리
+    (벽 충돌·바닥) 를 거친다. **수직**: 기술 stateMask & 0x1C == 0 (stateMask 1/3 — 처형 MAI*, 띄우기 등) 이면 원작 0x1ECD60 경로 = 중력 없는 3D 변위
+    (0x1E5F90) + 충돌 0x1EA200 (밀기는 stateMask 비트 2 일 때만, 바닥 아래만 막음) → 엔진 `EnemyNav.free` + 수직 변위 적용. stateMask 7 은 지상 이동이
+    바닥에 붙이므로 버린다 (32 문서 §기술 중 루트 모션). BMI 의 자체 zeroJoint 이동 코드는 공용으로 대체.
     `rootHold` = 상대가 끄는 중 (0x1EC058), `rootMotionOff` = 클래스가 위치를 직접 정할 때.
-  - 끌리는 쪽: `GrabSync` 는 같은 틱에, `BossSync` 는 다음 틱부터 루트 모션 없음 [근사: 한 틱 늦음].
+  - 끌리는 쪽: 원작 0x1EBF8C 는 상대 이벤트 창을 같은 프레임에 0x206030 으로 갱신한 뒤 0x2441E0 을 보므로 **끌리는 첫 프레임부터** D = 단위.
+    엔진은 두 쪽 갱신이 끝난 뒤 끌기를 알게 되므로 그 틱의 루트 모션을 되돌린다 (`HeroController.undoRoot`, `EnemyFighter.undoRootMotion` —
+    `BossSync`·`GrabSync`·결합 없는 끌기 모두). 예전 `BossSync` 의 "한 틱 늦음" [근사] 해소.
   - 동기 중 영웅 수직 하한 = 동기 시작 높이 [근사: 원작은 지상 이동이 바닥에 붙임 — BMI 실패 454 는 zero 가 바닥 아래로].
 - 대체 규칙 삭제: `BossSync(IntPredicate)` (Align 없음), `GrabSync` 의 "적 = 영웅 위치·방향" 삭제. 결과 (헤드리스, 두 synchJoint 월드 거리 = 설계 관계와의 차이):
   메두사 MAIMEWGRAB 4.0 (영웅이 루트 회전으로 0 → 150° 돌고 synch 고정), 사이클롭스 MAICYWMini02 5.1 (F1 실패 분기 13), 하피 WingRip 11,
-  미노타우로스 maiMin01 36 (적중 거리 40 에서 시작 — 설계 관계는 정면 71: 원작에서 GRAB 적중이 어디서 나는지에 달림, 미확인).
+  미노타우로스 maiMin01 36 (적중 거리 40 에서 시작 — 설계 관계는 정면 70.4) → §11.5 (적중 거리 해독: 멀리서 누르면 70.7 에서 잡혀 0.5).
   가족 포옹: 두 zero 고정 → 영웅은 잡은 자리 그대로. 분신 잡기 861: 영웅–분신 43 (분신 EVIGrab 이 앞으로 64 나아가 잡음).
 - **연결 안 됐던 이벤트 22 동기**:
   - 아기 히드라 ATHN01C (AI1 252, Instance Name "hydra enc2" 와 같은 오브젝트가 없어 대역으로 나오던 것): `EnemyFactory` 가 이름 오브젝트가 없으면
     **CombatFileSet 기술 애니를 가장 많이 가진 스켈레톤** (bhb) 을 고른다 [추정]. BITEGRAB(8) 적중 → 영웅 006 A821 (태그 821, 공격자 252) → 821.
     `GrabSync` 결합 조건에 "적 기술 플래그 0x20 + 같은 기술 ID" 추가 (유지 = 적 기술 플래그 0x60, 원작 0x2050D8), 821–824 창에서 적이 영웅을 끈다.
-    825 BHABABYGRAB [0–0.22] 은 영웅 기술과 무관 (영웅은 COMBO5A → GRABREJECT) → **결합 없는 끌기** (`GrabSync.lonePull`: 대상 = 가장 가까운 적, 플래그 0x60 기술의 창).
+    825 BHABABYGRAB [0–0.22] 은 영웅 기술과 무관 (영웅은 COMBO5A → GRABREJECT) → **결합 없는 끌기** (`GrabSync.lonePull`, 플래그 0x60 기술의 창).
+    끄는 쪽 = **공격 대상이 영웅인 적** [확실: 0x2097A8 — 플래그 0x20 기술 시작 때 +0x84 가 비어 있으면 +0x84 = +0x80 (공격 대상), 기술 플래그 0x8 이면
+    +0x80 = 0, 상대 +0x84 = 자기]: 가장 가까운 적이 아니다. 엔진 `GrabSync.setPullers` (GameScene = 적 전부) 중 이미 끄는 적, 없으면 조건을 만족하는 첫 적
+    (`GrabRelationTest.lonePullUsesAttackTargetNotNearest`: 가까운 아기 히드라는 대기, 먼 쪽 825 가 영웅을 끈다).
   - 침대 ATHN01F (AI1 305 aoxpt): MAIXPTBEDMOUNT* 는 MAI 이름이라 기존 결합 + 적 기술 창 끌기로 동작 (정렬만 — 미니게임 흐름은 그대로).
 - 시험 `combat.RootMotionTest`: 적 공격 변위 = R(요)·Δzero·배율 (미노타우로스), 메두사 잡기 루트 회전 > 126°·synch 고정 < 6·적을 영웅에 겹치지 않음,
   아기 히드라 821 끌기 (목표 오차 < 2), 침대 846 끌기. `EvilKratosFightTest` 포옹·분신 잡기 = 정렬 없음 (제자리) 으로 바꿈.
 - 스크린샷 (`/Users/obeomsu/.claude/jobs/6f65672f/tmp/sync2/`, 커밋 안 함, `--hero --auto grab --enemy R_xxx --no-fx`, 틱 60/120/200/300/420):
   `before_*` (예전 기준점 규칙) / `after_*`, 비교 시트 `sheet_R_CY2/R_MIN/R_HAR/R_MEW.png` (위 = 이전, 아래 = 이후). `HeroTestScene` GRAB 은 이제 서로 마주 보게 둔다
   (예전 배치는 등을 지고 있었는데 기준점 규칙이 가렸다).
+
+### 11.5 잡기 적중 거리와 설계 관계 (일반 적 처형) [확실: 코드 / 데이터 계산]
+- **원작은 맞추지 않는다.** 오브젝트 위치를 바꾸는 곳은 루트 모션 (0x1EBD78) 과 0x204BF0 (이벤트 22 창, 끌리는 쪽 combatant +0x00 변위 — 0x205088) 뿐이고
+  combatant 변위 +0x00/+0x10 을 쓰는 다른 곳은 초기화 0x2030B8 뿐. 동기 연결 0x209790–0x2098B4 도 +0x84/+0x1BC 만 (위치 없음). 처형 애니를 트는 0x1F6FC8 도 층만.
+- **GRAB 적중**: 영웅 200 GRAB 의 공격 = 부위 1 (몸 구, [0.05–0.40]) · 부위 9 (extra1 구 정면 z −20 r27, [0.27–0.32]), dmg 0. 거리 조건 없음 —
+  0x13B688 이 두 오브젝트의 **모든 구 쌍**을 0x13C400 로 시험하고 (콜백 0x203150 이 0xB 를 돌려 계속), 0x203AF0 → 0x209AB0 이 공격 부위만 비교.
+  그 프레임 HIT_CONFIRM → 처형 기술 (GRAB 분기: 상대 종류·HP·잡기 가능 0x10). GRAB 애니는 앞으로 나간다 (zero z 1.8 → −26.5 (0.3) → −30.7).
+  GRAB 의 SCRIPT 0x8CACF07D = SCR_HideBerserkBlade (접근·스냅 아님).
+- 그래서 관계 = **처음 닿은 자리** + 두 쪽 루트 모션. 설계 관계 (처형 0 프레임 synchJoint 일치, `GrabRelation.relation`) 는 **멀리서 ○ 를 눌러 GRAB 이 달려들고
+  부위 9 창 [0.27–0.32] 에서 처음 닿는 거리**와 같다 (아래 표, 헤드리스 `GrabRelationTest.designedStartPerEnemy`, 결합 0.5 초 뒤 두 synchJoint 거리).
+  가까이서 누르면 부위 1 이 바로 닿아 관계가 그 차이만큼 어긋난다 — 원작도 같다 (`tooCloseKeepsHitPosition`: 미노타우로스 40 에서 누르면 오차 ≈ 설계 − 결합 ≈ 30).
+
+| 적 (처형) | 설계 관계 (적 정면, 마주 봄) | ○ 시작 거리 | 적중 GRAB 진행률 | 결합 거리 | 오차 |
+|---|---|---|---|---|---|
+| 미노타우로스 R_MIN (400 MAIMIN01) | 70.4 | 99 | 0.29 (부위 9) | 70.7 | 0.5 |
+| 고르곤 R_MEW / R_ME2 (260 / 263 MAIMEWGRAB) | 37.7 | 66 | 0.29 | 37.7 | 0.2 |
+| 세이렌 R_SIR (421 MAISIRKILL, HP ≤ 10) | 45.9 | 74 | 0.29 | 45.3 | 0.4 |
+| 사티로스 R_SAT (431 MAISATGRAB) | 37.4 | 66 | 0.29 | 37.7 | 0.4 |
+| 해골병 R_SKS (220 MAISKB00) | 27.6 | 39 | 0.12 (부위 1) | 26.9 | 0.3 |
+| 켄타우로스 R_CNM (291 MAICNMKILL) | 40.6 | 69 | 0.29 | 41.2 | 0.6 |
+| 케르베로스 새끼 R_CEP (286 MAICEPSTOMP) | 42.2 | 67 | 0.29 | 35.2 | 0.4 |
+| 케르베로스 R_CEA (395 MAICEAKILL) | 43.3 | 68 | 0.25 | 43.3 | 0.4 |
+| 사이클롭스 R_CY2 (240 MAICYWMINI02) | 29.7 | 35 | 0.07 | 35.7 | 10.7 |
+| 하피 R_HAR (270 MAIHARWINGRIP, 뒤에서·같은 방향) | 7.9 | 20 | 0.07 | 16.3 | 11.3 |
+
+  사이클롭스·하피는 몸 캡슐 (Sold +0x234: 57.6 / 19.6) 이 설계 거리보다 커서 엔진에서 닿지 않는다 [미확인: 원작은 잡기 원 상태의 캡슐·밀기 제외 +0x188 확인 필요].
+- 엔진 변경: 대체 정렬 없음 (원작대로). `GrabRelation` = 설계 관계·처형 기술 조회·시작 거리 헤드리스 탐색 (5 단위 훑기 + ±4 1 단위, 적 하나 100–250 ms).
+  `HeroTestScene --auto grab` 은 이 거리에 적을 둔다 (AI 정지 `EnemyFighter.holdAi`). 예전 "적중 거리 40" 은 시작 32 + GRAB 루트 모션 없이 부위 1 이 바로 닿은 것.
+- **결합 중 영웅 전투 갱신** (원작: 동기 중에도 영웅 Combat_Update): `GrabSync` 가 결합 중 영웅 `Combatant.update` 를 돌린다 → 입력 분기 (해골병 MAISKB00
+  [0.4–1] □ → 221 MAISKB02, 이벤트 22 로 영웅이 해골병을 끌어 꿰뚫음), 끝 AUTO (사티로스 431 → 435). **같은 ID 따라가기** (원작 SYNC(18) 분기): 적이 새 기술
+  (실패 분기·Pass/Fail Move) → 영웅도 같은 ID, 영웅이 새 기술 → 적도 같은 ID (`GrabSync.follow`). 영웅이 이끄는 동기 (영웅 기술 플래그 0x20, 사티로스
+  431 의 적 쪽 플래그 0x40) 는 적 기술이 먼저 끝나 끊긴 뒤 영웅 새 기술 시작 때 다시 묶는다 (0x2097A8). 영웅 기술의 연타 (사티로스 432/435 SCR_RepeatPress
+  idx 130/131, 템플릿은 적 WAD) 도 `RepeatPressQte`.
+- **전환 시간**: `Animator` 기본값 = act +0x04 (0x116BB0 이 TWK `<클립>_Tween` 으로 덮어쓰는 칸 — 적 WAD 의 영웅용 처형 애니는 TWK 가 없어 act 0.2) [확실: 코드].
+  act 값이 1 을 넘는 적 애니 (2.0 / 5.0, 단위 미확인) 는 예전 기본값 [근사].
+- 미니게임 자동 입력 (`HeroTestScene`, `boss.AutoPad`): 타이밍 = 그 버튼 / 스틱 회전 = 사분면 순서, 연타 = 0.1 초마다. 해골병 처형은 □ 를 누른다.
+  결과 (헤드리스 로그): 사이클롭스 MAICYWMini02 타이밍 4/4 성공 → 등에 올라타 눈 찌름 → 쓰러짐, 미노타우로스 연타 → 402 MAIMIN03,
+  고르곤 타이밍 2/2, 사티로스 431 → 435 연타 PASSED → 429 MAISATKILL, 해골병 □ → 221 → 사망.
+- 스크린샷 (`/Users/obeomsu/.claude/jobs/6f65672f/tmp/grab2/`, 커밋 안 함, `--hero --auto grab --enemy R_xxx --no-fx --ticks N`): `R_MIN_t40` (부위 9 창에서 뿔을 잡음),
+  `R_MIN_t200` (가슴 위 연타), `R_MIN_t380` (402 성공), `R_CY2_t240` (등에 올라타 찌름), `R_CY2_t330` (쓰러진 사이클롭스), `R_MEW_t40/t90/t150`, `R_SAT_t100/t200/t330`,
+  `R_SKS_t80/t120`, `R_SIR_t40/t80`, `R_CNM_t40/t90`, `R_HAR_t40/t80`.
 
 ## 보스 체력 미터 (HUD)
 - 미터는 FLP_HUDK 가 아니라 **레벨 WAD 의 FLP_&lt;레벨&gt;** (ATHN01B/C/E, ATHN08A/B/C, PAND03G) 에 있다. `GameScene` 이 이 FLP 를 HUD 와 변수를 공유하는

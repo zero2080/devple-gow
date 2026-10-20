@@ -379,7 +379,42 @@ public final class EnemyNav {
 
 	// ------------------------------------------------------------------ 지상 / 공중
 
+	/**
+	 * 자유 이동 기술 중 (기술 stateMask &amp; 0x1C == 0 — 처형 MAI* 등 stateMask 1/3): 원작 0x1EBD78 은 이 때 지상/공중 이동 (0x1EAEC8 /
+	 * 0x1EB3D8, 중력) 을 부르지 않고 0x1E5F90 (위치 + 루트 모션 변위 3D) → 0x1EA200 (밀어내기는 stateMask 비트 2 일 때만, 벽 0x1E2100,
+	 * 바닥 0x1E3298 — 바닥 아래로만 막음) [확실: 호출 경로 / 바닥 처리 세부는 근사]. 루트 모션은 {@link EnemyFighter} 가 더한다.
+	 */
+	public boolean free;
+
+	private void free(Vector3f pos) {
+		speed = 0;
+		vy = 0;
+		if (world == null) {
+			return;
+		}
+		if (pushInFree) {
+			crowdPush(pos, null);
+		}
+		float r = bodyRadius();
+		Vector3f c = new Vector3f(pos.x, pos.y + STEP + r, pos.z);
+		if (world.collide(c, r)) {
+			pos.x = c.x;
+			pos.z = c.z;
+		}
+		float g = world.ground(pos.x, pos.y + STEP, pos.z, 4000);
+		if (!Float.isNaN(g) && pos.y < g) {
+			pos.y = g; // 바닥 아래로는 못 감
+		}
+	}
+
+	/** 자유 이동 중 밀어내기 (stateMask 비트 2, 0x1ECDEC). */
+	public boolean pushInFree;
+
 	private void ground(Vector3f pos, Vector3f stick, float dt) {
+		if (free) {
+			free(pos);
+			return;
+		}
 		if (mode == Mode.GROUND || world == null) {
 			float mag = Math.min(1f, (float) Math.hypot(stick.x, stick.z));
 			if (mag > 1e-3f) {

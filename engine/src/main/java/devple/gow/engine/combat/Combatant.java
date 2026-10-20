@@ -118,6 +118,11 @@ public final class Combatant {
 		contactListeners.add(l);
 	}
 
+	/** 기술 데이터 (처형 기술 조회 — {@link GrabRelation#finisher}). */
+	public CombatData data() {
+		return data;
+	}
+
 	public Combatant(CombatData data, Animator anim, CombatOwner owner) {
 		this.data = data;
 		this.anim = anim;
