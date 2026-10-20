@@ -185,6 +185,7 @@ public abstract class BossFight {
 			contactNow(pendingContact, pendingDamage);
 			pendingContact = -1;
 		}
+		pin();
 		if (sync != null) {
 			Input sin = in;
 			if (autoPlay) {
@@ -204,6 +205,10 @@ public abstract class BossFight {
 	}
 
 	protected abstract void tick(Input in, float dt);
+
+	/** 동기 정렬 ({@link BossSync}) 전에 클래스가 보스 위치·방향을 고정 (끌기 목표가 고정 전 값으로 계산되지 않게). 기본 없음. */
+	protected void pin() {
+	}
 
 	/** 레벨 HUD 변수 (GameScene, 매 프레임). 클래스 코드가 HUD 를 직접 쓰는 보스만 (BMI EnemyState). */
 	public void hud(devple.gow.engine.ui.UiVariables v) {

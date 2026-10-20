@@ -28,7 +28,7 @@ import java.util.List;
  *  SNDFakeEnemyCreatorEvilKratos 670 = 소리 뱅크 전용
  * </pre>
  * 엔진 쪽: 가족을 보호 대상(본체)으로, 분신 공격이 가족에게도 판정(Combatant 휘말림), 영웅 공격은 가족에게 피해 없음(잡기 자세 200 제외),
- * 가족 위치·방향 고정 (이동 애니가 없음), 포옹 동기 = synchJoint 정렬 ({@link BossSync.Align#SYNCH}).
+ * 가족 위치·방향 고정 (이동 애니가 없음), 포옹 동기 = 가족 662 의 이벤트 19 창 → 가족이 영웅을 synchJoint 관계로 끈다 (0x204BF0, 37 문서 §11.6).
  */
 public final class EvilKratosFight extends BossFight {
 
@@ -47,7 +47,7 @@ public final class EvilKratosFight extends BossFight {
 	private int hugs;
 	private int demoStep;
 	private float demoWait;
-	/** 분신 잡기 동기 (860–863, 같은 ID 쌍): 분신을 영웅 원점에 (synchJoint 둘 다 (0,0,−32) → 같은 원점). */
+	/** 분신 잡기 동기 (860–863, 같은 ID 쌍): 분신 668 의 860/861 이벤트 19 창 [0–1] → 분신이 영웅을 끈다 (synchJoint 둘 다 (0,0,−32) → 같은 원점). */
 	private final BossSync cloneSync = new BossSync(id -> id >= CLONE_GRAB_START && id <= CLONE_GRAB_LOSE);
 	private EnemyFighter grabber;
 	private int heroSerial = -1;
@@ -150,14 +150,21 @@ public final class EvilKratosFight extends BossFight {
 		}
 	}
 
+	/** 가족은 제자리 (xmc 애니 세트에 이동 클립이 없고 DTre 001 이 비어 있음) — 포옹 끌기 (가족이 영웅을 끈다) 전에 고정. */
+	@Override
+	protected void pin() {
+		if (boss != null) {
+			boss.pos.set(familyPos);
+			boss.prevPos.set(familyPos);
+			boss.yaw = familyYaw;
+		}
+	}
+
 	@Override
 	protected void tick(Input in, float dt) {
 		cloneGrabSync(in, dt);
 		EnemyFighter f = boss;
-		// 가족은 제자리 (xmc 애니 세트에 이동 클립이 없고 DTre 001 이 비어 있음)
-		f.pos.set(familyPos);
-		f.prevPos.set(familyPos);
-		f.yaw = familyYaw;
+		pin();
 		int m = f.combat().active() ? f.combat().move().id() : -1;
 		if (m == HUG_START && sync.active() && !phase().equals("포옹")) {
 			hugs++;

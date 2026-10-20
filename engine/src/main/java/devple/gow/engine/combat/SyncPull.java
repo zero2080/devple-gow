@@ -111,14 +111,19 @@ public final class SyncPull {
 		blend = Math.min(1f, blend * 1.1f);
 	}
 
-	/** zeroJoint 기준 synchJoint 행렬 (열벡터: Z⁻¹ · S), 위치 × 배율. 관절이 없으면 단위. */
+	/**
+	 * zeroJoint 기준 synchJoint 행렬 (열벡터: Z⁻¹ · S), 위치 × 배율. 관절이 없으면 단위.
+	 * 원작 0x1F7110 은 S·Z 를 <b>가장 무거운 애니 층 하나</b> (0x116708, 새 애니의 층 — 크로스페이드로 사라지는 옛 클립은 층 목록에 없다, 37 문서 §11.4)
+	 * 에서 구해 [synchJoint] 에 덮어쓰고 0x204BF0 이 그것을 읽는다 [확실: 코드] → 섞인 자세가 아니라 현재 클립 단독 표본.
+	 * (섞인 자세를 쓰면 포옹 865 첫 0.2 초에 GRAB → 포옹 페이드로 영웅 synch 방향이 돌아 끌기 목표가 가족 원점 뒤까지 흔들리고 영웅이 70° 휘청였다.)
+	 */
 	public static Matrix4f synchRel(Animator an, float scale) {
 		var sk = an.skeleton();
 		int zj = sk.indexOf("zeroJoint"), sj = sk.indexOf("synchJoint");
 		if (sj < 0 || an.current() == null) {
 			return new Matrix4f();
 		}
-		float[][] w = an.pose().world(sk);
+		float[][] w = an.current().sample(sk, an.time(), an.current().looping()).world(sk);
 		Matrix4f s = new Matrix4f().set(w[sj]);
 		if (zj >= 0) {
 			s = new Matrix4f().set(w[zj]).invert().mul(s);
