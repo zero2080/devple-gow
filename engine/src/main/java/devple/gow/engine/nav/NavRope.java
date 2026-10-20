@@ -21,9 +21,16 @@ import java.util.List;
  * @param joints 시뮬레이션 노드 수 = 줄 모델 사슬 관절 수 (0x216FC8 +0x54, {@link RopeSkin#chain}) [확실]
  * @param axis   줄 오브젝트 행렬 z 축 (수평, 원작 줄 +0x20 = 오브젝트 행렬 +0x40 행 — 0x216D2C) — 매단 줄 위 몸 방향·뛰어내리기 방향의 기준
  * @param dirs   매단 줄 방향 제한 = 템플릿 +0xB8 (#b38919fb, 0x216AB8): 0 = 축 4 방향, 1 = ±z (RopeNorthSouth), 2 = ±(z × 위) (RopeEastWest)
+ * @param shortChain SCR f3 (+0x384+0x14 → 줄 +0x374 |= 4, 0x216DCC): 잡으면 영웅 +0x174 = 0x10000 (0x1C5DA4) — 흔들기 힘·잡을 때 미는 창 없음
+ *                   (0x1C6BB8 → 0x1C71BC), 흔들기 버튼 무시 (0x1C61CC), 줄 위치 최소 0.5 m (0x1C65E4) [확실]. 사슬 관절 2 개짜리 긴 오르기 줄
+ *                   (HDES01E gorope3 54 m, ATRET01A gorope1, PAND01A gorope6, PAND01C gorope7, PAND04C gorope61) 과 PAND04G 5 관절 줄.
  */
 public record NavRope(String owner, RopeDef.Type type, int template, float lengthM, Vector3f top, Vector3f end, int joints, Vector3f axis,
-					  int dirs) {
+					  int dirs, boolean shortChain) {
+
+	public NavRope(String owner, RopeDef.Type type, int template, float lengthM, Vector3f top, Vector3f end, int joints, Vector3f axis, int dirs) {
+		this(owner, type, template, lengthM, top, end, joints, axis, dirs, false);
+	}
 
 	/** 관절 수를 모를 때 (시험) 9 노드 = 8 칸, 축 +z, 4 방향. */
 	public NavRope(String owner, RopeDef.Type type, int template, float lengthM, Vector3f top, Vector3f end) {
@@ -138,7 +145,8 @@ public record NavRope(String owner, RopeDef.Type type, int template, float lengt
 			// 노드 수 = 줄 모델 사슬 관절 수 (0x216FC8 +0x54, RopeSkin.chain), 사슬이 없으면 관절 수
 			int[] chain = p.object().skeleton() != null ? RopeSkin.chain(p.object().skeleton(), jw, 0) : new int[0];
 			int nodes = chain.length >= 2 ? chain.length : jw.length;
-			out.add(new NavRope(p.instance().name(), d.type(), d.template(), d.lengthM(), top, end, nodes, axis, dirs(tw, d.template())));
+			out.add(new NavRope(p.instance().name(), d.type(), d.template(), d.lengthM(), top, end, nodes, axis, dirs(tw, d.template()),
+					d.flags()[3] != 0));
 		}
 		return out;
 	}

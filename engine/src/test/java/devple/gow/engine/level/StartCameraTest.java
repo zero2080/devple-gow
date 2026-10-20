@@ -68,6 +68,33 @@ class StartCameraTest {
 		}
 	}
 
+	/**
+	 * 0x1EE8E0 전환표 "prefer" (+0x1C) 해독: 현재 카메라에서 오는 항목이 그 표시를 가진 카메라는 이번 선택에서 이기지 못한다 (동순위면 최선과 자리만 바꾸고
+	 * 최선 색인은 원래 최선, 다른 순위면 건너뜀). PAND00D ← PAND01BB Warp (WarpFrm1BB, y −220 아래층) 는 Lv1TunCam3/4 가 서로 prefer 라 이전 엔진이
+	 * 매 프레임 번갈았다 (43 §13.10) → 이제 Lv1TunCam4 하나, 크레토스가 보인다.
+	 */
+	@Test
+	void preferTransitionDoesNotFlipFlop() throws Exception {
+		LevelData d = load("PAND00D");
+		LevelCollision col = new LevelCollision(d.sheets);
+		ScriptWorld w = new ScriptWorld(d, new ScriptHost(), null);
+		LevelEntry.Spot s = LevelEntry.resolve(d, w, null, "PAND01BB");
+		float[] p = s.pos();
+		float g = col.groundHeight(p[0], p[1] + LevelEntry.UP, p[2], LevelEntry.DROP);
+		Vector3f feet = new Vector3f(p[0], Float.isNaN(g) ? p[1] : g, p[2]);
+		assertEquals(-220, feet.y, 2, "WarpFrm1BB 아래층");
+		CameraRig rig = new CameraRig(d);
+		java.util.List<String> sw = new java.util.ArrayList<>();
+		rig.onSwitch(sw::add);
+		rig.update(0, feet, 0, false);
+		for (int i = 0; i < 120; i++) {
+			rig.update(1 / 60f, feet, 0, false);
+		}
+		assertEquals("Lv1TunCam4", rig.current());
+		assertEquals(1, sw.size(), "전환 한 번뿐 " + sw);
+		assertSeesHero("PAND00D", rig, col);
+	}
+
 	/** ATHN04C camera1: 레일 위, 영웅 뒤(−z) 128 거리 — 설계 정면 +z 를 따라 복도를 내다본다. */
 	@Test
 	void athn04cCameraBehindHero() throws Exception {

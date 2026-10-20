@@ -1166,7 +1166,9 @@ public final class HeroNavigator {
 				Vector3f face = forward(body.yaw());
 				swingRight.set(rightOf(face));
 				swingBack.set(face).negate();
-				pumpTimer = SWING_WINDOW;
+				// 짧은 사슬 줄 (SCR f3, 줄 +0x374 & 4) 은 영웅 +0x174 = 0x10000 (0x1C5DA4) → 흔들기 힘 구간 (0x1C6BC8–0x1C71B8) 전체를 건너뛴다:
+				// 잡을 때 미는 창도 없다 (HDES01E ← ATRET01A 도착 rope3 이 크게 흔들리던 원인, 43 §13.10) [확실]
+				pumpTimer = r.shortChain() ? 0 : SWING_WINDOW;
 				swingForce = 0;
 				// 몸 방향 = 줄 축 4 (또는 2) 방향 중 지금 뒤에 가장 가까운 것 (0x1C6918), 보이는 몸은 보간 [추정: 잡을 때 +0x150 = 0.1]
 				ropeDir = r.bestDir(new Vector3f(face).negate());
@@ -1231,12 +1233,15 @@ public final class HeroNavigator {
 		}
 		String a = anims.get("ANIRope");
 		// 흔들기 버튼 (+0x310 0x10 ← 논리 0x40000 ← 패드 비트 5 = ○, 0x1D8108) 을 누르고 있으면 오르내리기 대신 흔들기 (0x1C61FC) [확실: 비트 / 추정: ○]
-		boolean swing = in.held(PadButton.CIRCLE);
+		boolean swing = !rope.shortChain() && in.held(PadButton.CIRCLE); // 0x1C61CC: 0x10000 (짧은 사슬) 이면 흔들기 버튼 무시
 		ropeTurn(sx, ref, swing, dt);
 		ropeVel = swing ? 0 : ropeVelocity(sy, dt);
 		if (ropeVel != 0) {
 			// 줄 위치 (m) += 속도 / 16 · dt, [0.25, 길이 − 0.25] (0x1C6578 → 0x2183B0)
 			float want = sim.dist() + ropeVel / NavTuning.UNITS_PER_METER * dt;
+			if (rope.shortChain()) {
+				want = Math.max(0.5f, want); // 0x1C65E4: 최소 0.25 m, 0x10000 이면 0.5 m
+			}
 			float got = sim.moveAttach(want);
 			ropeT = got / sim.length();
 			a = ropeSlide ? anims.get("ANIRSlide") : anims.get(ropeVel < 0 ? "ANIRopeU" : "ANIRopeD");
@@ -1255,7 +1260,9 @@ public final class HeroNavigator {
 			a = anims.get("ANIRopeIdle");
 		}
 		// 매 프레임 매달림 힘을 준다 (0x1C71A8 → 0x218470, 줄이 잠들지 않음)
-		sim.setForce(swingForce(sim, swing, dt));
+		if (!rope.shortChain()) {
+			sim.setForce(swingForce(sim, swing, dt));
+		}
 		placeOnRope();
 		body.play(a, false);
 	}

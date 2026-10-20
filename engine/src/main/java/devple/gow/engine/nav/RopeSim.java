@@ -60,7 +60,7 @@ public final class RopeSim {
 	}
 
 	private RopeSim(Vector3f top, Vector3f end, float length, int nodes) {
-		n = Math.max(3, nodes);
+		n = Math.max(2, nodes); // 0x2170BC: +0x54 = 사슬 관절 수 그대로 (HDES01E gorope3 등 2 노드 = 매단 점 + 끝)
 		this.length = length / NavTuning.UNITS_PER_METER;
 		seg = this.length / (n - 1);
 		anchor.set(top).div(NavTuning.UNITS_PER_METER);

@@ -22,7 +22,8 @@ import java.util.function.Consumer;
  * 원작 레벨 카메라 시스템 재구현 (30 문서). 실행 파일의 카메라 관리자 0x1EE8E0/0x1EF310/0x1EF3F0 와 카메라 상태 갱신 0x1F3768/0x1F29A0 를 따른다.
  * <ul>
  *   <li>선택: 플레이어가 든 CMV hull 의 카메라들이 후보. 활성 목록은 후보에서 빠질 때만 지워지고 새 후보는 뒤에 붙는다.
- *       우선순위(CAM 0xBC) 최대, 동순위면 나중에 들어온 것 (전환표 prefer 가 있으면 그것). 후보가 없으면 현재 카메라 유지</li>
+ *       우선순위(CAM 0xBC) 최대, 동순위면 나중에 들어온 것. 전환표에서 현재 카메라 항목의 +0x1C ("prefer") 가 켜진 카메라는
+ *       이번 선택에서 이기지 못한다 (동순위면 목록 자리만 맞바꿈, 다른 순위면 건너뜀 — 0x1EECE4). 후보가 없으면 현재 카메라 유지</li>
  *   <li>상태: 대상 T(영웅 + 24 높이), 요/피치(도), 화면 속 대상 각(데드존), 거리. 눈 = T − 거리·R(요, 피치)·방향(화면 각) (30 문서 §8)</li>
  *   <li>모드 (CAM 0x78 피치 / 0x7A 요): 1 설계 각도, 2 카메라 위치 → T 방향, 3 레일 점 → T 방향 (레일 점은 비용 최소 t 를 지역 탐색)</li>
  *   <li>전환: 기본 시간 CAM 0xB8 또는 전환표(이전 카메라 이름) 시간. 0 이하 = 컷. 상태 공간(T, 각, 거리)에서 Hermite 보간 [근사: 속도항 0]</li>
@@ -656,22 +657,34 @@ public final class CameraRig {
 		}
 		Shot curShot = shots.isEmpty() ? null : shots.getLast();
 		String curName = curShot != null && curShot.cam != null ? curShot.cam.def().shortName() : "";
-		LevelData.PlacedCamera best = null;
+		// 0x1EEC3C–0x1EED58: best = −1, bestPri = INT_MIN. 전환표에서 현재 카메라 이름 (+0x808) 항목의 +0x1C 가 0 아니면 ("prefer")
+		// 우선순위가 지금 최선과 같을 때만 목록에서 최선 자리와 맞바꾸고 최선 색인은 그 자리 (= 원래 최선 카메라) — 즉 그 카메라는 이번 선택에서 이기지 못한다.
+		// 우선순위가 다르면 (또는 아직 최선이 없으면) 건너뛴다. 그 밖은 우선순위 ≥ 최선이면 최선 (동순위는 뒤엣것).
+		// (이전 엔진은 prefer 를 "동순위 우선" 으로 읽어 서로 prefer 인 두 카메라 — PAND00D Lv1TunCam3/4 — 가 매 프레임 번갈았다, 43 §13.10.)
+		int bestIdx = -1;
 		int bestPri = Integer.MIN_VALUE;
-		boolean bestPrefer = false;
 		int mask = stateMask(heroBits, heroCombat);
-		for (LevelData.PlacedCamera c : active) {
+		for (int i = 0; i < active.size(); i++) {
+			LevelData.PlacedCamera c = active.get(i);
 			if ((c.def().p().flags() & mask) == 0) {
 				continue; // 0x1EEC9C: CAM 플래그 하위 바이트 & 영웅 상태 마스크 0x1EE510 = 0 이면 이번 선택에서 건너뜀 (활성 목록에는 남는다)
 			}
 			int pri = c.def().p().priority();
-			boolean prefer = transition(c, curName) != null && transition(c, curName).prefer();
-			if (pri > bestPri || pri == bestPri && (prefer || !bestPrefer)) {
-				best = c;
+			CameraDef.Transition ptr = transition(c, curName);
+			if (ptr != null && ptr.prefer()) {
+				if (pri == bestPri && bestIdx >= 0) {
+					active.set(i, active.get(bestIdx));
+					active.set(bestIdx, c);
+					bestIdx = i;
+				}
+				continue;
+			}
+			if (pri >= bestPri) {
+				bestIdx = i;
 				bestPri = pri;
-				bestPrefer = prefer;
 			}
 		}
+		LevelData.PlacedCamera best = bestIdx >= 0 ? active.get(bestIdx) : null;
 		if (best == null) {
 			if (shots.isEmpty()) {
 				follow = new Shot(null);

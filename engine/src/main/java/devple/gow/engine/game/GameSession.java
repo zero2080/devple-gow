@@ -38,6 +38,8 @@ public final class GameSession {
 	public float playTime;
 	/** 새 게임 첫 ATHN01A 진입 시 오프닝(Semo01) 재생 여부 (원작 sub_0021efd8). */
 	public boolean openingPending;
+	/** 직전 Warp 로 떠나온 레벨의 화면 상태 — 원작은 그 레벨을 꺼진 채 메모리에 두므로 바로 Warp 로 돌아오면 그대로 (GameScene.goToLevel, 43 §13.10). */
+	public GameScene.Resident warpLeft;
 
 	public GameSession(Path rom) throws IOException {
 		this.rom = rom;
