@@ -162,7 +162,8 @@ public final class BladeChainRenderer implements AutoCloseable {
 			return;
 		}
 		buf.flip();
-		glBufferSubData(GL_ARRAY_BUFFER, 0, buf);
+		// 48 문서 §9: 같은 프레임에 여러 번 덮어쓰므로 저장소를 새로 받는다 (orphan) — glBufferSubData(0) 는 GPU 를 기다렸다.
+		glBufferData(GL_ARRAY_BUFFER, buf, GL_STREAM_DRAW);
 		if (t != null) {
 			t.bind(0);
 			shader.set("uUseTex", 1);
