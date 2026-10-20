@@ -14,7 +14,7 @@ import java.nio.file.Path;
 /**
  * 셸(메인 메뉴) — 원작 상태 1–3 (ShellLoad → ShellMenu, 11 문서 §6.1). R_SHELLK / FLP_ShellK 를 그대로 실행한다.
  * 메뉴가 {@code PS2_Menu_Choice}(1 새 게임, 2 불러오기) + {@code PS2_Done = 1} 을 쓰면 다음 상태로.
- * 새 게임 = 난이도 {@code PS2_Difficulty_Level} 로 {@link GameFlow#START_LEVEL} 진입.
+ * 새 게임 = 난이도 {@code PS2_Difficulty_Level} 로 {@link GameFlow#startLevel()} (기본 {@link GameFlow#START_LEVEL}) 진입.
  * 불러오기 = 메뉴의 메모리카드 화면을 {@link MemoryCardFlow} 로 진행 (카드 → 파일 → 확인 → 불러오는 중), △ 취소면 메뉴로 복귀.
  * 귀중품 = {@link BonusMenu} (PS2_BonusScroll) — 보너스 영상은 {@link devple.gow.engine.video.MovieScene} 을 위에 띄우고 끝나면 메뉴로,
  * 신들의 시험/캐릭터 공동 묘지는 해당 레벨로 새 게임. 해금 = {@link BonusMenu#unlockBits()} ({@code -Dgow.unlockAll}).
@@ -111,10 +111,14 @@ public final class ShellScene implements Scene {
 	}
 
 	private void startGame(Engine e, int difficulty) {
-		startGame(e, difficulty, GameFlow.START_LEVEL);
+		startGame(e, difficulty, GameFlow.startLevel(), devple.gow.tools.content.Stages.startEntry()); // stages.properties (49 문서 §9)
 	}
 
 	private void startGame(Engine e, int difficulty, String level) {
+		startGame(e, difficulty, level, null);
+	}
+
+	private void startGame(Engine e, int difficulty, String level, String entry) {
 		if (started) {
 			return;
 		}
@@ -127,7 +131,7 @@ public final class ShellScene implements Scene {
 			s.costume = c >= 0 && java.nio.file.Files.exists(Content.file(rom, "R_HERO" + c + ".WAD")) ? c : 0;
 			s.openingPending = level.equals(GameFlow.START_LEVEL);
 			System.out.println("새 게임: " + level + " 난이도 " + s.difficulty + " (" + devple.gow.engine.combat.DamageRules.DIFFICULTY[s.difficulty] + ") 코스튬 " + s.costume);
-			e.scenes().transitionTo(new GameScene(s, level, null, 0));
+			e.scenes().transitionTo(new GameScene(s, level, entry, 0));
 		} catch (IOException ex) {
 			throw new UncheckedIOException(ex);
 		}

@@ -72,7 +72,9 @@ public final class MovieScene implements Scene {
 
 	@Override
 	public void enter(Engine engine) {
-		if (player == null) {
+		if (player == null && devple.gow.tools.video.MovieNames.skipped(name)) {
+			System.out.println("[movie] " + name + " 건너뜀 (movies.properties)");
+		} else if (player == null) {
 			try {
 				player = MoviePlayer.open(name, widescreen);
 			} catch (IOException e) {

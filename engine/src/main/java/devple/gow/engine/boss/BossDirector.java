@@ -1,6 +1,6 @@
 package devple.gow.engine.boss;
 
-import devple.gow.tools.content.Content;
+import devple.gow.tools.content.Stages;
 import devple.gow.engine.combat.EnemyFighter;
 import devple.gow.engine.input.Input;
 import devple.gow.engine.script.ScriptActor;
@@ -38,7 +38,7 @@ public final class BossDirector {
 	/** 보스전 (없으면 null). 로드 실패도 null (경고 출력) — 일반 레벨로 계속. */
 	public static BossFight create(String level, Path rom, WadFile permk) {
 		String lv = level.toUpperCase(Locale.ROOT);
-		if (!hostsBoss(lv) || !Files.exists(Content.file(rom, lv + ".WAD"))) {
+		if (!hostsBoss(lv) || !Stages.exists(rom, lv)) {
 			return null;
 		}
 		try {
@@ -62,7 +62,7 @@ public final class BossDirector {
 
 		ResourceOnlyFight(String level, Path rom, WadFile permk, int[][] templateSet, String[] skeletons) throws IOException {
 			super(level);
-			var assets = new devple.gow.engine.asset.WadAssets(Content.file(rom, level + ".WAD"));
+			var assets = new devple.gow.engine.asset.WadAssets(Stages.wad(rom, level));
 			for (int i = 0; i < templateSet.length; i++) {
 				try {
 					kinds.put(templateSet[i][0], BossKinds.load(assets, permk, List.of(), skeletons[i], templateSet[i][0], templateSet[i][1]));

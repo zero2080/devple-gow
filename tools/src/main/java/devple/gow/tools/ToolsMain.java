@@ -24,6 +24,7 @@ import java.util.Arrays;
  *   ./gradlew :tools:run --args="pak-ls      P2_gow_kor.iso"
  *   ./gradlew :tools:run --args="pak-extract P2_gow_kor.iso gow-rom [--all]"   (--all: 동영상 PSS/PSW 포함)
  *   ./gradlew :tools:run --args="wad-ls gow-rom/ATHN01A.WAD"
+ *   ./gradlew :tools:run --args="text:export gow-rom/R_PERMK.WAD messages.properties"   (텍스트 모드 표, 49 문서 §8)
  * </pre>
  * "패키지:명령" 형식은 {@code devple.gow.tools.<패키지>.Cli#main(String[])} 로 위임한다.
  * 예) {@code texture:export gow-rom/R_HERO0.WAD out} → {@code texture.Cli.main(["export", ...])}

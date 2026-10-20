@@ -131,7 +131,7 @@ public final class UiScene implements Scene {
 				continue;
 			}
 			devple.gow.engine.game.SaveGame g = new devple.gow.engine.game.SaveGame();
-			g.level = "ATHN01A";
+			g.level = devple.gow.engine.game.GameFlow.startLevel();
 			g.selectedMagic = "";
 			g.difficulty = (int) demo[i][0];
 			g.playTime = demo[i][1];
