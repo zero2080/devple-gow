@@ -68,6 +68,17 @@ public final class HydraFight extends BossFight {
 		f.brain().engage();
 	}
 
+	/** 몸통 고정 — 동기 끌기 전에도 (새 기술 첫 프레임은 직전 루트 모션 델타를 유지해 요가 0.09 돌고, 끌기 목표가 영웅 쪽 synch 거리 ≈ 450 만큼
+	 * 휘둘려 806 → 807 에서 영웅이 한 틱 40 튀었다). */
+	@Override
+	protected void pin() {
+		if (boss != null) {
+			boss.pos.x = anchor.x;
+			boss.pos.z = anchor.z;
+			boss.yaw = anchorYaw;
+		}
+	}
+
 	@Override
 	protected void tick(Input in, float dt) {
 		EnemyFighter f = boss;
@@ -77,9 +88,7 @@ public final class HydraFight extends BossFight {
 		// 목이 바다에 고정된 몸통: 위치·방향 모두 스폰 값 고정 [추정]. 공격 방향은 구역별 애니(51 왼쪽 / 52 오른쪽 / 62 가운데)가 맡고,
 		// 잡기·처형 카메라(gobossleftfight 등)가 월드 고정 오브젝트라 동기 장면도 스폰 방향 기준으로 저작됨 (30 문서 §6).
 		// 방향을 AI 에 맡기면 영웅 쪽으로 돌아 HERO_TO_BOSS 정렬된 크레토스가 망대 밖 허공 / 카메라 밖에 놓였다.
-		f.pos.x = anchor.x;
-		f.pos.z = anchor.z;
-		f.yaw = anchorYaw;
+		pin();
 		int m = f.combat().active() ? f.combat().move().id() : -1;
 		if (m == 812 && f.hp <= 0 || killDone) {
 			killDone = true;

@@ -19,10 +19,10 @@ import java.util.function.IntPredicate;
  *   <li>RepeatPress(SCRIPT 0xE513E9CB, idx = 템플릿) 가 있는 기술: {@link RepeatPressQte} 게이지가 두 쪽 진행률. 결과 Pass/Fail Move
  *       는 보스에 요청되고 영웅은 다음 틱에 같은 ID 로 따라간다 (히드라 807 → 809/808, 811 → 812/816, 아레스 606 → 608/607)</li>
  *   <li>TimedPress(0xF980EF69): 이벤트 창 = 프롬프트, 실패 → 같은 창의 REQUEST0 실패 분기 (히드라 810 [0.39–0.47] → 813)</li>
- *   <li>정렬: 이벤트 22 창 안이면 원작 0x204BF0 ({@link SyncPull}) — 그 기술을 가진 쪽이 상대를 끈다 (보스 → 영웅: 히드라 802/806/810,
- *       아레스 600/608; 영웅 → 보스도 같은 규칙). 창 밖은 원작이 위치를 건드리지 않는다 (이벤트 19 FLAG_4 = 동기 유지만) —
- *       잡기 적중 자리 + 두 쪽 루트 모션 (이동·회전, {@link devple.gow.engine.anim.RootMotion}) 이 관계를 만든다 (가족 포옹 865–867,
- *       분신 잡기 860–863, BMI 올라타기 450–455, 아레스 605–607/609 …). 끌리는 쪽은 루트 모션 없음 (37 문서 §11.4)</li>
+ *   <li>정렬: 원작 0x204BF0 ({@link SyncPull}) — 이벤트 22 또는 19 창을 가진 쪽이 상대를 끈다 (0x205B28 의 0x24 검사, 37 문서 §11.6).
+ *       보스 → 영웅: 히드라 802–816, 아레스 600·605–609·621–623, 가족 포옹 865–867, 분신 잡기 860/861, BMI 올라타기 450–455.
+ *       영웅 → 보스: 아레스 620 (영웅 기술의 이벤트 19). 창 밖 (아레스 608 [0.52–1], 607 [0.6–1] …) 은 두 쪽 루트 모션만
+ *       ({@link devple.gow.engine.anim.RootMotion}). 끌리는 쪽은 루트 모션 없음 (37 문서 §11.4)</li>
  * </ul>
  */
 public final class BossSync {
@@ -38,8 +38,9 @@ public final class BossSync {
 	private GrabSync timedHelper;
 	/** 마지막 쌍 (기술 ID, 없으면 -1). */
 	private int paired = -1;
-	/** 원작 0x204BF0 끌기 (섞기 비율 +0x1BC: 동기 연결 시작 0.1, 끄는 프레임마다 ×1.1). */
-	private final SyncPull pull = new SyncPull();
+	/** 원작 0x204BF0 끌기. 섞기 비율 +0x1BC 는 <b>끌리는 쪽</b> combatant 의 것 (0x204EEC 읽기·0x2050A0 쓰기): 동기 연결 시작 때 두 쪽 모두 0.1
+	 * (0x209830), 끌리는 프레임마다 ×1.1 — 영웅이 끌릴 때 / 보스가 끌릴 때 따로. */
+	private final SyncPull heroPull = new SyncPull(), bossPull = new SyncPull();
 	/** 마지막 틱에 끈 쪽: 1 = 보스가 영웅을, 2 = 영웅이 보스를, 0 = 없음 (테스트). */
 	private int pulling;
 	/** 동기 시작 때 영웅 높이 (수직 루트 모션 하한). */
@@ -101,23 +102,29 @@ public final class BossSync {
 		pulling = 0;
 		if (paired < 0) {
 			qte = null;
-			if (pull.linked()) {
+			if (heroPull.linked()) {
 				ctl.rootHold = false;
 				boss.rootHold = false;
 			}
-			pull.unlink();
+			heroPull.unlink();
+			bossPull.unlink();
 			return;
 		}
-		if (!pull.linked()) {
-			pull.link(); // 0x209830: 동기 연결이 새로 생길 때 +0x1BC = 0.1 (자기·상대)
+		if (!heroPull.linked()) {
+			heroPull.link(); // 0x209830: 동기 연결이 새로 생길 때 +0x1BC = 0.1 (자기·상대)
+			bossPull.link();
 			linkFloor = ctl.position.y;
 		}
-		// 원작 0x2441E0(+0x1AC, 0x24) 는 이벤트 19 (0x4) 창도 끈다 (일반 적 처형은 GrabSync 가 적용, 37 문서 §11.5). 보스 동기 (아레스 605–609, 악령 크라토스
-		// 포옹·분신 잡기 등) 는 아직 이벤트 22 만 [근사: 미적용 — 악령 크라토스 포옹은 끌기 목표가 수백 단위 밖으로 나와 따로 확인 필요]
-		boolean bossPulls = SyncPull.pullWindow(bc) != null;
-		boolean heroPulls = !bossPulls && SyncPull.pullWindow(hero) != null;
+		// 원작 0x205B28: 0x2441E0(+0x1AC, 0x24) ≠ 0 → 0x204BF0. 이벤트 22 (0x20) 와 이벤트 19 (0x4) 창 모두 그 기술을 가진 쪽이 상대를 끈다
+		// (37 문서 §11.1, §11.6). 보스 데이터: 히드라 802/806/810 (22)·803–805/807–809/811–816 (19), 아레스 600/608 (22)·605/606/607/609 (19)·
+		// 621–623 (19) 은 보스가, 영웅 620 MAIBARSHOWDOWN (19) 은 영웅이 아레스를, 가족 865–867·분신 860/861·BMI 450–455 (19) 는 보스 쪽이 영웅을 끈다.
+		// 두 쪽이 같은 프레임에 창을 가진 동기는 보스 데이터에 없다 — 엔진은 보스 쪽 우선 [근사: 원작은 서로 회전만 끌고 위치는 둘 다 자기 루트 모션]
+		boolean bossPulls = SyncPull.linkedPullWindow(bc) != null;
+		boolean heroPulls = !bossPulls && SyncPull.linkedPullWindow(hero) != null;
 		// 끌리는 쪽은 루트 모션 없음 (0x1EC058). 원작은 상대 이벤트 창을 같은 프레임에 갱신해 (0x1EBF8C → 0x206030) 끌리는 첫 프레임부터
-		// D = 단위 — 엔진은 두 쪽 갱신이 끝난 뒤라 이번 틱 루트 모션을 되돌리고 다음 틱부터는 rootHold 로 막는다
+		// D = 단위 — 엔진은 두 쪽 갱신이 끝난 뒤라 이번 틱 루트 모션을 되돌리고 다음 틱부터는 rootHold 로 막는다.
+		// 끄는 쪽은 자기 루트 모션 그대로 (0x1EBFB8: 0x20 이면 변위 0 + D, 0x4 만이면 변위 = 상대 combatant +0x10 + D — +0x10 은 상대가 지난 갱신의
+		// 자유 이동 0x1ECD60 에서 충돌이 깎은 양 (0x1ECE48) 이라 끌린 상대가 벽에 막히면 끄는 쪽도 그만큼 따라간다. 엔진의 끌기는 충돌 없이 위치를 정하므로 0)
 		if (bossPulls && !ctl.rootHold) {
 			ctl.undoRoot();
 		}
@@ -127,24 +134,24 @@ public final class BossSync {
 		ctl.rootHold = bossPulls;
 		boss.rootHold = heroPulls;
 		if (bossPulls) {
-			// 보스 기술의 이벤트 22 창: 보스가 영웅을 끈다 (히드라 802/806/810, 아레스 600/608)
+			// 보스 기술의 이벤트 22/19 창: 보스가 영웅을 끈다 (비율 = 끌리는 쪽 +0x1BC, 0x2050A0)
 			float[] y = {ctl.yaw};
-			pull.step(SyncPull.target(boss.pos, boss.yaw, boss.animator(), boss.scale, ctl.animator(), 1f), ctl.position, y);
+			heroPull.step(SyncPull.target(boss.pos, boss.yaw, boss.animator(), boss.scale, ctl.animator(), 1f), ctl.position, y);
 			ctl.yaw = y[0];
 			ctl.prevPosition.set(ctl.position);
 			ctl.vy = 0;
 			pulling = 1;
 		} else if (heroPulls) {
-			// 영웅 기술의 이벤트 22 창: 영웅이 보스를 끈다 (같은 0x204BF0, 자기 = 영웅)
+			// 영웅 기술의 이벤트 22/19 창: 영웅이 보스를 끈다 (같은 0x204BF0, 자기 = 영웅 — 아레스 620)
 			float[] y = {boss.yaw};
-			pull.step(SyncPull.target(ctl.position, ctl.yaw, ctl.animator(), 1f, boss.animator(), boss.scale), boss.pos, y);
+			bossPull.step(SyncPull.target(ctl.position, ctl.yaw, ctl.animator(), 1f, boss.animator(), boss.scale), boss.pos, y);
 			boss.yaw = y[0];
 			boss.prevPos.set(boss.pos);
 			pulling = 2;
-		} else {
-			// 이벤트 22 창 밖: 두 쪽 루트 모션 (0x1F7110 → 0x1EBD78: 이동·회전). 영웅 수평·회전은 HeroController,
-			// 보스는 EnemyFighter, 영웅 수직은 여기서 (동기 중 물리가 꺼져 있다 — 608 창 뒤 zeroJoint y 62 → 0 로 내려옴, BMI 올라타기 0 → 212).
-			// 동기 시작 높이 아래로는 내려가지 않게 (BMI 실패 454 는 zeroJoint 가 바닥 아래로) [근사: 원작은 지상 이동이 바닥에 붙임]
+		}
+		if (!bossPulls) {
+			// 영웅이 끌리지 않는 프레임: 영웅 루트 모션 (0x1F7110 → 0x1EBD78). 수평·회전은 HeroController, 수직은 여기서 (동기 중 물리가 꺼져 있다 —
+			// 608 창 뒤 zeroJoint y 62 → 0 로 내려옴). 동기 시작 높이 아래로는 내려가지 않게 [근사: 원작은 지상 이동이 바닥에 붙임]
 			ctl.position.y = Math.max(linkFloor, ctl.position.y + ctl.rootDy());
 			ctl.prevPosition.y = ctl.position.y;
 			ctl.vy = 0;

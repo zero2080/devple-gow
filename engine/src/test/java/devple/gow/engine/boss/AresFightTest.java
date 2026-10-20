@@ -84,7 +84,7 @@ class AresFightTest {
 	}
 
 	/**
-	 * 잡기 정렬 = 원작 0x204BF0 (37 문서 §11): 605/606 (이벤트 19, 동기 유지만) 은 위치를 건드리지 않고, 608 MAIBARGRABWIN 의
+	 * 잡기 정렬 = 원작 0x204BF0 (37 문서 §11): 605/606 은 아레스 기술의 이벤트 19 창 [0–1] 로 (0x205B28 의 0x24 검사), 608 MAIBARGRABWIN 은
 	 * 이벤트 22 창 [0–0.52] 동안 아레스가 영웅을 synchJoint 관계로 끈다 — 영웅 = 아레스 정면 (z −28 → −3), 마주 봄, 들어 올림 (y +30).
 	 * 그 관계에서 영웅 손목이 아레스 손가락 관절에 붙는다 (평균 &lt; 6). 예전 BOSS_TO_HERO "같은 원점·같은 방향" 은 폐기.
 	 */
@@ -102,13 +102,19 @@ class AresFightTest {
 		r.ctl.yaw = b.yaw + (float) Math.PI;
 		contact(r, 200, 0);
 		assertTrue(until(r, 3, () -> r.fight.sync().active() && r.fight.sync().pairedMove() == 606), r.bossMoves.toString());
-		// 606: 정렬 없음 (원작 이벤트 19) — 아레스·영웅 모두 그대로
+		// 606: 아레스 604 의 이벤트 19 (FLAG_4 [0–1]) → 0x205B28 의 0x24 검사에 걸려 아레스가 영웅을 끈다 (0x204BF0, 37 문서 §11.6).
+		// 영웅 002 의 605–609 에는 이벤트 19/22 가 없다. 아레스는 끄는 쪽 = 자기 루트 모션 그대로 (MAIBARAutoStruggle zero 고정 → 제자리)
 		org.joml.Vector3f bp = new org.joml.Vector3f(b.pos);
 		for (int k = 0; k < 30; k++) {
 			r.tick();
-			assertEquals(0, r.fight.sync().pulling(), "606 은 끌지 않음");
+			assertEquals(1, r.fight.sync().pulling(), "606 이벤트 19 → 아레스가 영웅을 끈다");
 		}
 		assertEquals(0, b.pos.distance(bp), 1e-3f, "아레스 제자리");
+		var t606 = devple.gow.engine.combat.SyncPull.target(b.pos, b.yaw, b.animator(), b.scale, r.ctl.animator(), 1f);
+		assertEquals(0, t606.getTranslation(new org.joml.Vector3f()).distance(r.ctl.position), 1f, "606 synchJoint 관계로 수렴: " + r.ctl.position);
+		var rel606 = new org.joml.Matrix4f().translation(b.pos).rotateY(b.yaw).invert().transformPosition(new org.joml.Vector3f(r.ctl.position));
+		assertTrue(Math.abs(rel606.x) < 5 && rel606.z < -20 && rel606.z > -45, "영웅 = 아레스 정면: " + rel606);
+		assertEquals(0, Math.abs(Math.IEEEremainder(r.ctl.yaw - b.yaw - Math.PI, Math.PI * 2)), 0.05, "마주 봄");
 		assertTrue(until(r, 15, () -> bossMove(r) == 608), "608: " + r.bossMoves);
 		float gap = 0;
 		int n = 0;
