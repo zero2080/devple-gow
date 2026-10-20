@@ -148,6 +148,13 @@ public final class GrabRelation {
 	 * ({@link BodyPush}) 를 영웅에. 결합 0.5 초 뒤 두 synchJoint 거리.
 	 */
 	public static Result run(Trial t, float start) {
+		return run(t, start, true);
+	}
+
+	/**
+	 * @param push 생물 밀어내기 (0x1E2DD8) — 원작 규칙 = true. false 는 비교용 (설계 관계가 GRAB 첫 접촉에서 나오는지만 본다).
+	 */
+	public static Result run(Trial t, float start, boolean push) {
 		Matrix4f rel = relation(t);
 		if (rel == null) {
 			return null;
@@ -167,7 +174,9 @@ public final class GrabRelation {
 		final float dt = 1 / 60f;
 		ScriptedInput in = new ScriptedInput(0, List.of(new ScriptedInput.Step(0.05f, 0.05f, PadButton.CIRCLE)));
 		GrabSync sync = new GrabSync(t.ctl(), t.hero());
-		BodyPush.Body heroBody = BodyPush.hero(t.ctl().position, () -> false, t.hero());
+		BodyPush.HeroBody heroBody = new BodyPush.HeroBody(t.ctl(), () -> false, t.hero());
+		List<BodyPush.Body> heroOnly = List.of(heroBody);
+		en.setCrowd(push ? () -> heroOnly : List::of); // 적도 자기 갱신에서 영웅 밖으로 자신을 민다 (0x1E2DD8, Sold +0x1C 비트 1 이면 안 함)
 		int after = -1;
 		float link = -1, hitProg = -1;
 		int fin = finisher(t.hero().data(), en.classId(), en.hp).id();
@@ -181,7 +190,12 @@ public final class GrabRelation {
 				} else {
 					t.ctl().update(in, 0, dt);
 				}
-				BodyPush.push(heroBody, t.ctl().position, List.of(en), null);
+				float y = t.ctl().position.y;
+				heroBody.refresh();
+				if (push && heroBody.pushesSelf()) {
+					BodyPush.push(heroBody, t.ctl().position, List.of(en), null);
+				}
+				t.ctl().position.y = y; // 지상 이동은 밀린 뒤 바닥에 붙는다 (0x1EA5F0 → 0x1E3298) — 바닥 없는 모의라 높이 유지
 			}
 			en.update(dt);
 			sync.update(in, en, t.enemyTweaks(), dt);
@@ -205,9 +219,14 @@ public final class GrabRelation {
 	 * @return 가장 작은 오차의 결과 (처형 기술이 없으면 null)
 	 */
 	public static Result search(Supplier<Trial> trials, float from, float to) {
+		return search(trials, from, to, true);
+	}
+
+	/** {@link #search(Supplier, float, float)} — push = 생물 밀어내기 ({@link #run(Trial, float, boolean)}). */
+	public static Result search(Supplier<Trial> trials, float from, float to, boolean push) {
 		Result best = null;
 		for (float d = from; d <= to; d += 5) {
-			Result r = run(trials.get(), d);
+			Result r = run(trials.get(), d, push);
 			if (r == null) {
 				return null;
 			}
@@ -220,7 +239,7 @@ public final class GrabRelation {
 		}
 		float c = best.start();
 		for (float d = c - 4; d <= c + 4; d += 1) {
-			Result r = run(trials.get(), d);
+			Result r = run(trials.get(), d, push);
 			if (r != null && !Float.isNaN(r.error()) && r.error() < best.error()) {
 				best = r;
 			}

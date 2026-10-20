@@ -541,7 +541,7 @@ ATHN07B (화면 전체), ATHN06B (방 안이 흐린 벽), PAND03I (주황 판) �
 - 도착점 (2429, 516, 6496) 은 DEST01 `goenddoor` (2416, 539, 6432) 바로 뒤, `goloadcheckdsrt2` 안 — 위치는 맞다. 문은 `EndDoor-AnimOpen` (Animator "!0", 조건 LevelData:0 == 3 = 세이렌 셋) 으로 열린다.
 - 엔진은 이음마다 두 레벨을 새로 읽고, 다른 슬롯은 정적 지오메트리만 그렸다 → 열린 문이 닫힌 자세로 돌아왔다 (실제 플레이에서도). 원작은 LoadCheck 가 현재 레벨 표시만 바꾸고 두 슬롯이 그대로 산다.
   - `GameScene.Resident` (레벨 이름, Vis 숨김, `Platforms.State` 목록) 를 이음/걷기 `Arrival` 로 두 슬롯 모두 넘긴다 → 떠난 레벨 = 다른 슬롯 (`neighbourPlatforms().restore`), 들어간 레벨 = 현재 (생성 스크립트 뒤 `restorePlatforms`·`hideInstance`).
-  - 이웃 스크립트의 Animator 도 이웃 오브젝트를 움직인다 (`SceneNav.neighbourPlatforms`, 렌더 자세만 — 충돌은 이웃 정적 충돌 [근사]). `LevelScene.renderNeighbour` 가 자세 인스턴스를 스키닝으로 그린다.
+  - 이웃 스크립트의 Animator 도 이웃 오브젝트를 움직인다 (`SceneNav.neighbourPlatforms`; ~~렌더 자세만 — 충돌은 이웃 정적 충돌 [근사]~~ → 이웃 CDV hull 도 이 레벨 발판과 같은 규칙으로 막고 받침, 이웃 Vis 충돌 끔·이음 넘기기 포함 — 42 §5). `LevelScene.renderNeighbour` 가 자세 인스턴스를 스키닝으로 그린다.
   - `Platforms.settleUnder` (Warp 도착 발판 맞추기) 가 맞지 않는 발판의 애니를 지우던 것을 원래 상태로 되돌리게 함 (넘겨받은 열린 문이 지워졌다).
 - 검증: `-Dgow.arrive.open=goenddoor` 로 DEST02 ← DEST01 (`d02_open.png`), DEST01 ← DEST02 → 걷기로 DEST02 (넘겨받은 문 자세, `d01_open.png`) 모두 문 너머 크레토스가 보인다.
   재현 옵션 없는 `--arrive` 는 여전히 닫힌 문 (상태 없음, 데이터대로).

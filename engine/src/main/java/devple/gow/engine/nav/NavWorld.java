@@ -23,6 +23,8 @@ public final class NavWorld {
 
 	private final List<LevelCollision> statics = new ArrayList<>();
 	private Platforms platforms = new Platforms();
+	/** 다른 슬롯 레벨의 움직이는 오브젝트 (이웃 스크립트 Animator 가 움직임, 43 §13.8) — 바닥·벽 모두 이 레벨 발판과 같은 규칙. */
+	private Platforms neighbour = new Platforms();
 	private final List<NavRope> ropes = new ArrayList<>();
 
 	public NavWorld(LevelCollision... cols) {
@@ -55,6 +57,15 @@ public final class NavWorld {
 		platforms = p != null ? p : new Platforms();
 	}
 
+	public Platforms neighbourPlatforms() {
+		return neighbour;
+	}
+
+	/** 다른 슬롯 레벨 발판 (원작은 두 슬롯 오브젝트가 같은 충돌 질의에 든다 — 36 문서 §2). */
+	public void setNeighbourPlatforms(Platforms p) {
+		neighbour = p != null ? p : new Platforms();
+	}
+
 	public List<NavRope> ropes() {
 		return ropes;
 	}
@@ -68,9 +79,11 @@ public final class NavWorld {
 				best = new Floor(f.y(), f.tri().attrs(), null);
 			}
 		}
-		Platforms.Support s = platforms.floor(x, y, z, drop);
-		if (s != null && (best == null || s.y() > best.y)) {
-			best = new Floor(s.y(), SurfaceAttr.GROUND.bit(), s);
+		for (Platforms ps : new Platforms[]{platforms, neighbour}) {
+			Platforms.Support s = ps.floor(x, y, z, drop);
+			if (s != null && (best == null || s.y() > best.y)) {
+				best = new Floor(s.y(), SurfaceAttr.GROUND.bit(), s);
+			}
 		}
 		return best;
 	}
@@ -119,6 +132,14 @@ public final class NavWorld {
 			any |= col.collideSphere(c, r);
 		}
 		return any;
+	}
+
+	/**
+	 * 움직이는 오브젝트 CDV hull (문·창살·회전방·발판) 로 구 밀어내기 — 이 레벨 (skip = 붙잡는 오브젝트 제외) + 다른 슬롯 레벨 (이웃 Animator 자세).
+	 */
+	public boolean collideBodies(Vector3f c, float r, java.util.Collection<String> skip) {
+		boolean own = platforms.collideSphere(c, r, skip);
+		return neighbour.collideSphere(c, r, java.util.Set.of()) | own;
 	}
 
 	/** 줄 선분까지 거리 r 안의 가장 가까운 줄 (없으면 null). */

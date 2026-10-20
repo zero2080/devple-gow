@@ -195,6 +195,8 @@ public final class BmiFight extends BossFight {
 			anchor.set(m[12], f.pos.y, m[14]);
 		}
 		f.damageHook = this::takeDamage;
+		// Think 0x1C0AD0–0x1C0AE8: 매 프레임 owner+0x2D8 |= 0x80000000 → 자기 이동에서 생물 밀어내기 없음 (영웅에게는 단단함, 32 문서) [확실]
+		f.nav().setNoPush(true);
 		meterState(true); // 생성자 sub_1C1958(this, 1): 단계 0 → 1
 		EffectSystem fx = arena.effects();
 		if (fx != null) {

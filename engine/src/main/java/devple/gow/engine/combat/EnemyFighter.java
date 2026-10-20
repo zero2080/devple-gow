@@ -143,7 +143,11 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 		this.scale = tmpl.scaleCenter / 100f + tmpl.scaleRange / 100f * (0.5f - rnd.nextFloat());
 		this.combat = new Combatant(new CombatData(wad, combatFiles, set), anim, this);
 		this.nav = new EnemyNav(tmpl.moveCaps, ai != null ? ai.motion(tmpl.soldier) : null, tmpl.pauseMoveMs);
-		nav.setBody(ai != null ? ai.body(tmpl.soldier) : null, scale);
+		AiData.Body soldBody = ai != null ? ai.body(tmpl.soldier) : null;
+		nav.setBody(soldBody, scale);
+		this.boxJoint = soldBody != null && soldBody.joint() != null ? anim.skeleton().indexOf(soldBody.joint()) : -1;
+		this.zeroJoint = anim.skeleton().indexOf("zeroJoint");
+		jointBox.radius = nav.bodyRadius();
 		nav.setRide(ai != null ? ai.ride(tmpl.soldier) : null);
 		collectLocoClips(set);
 		DecisionTree tree = ai != null ? ai.tree(tmpl.decisionTree) : null;
@@ -238,7 +242,9 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 			return;
 		}
 		if (holdAi) {
-			// AI·이동 정지 (시험·HeroTestScene 배치용): 전투·애니·루트 모션만
+			// AI 정지 (시험·HeroTestScene 배치용): 스틱 0 으로 내비게이션 이동 단계는 돈다 — 원작은 AI 가 서 있어도 0x1EBD78 이 매 프레임
+			// 생물 밀어내기 0x1E2DD8 을 부른다 (자유 이동 기술이면 nav.free 가 처리)
+			nav.update(pos, ZERO, null, combat.active(), dt);
 		} else if (brain.tree != null) {
 			brain.update(dt);
 			boolean busy = combat.active();
@@ -302,6 +308,7 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 	 * (중력 없는 0x1E5F90 + 충돌 0x1EA200). stateMask 7 기술은 지상 이동이 바닥에 붙이므로 버린다.
 	 */
 	private void rootMotion() {
+		refreshBox();
 		if (rootMotionOff || !combat.active()) {
 			root.reset();
 			nav.free = false;
@@ -439,7 +446,43 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 
 	@Override
 	public float bodyRadius() {
-		return nav.bodyRadius();
+		return boxJoint >= 0 ? jointBox.radius : nav.bodyRadius();
+	}
+
+	@Override
+	public float refX() {
+		return boxJoint >= 0 ? jointBox.offX : 0;
+	}
+
+	@Override
+	public float refZ() {
+		return boxJoint >= 0 ? jointBox.offZ : 0;
+	}
+
+	/** 관절 상자 관절 (Sold +0xA4, 없으면 −1 = 루트 → Sold 상자) 과 상자 (0x1E6DF0, {@link BodyPush.JointBox}). */
+	private final int boxJoint, zeroJoint;
+	private final BodyPush.JointBox jointBox = new BodyPush.JointBox();
+
+	/** 0x1EBD78 → 0x1E6DF0: 이번 자세로 상자를 다시 만든다 (Sold +0xA4 관절이 있는 몸만 — 크라토스 001·BMI·히드라). */
+	private void refreshBox() {
+		if (boxJoint < 0) {
+			return;
+		}
+		float r = nav.bodyRadius(), h = nav.bodyHeight();
+		if (anim.current() == null) {
+			jointBox.update(r, h, 0, 0, yaw, false, false);
+			return;
+		}
+		float[][] w = anim.pose().world(anim.skeleton());
+		org.joml.Matrix4f m = new org.joml.Matrix4f().set(w[boxJoint]);
+		if (zeroJoint >= 0) {
+			m = new org.joml.Matrix4f().set(w[zeroJoint]).invert().mul(m);
+		}
+		Vector3f j = m.getTranslation(new Vector3f()).mul(scale);
+		devple.gow.tools.combat.CombatFile.Move mv = combat.active() ? combat.move() : null;
+		boolean sync = mv != null && (mv.flags() & 0x60) != 0;
+		boolean joint = nav.mode() == EnemyNav.Mode.GROUND || (nav.mode() == EnemyNav.Mode.AIR && mv != null);
+		jointBox.update(r, h, j.x, j.z, yaw, sync, joint);
 	}
 
 	@Override
@@ -452,9 +495,13 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 		return nav.bodyBase();
 	}
 
+	/**
+	 * 공중 (+0x174 &amp; 0x4C). 날기 능력 (AI1 0x38 Fly 0x8) 이면 시작 상태가 0x40 날기 (0x1D08C0) — 하피: 지상 영웅은 하피에게 밀리지 않는다
+	 * (0x1E2B80) [확실: 시작 상태 / 근사: 엔진은 날기 높이·날기 상태 이탈을 모의하지 않고 계속 공중으로 본다].
+	 */
 	@Override
 	public boolean airborne() {
-		return nav.mode() == EnemyNav.Mode.AIR;
+		return nav.mode() == EnemyNav.Mode.AIR || ((nav.caps() & AiTemplate.CAP_FLY) != 0 && nav.mode() == EnemyNav.Mode.GROUND);
 	}
 
 	/** 단단함 = 현재 기술 stateMask 비트 2 (0x1E29A8). 사망 기술이 끝난 시체는 통과 [근사: 원작 시체 처리 미분석]. */

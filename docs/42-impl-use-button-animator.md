@@ -94,6 +94,10 @@
 **움직이는 오브젝트 충돌**: 자세를 갖는 오브젝트(Animator 발판·회전방, R1 문)의 CDV 볼록 hull 이 영웅을 막는다 (`Platforms.collideSphere`) — hull 관절 로컬에서 평면 n·x + d 의 부호 거리 최댓값이 반지름보다 작으면 그 평면 법선으로 밀어낸다 [근사: 모서리 영역도 면으로], 최대 3 회. 전에는 문·창살을 그냥 통과했다.
 - 스크립트 Vis 슬롯 3 `Attr11_0` (1 켬 / 2 끔) = 충돌 [추정: "collisionOFF"·"DoorCollOff"·"XFCcaptainCSM-main-collisionOFF" 등 데이터 용례]. `GameScene.vis` → `SceneNav.setSolid`.
 - 붙잡는 오브젝트(레버·크랭크·밀기 상자)는 영웅이 손잡이에 닿아야 하므로 뺀다. 적은 아직 막지 않는다.
+- **다른 슬롯 레벨** (2026-10-20): 이웃 스크립트 Animator 가 움직이는 이웃 오브젝트도 같은 규칙 — `NavWorld.setNeighbourPlatforms` (바닥 `floor`·실려 감 `carry`)
+  + `NavWorld.collideBodies` (이 레벨 + 이웃 hull), 이웃 Vis 슬롯 3 → `SceneNav.applyCollision` (이웃 발판 `setSolid`), 이음 넘기기 `Platforms.State.solid` (43 §13.8).
+  예: DEST02 에서 본 DEST01 `goenddoor` — 닫히면 hull (y 516–668) 이 막고, `EndDoor-AnimOpen` (모드 8, 3 초) 이 hull 을 104 내리고 `EndDoor-DoorCDOff` (Attr11_0 = 2) 가 끄면 지나간다
+  (`NeighbourDoorCollisionTest`). 예전에는 이웃 hull 을 아예 보지 않아 닫힌 이웃 문도 통과했다 (정적 시트에는 문이 없다).
 
 **고리 퍼즐 흐름** [확실: 데이터]:
 1. 고리 3 개를 남쪽 자리에 둔다 → LevelData 3/4/7, 레버 112·113 = 100 → LevelData 8/9.

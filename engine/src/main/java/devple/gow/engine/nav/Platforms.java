@@ -204,15 +204,15 @@ public final class Platforms {
 	}
 
 	/** 오브젝트 애니 상태 (이음 넘기기: 떠나온 레벨은 원작에서 다른 슬롯에 그대로 남는다, 43 §13.8). */
-	public record State(String owner, String anim, float time, float rate, boolean playing, boolean loop, boolean pingPong) {
+	public record State(String owner, String anim, float time, float rate, boolean playing, boolean loop, boolean pingPong, boolean solid) {
 	}
 
-	/** 애니가 한 번이라도 걸린 오브젝트의 상태. */
+	/** 애니가 한 번이라도 걸렸거나 충돌이 꺼진 (스크립트 Vis Attr11_0 "DoorCDOff" 등) 오브젝트의 상태. */
 	public List<State> states() {
 		List<State> out = new ArrayList<>();
 		for (Body b : bodies) {
-			if (b.anim != null) {
-				out.add(new State(b.owner, b.anim.name, b.time, b.rate, b.playing, b.loop, b.pingPong));
+			if (b.anim != null || !b.solid) {
+				out.add(new State(b.owner, b.anim != null ? b.anim.name : null, b.time, b.rate, b.playing, b.loop, b.pingPong, b.solid));
 			}
 		}
 		return out;
@@ -222,7 +222,11 @@ public final class Platforms {
 	public void restore(List<State> states) {
 		for (State s : states) {
 			Body b = body(s.owner());
-			if (b == null || b.anims == null) {
+			if (b == null) {
+				continue;
+			}
+			b.solid = s.solid();
+			if (b.anims == null || s.anim() == null) {
 				continue;
 			}
 			Animation a = b.anims.find(s.anim());

@@ -176,6 +176,7 @@ public final class SceneNav {
 		neighbourName = name;
 		neighbour = null;
 		neighbourPlatforms = new Platforms();
+		navWorld.setNeighbourPlatforms(neighbourPlatforms);
 		world.linkEvents(null);
 		if (data == null) {
 			return;
@@ -184,6 +185,7 @@ public final class SceneNav {
 			ScriptWorld nw = new ScriptWorld(data, ScriptHost.neighbour(mainHost), neighbourListener);
 			Set<String> owners = animatorOwners(nw);
 			neighbourPlatforms = Platforms.of(data, owners, owners);
+			navWorld.setNeighbourPlatforms(neighbourPlatforms); // 이웃 문·발판 충돌도 자세대로 (43 §13.8 [근사] 해소)
 			nw.start();
 			Vector3f p = world.player() != null ? new Vector3f(world.player().pos[0], world.player().pos[1], world.player().pos[2]) : new Vector3f();
 			nw.placePlayer(p.x, p.y, p.z, true); // 이미 서 있는 볼륨은 "안" 으로 (들어올 때 발동하지 않음)
@@ -233,14 +235,7 @@ public final class SceneNav {
 
 			@Override
 			public void animate(ScriptEntity source, List<String> objects, String anim) {
-				int[] mode = new int[1];
-				float[] speed = {1}, start = new float[1];
-				if (source != null && neighbour != null) {
-					animatorArgs(neighbour, source, mode, speed, start);
-				}
-				for (String o : objects) {
-					neighbourPlatforms.play(o, anim, mode[0], speed[0], start[0]);
-				}
+				applyAnimator(neighbour, neighbourPlatforms, source, objects, anim);
 			}
 
 			@Override
@@ -259,6 +254,7 @@ public final class SceneNav {
 					}
 					host.neighbourVisible(objects, values[0] == 1);
 				}
+				applyCollision(neighbourPlatforms, objects, values); // 이웃 문 "EndDoor-DoorCDOff" 등
 				if (values.length > 4 && values[4] != 0) {
 					if (System.getProperty("gow.trace.vis") != null) {
 						System.out.println("VIS(이웃) " + source.name() + " CMV " + (values[4] == 1 ? "ON " : "OFF ") + objects);
@@ -308,6 +304,29 @@ public final class SceneNav {
 		for (String o : objects) {
 			if (navWorld.platforms().play(o, anim, mode[0], speed[0], start[0])) {
 				System.out.println("오브젝트 애니: " + o + " " + anim + " 모드 0x" + Integer.toHexString(mode[0]) + " 속도 " + speed[0]);
+			}
+		}
+	}
+
+	/**
+	 * 스크립트 Animator → 발판 애니 (다른 슬롯 레벨: 이웃 스크립트가 이웃 오브젝트를, 43 §13.8). 렌더 자세와 CDV hull 충돌이 같이 움직인다.
+	 */
+	public static void applyAnimator(ScriptWorld w, Platforms ps, ScriptEntity source, List<String> objects, String anim) {
+		int[] mode = new int[1];
+		float[] speed = {1}, start = new float[1];
+		if (source != null && w != null) {
+			animatorArgs(w, source, mode, speed, start);
+		}
+		for (String o : objects) {
+			ps.play(o, anim, mode[0], speed[0], start[0]);
+		}
+	}
+
+	/** 스크립트 Vis 슬롯 3 (Attr11_0, 1 켬 / 2 끔 — "DoorCollOff", "DoorCDOff") → 소유 GO 의 CDV 충돌 (이 레벨은 GameScene 이 같은 규칙으로). */
+	public static void applyCollision(Platforms ps, List<String> objects, int[] values) {
+		if (values.length > 3 && values[3] != 0) {
+			for (String o : objects) {
+				ps.setSolid(o, values[3] == 1);
 			}
 		}
 	}
@@ -432,7 +451,7 @@ public final class SceneNav {
 				}
 			}
 		}
-		return navWorld.platforms().collideSphere(c, r, grabbed);
+		return navWorld.collideBodies(c, r, grabbed); // 이 레벨 + 다른 슬롯 레벨 문·발판 (이웃 Animator 자세)
 	}
 
 	/** 스크립트 Vis Attr11_0 → 충돌 켜고 끄기. */
