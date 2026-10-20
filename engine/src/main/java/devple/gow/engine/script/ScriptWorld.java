@@ -565,6 +565,24 @@ public final class ScriptWorld {
 
 	// ---- 발동 ----
 
+	/**
+	 * Warp_Jump 0x1B2E08 끝의 0x1A9C18(Start, 영웅): 도착 Start 의 대상 목록 (+0x4A 개수, +0x4C 번호) 을 하나씩 0x1A9750 으로 발동 [확실].
+	 * 데이터: 대상이 있는 Start 는 Warp 도착 5 곳뿐 (PAND04AA WarpFrmCore → 엘리베이터 AnimLiftUp, ATHN02A ShipTrans, PAND00D WarpFrom2i,
+	 * ATHN08C WarpFrm08B, ATHN01F WarpfromD — 43 §13.10).
+	 */
+	public void fireStart(ScriptEntity st) {
+		if (st == null) {
+			return;
+		}
+		for (int t : st.targets()) {
+			ScriptEntity te = byId.get(t);
+			if (te != null) {
+				trigger(te, player);
+			}
+		}
+		runPending();
+	}
+
 	/** 원작 0x1A9750. */
 	public void trigger(ScriptEntity e, ScriptActor sender) {
 		int base = EntitySlots.baseIndex(e.type());

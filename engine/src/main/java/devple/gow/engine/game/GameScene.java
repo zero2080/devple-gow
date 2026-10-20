@@ -340,9 +340,17 @@ public final class GameScene implements Scene {
 		// Warp 도 이미 서 있는 볼륨은 "안" 으로: 원작 영웅 볼륨 판정은 이전 위치 → 지금 위치 선분 (0x1A7FFC, 콜백 0x1A8508) 인데 순간이동
 		// (0x1E0A18 → 0x1B3030 → 0x29D90C) 프레임은 선분을 건너뛰고 이전 위치 = 도착점 — 도착점을 덮는 Warp 볼륨이 곧바로 되돌리지 않는다 (43 §13.9)
 		world.placePlayer(spawn.x, spawn.y, spawn.z, seamless || warped);
+		if (warped && loadPos == null) {
+			// Warp_Jump 끝 0x1A9C18: 도착 Start 의 대상 발동 (PAND04AA WarpFrmCore → 엘리베이터 AnimLiftUp 등, 43 §13.10) [확실]
+			world.fireStart(world.warpTarget(arrival.from()));
+		}
 		Resident here = resident(arrival, levelName);
 		if (here != null) { // 이음: 들어온 레벨은 원작에서 이미 다른 슬롯에 살아 있었다 → 그 화면 상태 (생성 스크립트 뒤)
-			here.hidden().forEach(level::hideInstance);
+			if (warped) {
+				level.setRemoved(here.hidden()); // Warp 로 되돌아옴: 떠날 때 숨김 집합 그대로 (생성 스크립트 VisOFF 도 되돌림)
+			} else {
+				here.hidden().forEach(level::hideInstance);
+			}
 			nav.restorePlatforms(here.anims());
 		}
 		// 검증: --arrive 이음 재현에는 슬롯 상태가 없다 → -Dgow.arrive.open=오브젝트[:애니],… 를 애니 끝 자세로 (열린 문, 43 §13.8)
@@ -894,6 +902,7 @@ public final class GameScene implements Scene {
 	}
 
 	private void goToLevel(String wad, String entryName) {
+		session.warpLeft = null; // LoadWad: 다른 슬롯이 새 레벨로 바뀐다
 		if (leaving) {
 			return;
 		}
@@ -936,6 +945,18 @@ public final class GameScene implements Scene {
 		if (a.kind() != LevelLink.Kind.WARP && a.camera() == null && cameraRig != null) {
 			a = new Arrival(a.kind(), a.from(), a.pos(), a.yaw(), cameraRig.handoff(), // 이음: 카메라 상태 유지 (30 문서 §7)
 					residents()); // 두 슬롯 화면 상태 (떠나는 레벨 → 다른 슬롯, 들어가는 레벨 → 현재)
+		}
+		// Warp: 원작은 떠나온 레벨을 메모리에 두고 컨텍스트만 끈다 (0x1BC3A0). 바로 그 레벨로 Warp 해 돌아오면 LoadForWarp 가 다시 읽지 않고
+		// (0x1BC110 = 1) 그대로 켠다 → 떠날 때의 화면 상태 (Vis 숨김·Animator 자세) 가 남는다 (HDES01E rope3 — 동영상 뒤 VisON, 43 §13.10).
+		// 그 사이 다른 로드 (이음·LoadWad) 가 있으면 그 슬롯은 새 레벨로 바뀌므로 잊는다.
+		GameScene.Resident back = session.warpLeft;
+		if (a.kind() == LevelLink.Kind.WARP) {
+			session.warpLeft = nav != null ? new Resident(levelName, level.removedInstances(), nav.platformStates()) : null;
+			if (back != null && back.wad().equalsIgnoreCase(wad) && a.resident() == null) {
+				a = new Arrival(a.kind(), a.from(), a.pos(), a.yaw(), a.camera(), List.of(back));
+			}
+		} else {
+			session.warpLeft = null;
 		}
 		pendingEngine.scenes().transitionTo(new GameScene(session, wad, a));
 	}

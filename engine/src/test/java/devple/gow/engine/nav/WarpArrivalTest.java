@@ -78,4 +78,31 @@ class WarpArrivalTest {
 		assertEquals("gorope1", nav.rope().owner());
 		assertEquals(p[1], b.pos.y, 40, "줄 한가운데 그대로 " + b.pos);
 	}
+
+	/**
+	 * 43 §13.10: Warp_Jump 끝 0x1A9C18 이 도착 Start 의 대상을 발동한다 — PAND04AA WarpFrmCore → ElevatorLift-AnimLiftUp ("!0"). HDES01E rope3 /
+	 * ATRET01A gorope1 은 SCR f3 짧은 사슬 줄 (사슬 관절 2) — 흔들기 힘이 없다.
+	 */
+	@Test
+	void warpStartTargetsFireAndShortChainRopes() throws Exception {
+		LevelData d = level("PAND04AA");
+		List<String> anims = new ArrayList<>();
+		ScriptWorld w = new ScriptWorld(d, new ScriptHost(), new ScriptListener() {
+			@Override
+			public void animate(ScriptEntity source, List<String> objects, String anim) {
+				anims.add(String.join(",", objects) + ":" + anim);
+			}
+		});
+		ScriptEntity st = w.warpTarget("PAND00C");
+		assertEquals("WarpFrmCore", st.name());
+		w.start();
+		assertFalse(anims.contains("goelevatorlift:!0"));
+		w.fireStart(st);
+		assertTrue(anims.contains("goelevatorlift:!0"), "도착 Start 대상 → 엘리베이터 " + anims);
+		for (String[] c : new String[][]{{"HDES01E", "gorope3"}, {"ATRET01A", "gorope1"}}) {
+			NavRope r = NavRope.of(level(c[0])).stream().filter(x -> x.owner().equals(c[1])).findFirst().orElseThrow();
+			assertTrue(r.shortChain(), c[1]);
+			assertEquals(2, r.joints(), c[1]);
+		}
+	}
 }

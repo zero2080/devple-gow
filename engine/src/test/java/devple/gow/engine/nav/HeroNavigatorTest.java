@@ -369,6 +369,39 @@ class HeroNavigatorTest {
 		assertEquals("jumpAir", b.anim);
 	}
 
+	/**
+	 * 짧은 사슬 줄 (SCR f3 → 줄 +0x374 & 4 → 영웅 +0x174 0x10000, 0x1C5DA4): 잡을 때 미는 창·흔들기 힘이 없고 (0x1C6BB8 → 0x1C71BC) ○ 도 무시 (0x1C61CC).
+	 * HDES01E gorope3 (54 m, 사슬 관절 2 = 노드 2) 처럼 공중에서 잡아도 줄이 흔들리지 않는다 (43 §13.10). 대조: 보통 줄은 잡을 때 정면으로 밀린다.
+	 */
+	@Test
+	void shortChainRopeDoesNotSwing() {
+		for (boolean shortChain : new boolean[]{true, false}) {
+			NavWorld w = new NavWorld(LevelCollision.of(new ArrayList<>()));
+			w.ropes().add(new NavRope("rope", RopeDef.Type.HANG, 0, 54f, v(0, 400, 0), v(0, -464, 0), 2, new Vector3f(0, 0, 1), 0, shortChain));
+			Body b = new Body();
+			HeroNavigator nav = new HeroNavigator(b, w, null);
+			Pad in = new Pad();
+			b.pos.set(0, 100, 0);
+			b.grounded = false;
+			nav.warpArrived();
+			tick(nav, b, w, in);
+			assertEquals(NavState.ROPE, nav.state(), "공중 줄 잡기");
+			assertEquals(2, nav.sim(w.ropes().getFirst()).nodes(), "노드 = 사슬 관절 2");
+			float maxH = 0;
+			for (int i = 0; i < 120; i++) {
+				in.down.add(PadButton.CIRCLE);
+				tick(nav, b, w, in);
+				maxH = Math.max(maxH, (float) Math.hypot(b.pos.x, b.pos.z));
+			}
+			if (shortChain) {
+				assertTrue(maxH < 1, "짧은 사슬: 흔들림 없음 " + maxH);
+				assertNotEquals("ropeswingidle", b.anim, "○ 무시");
+			} else {
+				assertTrue(maxH > 20, "대조: 잡을 때 미는 창 + ○ 흔들기 " + maxH);
+			}
+		}
+	}
+
 	/** 줄 × 는 잡은 뒤 0.5 초 (0x29DBF8) 가 지나야 먹고, 스틱 쪽 줄 축 방향으로 뛴다. 2 방향 줄 (RopeEastWest = ±(z × 위)) 은 스틱 쪽으로 몸이 돈다. */
 	@Test
 	void ropeJumpWaitsHalfSecondAndSnapsToRopeAxis() {

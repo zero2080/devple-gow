@@ -610,3 +610,60 @@ ATHN07B (화면 전체), ATHN06B (방 안이 흐린 벽), PAND03I (주황 판) �
   후보가 아니다 [추정] — 엔진 `Follow` 그대로.
 
 테스트 `WarpArrivalTest` 2 (도착점 볼륨 = 안 → 되돌림 없음 / 대조로 진입 처리면 LoadForWarp HDES01E, Warp 도착 첫 틱 gorope1). 엔진 테스트 380.
+
+### 13.10 도착 3 차 (prefer 전환표 · 짧은 사슬 줄 · Warp Start 대상 · Warp 되돌아옴 상태)
+스크린샷 (커밋 안 함): `/Users/obeomsu/.claude/jobs/6f65672f/tmp/arr2/` — `p00d_b/p00d_a.png` (PAND00D 수정 전후), `h1e_b/h1e_a.png` (HDES01E), `arr/` (도착 188, 수정 후),
+`head/` (같은 188, HEAD 빌드), `sheets/arr_0..9.png` (대조 시트), `start/` (Start 대상이 있는 Warp 도착).
+
+**1. PAND00D ← PAND01BB Warp (WarpFrm1BB)** — 카메라 선택 [확실: 0x1EE8E0 / 0x1EECE4–0x1EED58]
+- 도착점 (-1883, −220, 3171) 은 아래층 바닥 (데이터대로), 후보 Lv1TunCam3 · Lv1TunCam4 (둘 다 순위 2, 서로의 전환표 항목 +0x1C 가 켜짐). 엔진은 이것을 "prefer = 동순위 우선" 으로 읽어
+  **매 프레임 둘이 번갈았다** (전환 1 초씩 섞임 → 벽 모서리만). 가시 칸·도착 위치·스크립트 문제 아님.
+- 해독: 최선 = −1, 최선 순위 = INT_MIN 으로 활성 목록을 돈다. 상태 마스크로 빠지지 않은 카메라 c 에 대해 전환표에서 **현재 카메라 이름 (+0x808)** 항목을 찾아 +0x1C ≠ 0 이면
+  c 의 순위 = 최선 순위일 때만 목록의 c 자리와 최선 자리를 맞바꾸고 최선 색인 = c 의 자리 (= 원래 최선 카메라), 다르면 (아직 최선이 없을 때 포함) 건너뜀. 아니면 순위 ≥ 최선이면 최선.
+  → **그 표시가 있는 카메라는 현재 카메라에서 넘어오는 선택에서 이기지 못한다** (목록 순서만 바뀜). 마지막에 최선이 이번 후보 (0x306CF0) 에 있고 현재와 다르면 전환.
+- 엔진 `CameraRig.select` 를 해독대로 (목록 자리 바꿈 포함). PAND00D 는 Lv1TunCam4 하나로 남아 크레토스가 보인다 (`p00d_a.png`). 시험 `StartCameraTest.preferTransitionDoesNotFlipFlop`.
+
+**2. HDES01E ← ATRET01A Warp — rope3** [확실: 0x216DCC · 0x1C5DA4 · 0x1C6BB8 · 0x1C61CC · 0x1C65E4 · 0x2170BC]
+- rope3 (54 m) 와 ATRET01A gorope1 은 SCR f3 = 1 (**짧은 사슬**, 모델 사슬 관절 2 개 = 매단 점 + 끝). 0x216DCC 가 줄 +0x374 = 4 → 잡을 때 0x1C5DA4 가 영웅 +0x174 를 0x10000 으로.
+  줄 갱신은 0x10000 이면 흔들기 힘 구간 (0x1C6BC8–0x1C71B8: 잡을 때 0.25 초 미는 창 + ○ 흔들기 + 0x218470 매달림 힘) 을 통째로 건너뛰고 (0x1C6BB8), ○ 도 무시 (0x1C61CC),
+  줄 위치 최소 0.5 m (0x1C65E4). 같은 줄: PAND01A gorope6, PAND01C gorope7, PAND04C gorope61, PAND04G 5 관절 줄들.
+- 엔진은 f3 를 읽지 않아 잡을 때 미는 창 (500 × 붙은 거리 16 m × 2 × 남은 창) 을 무게 0 (붙으면 50/초로 늘어남) 인 끝 노드에 그대로 줘 크게 흔들렸고, 노드도 최소 3 개로 만들었다.
+  영웅이 가져오는 속도는 없다 (잡기 0x1C5D54 는 속도를 줄에 넘기지 않음). 줄은 처음부터 쉬고, 영웅 무게는 붙은 뒤 늘어난다 — 원작도 같다.
+- 수정: `NavRope.shortChain` (SCR f3), `HeroNavigator` 미는 창·흔들기 힘·○ 없음·최소 0.5 m, `RopeSim` 노드 = 사슬 관절 수 그대로 (최소 2). 도착 첫 틱에 rope3 에 매달려 가만히 있고
+  Gcam6 이 크레토스를 비춘다 (`h1e_a.png`). 시험 `HeroNavigatorTest.shortChainRopeDoesNotSwing`, `WarpArrivalTest.warpStartTargetsFireAndShortChainRopes`.
+- rope3 모델은 `rope3-CreationSensor1` → VisOFF, 동영상 h01Mp03 끝 이벤트에서 VisON — `--arrive` 재현에는 그 상태가 없어 안 보인다 (아래 4).
+
+**3. Warp 도착 Start 의 대상 발동** [확실: Warp_Jump 0x1B2E08 끝 → 0x1A9C18(Start)]
+- 0x1A9C18 은 엔티티 대상 목록 (+0x4A 개수, +0x4C 번호) 을 하나씩 0x1A9750 (발동) 으로 보낸다. 엔진은 Start 의 대상을 발동하지 않았다.
+  데이터: 대상이 있는 Start 는 Warp 도착 5 곳 — PAND04AA WarpFrmCore (엘리베이터 AnimLiftUp · IdleOff), ATHN02A ShipTrans-Anim-WarpFrom1F (배 Animator · 소리 · CDsOn 10 초 · 체크포인트 11 초 ·
+  PortCam 0.5 초), PAND00D WarpFrom2i (Load · 체크포인트), ATHN08C WarpFrm08B (음악), ATHN01F WarpfromD (Load).
+- 엔진 `ScriptWorld.fireStart` (GameScene Warp 도착, `placePlayer` 뒤).
+- 남는 것: PAND04AA 엘리베이터 CDV 바닥 hull 이름 `EntitiesPand04AA_SheetM` 이 엔진의 발판 판정 (이름에 ground/floor, `Platforms.walkable` [추정]) 에 걸리지 않아 영웅이 −239 로 떨어진다
+  (CDV 표면 레코드는 레벨 시트에 없음 — 같은 이름 규칙에서 빠지는 발판: PAND04F goelevator, PAND02I goplat1–4, PAND02C gocagelift2, ARENA27 goriseplat …) [미해결].
+  ATHN02A 배: Start 가 배 관절 1 에 붙어 있고 배 충돌은 10 초 뒤 CDsOn — 원작에서 영웅이 배를 어떻게 타는지 미확인 (엔진은 −800 바닥) [미해결].
+
+**4. Warp 로 바로 되돌아올 때의 레벨 상태** [확실: 0x1BC3A0 · 0x1BC110 (§13.9) / 근사: 넘기는 것은 화면 상태만]
+- 원작은 Warp 로 떠나온 레벨을 꺼진 채 메모리에 두고, 곧바로 그 레벨로 LoadForWarp/Warp 하면 다시 읽지 않는다 → 떠날 때의 Vis·Animator 상태가 남는다.
+  엔진은 Warp 마다 새로 읽어 HDES01E rope3 (VisON 뒤) · OLYMP01 goentrance (OpenGates 로 연 문 — 도착점이 볼륨 안이라 다시 열리지 않음) 가 처음 상태로 돌아왔다.
+- 엔진: `GameSession.warpLeft` = Warp 로 떠난 레벨의 `Resident` (숨김 집합 · 발판 상태), 바로 그 레벨로 Warp 하면 생성 스크립트 뒤 숨김 집합을 그대로 (`setRemoved`)·발판 복원.
+  그 사이 이음·LoadWad 가 있으면 잊는다. `--arrive` 재현에는 넘길 상태가 없다 (rope3 안 보임, OLYMP01 문 닫힘 = 하네스).
+
+**5. 도착 188 전수 (240 틱, `arr/` ↔ `head/`)**
+- HEAD 대비 화소 변화 > 10 %: HDES01E ← ATRET01A (87 %, 위 2), PAND00D ← PAND01BB (69 %, 위 1), ATHN01C ← ATHN01D (32 %, 비 효과 잡음), ATRET01A ← HDES01E (26 %, gorope1 짧은 사슬 —
+  흔들리지 않고 그대로 매달림), ATHN01F 둘 (연출 타이밍), PAND00D ← PAND02I (18 %, 같은 카메라·적 위치). 그 밖 ≤ 6 % — 회귀 0.
+- 크레토스가 안 보이는 도착 (눈으로, 대조 시트) 과 분류:
+
+| 도착 | 원인 | 분류 |
+|---|---|---|
+| PAND00D ← PAND01BB | prefer 번갈기 | **해결** (1) |
+| HDES01E ← ATRET01A | rope3 흔들림 → Gcam6 벽 | **해결** (2) |
+| PAND04AA ← PAND00C | Start 대상 미발동 + 엘리베이터 바닥 판정 | 대상 **해결** (3), 발판 판정 미해결 |
+| OLYMP01 ← OLYMP02 Warp | goentrance 문 닫힘 (도착점이 OpenGates 안) | 실제 플레이 **해결** (4), 하네스는 상태 없음 |
+| ATHN02A ← ATHN01F | 배 타기 (3 남는 것) | 미해결 |
+| PAND03F/03J ← PAND00C, PAND02A ← PAND00C | CoreTubeCam4 / Follow | 데이터대로 (§13.9) |
+| DEST01 ↔ DEST02, OLYMP02 ← OLYMP01 걷기, PAND03H ← PAND03I, PAND05B ← PAND05A | 닫힌 문 · 겹친 좌표 · 수호자 가림 · camEleEnter | 기존 분류 (§13.8) |
+| ATHN01D ← ATHN01E, ATHN01B ← ATHN01A, ATHN01E ← ATHN01D (짚라인 끝 Follow), PAND01C ← PAND01B (도착 즉시 PAND01B 로 걷기 → Follow) | 이음 도착점이 돛대·상자 뒤 / 넘겨받을 카메라 없음 | 하네스 (이음 재현 위치·카메라 상태) |
+| DEST00 ↔ DEST01, ATHN03E ← DEST00, ATHN06A ← ATHN06B (camNewWarp 계단 아래 고정, 영웅 400 위 어두운 문) | 멀리 작게 / 어두움 | 데이터대로 (카메라 설계) |
+| ATHN06C ← ATHN07, ATHN07 ← ATHN06C, ATHN07B ← OLYMP01 이음, PAND02AA ↔ PAND02B, PAND03A ← PAND03B, PAND03H ← PAND03G, PAND04J ← PAND05A | 이음 도착점 바로 앞 문·벽 (CMV 카메라, 시선 질의 없음 §13.9) | 데이터대로 [추정: 원작은 걸어 들어오는 카메라] |
+
+시선 탐침 (같은 탐침, 60 프레임 · 정적 충돌): 기본 시작 변화 없음, 도착 +1 (PAND00D ← PAND01BB). 엔진 테스트 394.
