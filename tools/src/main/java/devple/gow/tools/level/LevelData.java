@@ -174,9 +174,23 @@ public final class LevelData {
 	 * 시트의 컨텍스트 목록에 있는데 비트가 꺼진 컨텍스트의 인스턴스 (소문자 이름) 를 돌려준다. 목록에 없는 컨텍스트 (CXT_default 등) 는 그대로 보인다.
 	 */
 	public java.util.Set<String> contextHidden(float x, float y, float z) {
+		return contextHidden(new float[][]{{x, y, z}});
+	}
+
+	/**
+	 * 활성 뷰포트가 여럿일 때 (SCR_Mirror 거울 뷰 + 주 뷰, 43 문서 §12) [확실: 0x152EC8]: 시트 마스크 +0x150 은 프레임마다 한 번 0 (0x16D6F0) 이고
+	 * 뷰 목록 순서대로 각 뷰 카메라 위치의 칸을 같은 마스크에 누적 (0x16DC60 — 뷰 마스크 인자는 레코드 적용 0x16D240 에서 쓰이지 않는다),
+	 * 그 뒤 뷰마다 같은 마스크를 적용 (0x11EF98(뷰 +0x3AC) → 0x16D6F8). ⇒ 모든 뷰가 같은 숨김 집합.
+	 *
+	 * @param eyes 뷰 목록 순서의 눈 위치들
+	 */
+	public java.util.Set<String> contextHidden(float[][] eyes) {
 		java.util.Set<String> hiddenCtx = new java.util.HashSet<>();
 		for (CollisionSheet s : sheets) {
-			long mask = s.visibleContextMask(x, y, z, 0);
+			long mask = 0;
+			for (float[] e : eyes) {
+				mask = s.visibleContextMask(e[0], e[1], e[2], mask);
+			}
 			for (int i = 0; i < s.visContexts.size() && i < 64; i++) {
 				if ((mask & (1L << i)) == 0) {
 					hiddenCtx.add(s.visContexts.get(i).toLowerCase(java.util.Locale.ROOT));

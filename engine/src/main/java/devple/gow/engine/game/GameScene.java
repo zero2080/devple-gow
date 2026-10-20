@@ -1579,6 +1579,10 @@ public final class GameScene implements Scene {
 		renderAlpha = alpha;
 		updateCamera(alpha);
 		level.fx().env().setFogOverride(magicFx.screen.fog()); // 포세이돈 Fog Template (0x195C90, 35 문서 §4.6)
+		if (shadows != null) {
+			// 주 뷰의 레벨 스키닝 GO (모드 0, SCR_Shadow 면 1) + 적·영웅 (47 문서 §11). 거울 반사 패스는 LevelScene 이 멈춘다
+			shadows.begin();
+		}
 		level.render(e, alpha);
 		renderOtherSlot(e);
 		// 캐릭터에도 레벨 안개 (같은 basic.frag 유니폼)
@@ -1586,9 +1590,6 @@ public final class GameScene implements Scene {
 		env.applyFog(hero.shader(), cam, e.window().height());
 		env.applyFog(enemyShader, cam, e.window().height());
 		Matrix4f m = new Matrix4f();
-		if (shadows != null) {
-			shadows.begin(); // 주 뷰의 캐릭터만 그림자 (거울 반사 패스는 level.render 안에서 이미 끝남)
-		}
 		for (Enemy en : enemies) {
 			if (en.fighter().shattered()) {
 				continue; // 부서진 석상 (원작은 *stonedbrk 파편 모델) [근사: 숨김]

@@ -109,7 +109,7 @@ render  fx.beforeRender(e, cam)                        // FarClip → cam.far, r
 - ~~안개 거리 보정값~~ → 원작 패스 해석식 (16 §1.2). ~~층 안개 키 알파·t 의 카메라 피치~~ (16 §1.3). 남은 것: TEXA 상태 가정, 텍스처 층 안개 0x127240 UV.
 - 여러 SCR_Fog 전환은 소유 GO 최근접으로 대체 (원작은 ESC 추정).
 - 비 볼륨 상자 판정, 눈/먼지/플랑크톤 모양, 표면·커브 이미터, 칼 궤적(0xB), 필드. (~~PTC 크기 단위~~ 16 §2.4)
-- ~~SCR_Mirror~~ (§8 / 43 §9: 값 [0] 후처리·합성 0x12ABA0 미해석), ~~LensFlare~~ (46), GhostTrail, RopeSkinned, cloth 미구현.
+- ~~SCR_Mirror~~ (§8 / 43 §9·§12: 합성 순서·층 0·값 [0] 흐림 해석, 0x12ABA0 의 Z 최대 효과만 미해석), ~~LensFlare~~ (46), GhostTrail, RopeSkinned, cloth 미구현.
 - 반투명 패스 안의 정렬 (원작 정렬 단위 미확인, 지금은 인스턴스 순서). ~~스크립트 Animator 없이 보이는 관절 오브젝트 (PAND03A `godmcdog2`) 는 바인드 자세~~ → 시작 act 자세 (43 §6). ~~LGT 동적 조명 (캐릭터용)~~ → 47 문서.
 - 파티클·물은 레벨 렌더 안에서 그려서 이후에 그리는 캐릭터가 덮는다 (GameScene 의 늦은 효과 패스 훅 필요).
 
@@ -125,3 +125,6 @@ render  fx.beforeRender(e, cam)                        // FarClip → cam.far, r
   거울 소유자는 bit 61 만 꺼질 뿐 일반 뷰에 그대로 그린다 (⑤ 는 합성 순서 근사). 가장 가까운 거울 하나만 반사 (0x12A6C8),
   평면 아닌 거울 메시는 모델 Y 축 평면 (0x12A330). 반사 카메라 = `Camera.mirror`/`clipPlane`, `glFrontFace(GL_CW)`.
   비교 `GOW_MIRROR=off` (이전: 반사 없음 + 대리 메시 일반 뷰), `GOW_MIRROR=raw` (거울 모델 생략).
+- **43 §12 후속** [확실: 0x161A80 · 0x165998 · 0x11FEA0 · 0x152EC8]: 원작은 거울 뷰를 프레임 맨 앞에 그리고 소유 모델 (층 0) 을 알파 테스트 없이 그 위에 블렌드
+  ((Cs−Cd)·As+Cd, 깊이 씀) → ⑤ 를 `Renderer.drawLayer0` 로 (불투명 분류 없음, 반사 = 1 − As). 반사 바탕 = 지움 색 + 배경 안개, 값 [0] ≠ 0 이면 ½ 축소·확대 흐림 2 회
+  (`render/MirrorComposite`), 거울 고르기 = 모델 Y 축 앞쪽 + 경계 중심 거리 (0x12A330), 가시 칸 = 주 눈과 반사 눈의 누적 마스크 (모든 뷰 공통).
