@@ -103,6 +103,51 @@ public final class FlpRenderer implements AutoCloseable {
 		basic.set("uTint", new Vector4f(1, 1, 1, 1));
 	}
 
+	private int warmRef;
+
+	/**
+	 * 페이드 동안 (48 문서 §9.7) 모든 메시 참조 (+ 글꼴마다 첫 글리프) 를 한 번씩 그려 파트 메시·텍스처 (R_PERMK 해독·GL 생성) 를 첫 화면 전에
+	 * 만든다 — {@link devple.gow.engine.render.GpuWarmup} FBO 안에서 부른다. 값·그리기 결과는 바뀌지 않는다 (같은 캐시를 미리 채울 뿐).
+	 *
+	 * @return 다 했으면 true (deadline 이 지나면 다음에 이어서)
+	 */
+	public boolean warm(Shader basic, Texture whiteTex, long deadline) {
+		this.shader = basic;
+		this.white = whiteTex;
+		glDisable(GL_DEPTH_TEST);
+		glDepthMask(false);
+		glEnable(GL_BLEND);
+		glBlendEquation(GL_FUNC_ADD);
+		glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+		basic.use();
+		basic.set("uTex", 0);
+		basic.set("uViewProj", proj);
+		basic.set("uLit", 0);
+		float[] id = {1, 0, 0, 1, 0, 0}, col = {1, 1, 1, 1};
+		boolean done = false;
+		try {
+			int n = flp.meshRefs.size();
+			while (warmRef < n + flp.fonts.size()) {
+				if (System.nanoTime() >= deadline) {
+					return false;
+				}
+				int r = warmRef++;
+				if (r < n) {
+					drawMeshRef(flp.meshRefs.get(r), id, col);
+				} else if (!flp.fonts.get(r - n).glyphMeshes().isEmpty()) {
+					drawMeshRef(flp.fonts.get(r - n).glyphMeshes().getFirst(), id, col);
+				}
+			}
+			done = true;
+		} finally {
+			glDisable(GL_BLEND);
+			glDepthMask(true);
+			glEnable(GL_DEPTH_TEST);
+			basic.set("uTint", new Vector4f(1, 1, 1, 1));
+		}
+		return done;
+	}
+
 	private static float[] mul(float[] p, float a, float b, float c, float d, float tx, float ty) {
 		return new float[]{
 				p[0] * a + p[2] * b, p[1] * a + p[3] * b,

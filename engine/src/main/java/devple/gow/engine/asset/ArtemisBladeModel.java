@@ -24,6 +24,7 @@ public final class ArtemisBladeModel implements AutoCloseable {
 	private ArtemisBladeModel(WadAssets assets, Skeleton sk, AnimatedModel model) {
 		this.assets = assets;
 		this.model = model;
+		model.layer3 = true; // 무기 궤적 객체 0x12DE70 도 0x150738(모델, 2) → 층 3 [추정: 아르테미스의 검이 이 경로]
 		this.idle = Pose.idle(sk);
 	}
 

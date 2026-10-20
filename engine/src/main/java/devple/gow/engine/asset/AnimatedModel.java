@@ -30,7 +30,7 @@ public final class AnimatedModel implements AutoCloseable {
 
 	/** @param litColor 동적 라이트 경로의 머티리얼 색 (MAT 헤더 색 × 레이어 rgb, VU qw 76 — {@link WadAssets#litColor}) */
 	private record Part(SkinnedMesh mesh, Texture texture, RenderModel.Blend blend, float[] tint, boolean lit,
-						boolean jointLocal, devple.gow.tools.fx.MaterialAnim.Anim matAnim, int[] joints, float[] litColor) {
+						boolean jointLocal, devple.gow.tools.fx.MaterialAnim.Anim matAnim, int[] joints, float[] litColor, boolean late) {
 
 		/** 파트가 쓰는 관절이 모두 숨김이면 그리지 않는다 (ANM u8 가시성, 41 문서 §2). */
 		boolean hiddenBy(boolean[] hidden) {
@@ -91,6 +91,25 @@ public final class AnimatedModel implements AutoCloseable {
 	public Object shadowParent;
 	/** 스크립트 이름 (Vis 슬롯 2 / SCR_NoShadow 로 끄기). */
 	public String shadowKey;
+	/**
+	 * 그리기 층 3 (0x150738(모델, 2) → 머티리얼 bit 35: 블레이드 Blades_Init 0x1FA010) — 층 2 가 다 끝난 뒤라 모든 파트가 그림자 합성 뒤
+	 * ({@link devple.gow.engine.render.DrawStage#LATE}). 기본 false = 층 2 (파트별 머티리얼 단계).
+	 */
+	public boolean layer3;
+
+	/** 그림자 합성 뒤 단계 ({@link devple.gow.engine.render.DrawStage#LATE}) 에 그릴 파트가 있는가. */
+	public boolean drawsLate() {
+		return layer3 || hasLate(parts);
+	}
+
+	private boolean hasLate(List<Part> ps) {
+		for (Part p : ps) {
+			if (p.late()) {
+				return true;
+			}
+		}
+		return false;
+	}
 
 	/**
 	 * 모델 변형 고르기 (GL 스레드): v ≥ 0 이면 파트마다 그룹 v (비면 그룹 0) — 원작이 클래스 코드로 모델 컴포넌트 +0x120 을 정하는 경우
@@ -149,6 +168,7 @@ public final class AnimatedModel implements AutoCloseable {
 				System.arraycopy(p.tris.get(i), 0, idx, i * 3, 3);
 			}
 			MaterialResource mat = assets.material(p.material);
+			boolean late = WadAssets.lateStage(mat);
 			Texture tex = null;
 			RenderModel.Blend blend = RenderModel.Blend.OPAQUE;
 			float[] tint = {1, 1, 1, 1};
@@ -162,7 +182,7 @@ public final class AnimatedModel implements AutoCloseable {
 				tint = l.rgba();
 			}
 			parts.add(new Part(new SkinnedMesh(v, idx), tex, blend, tint, p.hasNormal, p.jointLocal(), assets.materialAnim(p.material),
-					used.stream().mapToInt(Integer::intValue).toArray(), litColor));
+					used.stream().mapToInt(Integer::intValue).toArray(), litColor, late));
 		}
 	}
 
@@ -204,12 +224,18 @@ public final class AnimatedModel implements AutoCloseable {
 			skinOut = new float[skeleton.size()][];
 			skinRows = new float[skeleton.size()][];
 		}
-		float[][] skin = skeleton.skin(w, skinOut, skinRows); // 그리기 안에서만 쓰는 작업 공간 (48 문서 §9)
 		ShadowCasters sc = shadow != null ? ShadowCasters.current() : null;
 		if (sc != null && sc.collecting()) {
 			sc.submit(this, shadowParent, shadow, w, hiddenJoints, world, devple.gow.engine.light.LightServer.jointSphere(w, world, new org.joml.Vector4f()),
 					shadowMode, shadowKey);
 		}
+		// 그림자 합성 앞/뒤 단계 (47 §7.4.2): 이 단계에 그릴 파트가 없으면 스키닝·라이트도 건너뛴다 (그림자는 위에서 이미 넘겼다)
+		int stage = devple.gow.engine.render.DrawStage.current();
+		if (stage == devple.gow.engine.render.DrawStage.EARLY && layer3
+				|| stage == devple.gow.engine.render.DrawStage.LATE && !layer3 && !hasLate(parts)) {
+			return;
+		}
+		float[][] skin = skeleton.skin(w, skinOut, skinRows); // 그리기 안에서만 쓰는 작업 공간 (48 문서 §9)
 		shader.use();
 		shader.set("uViewProj", cam.viewProj(aspect));
 		float[] cp = cam.clipPlane;
@@ -230,7 +256,8 @@ public final class AnimatedModel implements AutoCloseable {
 			for (Part p : parts) {
 				RenderModel.Blend b = p.blend();
 				boolean solid = b == RenderModel.Blend.OPAQUE || b == RenderModel.Blend.CUTOUT;
-				if (pass == 0 && !solid || pass == 1 && b == RenderModel.Blend.OPAQUE || p.hiddenBy(hiddenJoints)) {
+				if (pass == 0 && !solid || pass == 1 && b == RenderModel.Blend.OPAQUE || p.hiddenBy(hiddenJoints)
+						|| !layer3 && devple.gow.engine.render.DrawStage.skip(p.late())) {
 					continue;
 				}
 				if (lastLocal == null || lastLocal != p.jointLocal()) {

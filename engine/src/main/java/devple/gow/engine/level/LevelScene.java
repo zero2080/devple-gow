@@ -460,6 +460,37 @@ public final class LevelScene implements Scene {
 		return glStep(e, deadline);
 	}
 
+	private int warmCursor;
+
+	/**
+	 * 페이드 동안 (48 문서 §9.7, {@link #preUpload} 뒤): 1×1 화면 밖 FBO 에 모든 배치를 한 번씩 그려 둔다 — 드라이버의 첫 그리기 (텍스처·정점 버퍼
+	 * GPU 올리기) 가 첫 화면 프레임에 몰리지 않게. 새 GL 객체는 만들지 않고, 화면·게임 상태·그림자 모으기에는 닿지 않는다. 다 했으면 true.
+	 * (반복 act GO 의 스키닝 모델은 미리 만들지 않는다: 보이지 않는 것까지 만들어 ATHN02D 에서 한 틱 280 ms 였다.)
+	 */
+	public boolean warmGpu(Engine e, long deadline) {
+		if (fx == null) {
+			return false;
+		}
+		devple.gow.engine.render.GpuWarmup w = e.renderer().warmup();
+		int stage = devple.gow.engine.render.DrawStage.set(devple.gow.engine.render.DrawStage.ALL);
+		w.begin();
+		try {
+			e.renderer().begin3d(cam);
+			tmp.identity();
+			while (warmCursor < instances.size()) {
+				if (System.nanoTime() >= deadline) {
+					return false;
+				}
+				e.renderer().draw(instances.get(warmCursor++).model(), tmp);
+			}
+			return true;
+		} finally {
+			w.end();
+			devple.gow.engine.render.DrawStage.set(stage);
+			FxEnvironment.disableFog(e.renderer().basic());
+		}
+	}
+
 	private final Map<String, devple.gow.tools.anim.AnimationSet> animSets = new HashMap<>();
 
 	/** 배치 오브젝트의 ANM 세트 (그룹 참조 ANM_x, 레벨 WAD 안). 없거나 읽지 못하면 null. */
@@ -695,7 +726,9 @@ public final class LevelScene implements Scene {
 		e.renderer().begin3d(cam);
 		fx.drawBackground(e, cam);
 		fx.beginWorld(e, cam, true);
-		// 하늘: 카메라 중심, 깊이 쓰기 끔 → 항상 맨 뒤
+		// 하늘: 카메라 중심, 깊이 쓰기 끔 → 항상 맨 뒤. 층 1 (SCR_Sky → 0x150738(모델, 1)) 이라 층 2 단계와 무관하게 모든 파트
+		frameCam = cam;
+		int stage = devple.gow.engine.render.DrawStage.set(devple.gow.engine.render.DrawStage.ALL);
 		glDepthMask(false);
 		for (Instance i : instances) {
 			if (i.sky() && !dbgHidden("sky") && !ctxHidden.contains(i.name().toLowerCase(Locale.ROOT))) {
@@ -704,31 +737,15 @@ public final class LevelScene implements Scene {
 			}
 		}
 		glDepthMask(true);
+		devple.gow.engine.render.DrawStage.set(stage);
 		fx.beginWorld(e, cam, false);
 		tmp.identity();
 		// 원작처럼 모든 인스턴스의 불투명 패스 뒤에 반투명 패스 (Renderer.drawPass). GOW_PASSORDER=model 이면 이전 (모델마다 두 패스)
 		for (int pass = MODEL_PASSES ? 1 : 0; pass < 2; pass++) {
-			if (pass == 1 && !MODEL_PASSES) {
+			if (pass == 1 && !MODEL_PASSES && stage != devple.gow.engine.render.DrawStage.LATE) {
 				renderMirrors(e, cam); // 불투명 뒤, 반투명 (거울 바닥 자체 포함) 앞
 			}
-			for (Instance i : instances) {
-				String key = i.name().toLowerCase(Locale.ROOT);
-				if (!i.sky() && !fx.hidden(i) && !removed.contains(key) && !posed.containsKey(key) && !ambientKeys.contains(key)
-						&& !culled(key) && !(MIRRORS && !MODEL_PASSES && mirrorKeys.contains(key)) && inMainView(key)) {
-					Vector3f lc = litCenters.get(key);
-					if (lc != null) {
-						devple.gow.engine.light.LightUniforms.apply(e.renderer().basic(), litFlags.get(key), lc, 1f);
-					}
-					if (MODEL_PASSES) {
-						e.renderer().draw(i.model(), tmp);
-					} else {
-						e.renderer().drawPass(i.model(), tmp, pass);
-					}
-					if (lc != null) {
-						devple.gow.engine.light.LightUniforms.off(e.renderer().basic());
-					}
-				}
-			}
+			drawInstances(e, pass);
 		}
 		renderPosed(e, cam, 0);
 		submitStaticShadows();
@@ -748,6 +765,53 @@ public final class LevelScene implements Scene {
 			}
 			glEnable(GL_DEPTH_TEST);
 		}
+	}
+
+	private void drawInstances(Engine e, int pass) {
+		boolean late = devple.gow.engine.render.DrawStage.current() == devple.gow.engine.render.DrawStage.LATE;
+		for (Instance i : instances) {
+			if (late && !i.model().hasLate()) {
+				continue;
+			}
+			String key = i.name().toLowerCase(Locale.ROOT);
+			if (!i.sky() && !fx.hidden(i) && !removed.contains(key) && !posed.containsKey(key) && !ambientKeys.contains(key)
+					&& !culled(key) && !(MIRRORS && !MODEL_PASSES && mirrorKeys.contains(key)) && inMainView(key)) {
+				Vector3f lc = litCenters.get(key);
+				if (lc != null) {
+					devple.gow.engine.light.LightUniforms.apply(e.renderer().basic(), litFlags.get(key), lc, 1f);
+				}
+				if (MODEL_PASSES) {
+					e.renderer().draw(i.model(), tmp);
+				} else {
+					e.renderer().drawPass(i.model(), tmp, pass);
+				}
+				if (lc != null) {
+					devple.gow.engine.light.LightUniforms.off(e.renderer().basic());
+				}
+			}
+		}
+	}
+
+	/** 이번 프레임 {@link #render} 의 카메라 ({@link #renderLate} 용). */
+	private Camera frameCam;
+
+	/**
+	 * 그림자 합성 뒤 단계 (47 §7.4.2, {@link devple.gow.engine.render.DrawStage#LATE}): 게임 씬이 {@code DrawStage.EARLY} 로 {@link #render} 를
+	 * 부르고 그림자를 합성한 다음 부른다. 같은 카메라·가시 칸 결과로 층 2 반투명 단계 머티리얼 (가산·뺄셈·flags2 0x100) 과 층 3 만 그린다.
+	 */
+	public void renderLate(Engine e) {
+		Camera cam = frameCam;
+		if (cam == null) {
+			return;
+		}
+		e.renderer().begin3d(cam);
+		fx.beginWorld(e, cam, false);
+		tmp.identity();
+		for (int pass = MODEL_PASSES ? 1 : 0; pass < 2; pass++) {
+			drawInstances(e, pass);
+		}
+		renderPosed(e, cam, 0);
+		FxEnvironment.disableFog(e.renderer().basic());
 	}
 
 	/** 비교용: GOW_MIRROR=off 이면 SCR_Mirror 반사를 그리지 않는다 (이전 동작). */
@@ -841,6 +905,8 @@ public final class LevelScene implements Scene {
 			if (pauseShadows) {
 				sc.pause(); // 그림자는 주 뷰만 (거울 뷰 마스크에 그림자 서버 항목이 없다 [근사])
 			}
+			// 거울 뷰엔 그림자 합성이 없다 (0x160CC0 특수 단계는 주 뷰 패스 1 만) → 층 2 단계로 나누지 않고 모두
+			int mirrorStage = devple.gow.engine.render.DrawStage.set(devple.gow.engine.render.DrawStage.ALL);
 			int vm = m.viewMask();
 			Matrix4f refl = m.reflection();
 			Matrix4f rvp = new Matrix4f(vp).mul(refl);
@@ -876,6 +942,7 @@ public final class LevelScene implements Scene {
 			glFrontFace(GL_CCW);
 			basic.use();
 			basic.set("uClipPlane", 0f, 0f, 0f, 0f);
+			devple.gow.engine.render.DrawStage.set(mirrorStage);
 			if (pauseShadows) {
 				sc.resume();
 			}
@@ -1021,8 +1088,9 @@ public final class LevelScene implements Scene {
 			skinned = new devple.gow.engine.render.Shader("skinned.vert", "basic.frag");
 		}
 		fx.env().applyFog(skinned, cam, e.window().height()); // 구운 메시와 같은 안개 (basic.frag 공유)
+		boolean late = devple.gow.engine.render.DrawStage.current() == devple.gow.engine.render.DrawStage.LATE;
 		for (Map.Entry<String, float[][]> en : posed.entrySet()) {
-			if (removed.contains(en.getKey()) || culled(en.getKey()) || !view.test(en.getKey())) {
+			if (removed.contains(en.getKey()) || culled(en.getKey()) || !view.test(en.getKey()) || late && !posedDrawsLate(en.getKey())) {
 				continue;
 			}
 			drawPosed(e, cam, en.getKey(), en.getValue(), posedHidden.get(en.getKey()));
@@ -1030,7 +1098,8 @@ public final class LevelScene implements Scene {
 		// 반복 act 배치: 시작 시간 + 레벨 시간 (스크립트 Animator 가 잡으면 posed 가 우선)
 		float now = fx.env().time();
 		for (Ambient a : ambient) {
-			if (posed.containsKey(a.key()) || removed.contains(a.key()) || culled(a.key()) || fxHidden(a.key()) || !view.test(a.key())) {
+			if (posed.containsKey(a.key()) || removed.contains(a.key()) || culled(a.key()) || fxHidden(a.key()) || !view.test(a.key())
+					|| late && !posedDrawsLate(a.key())) {
 				continue;
 			}
 			float t = a.start() + now;
@@ -1052,6 +1121,15 @@ public final class LevelScene implements Scene {
 			}
 		}
 		return false;
+	}
+
+	/** 합성 뒤 단계에 그릴 파트가 있는 자세 GO 인가 (없으면 관절 샘플링부터 건너뛴다). 모델을 아직 안 만들었으면 true. */
+	private boolean posedDrawsLate(String key) {
+		if (!posedModels.containsKey(key)) {
+			return true;
+		}
+		devple.gow.engine.asset.AnimatedModel m = posedModels.get(key);
+		return m != null && m.drawsLate();
 	}
 
 	private void drawPosed(Engine e, Camera cam, String key, float[][] joints, boolean[] hidden) {
@@ -1168,12 +1246,18 @@ public final class LevelScene implements Scene {
 	 * (36/37 문서: ATHN02D 메두사 방 = ATHN02C 지오메트리, 이음 전환 경계 너머).
 	 */
 	public void renderNeighbour(Engine e, Camera c) {
-		updateContextVisibility(c.eye); // 원작 질의는 충돌 월드의 시트 전부 (두 슬롯) 를 같은 카메라로 돈다 (0x11F098)
+		boolean late = devple.gow.engine.render.DrawStage.current() == devple.gow.engine.render.DrawStage.LATE;
+		if (!late) { // 합성 뒤 단계 (47 §7.4.2) 는 같은 프레임의 가시 칸 결과를 그대로
+			updateContextVisibility(c.eye); // 원작 질의는 충돌 월드의 시트 전부 (두 슬롯) 를 같은 카메라로 돈다 (0x11F098)
+		}
 		e.renderer().begin3d(c);
 		fx.beginWorld(e, c, false);
 		tmp.identity();
 		for (int pass = 0; pass < 2; pass++) {
 			for (Instance i : instances) {
+				if (late && !i.model().hasLate()) {
+					continue;
+				}
 				String key = i.name().toLowerCase(Locale.ROOT);
 				if (!i.sky() && !fx.hidden(i) && !removed.contains(key) && !posed.containsKey(key) && !culled(key) && inMainView(key)) {
 					e.renderer().drawPass(i.model(), tmp, pass);

@@ -26,6 +26,7 @@ public final class BladeModels implements AutoCloseable {
 		this.assets = assets;
 		this.skeleton = sk;
 		this.model = model;
+		model.layer3 = true; // Blades_Init 0x1FA010: 0x150738(모델, 2) → 층 3 = 그림자 합성 뒤 (47 §7.4.2)
 		this.idle = Pose.idle(sk);
 	}
 
