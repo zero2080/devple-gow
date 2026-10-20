@@ -10,7 +10,9 @@ import org.joml.Vector3f;
  * <ul>
  *   <li>이벤트 22 (덤프 FLAG_24, 0x206BA0): 창 안 프레임마다 자기 combatant +0x1AC |= 0x24, 동기 상대 +0x1AC |= 0x4000.
  *       0x206030 이 매 프레임 +0x1AC 를 0x5400 으로 지우고 창 안 이벤트만 다시 켜므로 <b>창 [start, end] 동안만</b> 끈다.</li>
- *   <li>이벤트 19 (FLAG_4, 0x206B44): 자기 |= 0x4, 상대 |= 0x4000 — 동기 유지(상대 기술이 끝나면 자기 기술도 끝, 0x2050D8)만, <b>위치는 건드리지 않는다</b>.</li>
+ *   <li>이벤트 19 (FLAG_4, 0x206B44): 자기 |= 0x4 → 0x206BA8 (이벤트 22 와 같은 꼬리) 상대 |= 0x4000. 아래 검사 마스크 0x24 가 0x4 를 포함하므로
+ *       <b>이벤트 19 창도 끈다</b> [확실: 코드 — 예전 문서의 "위치는 건드리지 않는다" 는 틀림]. 사이클롭스 240 MAICYWMINI02 [0–0.86] (적이 영웅을),
+ *       영웅 270 MAIHARWINGRIP [0–1] (영웅이 하피를) 등 일반 적 처형 대부분 (37 문서 §11.5).</li>
  *   <li>0x205968 → 0x2441E0(+0x1AC, 0x24) → 0x204BF0: 동기 상대 (+0x84, 0x207B38 — 서로 연결된 경우만) 오브젝트를
  *       목표 = inv(S_상대) · S_자기 · W_자기 (행벡터) 로. S = zeroJoint 기준 synchJoint (0x1F7110 이 [synchJoint] = S · Z⁻¹ 로 덮어씀),
  *       위치 × 오브젝트 배율. 회전 slerp · 위치 lerp, 비율 t = +0x1BC: 동기 연결이 새로 생길 때 (0x209830, 기술 플래그 0x20 이고 +0x84 가 비어 있을 때)
@@ -23,7 +25,7 @@ public final class SyncPull {
 
 	/** CombatFile 이벤트 22 (FLAG_24): 동기 상대를 끌어 붙임. */
 	public static final int EV_SYNC_TARGET = 22;
-	/** CombatFile 이벤트 19 (FLAG_4): 동기 유지만 (위치 정렬 없음). */
+	/** CombatFile 이벤트 19 (FLAG_4): +0x1AC |= 0x4 — 0x24 검사에 걸리므로 이벤트 22 처럼 끈다 (0x206B44 → 0x206BA8, 0x205B28). */
 	public static final int EV_SYNC_HOLD = 19;
 
 	/** +0x1BC 섞기 비율 (음수 = 연결 없음). */
@@ -45,6 +47,22 @@ public final class SyncPull {
 
 	public float blend() {
 		return blend;
+	}
+
+	/**
+	 * 서로 연결된 동기 (결합) 에서 끄는 창: 이벤트 22 또는 19 (0x2441E0(+0x1AC, 0x24) — 0x20 은 22, 0x4 는 19 와 22 가 켬). 없으면 null.
+	 */
+	public static CombatFile.Event linkedPullWindow(Combatant c) {
+		return c.active() ? linkedPullWindow(c.move(), c.progress()) : null;
+	}
+
+	public static CombatFile.Event linkedPullWindow(CombatFile.Move m, float progress) {
+		for (CombatFile.Event e : m.events()) {
+			if ((e.type() == EV_SYNC_TARGET || e.type() == EV_SYNC_HOLD) && progress >= e.start() && progress <= e.end()) {
+				return e;
+			}
+		}
+		return null;
 	}
 
 	/** 지금 기술 진행률이 이벤트 22 창 안이면 그 이벤트 (없으면 null). */

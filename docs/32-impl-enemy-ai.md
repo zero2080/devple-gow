@@ -199,12 +199,23 @@ A170–173 (자신 HP 0..5) WALLHITRIGHT/LEFT → AUTO [0–0.6] WALLCLIMBATR/L 
 
 **잡기 (GRAB) 와 밀기** (37 §11.5) [확실: 코드]: 밀기를 끄는 기술 비트·동기 연결 (+0x84)·잡기 가능 (0x10) 조건은 없다. GRAB (영웅 200) 은 stateMask 7 = 지상 경로 = 밀림·단단함,
 일반 적의 대기 (기술 없음) 는 0x1F = 단단함, 잡기 원 상태 (사이클롭스 M140 HITSTAGGER 등) 도 7. 처형 MAI* 이 시작되면 (stateMask 1, 자유 이동) 양쪽 모두 밀지 않는다.
+그래서 사이클롭스·하피는 GRAB 이 캡슐 경계에서 닿고, 그 어긋남은 처형 기술의 **이벤트 19 창이 0x204BF0 으로 끌어** 메운다 (+0x1AC 0x4 가 0x24 검사에 걸림 — 37 §11.1/§11.5).
+
+**밀기 세부 2 가지** (2026-10-20 해독, 엔진 미적용) [확실: 코드]:
+- **서 있는 생물은 자기를 밀지 않는다**: 지상 이동 0x1EB3D8 끝 (0x1EBB38–0x1EBBF4) 이 지상 (+0x174 & 1, 날기 0x40·벽/턱 0x30 아님, +0x174 비트 31 아님) 이고
+  +0x24C = 0, 속도 +0xE0 의 x·z = 0, 이번 변위 (루트 모션 + 내비, 0x1EC6D8) 의 x·y·z = 0 이면 정지 플래그 (0x1EBD78 sp+0x3A0) 를 세우고
+  0x1EA5F0 (밀기·벽·바닥) 대신 0x1E9470 을 부른다. 다른 생물이 그 생물을 피해 자기를 미는 것은 그대로. 위 "holdAi 도 매 프레임 밀기" 와 갑판 해골 넷 시험
+  (`deckSkeletonsDoNotStackOnEachOtherOrTheHero`: 같은 점의 서 있는 넷이 갈라짐) 은 원작과 다르다 — 적용하면 이 시험을 바꿔야 한다.
+- **밀기 후보 = 상대 CDV 구**: 질의 0x11E8D0 의 후보는 충돌 세계 0x29C978 엔트리 중 질의 구 (중심 = 기준점 b + 위 × 키/2, 반지름 = 키/2 + R, 0x1E2EB8) 와
+  겹치는 것 (0x175648: d² < (r1 + r2)², 범주 & 3). 생물 엔트리 = CDV 구 하나씩 (경계 0x13A998 = 관절 행렬 × 로컬 중심, 반지름 × 관절 배율, BallHull vtable 0x2BF3A0) —
+  CDV 구가 하나도 질의 구에 닿지 않으면 캡슐이 겹쳐도 콜백이 불리지 않는다. 사이클롭스 (몸 구 r 51.5)·하피 (r 62.4) 는 구가 커서 결과가 거의 같다.
 
 **엔진**: `BodyPush.push(self, feet, others, wallNormal)` — 위 4 의 선분 (자기 위치 − 바닥 / 상대 위치 + 바닥 + `refX/refZ`), 누적, 같은 점이면 +x [근사: 원작은 0 벡터].
 - `BodyPush.JointBox` = 0x1E6DF0 식. `BodyPush.HeroBody` (크라토스 `head`, 틱마다 `refresh`; 자유 이동 기술이면 자기 stateMask & 2 일 때만 민다 `pushesSelf`), `EnemyFighter` (Sold +0xA4 관절이 있으면 `rootMotion` 앞에서 갱신, 없으면 Sold 상자).
 - `AiData.Body` 에 +0x1C `flags` (`noPush()` = 비트 1) 와 +0xA4 `joint`. `EnemyNav.setNoPush` / `noPush` — 지상·공중·자유·벽 밀기 모두 건너뜀. `BmiFight.bind` 가 켠다 (Think).
 - `EnemyFighter.airborne()`: 내비 AIR 또는 **날기 능력 (CAP_FLY) 의 지상 상태** [근사: 엔진은 날기 높이·날기 상태 이탈을 모의하지 않고 계속 공중으로 본다].
-- `EnemyFighter` 가 `BodyPush.Body` (발 = pos, 단단함 = 기술 stateMask 비트 2, 사망 기술이 끝난 시체는 통과 [근사]). `holdAi` (시험·HeroTestScene) 도 스틱 0 으로 내비 이동 단계를 돈다 (원작은 AI 가 서 있어도 매 프레임 밀기).
+- `EnemyFighter` 가 `BodyPush.Body` (발 = pos, 단단함 = 기술 stateMask 비트 2, 사망 기술이 끝난 시체는 통과 [근사]). `holdAi` (시험·HeroTestScene) 도 스틱 0 으로 내비 이동 단계를 돈다
+  [근사: 원작은 서 있으면 (변위·속도 0) 자기를 밀지 않는다 — 위 "밀기 세부"].
 - `EnemyNav` 지상·공중 갱신은 이동 뒤 밀고 → 벽 충돌 (구 r = R, 중심 발 + 계단 14 + R, `NavWorld.collideSphere`) [근사: 원작은 상자 모서리 레이 0x1E1F28], 벽 오르기는 밀고 같은 벽에 다시 붙임.
   세계가 없는 적 (보스·시험) 은 밀린 뒤 높이 유지 (바닥 붙이기 0x1E3298 대신 [근사]).
 - `GameScene`: 프레임마다 몸 목록 = 영웅 `HeroBody` + **모든 적 (보스 포함)** → 모든 적 `setCrowd` (보스도), 영웅 `physics()` 의 벽 구 충돌 앞에서 영웅도 민다 (영웅이 벽·줄 상태면 내비게이터가 위치를 정해 건너뜀 [근사]).

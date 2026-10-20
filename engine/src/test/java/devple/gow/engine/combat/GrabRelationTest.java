@@ -20,9 +20,9 @@ import java.util.function.Supplier;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 잡기 처형의 시작 관계 (37 문서 §11.5): 원작은 이벤트 19 처형에서 위치를 맞추지 않는다 — GRAB 이 처음 닿은 자리 + 루트 모션.
- * 적 종류마다 설계 관계 (처형 0 프레임 synchJoint 일치) 가 나오는 ○ 시작 거리가 GRAB 의 사거리 안에 있고, 그 자리에서 잡으면 오차가 작다.
- * 대부분은 GRAB 의 extra1 구 (부위 9, [0.27–0.32]) 가 닿는 거리 = 설계 관계 (멀리서 누르면 달려들어 이 창에서 잡는다).
+ * 잡기 처형의 시작 관계 (37 문서 §11.5): 처형 기술의 이벤트 19 (FLAG_4) 창이 +0x1AC |= 0x4 → 0x2441E0(+0x1AC, 0x24) → 0x204BF0 으로
+ * 동기 상대를 설계 관계 (처형 0 프레임 synchJoint 일치) 로 끌어 붙인다 — 어디서 잡든 0.5 초 뒤 오차 &lt; 1.
+ * 끌기 전 GRAB 첫 접촉 자리도 대부분 설계 관계와 같다: GRAB 의 extra1 구 (부위 9, [0.27–0.32]) 가 닿는 거리 (멀리서 누르면 달려들어 이 창에서 잡는다).
  */
 class GrabRelationTest {
 
@@ -57,7 +57,7 @@ class GrabRelationTest {
 	}
 
 	/**
-	 * 적 종류별 시작 거리: 설계 관계 거리 (±1), 처형 기술, 찾은 자리에서 오차 &lt; 2, 결합 거리 ≈ 설계 (±8).
+	 * 적 종류별 시작 거리: 설계 관계 거리 (±1), 처형 기술, 찾은 자리에서 결합 순간 (끌기 전) 오차 &lt; 2, 결합 거리 ≈ 설계 (±8), 0.5 초 뒤 오차 &lt; 1.
 	 * extra1 = 적중이 GRAB 부위 9 창 [0.27–0.32] 에서 (멀리서 달려들어 잡음).
 	 */
 	@Test
@@ -80,7 +80,8 @@ class GrabRelationTest {
 			log.append(String.format("%s %s%n", c.wad(), r));
 			assertEquals(c.finisher(), r.finisher(), c.wad());
 			assertEquals(c.design(), r.design(), 1f, c.wad() + " 설계 관계");
-			assertTrue(r.error() < 2f, c.wad() + " 오차: " + r);
+			assertTrue(r.contact() < 2f, c.wad() + " 결합 순간 오차: " + r);
+			assertTrue(r.error() < 1f, c.wad() + " 0.5 초 뒤 오차: " + r);
 			assertEquals(r.design(), r.link(), 8f, c.wad() + " 결합 거리 ≈ 설계 관계: " + r);
 			assertTrue(r.start() > r.link(), c.wad() + " GRAB 루트 모션으로 달려들어 잡음: " + r);
 			if (c.extra1()) {
@@ -90,24 +91,28 @@ class GrabRelationTest {
 		System.out.print(log);
 	}
 
-	/** 원작에는 맞춤이 없다: 너무 가까이서 누르면 바로 닿고 관계가 그만큼 어긋난다 (오차 ≈ 거리 차이). */
+	/**
+	 * 너무 가까이서 누르면 바로 닿아 결합 순간 관계가 그만큼 어긋나지만 (오차 ≈ 거리 차이), 처형 기술의 이벤트 19 창 (미노타우로스 400 MAIMIN01)
+	 * 이 0x204BF0 으로 끌어 0.5 초 뒤엔 설계 관계가 된다.
+	 */
 	@Test
-	void tooCloseKeepsHitPosition() throws Exception {
+	void tooCloseIsPulledIntoRelation() throws Exception {
 		Supplier<GrabRelation.Trial> t = trials("R_MIN.WAD");
 		GrabRelation.Result best = GrabRelation.search(t, 10, 130);
 		GrabRelation.Result close = GrabRelation.run(t.get(), 40);
 		assertTrue(close.hitProgress() < 0.12f, "가까우면 GRAB 첫 판정 (부위 1 [0.05–]) 에서 바로 잡힘: " + close);
-		assertTrue(close.error() > 20 && close.error() > best.error() + 20, "정렬 없음 → 잡은 자리 그대로: " + close + " / " + best);
-		assertEquals(close.design() - close.link(), close.error(), 6f, "오차 ≈ 설계 관계 − 결합 거리");
+		assertTrue(close.contact() > 20 && close.contact() > best.contact() + 20, "결합 순간은 잡은 자리: " + close + " / " + best);
+		assertEquals(close.design() - close.link(), close.contact(), 6f, "결합 순간 오차 ≈ 설계 관계 − 결합 거리");
+		assertTrue(close.error() < 1f, "이벤트 19 끌기로 설계 관계: " + close);
 	}
 
 	/**
 	 * 몸 캡슐 (Sold +0x234) 이 설계 거리보다 큰 처형 (37 문서 §11.5): 사이클롭스 (캡슐 합 57.6 &gt; 설계 29.7), 하피 (19.6 &gt; 7.9, 뒤에서).
 	 * <ul>
-	 *   <li>밀기를 빼면 (비교용) GRAB 첫 접촉 = 설계 관계 — 다른 처형과 같이 오차 &lt; 1 (설계가 GRAB 달려듦에 맞춰져 있다).</li>
-	 *   <li>원작 밀기 규칙 [확실: 0x1E2DD8 / 0x1E28B0 / 0x1E6DF0 — GRAB stateMask 7 = 단단함, 잡기 원 상태·동기 연결 +0x84 와 무관,
-	 *       밀기 끔은 Sold +0x1C 비트 1 (둘 다 0) 과 BMI Think 뿐] 으로는 GRAB 이 닿기 전에 서로 밀어 설계 관계에 못 간다:
-	 *       사이클롭스는 캡슐 경계 (결합 ≥ 45), 하피는 날기 (0x40 → 지상 영웅은 안 밀림) 지만 하피가 자기를 민다 (결합 ≥ 13).</li>
+	 *   <li>원작 밀기 규칙 [0x1E2DD8 / 0x1E28B0 — GRAB stateMask 7 = 단단함] 으로는 GRAB 이 캡슐 경계에서 닿는다 (사이클롭스 결합 ≥ 45, 하피 ≥ 13).</li>
+	 *   <li>그 어긋남은 이벤트 19 (FLAG_4) 창이 메운다 [확실: 0x206B44 → +0x1AC |= 0x4, 0x205B28 의 0x24 검사 → 0x204BF0]: 사이클롭스는 적 240
+	 *       MAICYWMINI02 [0–0.86] 이 영웅을, 하피는 영웅 270 MAIHARWINGRIP [0–1] 이 하피를 끈다 → 0.5 초 뒤 오차 &lt; 1 (예전: 27.3 / 10.2).</li>
+	 *   <li>밀기를 빼면 (비교용) GRAB 첫 접촉이 그대로 설계 관계.</li>
 	 * </ul>
 	 */
 	@Test
@@ -117,14 +122,25 @@ class GrabRelationTest {
 			Supplier<GrabRelation.Trial> t = trials(w);
 			GrabRelation.Result free = GrabRelation.search(t, 5, 130, false);
 			assertNotNull(free, w);
-			assertTrue(free.error() < 1f, w + " 밀기 없으면 설계 관계: " + free);
+			assertTrue(free.contact() < 1f, w + " 밀기 없으면 첫 접촉 = 설계 관계: " + free);
 			GrabRelation.Result pushed = GrabRelation.search(t, 5, 130, true);
-			assertTrue(pushed.link() > free.link() + 5, w + " 원작 밀기로 설계 거리에 못 감: " + pushed + " / " + free);
-			assertTrue(pushed.error() > 5f, w + ": " + pushed);
+			assertTrue(pushed.link() > free.link() + 5, w + " 원작 밀기로 첫 접촉은 설계 거리 밖: " + pushed + " / " + free);
+			assertTrue(pushed.contact() > 5f, w + ": " + pushed);
+			assertEquals(0f, pushed.error(), 1f, w + " 이벤트 19 끌기로 설계 관계 (±1): " + pushed);
+			for (float d : new float[]{40, 60, 80}) {
+				GrabRelation.Result r = GrabRelation.run(t.get(), d, true);
+				assertEquals(0f, r.error(), 1f, w + " 시작 " + d + ": " + r);
+			}
+			GrabRelation.Trial probe = t.get();
 			if (w.equals("R_CY2.WAD")) {
 				assertTrue(pushed.link() >= 45f, "사이클롭스 캡슐 경계 (영웅 쪽 수평 45.6, 사이클롭스 쪽 56.8): " + pushed);
+				CombatFile.Move m = probe.enemy().combat().data().move(240);
+				assertNotNull(SyncPull.linkedPullWindow(m, 0.5f), "적 240 이벤트 19 [0–0.86]");
+				assertNull(SyncPull.linkedPullWindow(m, 0.9f));
+				assertNull(SyncPull.pullWindow(m, 0.5f), "이벤트 22 는 없음");
 			} else {
 				assertTrue(pushed.link() >= 13f, "하피가 자기를 민다 (하피 쪽 수평 17.3): " + pushed);
+				assertNotNull(SyncPull.linkedPullWindow(probe.hero().data().move(270), 0.5f), "영웅 270 이벤트 19 [0–1]");
 			}
 		}
 	}

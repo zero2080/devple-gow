@@ -16,17 +16,18 @@ import java.util.List;
 import java.util.function.Supplier;
 
 /**
- * 잡기 처형의 설계 관계와 "어디서 ○ 를 눌러야 그 관계가 나오는지" (37 문서 §11.5).
+ * 잡기 처형의 설계 관계와 "어디서 ○ 를 눌러야 GRAB 첫 접촉이 그 관계에 가장 가까운지" (37 문서 §11.5).
  * <p>
- * 원작은 이벤트 19 만인 처형에서 위치를 맞추지 않는다 [확실: 코드] — 오브젝트 위치를 바꾸는 곳은 루트 모션 (0x1EBD78) 과 이벤트 22 창의
- * 0x204BF0 (끌리는 쪽 combatant +0x00 변위, 0x205088) 뿐이고 그 밖에 combatant 변위를 쓰는 곳은 초기화 0x2030B8 뿐이다.
- * 잡기 적중 판정도 거리 조건이 없다: GRAB (영웅 200) 의 공격 2 개 (부위 1 몸 [0.05–0.40], 부위 9 extra1 [0.27–0.32]) 가 상대 구에 처음 닿는
- * 프레임 (0x13B688 모든 구 쌍 → 0x203150 → 0x209AB0) 에 HIT_CONFIRM → 처형 기술. GRAB 은 루트 모션으로 앞으로 나간다 (zero z 1.8 → −30.7)
- * — 멀리서 누르면 크레토스가 달려들어 <b>몸이 처음 닿는 거리</b>에서 잡고, 그 거리가 대부분의 처형 설계 관계와 같다 (사티로스 37.4 / 해골병 27.6 /
- * 켄타우로스 40.6 / 케르베로스 43.3 …). 너무 가까이서 누르면 바로 닿아 관계가 그만큼 어긋난다 (원작도 같다).
+ * 잡기 적중 판정에는 거리 조건이 없다: GRAB (영웅 200) 의 공격 2 개 (부위 1 몸 [0.05–0.40], 부위 9 extra1 [0.27–0.32]) 가 상대 구에 처음 닿는
+ * 프레임 (0x13B688 모든 구 쌍 → 0x203150 → 0x209AB0) 에 HIT_CONFIRM → 처형 기술. GRAB 은 루트 모션으로 앞으로 나간다 (zero z 1.8 → −30.7).
+ * 처형 기술 (적 쪽 MAI* 또는 영웅 쪽) 에는 <b>이벤트 19 (FLAG_4)</b> 창이 있고, 0x206B44 가 +0x1AC |= 0x4 → 0x205B28 의 0x2441E0(+0x1AC, 0x24)
+ * 검사에 걸려 0x204BF0 이 동기 상대를 설계 관계로 끌어 붙인다 [확실: 코드] ({@link SyncPull}, 비율 0.1 → ×1.1). 그래서 어디서 잡든 0.5 초 뒤엔
+ * 관계가 맞는다 (사이클롭스·하피처럼 몸 캡슐이 설계 거리보다 커서 GRAB 이 먼 곳에서 닿아도).
+ * 멀리서 누르면 크레토스가 달려들어 <b>몸이 처음 닿는 거리</b>에서 잡고, 그 거리가 대부분의 처형 설계 관계와 같다 (끌림이 거의 없다 —
+ * 사티로스 37.4 / 해골병 27.6 / 켄타우로스 40.6 / 케르베로스 43.3 …).
  * <p>
- * 이 클래스: 설계 관계 (처형 0 프레임 synchJoint 일치), 처형 기술 조회, 그리고 그 관계가 나오는 시작 거리를 헤드리스 모의로 찾는다
- * (HeroTestScene 배치·시험용 — 원작에는 없는 계산).
+ * 이 클래스: 설계 관계 (처형 0 프레임 synchJoint 일치), 처형 기술 조회, 그리고 결합 순간 오차 (끌기 전) 가 가장 작은 시작 거리를 헤드리스 모의로
+ * 찾는다 (HeroTestScene 배치·시험용 — 원작에는 없는 계산).
  */
 public final class GrabRelation {
 
@@ -123,12 +124,13 @@ public final class GrabRelation {
 	 *
 	 * @param start       ○ 를 누를 때 영웅–적 거리 (적 정면 쪽 설계 방향)
 	 * @param relYaw      설계 관계의 영웅 요 − 적 요
-	 * @param error       결합 0.5 초 뒤 두 synchJoint 월드 거리 (설계 관계와의 차이)
+	 * @param error       결합 0.5 초 뒤 두 synchJoint 월드 거리 (설계 관계와의 차이 — 이벤트 19/22 끌기 뒤)
+	 * @param contact     결합 순간 (끌기 전) 두 synchJoint 월드 거리 = GRAB 첫 접촉 자리와 설계 관계의 차이
 	 * @param link        결합 순간 영웅–적 거리
 	 * @param hitProgress 적중 순간 GRAB 진행률 (−1 = 결합 없음)
 	 * @param finisher    처형 기술 ID
 	 */
-	public record Result(float start, float relYaw, float design, float error, float link, float hitProgress, int finisher) {
+	public record Result(float start, float relYaw, float design, float error, float contact, float link, float hitProgress, int finisher) {
 	}
 
 	/** 설계 관계 (적 기준 영웅 오브젝트) — 처형 기술이 없으면 null. */
@@ -178,7 +180,7 @@ public final class GrabRelation {
 		List<BodyPush.Body> heroOnly = List.of(heroBody);
 		en.setCrowd(push ? () -> heroOnly : List::of); // 적도 자기 갱신에서 영웅 밖으로 자신을 민다 (0x1E2DD8, Sold +0x1C 비트 1 이면 안 함)
 		int after = -1;
-		float link = -1, hitProg = -1;
+		float link = -1, hitProg = -1, contact = Float.NaN;
 		int fin = finisher(t.hero().data(), en.classId(), en.hp).id();
 		for (int i = 0; i < 240; i++) {
 			in.advance(dt);
@@ -198,25 +200,40 @@ public final class GrabRelation {
 				t.ctl().position.y = y; // 지상 이동은 밀린 뒤 바닥에 붙는다 (0x1EA5F0 → 0x1E3298) — 바닥 없는 모의라 높이 유지
 			}
 			en.update(dt);
-			sync.update(in, en, t.enemyTweaks(), dt);
-			if (sync.active() && after < 0) {
-				after = 0;
-				hitProg = gp;
-				link = new Vector3f(t.ctl().position).sub(en.pos).setComponent(1, 0).length();
+			if (!sync.active()) {
+				// 결합 직전 = 이번 틱 영웅·적 갱신 뒤, 끌기 전 (결합 틱의 GrabSync 가 처형 애니를 틀고 끈다)
+				Vector3f h0 = new Vector3f(t.ctl().position), e0 = new Vector3f(en.pos);
+				float ey = en.yaw;
+				sync.update(in, en, t.enemyTweaks(), dt);
+				if (sync.active()) {
+					after = 0;
+					hitProg = gp;
+					link = new Vector3f(h0).sub(e0).setComponent(1, 0).length();
+					contact = contactError(rel, h0, e0, ey);
+				}
+				continue;
 			}
+			sync.update(in, en, t.enemyTweaks(), dt);
 			if (after >= 0 && ++after == 30) {
 				float e = synchWorld(t.ctl().position, t.ctl().yaw, t.ctl().animator(), 1f)
 						.distance(synchWorld(en.pos, en.yaw, en.animator(), en.scale));
-				return new Result(start, relYaw, design, e, link, hitProg, fin);
+				return new Result(start, relYaw, design, e, contact, link, hitProg, fin);
 			}
 		}
-		return new Result(start, relYaw, design, Float.NaN, -1, -1, fin);
+		return new Result(start, relYaw, design, Float.NaN, Float.NaN, -1, -1, fin);
+	}
+
+	/** 결합 순간 (끌기 전) 오차: 영웅 위치와 설계 위치 (적 오브젝트 행렬 · 설계 관계) 의 거리 (요 차이는 넣지 않음). */
+	private static float contactError(Matrix4f rel, Vector3f heroPos, Vector3f enPos, float enYaw) {
+		Vector3f want = new Matrix4f().translation(enPos).rotateY(enYaw).mul(rel).getTranslation(new Vector3f());
+		return want.distance(heroPos);
 	}
 
 	/**
-	 * 설계 관계가 가장 잘 나오는 시작 거리 (5 단위로 훑고 ±4 를 1 단위로) — 각 시도는 새 {@link Trial}.
+	 * GRAB 첫 접촉이 설계 관계에 가장 가까운 시작 거리 (결합 순간 오차 {@link Result#contact} 최소, 5 단위로 훑고 ±4 를 1 단위로) — 각 시도는 새 {@link Trial}.
+	 * (0.5 초 뒤 오차 {@link Result#error} 는 이벤트 19/22 끌기로 어디서든 작다.)
 	 *
-	 * @return 가장 작은 오차의 결과 (처형 기술이 없으면 null)
+	 * @return 결합 순간 오차가 가장 작은 결과 (처형 기술이 없으면 null)
 	 */
 	public static Result search(Supplier<Trial> trials, float from, float to) {
 		return search(trials, from, to, true);
@@ -230,7 +247,7 @@ public final class GrabRelation {
 			if (r == null) {
 				return null;
 			}
-			if (!Float.isNaN(r.error()) && (best == null || r.error() < best.error())) {
+			if (!Float.isNaN(r.contact()) && (best == null || r.contact() < best.contact())) {
 				best = r;
 			}
 		}
@@ -240,7 +257,7 @@ public final class GrabRelation {
 		float c = best.start();
 		for (float d = c - 4; d <= c + 4; d += 1) {
 			Result r = run(trials.get(), d, push);
-			if (r != null && !Float.isNaN(r.error()) && r.error() < best.error()) {
+			if (r != null && !Float.isNaN(r.contact()) && r.contact() < best.contact()) {
 				best = r;
 			}
 		}
