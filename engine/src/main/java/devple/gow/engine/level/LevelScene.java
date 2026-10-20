@@ -222,6 +222,8 @@ public final class LevelScene implements Scene {
 		devple.gow.tools.fx.EnvParams envParams = new devple.gow.tools.fx.EnvParams(assets.wad());
 		java.util.Set<String> skyNames = skyNames(envParams);
 		Map<String, int[]> mirrorOwners = Mirrors.owners(envParams);
+		shadowOwners = scriptOwners(envParams, "SCR_Shadow");
+		java.util.Set<String> aiTemplates = aiTemplateObjects(assets.wad());
 		lensFlares = new devple.gow.engine.fx.LensFlares(envParams, data, assets); // SCR_LensFlare (46 문서)
 		for (LevelLayout.Placement p : data.layout.placements()) {
 			String mdl = p.model();
@@ -267,7 +269,23 @@ public final class LevelScene implements Scene {
 				float[] j0 = p.jointWorld()[0];
 				off.set(j0[12], j0[13], j0[14]);
 			}
-			instances.add(new Instance(p.instance().name(), assets.build(p.instance().name(), tm), sky, off));
+			Instance inst = new Instance(p.instance().name(), assets.build(p.instance().name(), tm), sky, off);
+			instances.add(inst);
+			if (!sky && p.object().skeleton() != null && System.getProperty("gow.noshadow") == null
+					&& !aiTemplates.contains(p.object().name().toLowerCase(Locale.ROOT))) {
+				// 레벨 GO 그림자 (47 문서 §11): SHG_<모델> 이 있는 스키닝 GO — 자세 (posed/반복 act) 가 아니면 시작 자세 관절로
+				devple.gow.engine.light.ShadowGeometry g = shgCache.computeIfAbsent(mdl, k -> {
+					try {
+						return java.util.Optional.ofNullable(devple.gow.engine.light.ShadowGeometry.forModel(assets.wad(), k));
+					} catch (RuntimeException ex) {
+						return java.util.Optional.empty();
+					}
+				}).orElse(null);
+				if (g != null) {
+					staticShadows.add(new StaticShadow(inst, p.instance().name().toLowerCase(Locale.ROOT), g,
+							sp.act() == null ? p.jointWorld() : sp.jointWorld(), sp.act() == null ? null : sp.hidden()));
+				}
+			}
 			if (!sky && (gm.renderFlags & devple.gow.engine.light.LightUniforms.LIT) != 0) {
 				// 렌더 플래그 0x800 정적 오브젝트: 원작 0x141EF8 은 구 = (오브젝트 위치, 1) 로 라이트를 모은다 (47 문서)
 				float[] j0 = p.jointWorld()[0];
@@ -301,11 +319,15 @@ public final class LevelScene implements Scene {
 					m = Mirrors.axisPlane(m, p.jointWorld()[0]);
 				}
 				if (m != null) {
+					// 0x12A330 기준: 모델 Y 축 (관절 0 월드 2 행) · 경계 중심 [근사: AABB 중심 = off]
+					float[] j0 = p.jointWorld()[0];
+					m = m.withAxis(new Vector3f(j0[4], j0[5], j0[6]), off);
 					mirrors.add(m);
 					mirrorKeys.add(m.key());
 					if (Boolean.getBoolean("gow.debug")) {
-						System.out.printf(Locale.ROOT, "SCR_Mirror %s: 평면 n=(%.2f, %.2f, %.2f) d=%.1f 이탈 %.2f 범위 %s%n", p.instance().name(),
-								m.normal().x, m.normal().y, m.normal().z, m.d(), m.maxDev(), java.util.Arrays.toString(b));
+						System.out.printf(Locale.ROOT, "SCR_Mirror %s: 평면 n=(%.2f, %.2f, %.2f) d=%.1f 이탈 %.2f 범위 %s 축 %s 값 [0]=%d [4]=%d%n",
+								p.instance().name(), m.normal().x, m.normal().y, m.normal().z, m.d(), m.maxDev(), java.util.Arrays.toString(b),
+								m.axis(), m.a(), m.b());
 					}
 				} else if (Boolean.getBoolean("gow.debug")) {
 					System.out.printf(Locale.ROOT, "SCR_Mirror %s: 면적 0 — 반사 생략%n", p.instance().name());
@@ -556,7 +578,9 @@ public final class LevelScene implements Scene {
 		} else {
 			applyCamera();
 		}
-		updateContextVisibility(cam.eye);
+		// 0x152EC8: 거울 관리자 갱신 0x12A6C8 (거울 고르기·반사 카메라) 이 가시 칸 질의보다 먼저 — 거울 뷰가 켜졌으면 반사 눈도 같은 마스크에 누적
+		frameMirror = MIRRORS ? chooseMirror(cam.eye) : null;
+		updateContextVisibility(cam.eye, frameMirror != null ? frameMirror.reflect(cam.eye) : null);
 		fx.beforeRender(e, cam);
 		e.renderer().begin3d(cam);
 		fx.drawBackground(e, cam);
@@ -597,6 +621,7 @@ public final class LevelScene implements Scene {
 			}
 		}
 		renderPosed(e, cam, 0);
+		submitStaticShadows();
 		if (!deferEffects) {
 			fx.renderEffects(e, cam);
 			lensFlares.render(cam, e.window().aspect());
@@ -621,9 +646,12 @@ public final class LevelScene implements Scene {
 	private static final boolean MIRROR_RAW = "raw".equals(System.getenv("GOW_MIRROR"));
 
 	/**
-	 * SCR_Mirror 반사 (Mirrors 주석, 43 문서 §9): 가장 가까운 거울 하나 (0x12A6C8) 만 반사 — 거울 화소 스텐실 → 그 화소 깊이를 먼 값으로 →
-	 * VP·R 로 거울 뷰 마스크에 맞는 것만 (반사 전용 대리 메시 bit 57, bit 61 모델, 값 [4] = 0 이면 영웅) 평면 뒤 자르고 감김 반전해 그림 →
-	 * 거울 깊이 복원 → 거울 모델. 거울 화소가 하나도 안 보이면 조건부 렌더로 반사 장면을 건너뛴다. 나머지 거울은 모델만 그린다.
+	 * SCR_Mirror 반사 (Mirrors 주석, 43 문서 §9·§12). 원작 순서 (0x161A80) [확실]: ① 거울 뷰 (반사 카메라) 층 1–4 를 지운 프레임에 먼저 그린다
+	 * (층 2 칸 6 = 값 [0] 후처리 흐림, 칸 7 = Z 0 으로 지움) → ② 주 뷰 층 0 = 거울 소유 모델 (0x150738 모드 0) 을 알파 테스트 없이 GS 블렌드로
+	 * 그 위에 (Z 씀) → ③ 노드 0x10 (Z GEQUAL 0 → RGBA 0): 거울 면이 덮지 않은 곳의 반사를 지운다 → ④ 0x12ABA0 (아래 메모) → ⑤ 주 뷰 층 1–4.
+	 * 엔진: 거울 화소 스텐실 (③ 과 같은 효과) → 그 화소 깊이를 먼 값 + 지움 색 (①의 바탕) → VP·R 로 거울 뷰 마스크에 맞는 것만 (가시 칸 =
+	 * 반사 눈, 0x152EC8) → 값 [0] 이면 흐림 → 거울 깊이 복원 → 층 0 그리기 ({@link devple.gow.engine.render.Renderer#drawLayer0}).
+	 * 거울 화소가 하나도 안 보이면 조건부 렌더로 반사 장면을 건너뛴다. 고르지 않은 거울도 층 0 그리기 (반사 없음).
 	 */
 	private void renderMirrors(Engine e, Camera cam) {
 		if (mirrors.isEmpty() || !MIRRORS) {
@@ -638,30 +666,28 @@ public final class LevelScene implements Scene {
 						GL_FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE));
 			}
 		}
-		// 0x12A6C8: 렌더러 중 0x12A330 거리가 가장 작은 거울 하나만 거울 뷰를 켠다
-		List<Mirrors.Mirror> live = new ArrayList<>();
-		Map<Mirrors.Mirror, Instance> owner = new HashMap<>();
-		for (Mirrors.Mirror m : mirrors) {
-			Instance mi = null;
-			for (Instance i : instances) {
-				if (i.name().equalsIgnoreCase(m.key())) {
-					mi = i;
-					break;
-				}
+		// 0x12A6C8: 렌더러 중 0x12A330 거리 (앞쪽만) 가 가장 작은 거울 하나만 거울 뷰를 켠다 (render() 에서 미리 골랐다)
+		List<Mirrors.Mirror> live = liveMirrors();
+		Mirrors.Mirror chosen = frameMirror != null && live.contains(frameMirror) ? frameMirror : null;
+		if (System.getProperty("gow.debug.mirror") != null && chosen != lastChosen) {
+			StringBuilder sb = new StringBuilder();
+			for (Mirrors.Mirror m : live) {
+				sb.append(String.format(Locale.ROOT, " %s=%.0f", m.key(), m.distance(cam.eye)));
 			}
-			if (mi == null || removed.contains(m.key()) || fx.hidden(mi) || culled(m.key())) {
-				continue;
-			}
-			live.add(m);
-			owner.put(m, mi);
+			System.out.printf(Locale.ROOT, "[거울] 눈 (%.0f, %.0f, %.0f) 고름 %s:%s%n", cam.eye.x, cam.eye.y, cam.eye.z,
+					chosen == null ? "없음" : chosen.key(), sb);
 		}
-		Mirrors.Mirror chosen = Mirrors.nearest(live, cam.eye);
+		lastChosen = chosen;
 		for (Mirrors.Mirror m : live) {
-			Instance mi = owner.get(m);
+			Instance mi = mirrorOwner(m);
+			if (culled(m.key())) {
+				continue; // 가시 칸으로 숨은 거울 모델 (고르기는 숨김 bit 54 만 본다 — 0x12A330)
+			}
 			if (m != chosen) {
-				// 거울 뷰가 고르지 않은 거울: 모델만 (원작도 일반 뷰에는 그대로 그린다, bit 61 만 꺼짐)
-				e.renderer().drawPass(mi.model(), tmp.identity(), 0);
-				e.renderer().drawPass(mi.model(), tmp.identity(), 1);
+				// 거울 뷰가 고르지 않은 거울: 층 0 그리기만 (원작 노드는 거울 뷰가 켜졌을 때만 켜진다, 0x12A998)
+				if (!MIRROR_RAW) {
+					e.renderer().drawLayer0(mi.model(), tmp.identity());
+				}
 				continue;
 			}
 			basic.use();
@@ -679,7 +705,7 @@ public final class LevelScene implements Scene {
 			glBeginQuery(GL_ANY_SAMPLES_PASSED, mirrorQuery);
 			e.renderer().drawShape(mi.model(), tmp.identity());
 			glEndQuery(GL_ANY_SAMPLES_PASSED);
-			// 2) 그 화소의 깊이를 먼 값으로
+			// 2) 그 화소의 깊이를 먼 값으로 (노드 C: 거울 뷰 Z 를 0 으로 = 먼 값)
 			glStencilFunc(GL_EQUAL, 1, 0xFF);
 			glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
 			glDepthMask(true);
@@ -689,13 +715,27 @@ public final class LevelScene implements Scene {
 			glDepthRange(0, 1);
 			glDepthFunc(GL_LESS);
 			glColorMask(true, true, true, true);
-			// 3) 반사 장면 (원작 0x12A4E8: 카메라를 평면에 대해 반사) — 거울 뷰 마스크에 맞는 모델만 (정적 월드는 다시 그리지 않음)
 			glBeginConditionalRender(mirrorQuery, GL_QUERY_WAIT);
+			// 3) 바탕 = 지운 프레임 (거울 뷰는 프레임 맨 앞에 그린다, 0x161A80): 지움 색 + 배경 안개
+			if (composite == null) {
+				composite = new devple.gow.engine.render.MirrorComposite();
+			}
+			composite.fill(0.05f, 0.04f, 0.04f); // Renderer.beginFrame 지움 색
+			fx.drawBackground(e, cam);
+			// 4) 반사 장면 (원작 0x12A4E8: 카메라를 평면에 대해 반사) — 거울 뷰 마스크에 맞는 모델만 (정적 월드는 다시 그리지 않음).
+			//    가시 칸 컨텍스트는 거울 뷰 자신의 카메라 위치 (= 반사 눈) 로 (0x152EC8 → 뷰마다 0x16DC60(눈, 뷰 마스크)) [확실]
+			//    가시 칸: 반사 눈은 render() 에서 주 뷰 눈과 같은 마스크에 누적 (0x152EC8, 모든 뷰가 같은 집합)
+			devple.gow.engine.light.ShadowCasters sc = devple.gow.engine.light.ShadowCasters.current();
+			boolean pauseShadows = sc != null && sc.collecting();
+			if (pauseShadows) {
+				sc.pause(); // 그림자는 주 뷰만 (거울 뷰 마스크에 그림자 서버 항목이 없다 [근사])
+			}
 			int vm = m.viewMask();
 			Matrix4f refl = m.reflection();
 			Matrix4f rvp = new Matrix4f(vp).mul(refl);
 			float[] cp = m.clipPlane(cam.eye);
 			glFrontFace(GL_CW); // 반사 = 행렬식 −1 → 감김 반전 (면 컬링을 켠 패스도 같은 면을 남긴다)
+			e.renderer().begin3d(cam);
 			fx.beginWorld(e, cam, false);
 			basic.set("uViewProj", rvp);
 			basic.set("uClipPlane", cp[0], cp[1], cp[2], cp[3]);
@@ -725,8 +765,15 @@ public final class LevelScene implements Scene {
 			glFrontFace(GL_CCW);
 			basic.use();
 			basic.set("uClipPlane", 0f, 0f, 0f, 0f);
+			if (pauseShadows) {
+				sc.resume();
+			}
+			// 5) 값 [0] ≠ 0: 거울 뷰 후처리 (층 2 칸 6, 0x120498 → 0x11FEA0 × 2, 계수 0.5) — 거울 화소만
+			if (m.blur() && !NO_MIRROR_BLUR) {
+				composite.blur(e.window().width(), e.window().height(), 0.5f, 2);
+			}
 			glEndConditionalRender();
-			// 4) 거울 깊이 복원 (뒤에 그리는 캐릭터·이펙트가 거울 면에 가려지도록)
+			// 6) 거울 깊이 복원 (뒤에 그리는 캐릭터·이펙트가 거울 면에 가려지도록)
 			e.renderer().begin3d(cam);
 			fx.beginWorld(e, cam, false);
 			basic.set("uViewProj", vp);
@@ -735,16 +782,53 @@ public final class LevelScene implements Scene {
 			e.renderer().drawShape(mi.model(), tmp.identity());
 			glColorMask(true, true, true, true);
 			glDisable(GL_STENCIL_TEST);
-			// 5) 거울 모델 자체: 반사 위에 두 패스 — 불투명 파트는 반사를 덮고 (ATHN04B 대리석 타일), 반투명 파트 (OLYMP02 대리석 알파) 는 그 위에 블렌드
+			// 7) 층 0: 거울 모델을 반사 위에 GS 식 그대로 (알파 테스트 없이 (Cs−Cd)·As+Cd) — 반사가 비치는 정도 = 1 − As
 			if (!MIRROR_RAW) {
 				glDepthFunc(GL_LEQUAL);
-				e.renderer().drawPass(mi.model(), tmp.identity(), 0);
-				e.renderer().drawPass(mi.model(), tmp.identity(), 1);
+				e.renderer().drawLayer0(mi.model(), tmp.identity());
 				glDepthFunc(GL_LESS);
 			}
 		}
 		basic.use();
 		basic.set("uViewProj", vp);
+	}
+
+	/** 비교용: GOW_MIRRORBLUR=off 면 값 [0] 후처리 흐림을 끈다. */
+	private static final boolean NO_MIRROR_BLUR = "off".equals(System.getenv("GOW_MIRRORBLUR"));
+	private devple.gow.engine.render.MirrorComposite composite;
+	private Mirrors.Mirror lastChosen;
+	/** 이번 프레임 거울 뷰를 켠 거울 (없으면 null). */
+	private Mirrors.Mirror frameMirror;
+
+	/** 거울 후보: 소유 인스턴스가 있고 제거·효과 숨김이 아닌 것 (원작 0x12A330 은 모델 숨김 bit 54 만 본다 — 가시 칸 컨텍스트는 뷰 비트라 무관). */
+	private List<Mirrors.Mirror> liveMirrors() {
+		List<Mirrors.Mirror> live = new ArrayList<>();
+		for (Mirrors.Mirror m : mirrors) {
+			Instance mi = mirrorOwner(m);
+			if (mi != null && !removed.contains(m.key()) && !fx.hidden(mi) && !dbgHidden(m.key())) {
+				live.add(m);
+			}
+		}
+		return live;
+	}
+
+	private Instance mirrorOwner(Mirrors.Mirror m) {
+		for (Instance i : instances) {
+			if (i.name().equalsIgnoreCase(m.key())) {
+				return i;
+			}
+		}
+		return null;
+	}
+
+	/** 0x12A6C8: 이번 프레임 거울 뷰를 켤 거울 (없으면 null). */
+	private Mirrors.Mirror chooseMirror(Vector3f eye) {
+		return mirrors.isEmpty() ? null : Mirrors.nearest(liveMirrors(), eye);
+	}
+
+	/** 이번 프레임 거울 뷰 거울 이름 (없으면 null) — 테스트·디버그. */
+	public String frameMirrorKey() {
+		return frameMirror == null ? null : frameMirror.key();
 	}
 
 	/** 디버그: GOW_HIDE=인스턴스,… 를 그리지 않는다 ("*" = 하늘 밖 전부, "sky" = 하늘). 화면을 덮는 메시 찾기용 (43 문서). */
@@ -763,17 +847,28 @@ public final class LevelScene implements Scene {
 	/** 이번 프레임 가시 칸으로 숨은 인스턴스 (소문자, {@link LevelData#contextHidden}). */
 	private java.util.Set<String> ctxHidden = java.util.Set.of();
 	private final Vector3f ctxEye = new Vector3f(Float.NaN, 0, 0);
+	private Vector3f ctxMirrorEye;
 
 	/**
 	 * 원작 0x152EC8: 매 프레임 마스크를 비우고 (0x16D6F0) 활성 뷰포트 카메라 위치로 칸 질의 (0x16DC60) 뒤 컨텍스트마다 뷰 마스크를 켜고 끈다
-	 * (0x16D6F8 → 0x134980: 컨텍스트 항목 중 MDL 0xF / PRT 0x13 / 0x1C / SHG 0x27 의 +0x48). 거울 뷰 카메라 위치는 합치지 않는다 [근사].
+	 * (0x16D6F8 → 0x134980: 컨텍스트 항목 중 MDL 0xF / PRT 0x13 / 0x1C / SHG 0x27 의 +0x48). 거울 뷰가 켜졌으면 반사 눈도 같은 마스크에 누적
+	 * (모든 뷰가 같은 집합, 43 §12.3).
 	 */
 	private void updateContextVisibility(Vector3f eye) {
-		if (!VIS_CELLS || eye.equals(ctxEye)) {
+		updateContextVisibility(eye, null);
+	}
+
+	/**
+	 * @param mirrorEye 거울 뷰가 켜졌으면 반사 눈 (뷰 목록에서 거울 뷰가 먼저 — 0x12A2A8 이 Engine_Init 에서 목록 맨 앞에 넣는다 [추정: 주 뷰가 그 전에 들어감]), 아니면 null
+	 */
+	private void updateContextVisibility(Vector3f eye, Vector3f mirrorEye) {
+		if (!VIS_CELLS || eye.equals(ctxEye) && java.util.Objects.equals(mirrorEye, ctxMirrorEye)) {
 			return;
 		}
 		ctxEye.set(eye);
-		java.util.Set<String> h = data.contextHidden(eye.x, eye.y, eye.z);
+		ctxMirrorEye = mirrorEye == null ? null : new Vector3f(mirrorEye);
+		java.util.Set<String> h = mirrorEye == null ? data.contextHidden(eye.x, eye.y, eye.z)
+				: data.contextHidden(new float[][]{{mirrorEye.x, mirrorEye.y, mirrorEye.z}, {eye.x, eye.y, eye.z}});
 		if (System.getProperty("gow.debug.vis") != null && !h.equals(ctxHidden)) {
 			System.out.printf(Locale.ROOT, "[가시 칸] %s 눈 (%.0f, %.0f, %.0f) 숨김 %d: %s%n", data.wad.name(), eye.x, eye.y, eye.z, h.size(),
 					new java.util.TreeSet<>(h));
@@ -862,11 +957,91 @@ public final class LevelScene implements Scene {
 			if (p.instance().name().equalsIgnoreCase(key) && p.model() != null && p.object().skeleton() != null) {
 				GowModel gm = assets.gowModel(p.model());
 				if (gm != null && p.object().skeleton().size() <= devple.gow.engine.asset.AnimatedModel.MAX_JOINTS) {
-					return new devple.gow.engine.asset.AnimatedModel(assets, gm, p.object().skeleton(), skinned);
+					var m = new devple.gow.engine.asset.AnimatedModel(assets, gm, p.object().skeleton(), skinned);
+					// 레벨 GO 그림자 (47 문서 §11): 같은 WAD 의 SHG_<모델> 이 있으면 renShadowServer 오브젝트 — 내비게이션 갱신이 없는 GO 는
+					// 모드 0 (밀어내기). SCR_Shadow (0x2465B0 → 0x1BF5C0 → 0x1BF680) 가 붙은 GO 는 받는 면 질의를 해 모드 1 (판) [확실]
+					m.shadowKey = key;
+					if (shadowOwners.contains(key.toLowerCase(Locale.ROOT))) {
+						m.shadowMode = devple.gow.engine.light.ShadowVolume.MODE_SLAB;
+					}
+					return m;
 				}
 			}
 		}
 		return null;
+	}
+
+	/** 시작 자세로 구운 스키닝 GO 중 SHG_ 가 있는 것 (그림자만 따로 모은다). */
+	private record StaticShadow(Instance inst, String key, devple.gow.engine.light.ShadowGeometry geometry, float[][] joints, boolean[] hidden) {
+	}
+
+	private final List<StaticShadow> staticShadows = new ArrayList<>();
+	private final Map<String, java.util.Optional<devple.gow.engine.light.ShadowGeometry>> shgCache = new HashMap<>();
+	private static final Matrix4f IDENTITY = new Matrix4f();
+
+	/**
+	 * 렌더러 0x162F20 은 그림자 서버의 모든 오브젝트를 돈다 (GO 가 움직이든 아니든) — 구운 시작 자세 GO 도 같은 관절로 그림자를 낸다.
+	 * 자세 (posed) · 반복 act GO 는 {@link devple.gow.engine.asset.AnimatedModel#draw} 가 넘긴다. 모드 0, SCR_Shadow 소유자는 1.
+	 */
+	private void submitStaticShadows() {
+		devple.gow.engine.light.ShadowCasters sc = devple.gow.engine.light.ShadowCasters.current();
+		if (sc == null || !sc.collecting() || staticShadows.isEmpty()) {
+			return;
+		}
+		for (StaticShadow s : staticShadows) {
+			if (posed.containsKey(s.key()) || ambientKeys.contains(s.key()) || removed.contains(s.key()) || culled(s.key()) || fx.hidden(s.inst())
+					|| !inMainView(s.key())) {
+				continue;
+			}
+			int mode = shadowOwners.contains(s.key()) ? devple.gow.engine.light.ShadowVolume.MODE_SLAB : devple.gow.engine.light.ShadowVolume.MODE_EXTRUDE;
+			sc.submit(s, null, s.geometry(), s.joints(), s.hidden(), IDENTITY,
+					devple.gow.engine.light.LightServer.jointSphere(s.joints(), IDENTITY, new org.joml.Vector4f()), mode, s.key());
+		}
+	}
+
+	/** 그림자 모으기 대상 레벨 GO 이름 (소문자) — 테스트. */
+	public List<String> staticShadowKeys() {
+		return staticShadows.stream().map(StaticShadow::key).toList();
+	}
+
+	/**
+	 * 레벨 WAD 자체 AI1 템플릿의 "Instance Name" 오브젝트 (소문자, ATHN01D aoxf1 …, 36 문서 §4): 원작은 이 오브젝트를 복사해 적으로 스폰하고
+	 * 템플릿 자체는 그리지 않는다 [추정] — 엔진은 원점의 템플릿을 구운 메시로 그리지만 (기존 동작) 그림자는 모으지 않는다.
+	 */
+	static java.util.Set<String> aiTemplateObjects(devple.gow.tools.wad.WadFile wad) {
+		devple.gow.engine.game.Tweaks t = new devple.gow.engine.game.Tweaks();
+		try {
+			t.load(wad);
+		} catch (RuntimeException ex) {
+			return java.util.Set.of();
+		}
+		java.util.Set<String> out = new java.util.HashSet<>();
+		for (String node : t.nodes("/TweakTemplates/AI1/")) {
+			String n = t.s(node, "Instance Name", null);
+			if (n != null && !n.isEmpty()) {
+				out.add(n.toLowerCase(Locale.ROOT));
+			}
+		}
+		return out;
+	}
+
+	/** SCR_Shadow 소유 GO (소문자). */
+	private java.util.Set<String> shadowOwners = java.util.Set.of();
+
+	/** 인스턴스 스크립트 target 의 소유 GO 이름 (소문자). */
+	static java.util.Set<String> scriptOwners(devple.gow.tools.fx.EnvParams env, String target) {
+		java.util.Set<String> out = new java.util.HashSet<>();
+		for (devple.gow.tools.fx.EnvParams.Raw r : env.others) {
+			if (target.equals(r.target()) && r.owner() != null && !r.owner().isBlank()) {
+				out.add(r.owner().trim().toLowerCase(Locale.ROOT));
+			}
+		}
+		return out;
+	}
+
+	/** SCR_Shadow 소유 GO (소문자) — 테스트. */
+	public java.util.Set<String> shadowOwners() {
+		return shadowOwners;
 	}
 
 	/**

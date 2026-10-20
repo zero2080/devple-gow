@@ -103,6 +103,16 @@ public final class ShadowCasters {
 		return collecting;
 	}
 
+	/** 모으기를 잠시 멈춘다 (거울 반사 패스의 그리기 — 그림자는 주 뷰만). 모은 것은 그대로. */
+	public void pause() {
+		collecting = false;
+	}
+
+	/** {@link #pause} 뒤 다시 모은다. */
+	public void resume() {
+		collecting = true;
+	}
+
 	public void submit(Object owner, Object parent, ShadowGeometry g, float[][] joints, boolean[] hidden, Matrix4fc world, Vector4fc sphere,
 					   int mode, String key) {
 		if (!collecting || g == null || key != null && hiddenKeys.contains(key.toLowerCase(Locale.ROOT))) {

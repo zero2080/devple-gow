@@ -90,6 +90,49 @@ public final class Renderer implements AutoCloseable {
 		drawPasses(model, world, pass, pass);
 	}
 
+	/**
+	 * 그리기 층 0 (SCR_Mirror 소유 모델, 0x129820 → 0x150738(모델, 0) = 머티리얼 층 bit 32) 의 원작 그리기 (43 문서 §12):
+	 * 머티리얼 렌더 0x165998 은 "주 패스 ∧ 층 0" 이면 TEST = 0x50000 (알파 테스트 없음, Z GEQUAL, Z 씀) — 불투명·알파 테스트 분류 없이
+	 * 모든 파트를 GS 식 그대로 (0x44 = (Cs−Cd)·As+Cd, As = 텍스처 α × 정점 α × 색) 아래 (거울 뷰 반사) 위에 블렌드하고 깊이를 쓴다.
+	 */
+	public void drawLayer0(RenderModel model, Matrix4f world) {
+		layer0 = true;
+		try {
+			basic.set("uModel", world);
+			for (RenderModel.Part p : model.parts()) {
+				RenderModel.Blend b = p.blend();
+				RenderModel.Blend mode = b == RenderModel.Blend.OPAQUE || b == RenderModel.Blend.CUTOUT ? RenderModel.Blend.ALPHA : b;
+				MaterialFx fx = p.fx();
+				Texture tex = fx == null ? p.texture() : fx.frame(p.texture(), fxTime);
+				float[] sc = fx == null ? null : fx.uv(0, fxTime);
+				float[] tint = p.tint();
+				if (fx != null && fx.anim() != null) {
+					tint = tint.clone();
+					tint[3] *= fx.opacity(fxTime, 1f);
+				}
+				drawLayer(p, tex, mode, tint, sc, false, true);
+				if (fx != null && !fx.layers().isEmpty()) {
+					glDepthFunc(GL_LEQUAL);
+					for (MaterialFx.Layer l : fx.layers()) {
+						RenderModel.Blend lb = l.blend() == RenderModel.Blend.OPAQUE || l.blend() == RenderModel.Blend.CUTOUT
+								? RenderModel.Blend.ALPHA : l.blend();
+						drawLayer(p, fx.frame(l, fxTime), lb, l.tint(), fx.uv(l.index(), fxTime), l.env() && p.lit(), false);
+					}
+					glDepthFunc(GL_LESS);
+				}
+			}
+		} finally {
+			layer0 = false;
+			basic.set("uTint", new Vector4f(1, 1, 1, 1));
+			basic.set("uUvOffset", 0f, 0f);
+			basic.set("uFogAdd", 0);
+			basic.set("uEnvUv", 0);
+		}
+	}
+
+	/** {@link #drawLayer0} 중: 반투명 파트도 깊이를 쓴다 (층 0 TEST 0x50000, ZMSK 없음). */
+	private boolean layer0;
+
 	/** 모양만 (상태·텍스처·블렌드 변경 없이 모든 파트 메시) — 스텐실 표시·깊이 쓰기용 (SCR_Mirror 반사, Mirrors). */
 	public void drawShape(RenderModel model, Matrix4f world) {
 		basic.set("uModel", world);
@@ -151,7 +194,7 @@ public final class Renderer implements AutoCloseable {
 		boolean opaque = blend == RenderModel.Blend.OPAQUE;
 		if (!opaque) {
 			glEnable(GL_BLEND);
-			glDepthMask(false);
+			glDepthMask(layer0);
 			switch (blend) {
 				case ADD -> {
 					glBlendEquation(GL_FUNC_ADD);

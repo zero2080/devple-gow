@@ -22,19 +22,46 @@ import java.util.Map;
  *       레벨 모델 m = 0x01 (0x1503E0), 렌더 플래그 = MDL +0x28 (0x156820). 영웅 (0x1DAEC0)·블레이드 (Blades_Init, 0x2015B8)·무기 (0x19C240)·
  *       PushPull/IO_TandF/IO_CSM (0x1DF1E0) 은 bit 61 을 켜고 m = 0x40 → 0xC0 (값 [4] 가 끄는 0x80 쪽).
  *       ⇒ 정적 월드는 다시 그리지 않는다: 반사 = 반사 전용 대리 메시 (bit 57) + bit 61 모델 + (값 [4] = 0 이면) 영웅 무리. 적은 bit 61 이 없다.
- *       값 [0] ≠ 0 = 거울 뷰 목록 +0x14 (vtable 0x2BE268, 0x120498 → 0x11FEA0 스프라이트 2 회, 계수 0.5) 켬 — 반사 이미지 후처리 [추정: 흐림] 미구현.
+ *       값 [0] ≠ 0 = 거울 뷰 목록 +0x14 (vtable 0x2BE268, 0x120498 → 0x11FEA0 × 2, 계수 0.5) 켬 = ½ 축소·확대 흐림 [확실, 43 §12.2].
  * 엔진: 평면 = 거울 메시 (월드) 의 면적 가중 법선 · 무게중심. 불투명 패스 뒤 거울 화소를 스텐실로 표시 → 그 화소 깊이를 먼 값으로 →
  *       VP·R (R = 평면 반사) 로 하늘 + 거울 뷰 마스크에 맞는 인스턴스·영웅을 다시 그린다 (평면 뒤쪽은 gl_ClipDistance 로 자름, 감김 반전) →
- *       거울 깊이 복원 → 거울 모델을 그 위에 두 패스로 [근사: GS 합성 0x12ABA0 미해석].
+ *       거울 깊이 복원 → 거울 모델을 층 0 그리기 (알파 테스트 없는 GS 블렌드, 0x165998) 로 그 위에 — 합성 순서 43 §12.1 [확실],
+ *       0x12ABA0 (알파 &gt; 0 → Z 최대) 만 미해석이라 넣지 않음.
  * </pre>
  */
 final class Mirrors {
 
 	/** 거울 하나: 평면 n·x = d (n 단위), 최대 평면 이탈 (평탄도 검사). */
-	record Mirror(String key, Vector3f normal, float d, float maxDev, int a, int b, Vector3f center) {
+	record Mirror(String key, Vector3f normal, float d, float maxDev, int a, int b, Vector3f center, Vector3f axis) {
 
 		Mirror(String key, Vector3f normal, float d, float maxDev, int a, int b) {
 			this(key, normal, d, maxDev, a, b, new Vector3f(normal).mul(d));
+		}
+
+		Mirror(String key, Vector3f normal, float d, float maxDev, int a, int b, Vector3f center) {
+			this(key, normal, d, maxDev, a, b, center, null);
+		}
+
+		/**
+		 * 0x12A330 의 기준: 모델 Y 축 (관절 0 월드 행렬 2 행, 정규화) 과 메시 경계 중심 (+0x48.. [근사: 엔진은 월드 AABB 중심]).
+		 * 축이 null 이면 앞쪽 검사 없음.
+		 */
+		Mirror withAxis(Vector3f axisY, Vector3f boundCenter) {
+			Vector3f ax = axisY == null || axisY.lengthSquared() == 0 ? null : new Vector3f(axisY).normalize();
+			return new Mirror(key, normal, d, maxDev, a, b, boundCenter != null ? new Vector3f(boundCenter) : center, ax);
+		}
+
+		/** 0x12A330: 카메라가 모델 Y 축 쪽 (축·(중심 − 눈) &lt; 0) 일 때만 거리 |중심 − 눈|, 아니면 FLT_MAX (후보 아님). */
+		float distance(Vector3f eye) {
+			if (axis != null && axis.x * (center.x - eye.x) + axis.y * (center.y - eye.y) + axis.z * (center.z - eye.z) >= 0) {
+				return Float.MAX_VALUE;
+			}
+			return center.distance(eye);
+		}
+
+		/** 값 [0] ≠ 0 = 거울 뷰 후처리 (관리자 목록 +0x14, 0x120498 → 0x11FEA0 × 2, 계수 0.5) 켬 (0x12A930). */
+		boolean blur() {
+			return a != 0;
 		}
 
 		/** 거울 뷰 마스크 (0x12A7A4: 값 [4] ≠ 0 이면 영웅 무리 0x80 을 뺀다). */
@@ -86,12 +113,15 @@ final class Mirrors {
 		return b != 0 ? v & ~0x80 : v | 0x80;
 	}
 
-	/** 0x12A6C8: 가장 가까운 거울 하나 (카메라 → 거울 중심 거리, 0x12A330). 후보가 없으면 null. */
+	/**
+	 * 0x12A6C8: 렌더러마다 0x12A330 거리 (모델 숨김 bit 54 · 카메라가 모델 Y 축 뒤쪽이면 FLT_MAX) 가 가장 작은 거울 하나.
+	 * 시작값이 FLT_MAX (0x4B189680 은 1e7 — c.lt 비교라 FLT_MAX 후보는 뽑히지 않는다). 후보가 없으면 null (거울 뷰 끔).
+	 */
 	static Mirror nearest(java.util.List<Mirror> candidates, Vector3f eye) {
 		Mirror best = null;
-		float bd = Float.MAX_VALUE;
+		float bd = 1e7f;
 		for (Mirror m : candidates) {
-			float dd = m.center().distanceSquared(eye);
+			float dd = m.distance(eye);
 			if (dd < bd) {
 				bd = dd;
 				best = m;
@@ -123,7 +153,7 @@ final class Mirrors {
 			return fitted;
 		}
 		n.normalize();
-		return new Mirror(fitted.key(), n, n.dot(fitted.center()), fitted.maxDev(), fitted.a(), fitted.b(), fitted.center());
+		return new Mirror(fitted.key(), n, n.dot(fitted.center()), fitted.maxDev(), fitted.a(), fitted.b(), fitted.center(), fitted.axis());
 	}
 
 	/** 월드 메시의 평면: 면적 가중 법선 (단위), d = n·무게중심, 최대 이탈. 면적이 0 이면 null. */
