@@ -287,6 +287,15 @@ public final class HeroNavigator {
 		cooldown = 0.3f;
 	}
 
+	/**
+	 * Warp 도착 (Warp_Jump 0x1B2E08 → 영웅 SetMatrix 0x1E79D0): 줄 위였으면 놓기 0x1C4FF8(1) = 떨어짐 (+0x174 0x8), 상태는 그대로 이어진다.
+	 * 놓은 줄 제외 (+0x2A8 → 0x3067E8) 도 +0x290 = 0 이라 없음 → 다음 프레임 공중 줄 잡기 (0x1C5C20) 가 도착점 줄을 바로 잡는다 [확실].
+	 * 리스폰 대기 (0.3 초, 엔진 [근사]) 를 없앤다.
+	 */
+	public void warpArrived() {
+		cooldown = 0;
+	}
+
 	// ---- 매 틱 ----
 
 	/** @return true = 이번 틱 이동을 처리함 (기본 이동·중력 생략) */
