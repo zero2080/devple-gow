@@ -74,6 +74,22 @@ public final class GameScene implements Scene {
 	private final HudBinding hudBinding = new HudBinding();
 	private final Camera cam = new Camera();
 	private devple.gow.engine.level.CameraRig cameraRig;
+
+	/**
+	 * 영웅 이동 상태 → 원작 +0x174 비트 (카메라 후보 마스크 0x1EE510 의 입력, 30 문서 §8): 지상 0x1, 점프 공중 0x4, 떨어짐 0x8, 턱 0x10,
+	 * 벽·좁은 턱·사다리 0x20, 물 0x80, 줄·수평 줄·짚라인 0x400. 상자 밀기·상황 동작은 지상 [추정].
+	 */
+	private int heroStateBits() {
+		var n = nav != null ? nav.navigator : null;
+		devple.gow.engine.nav.NavState st = n != null ? n.state() : devple.gow.engine.nav.NavState.GROUND;
+		return switch (st) {
+			case LEDGE_HANG -> 0x10;
+			case WALL_CLIMB, WALL_WALK, LADDER -> 0x20;
+			case ROPE, ROPE_TRAVERSE, ZIPLINE -> 0x400;
+			case SWIM -> 0x80;
+			default -> hero.ctl.grounded ? 0x1 : hero.ctl.jumped() || n != null && n.airJump() ? 0x4 : 0x8;
+		};
+	}
 	private final Vector3f spawn = new Vector3f();
 	private final Vector3f checkpoint = new Vector3f();
 	private float spawnYaw;
@@ -607,6 +623,9 @@ public final class GameScene implements Scene {
 					nav.setSolid(objects, values[3] == 1); // Attr11_0: 충돌 on/off ("collisionOFF", "DoorCollOff") [추정: 데이터 용례]
 				}
 				if (values.length > 4 && values[4] != 0) {
+					if (System.getProperty("gow.trace.vis") != null) {
+						System.out.println("VIS " + source.name() + " CMV " + (values[4] == 1 ? "ON " : "OFF ") + objects);
+					}
 					objects.forEach(o -> cameraRig.setOwnerVolumes(o, values[4] == 1)); // Attr11_1: CMV 볼륨 on/off
 				}
 			}
@@ -1215,6 +1234,8 @@ public final class GameScene implements Scene {
 			}
 		}
 		breakables.update(hero.combat, world, this::onBreak);
+		cameraRig.setHeroState(heroStateBits(), enemies.stream().anyMatch(en -> !en.fighter().dead() && en.fighter().brain() != null
+				&& en.fighter().brain().state() == devple.gow.engine.combat.AiBrain.State.COMBAT));
 		cameraRig.update(dt, p, hero.ctl.yaw, !hero.ctl.grounded);
 		session.sound.setUnderwater(cameraRig.underwater()); // 수중 카메라 → 소리 수중 처리 (29 문서 §10)
 		world.tick(dt, p.x, p.y, p.z);
