@@ -5,13 +5,18 @@ import devple.gow.engine.anim.HeroController;
 import devple.gow.engine.game.Tweaks;
 import devple.gow.engine.input.Input;
 import devple.gow.tools.anim.Animation;
+import devple.gow.tools.combat.CombatFile;
 
 /**
  * 잡기/처형 동기화. 원작은 SYNC(18) 분기와 synchJoint 로 두 캐릭터의 애니를 맞춘다 (10 문서 §12, 05 문서 synchJoint).
  * 구현(근사):
  * <ul>
  *   <li>영웅이 MAI* 기술에 들어가면 대상 적과 "결합" — 적의 MAI* 기술이 끝날 때까지 영웅은 같은 이름의 외부 애니(영웅용)를 같은 시간으로 재생</li>
- *   <li>두 캐릭터는 같은 기준점(영웅 위치·방향)에 배치 — 처형 애니는 같은 원점 기준으로 제작됨 [추정]</li>
+ *   <li>정렬: 어느 쪽 기술이든 이벤트 22 창 안이면 원작 0x204BF0 ({@link SyncPull}) — 그 쪽이 상대를 끈다
+ *       (영웅 221 MAISKB02 [0–0.76], 421 MAISIRKILL [0.44–0.91] = 영웅이 적을). 그런 기술의 창 밖은 원작처럼 위치를 건드리지 않는다.
+ *       이벤트 22 가 없는 처형 (사이클롭스·미노타우로스·하피·고르곤·메두사 … 디스크 전체 조사, 37 문서 §11) 은 원작도 정렬이 없다
+ *       (이벤트 19 = 동기 유지만 — 잡기 적중 위치 + 두 쪽 루트 모션). 엔진은 적 루트 모션·처형 애니(적 세트에 없음)가 없어
+ *       같은 기준점(영웅 위치·방향)에 둔다 [근사]</li>
  *   <li>적 기술에 SCRIPT SCR_RepeatPress + 재생 속도 0 → {@link RepeatPressQte} (idx = 템플릿)</li>
  *   <li>적 기술에 SCRIPT SCR_TimedPress → 이벤트 창마다 {@link TimedPressQte} (버튼 / 스틱 회전, 사이클롭스·고르곤 처형).
  *       실패(틀린 버튼, 창 만료) → 적 기술의 같은 창 REQUEST0 분기 (실패 기술) — 영웅은 같은 이름 애니로 따라감</li>
@@ -34,6 +39,15 @@ public final class GrabSync {
 	/** 타이밍 프롬프트 결과 기록 (테스트·HUD). */
 	public int timedPassed, timedFailed;
 	private int sessionPassed, sessionFailed;
+	/** 원작 0x204BF0 끌기 (+0x1BC 비율). */
+	private final SyncPull pull = new SyncPull();
+	/** 마지막 갱신에서 끈 쪽: 1 = 적이 영웅을, 2 = 영웅이 적을, 0 = 없음. */
+	private int pulling;
+
+	/** 마지막 갱신의 끌기 (1 = 적 → 영웅, 2 = 영웅 → 적, 0 = 없음). */
+	public int pulling() {
+		return pulling;
+	}
 
 	/** 마지막 결합(처형)이 성공으로 끝났는지: 연타 성공, 또는 타이밍 프롬프트 전부 성공. */
 	public boolean executionSucceeded() {
@@ -85,6 +99,7 @@ public final class GrabSync {
 				lastEnemyClip = null;
 				lastResult = null;
 				sessionPassed = sessionFailed = 0;
+				pull.link(); // 0x209830: 동기 연결 시작 → 비율 0.1
 			}
 		}
 		if (partner == null) {
@@ -96,12 +111,11 @@ public final class GrabSync {
 			qte = null;
 			timed = null;
 			timedEvent = null;
+			pull.unlink();
+			pulling = 0;
 			return false;
 		}
-		// 기준점 공유: 적을 영웅 위치·방향에
-		partner.pos.set(hero.position);
-		partner.prevPos.set(hero.prevPosition);
-		partner.yaw = hero.yaw;
+		align();
 		if (!ec.equals(lastEnemyClip)) {
 			lastEnemyClip = ec;
 			Animation a = heroAnim.find(ec);
@@ -124,6 +138,35 @@ public final class GrabSync {
 			heroAnim.update(dt);
 		}
 		return true;
+	}
+
+	/**
+	 * 동기 정렬. 이벤트 22 창: 원작 0x204BF0 (적 기술 → 영웅을, 영웅 기술 → 적을 끈다). 영웅 기술 진행률은 결합 중 영웅 전투 갱신이 멈추므로
+	 * 영웅 애니 시간 / 길이. 이벤트 22 를 가진 기술의 창 밖은 그대로, 이벤트 22 가 없는 처형은 같은 기준점 [근사].
+	 */
+	private void align() {
+		pulling = 0;
+		CombatFile.Move hm = heroCombat.active() ? heroCombat.move() : null;
+		Animation cur = heroAnim.current();
+		float hp = cur != null && cur.duration > 0 ? Math.min(1f, heroAnim.time() / cur.duration) : 0;
+		if (SyncPull.pullWindow(partner.combat()) != null) {
+			float[] y = {hero.yaw};
+			pull.step(SyncPull.target(partner.pos, partner.yaw, partner.animator(), partner.scale, heroAnim, 1f), hero.position, y);
+			hero.yaw = y[0];
+			hero.prevPosition.set(hero.position);
+			pulling = 1;
+		} else if (hm != null && SyncPull.pullWindow(hm, hp) != null) {
+			float[] y = {partner.yaw};
+			pull.step(SyncPull.target(hero.position, hero.yaw, heroAnim, 1f, partner.animator(), partner.scale), partner.pos, y);
+			partner.yaw = y[0];
+			partner.prevPos.set(partner.pos);
+			pulling = 2;
+		} else if ((hm == null || !SyncPull.hasPull(hm)) && !(partner.combat().active() && SyncPull.hasPull(partner.combat().move()))) {
+			// 기준점 공유: 적을 영웅 위치·방향에 [근사]
+			partner.pos.set(hero.position);
+			partner.prevPos.set(hero.prevPosition);
+			partner.yaw = hero.yaw;
+		}
 	}
 
 	/** TimedPress: 이벤트 창 진입 → 프롬프트, 틀린 버튼 → 즉시 실패 분기, 창 만료 → 실패 분기. */

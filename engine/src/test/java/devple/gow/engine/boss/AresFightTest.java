@@ -83,37 +83,73 @@ class AresFightTest {
 		assertTrue(r.log.stream().anyMatch(s -> s.startsWith("level WARP")), r.log.toString());
 	}
 
-	/** 잡기 정렬 (37 문서 §11): 같은 원점·같은 방향에서 영웅 손목이 아레스 손가락 관절에 붙는다 (평균 7). synchJoint 행렬을 맞춘 "64 앞 마주 봄"(25),
-	 * zeroJoint 차 규칙(40) 은 멀다. */
+	/**
+	 * 잡기 정렬 = 원작 0x204BF0 (37 문서 §11): 605/606 (이벤트 19, 동기 유지만) 은 위치를 건드리지 않고, 608 MAIBARGRABWIN 의
+	 * 이벤트 22 창 [0–0.52] 동안 아레스가 영웅을 synchJoint 관계로 끈다 — 영웅 = 아레스 정면 (z −28 → −3), 마주 봄, 들어 올림 (y +30).
+	 * 그 관계에서 영웅 손목이 아레스 손가락 관절에 붙는다 (평균 &lt; 6). 예전 BOSS_TO_HERO "같은 원점·같은 방향" 은 폐기.
+	 */
 	@Test
-	void grabAlignmentSameOrigin() throws Exception {
+	void grabAlignmentTargetSynch() throws Exception {
 		BossRig r = spawned("ATHN08A");
 		EnemyFighter b = r.fight.boss();
 		b.hp = 520;
 		until(r, 6, () -> !b.combat().active());
 		b.hp = 480;
 		assertTrue(until(r, 3, () -> bossMove(r) == 290), r.bossMoves.toString());
-		place(r, 40);
+		// 정면 40 에서 아레스를 마주 보고 잡기
+		r.ctl.position.set(b.pos.x - (float) Math.sin(b.yaw) * 40, b.pos.y, b.pos.z - (float) Math.cos(b.yaw) * 40);
+		r.ctl.prevPosition.set(r.ctl.position);
+		r.ctl.yaw = b.yaw + (float) Math.PI;
 		contact(r, 200, 0);
 		assertTrue(until(r, 3, () -> r.fight.sync().active() && r.fight.sync().pairedMove() == 606), r.bossMoves.toString());
-		float same = 0, apart = 0, zrule = 0;
-		int n = 0;
-		for (int k = 0; k < 120; k++, r.tick()) {
-			if (k % 10 != 0 || !r.fight.sync().active()) {
-				continue;
-			}
-			var bw = b.world(new org.joml.Matrix4f(), 1);
-			same += BossSyncContact.handGap(r.ctl.animator(), r.ctl.world(new org.joml.Matrix4f(), 1), b.animator(), bw);
-			var facing = new org.joml.Matrix4f().translation(b.pos).rotateY(b.yaw).translate(0, 0, -64).rotateY((float) Math.PI);
-			apart += BossSyncContact.handGap(r.ctl.animator(), facing, b.animator(), bw);
-			zrule += BossSyncContact.handGap(r.ctl.animator(), BossSyncContact.zeroRule(r.ctl.animator(), b.animator(), b.pos, b.yaw), b.animator(), bw);
-			n++;
+		// 606: 정렬 없음 (원작 이벤트 19) — 아레스·영웅 모두 그대로
+		org.joml.Vector3f bp = new org.joml.Vector3f(b.pos);
+		for (int k = 0; k < 30; k++) {
+			r.tick();
+			assertEquals(0, r.fight.sync().pulling(), "606 은 끌지 않음");
 		}
+		assertEquals(0, b.pos.distance(bp), 1e-3f, "아레스 제자리");
+		assertTrue(until(r, 15, () -> bossMove(r) == 608), "608: " + r.bossMoves);
+		float gap = 0;
+		int n = 0;
+		boolean pulled = false;
+		for (int k = 0; k < 200 && bossMove(r) == 608; k++, r.tick()) {
+			float p = b.combat().progress();
+			if (r.fight.sync().pulling() == 1) {
+				pulled = true;
+				assertTrue(p <= 0.53f, "이벤트 22 창 [0–0.52] 안에서만 끌기: " + p);
+			}
+			if (p > 0.15f && p < 0.5f && r.fight.sync().active()) {
+				gap += BossSyncContact.handGap(r.ctl.animator(), r.ctl.world(new org.joml.Matrix4f(), 1), b.animator(), b.world(new org.joml.Matrix4f(), 1));
+				n++;
+				var rel = new org.joml.Matrix4f().translation(b.pos).rotateY(b.yaw).invert().transformPosition(new org.joml.Vector3f(r.ctl.position));
+				assertTrue(Math.abs(rel.x) < 5 && rel.z < 5 && rel.z > -32, "영웅 = 아레스 정면 (z −28 → −3, 608 synchJoint): " + rel);
+				assertTrue(rel.y > 25, "들어 올림: " + rel);
+				assertEquals(0, Math.abs(Math.IEEEremainder(r.ctl.yaw - b.yaw - Math.PI, Math.PI * 2)), 0.05, "마주 봄");
+			}
+		}
+		assertTrue(pulled, "608 이벤트 22 → 아레스가 영웅을 끈다");
 		assertTrue(n > 5);
-		assertEquals(0, r.ctl.position.distance(b.pos), 1e-3f, "BOSS_TO_HERO: synchJoint (0,0,−32) 둘 다 → 같은 원점");
-		assertTrue(same / n < 10, "손목 ↔ 아레스 관절 평균 " + same / n);
-		assertTrue(apart / n > 2 * (same / n), "64 앞 마주 봄 " + apart / n + " vs 같은 원점 " + same / n);
-		assertTrue(zrule / n > 2 * (same / n), "zeroJoint 차 규칙 " + zrule / n + " vs 같은 원점 " + same / n);
+		assertTrue(gap / n < 6, "손목 ↔ 아레스 관절 평균 " + gap / n);
+	}
+
+	/** 600 BARMAIBLADESHITTHROW (아레스 공격 적중 → 영웅 A600): 동기 쌍, 아레스의 이벤트 22 [0–0.35] 동안만 영웅을 끈다. */
+	@Test
+	void bladesThrowPullsHeroInWindow() throws Exception {
+		BossRig r = spawned("ATHN08A");
+		EnemyFighter b = r.fight.boss();
+		until(r, 6, () -> !b.combat().active());
+		b.combat().forceMove(600);
+		r.tick();
+		assertTrue(until(r, 1, () -> r.hero.active() && r.hero.move().id() == 600), "영웅 600 동기: " + r.heroMoves);
+		boolean pulled = false;
+		for (int k = 0; k < 120 && bossMove(r) == 600; k++, r.tick()) {
+			if (r.fight.sync().pulling() == 1) {
+				pulled = true;
+				assertTrue(b.combat().progress() <= 0.36f, "창 [0–0.35]: " + b.combat().progress());
+			}
+		}
+		assertTrue(pulled, "600 이벤트 22 → 영웅을 끈다");
 	}
 
 	@Test
