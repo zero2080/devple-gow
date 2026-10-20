@@ -27,6 +27,7 @@ import static org.lwjgl.opengl.GL41C.*;
  * 머티리얼 i (블렌드 컬러 ARGB + TXR) 로 그린다. 동적 라벨은 폰트 글리프 파트를 펜 위치에 배치한다
  * (글리프 메시 단위: em = 64, 폭 테이블 1024 = em, 기준선 y = 0).
  * 셰이더는 엔진 공용 basic (정점색 × uTint × 텍스처).
+ * 계층에 {@code font.properties} 가 있으면 글자를 TTF 아틀라스로 대신 그린다 ({@link TtfFont}, 49 문서 §7).
  */
 public final class FlpRenderer implements AutoCloseable {
 
@@ -250,7 +251,8 @@ public final class FlpRenderer implements AutoCloseable {
 			return;
 		}
 		FlpFile.Font font = flp.fontOf(dl.fontHandler());
-		if (font == null || font.glyphMeshes().isEmpty()) {
+		TtfFont ttf = TtfFont.shared();
+		if (font == null || font.glyphMeshes().isEmpty() && ttf == null) {
 			return;
 		}
 		int c = dl.color();
@@ -267,7 +269,7 @@ public final class FlpRenderer implements AutoCloseable {
 			List<Object> runs = tokenize(line);
 			float w = 0;
 			for (Object r : runs) {
-				w += advance(font, r, h);
+				w += advance(font, ttf, r, h);
 			}
 			float x = switch (dl.align()) {
 				case 1 -> left + width - w;
@@ -277,16 +279,22 @@ public final class FlpRenderer implements AutoCloseable {
 			for (Object r : runs) {
 				if (r instanceof Character ch) {
 					int g = font.glyphOf(ch);
-					if (g >= 0 && ch != ' ') {
+					if (ttf != null && ttf.covers(ch, g >= 0)) {
+						ttf.add(ch, x, base, h);
+					} else if (g >= 0 && ch != ' ') {
 						float s = h / GLYPH_EM;
 						drawMeshRef(font.glyphMeshes().get(g), mul(m, s, 0, 0, s, x, base), tc);
 					}
 				} else if (r instanceof String icon && drawIcons) {
 					drawIcon(icon, x, base, h, ascent, m, col);
 				}
-				x += advance(font, r, h);
+				x += advance(font, ttf, r, h);
 			}
 			base += lineH;
+		}
+		if (ttf != null) {
+			tint.set(tc[0], tc[1], tc[2], tc[3]);
+			ttf.flush(shader, m, tint);
 		}
 	}
 
@@ -311,9 +319,12 @@ public final class FlpRenderer implements AutoCloseable {
 		return out;
 	}
 
-	private static float advance(FlpFile.Font f, Object r, float h) {
+	private static float advance(FlpFile.Font f, TtfFont ttf, Object r, float h) {
 		if (r instanceof Character ch) {
 			int g = f.glyphOf(ch);
+			if (ttf != null && ttf.covers(ch, g >= 0)) {
+				return ttf.advance(ch, h);
+			}
 			return g >= 0 ? f.widths()[g] / 1024f * h : h * 0.33f;
 		}
 		return h * 1.25f;

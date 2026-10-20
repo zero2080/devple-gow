@@ -2,9 +2,6 @@ package devple.gow.engine.input;
 
 import org.lwjgl.glfw.GLFWGamepadState;
 
-import java.util.EnumMap;
-import java.util.Map;
-
 import static org.lwjgl.glfw.GLFW.*;
 
 /**
@@ -13,7 +10,7 @@ import static org.lwjgl.glfw.GLFW.*;
  * L2 마법 (포세이돈 연타 = ○), R2 사용 (상자·문·레버·세이브), 우스틱 회피, L3+R3 신들의 분노.
  * <p>
  * 키보드 기본 배치: J=□ I=△ L=○ K=X, Q=L1 E=R1 Z=L2 C=R2, WASD=좌스틱, 방향키=우스틱(회피), Enter=START, Tab=SELECT,
- * 왼쪽/오른쪽 Shift = L3/R3.
+ * 왼쪽/오른쪽 Shift = L3/R3. 계층의 {@code keys.properties} 로 바꾼다 ({@link KeyBindings}, 49 문서 §6).
  * <p>
  * 게임패드: GLFW 게임패드 매핑 (SDL 형식, Xbox·DualShock 4·DualSense 등 내장). 슬롯 1–16 중 첫 게임패드를 쓰고 꽂고 뺄 때 다시 찾는다.
  * 매핑이 없는 패드는 작업 폴더의 {@code gamecontrollerdb.txt} (또는 환경 변수 {@code GOW_PAD_DB} 경로) 를 시작할 때 읽어 추가한다.
@@ -21,26 +18,8 @@ import static org.lwjgl.glfw.GLFW.*;
  */
 public class Input {
 
-	private static final Map<PadButton, Integer> KEYS = new EnumMap<>(Map.ofEntries(
-			Map.entry(PadButton.SQUARE, GLFW_KEY_J), Map.entry(PadButton.TRIANGLE, GLFW_KEY_I),
-			Map.entry(PadButton.CIRCLE, GLFW_KEY_L), Map.entry(PadButton.CROSS, GLFW_KEY_K),
-			Map.entry(PadButton.L1, GLFW_KEY_Q), Map.entry(PadButton.R1, GLFW_KEY_E),
-			Map.entry(PadButton.L2, GLFW_KEY_Z), Map.entry(PadButton.R2, GLFW_KEY_C),
-			Map.entry(PadButton.START, GLFW_KEY_ENTER), Map.entry(PadButton.SELECT, GLFW_KEY_TAB),
-			Map.entry(PadButton.UP, GLFW_KEY_UP), Map.entry(PadButton.DOWN, GLFW_KEY_DOWN),
-			Map.entry(PadButton.LEFT, GLFW_KEY_LEFT), Map.entry(PadButton.RIGHT, GLFW_KEY_RIGHT),
-			Map.entry(PadButton.L3, GLFW_KEY_LEFT_SHIFT), Map.entry(PadButton.R3, GLFW_KEY_RIGHT_SHIFT)));
-
-	private static final Map<PadButton, Integer> PAD = new EnumMap<>(Map.ofEntries(
-			Map.entry(PadButton.CROSS, GLFW_GAMEPAD_BUTTON_A), Map.entry(PadButton.CIRCLE, GLFW_GAMEPAD_BUTTON_B),
-			Map.entry(PadButton.SQUARE, GLFW_GAMEPAD_BUTTON_X), Map.entry(PadButton.TRIANGLE, GLFW_GAMEPAD_BUTTON_Y),
-			Map.entry(PadButton.L1, GLFW_GAMEPAD_BUTTON_LEFT_BUMPER), Map.entry(PadButton.R1, GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER),
-			Map.entry(PadButton.START, GLFW_GAMEPAD_BUTTON_START), Map.entry(PadButton.SELECT, GLFW_GAMEPAD_BUTTON_BACK),
-			Map.entry(PadButton.UP, GLFW_GAMEPAD_BUTTON_DPAD_UP), Map.entry(PadButton.DOWN, GLFW_GAMEPAD_BUTTON_DPAD_DOWN),
-			Map.entry(PadButton.LEFT, GLFW_GAMEPAD_BUTTON_DPAD_LEFT), Map.entry(PadButton.RIGHT, GLFW_GAMEPAD_BUTTON_DPAD_RIGHT),
-			Map.entry(PadButton.L3, GLFW_GAMEPAD_BUTTON_LEFT_THUMB), Map.entry(PadButton.R3, GLFW_GAMEPAD_BUTTON_RIGHT_THUMB)));
-
 	private final long window;
+	private final KeyBindings bind = KeyBindings.current();
 	private final GLFWGamepadState pad = GLFWGamepadState.create();
 	private final boolean[] down = new boolean[PadButton.values().length];
 	private final boolean[] prev = new boolean[PadButton.values().length];
@@ -127,23 +106,20 @@ public class Input {
 		}
 		boolean hasPad = padSlot >= 0 && glfwGetGamepadState(padSlot, pad);
 		for (PadButton b : PadButton.values()) {
-			boolean v = glfwGetKey(window, KEYS.get(b)) == GLFW_PRESS;
+			boolean v = any(bind.keys(b));
 			if (hasPad) {
-				Integer pb = PAD.get(b);
-				if (pb != null) {
-					v |= pad.buttons(pb) == GLFW_PRESS;
-				} else if (b == PadButton.L2) {
-					v |= pad.axes(GLFW_GAMEPAD_AXIS_LEFT_TRIGGER) > 0f; // 트리거 −1(뗌)..1 → 절반 이상
-				} else if (b == PadButton.R2) {
-					v |= pad.axes(GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER) > 0f;
+				for (int pb : bind.pad(b)) {
+					v |= (pb & KeyBindings.PAD_AXIS) != 0
+							? pad.axes(pb & 0xFF) > 0f // 트리거 −1(뗌)..1 → 절반 이상
+							: pad.buttons(pb) == GLFW_PRESS;
 				}
 			}
 			down[b.ordinal()] = v;
 		}
-		lx = key(GLFW_KEY_D) - key(GLFW_KEY_A);
-		ly = key(GLFW_KEY_W) - key(GLFW_KEY_S);
-		rx = key(GLFW_KEY_RIGHT) - key(GLFW_KEY_LEFT);
-		ry = key(GLFW_KEY_UP) - key(GLFW_KEY_DOWN);
+		lx = key(KeyBindings.Stick.STICK_L_RIGHT) - key(KeyBindings.Stick.STICK_L_LEFT);
+		ly = key(KeyBindings.Stick.STICK_L_UP) - key(KeyBindings.Stick.STICK_L_DOWN);
+		rx = key(KeyBindings.Stick.STICK_R_RIGHT) - key(KeyBindings.Stick.STICK_R_LEFT);
+		ry = key(KeyBindings.Stick.STICK_R_UP) - key(KeyBindings.Stick.STICK_R_DOWN);
 		if (hasPad) {
 			lx = pick(lx, pad.axes(GLFW_GAMEPAD_AXIS_LEFT_X));
 			ly = pick(ly, -pad.axes(GLFW_GAMEPAD_AXIS_LEFT_Y));
@@ -152,8 +128,17 @@ public class Input {
 		}
 	}
 
-	private float key(int k) {
-		return glfwGetKey(window, k) == GLFW_PRESS ? 1f : 0f;
+	private boolean any(int[] ks) {
+		for (int k : ks) {
+			if (glfwGetKey(window, k) == GLFW_PRESS) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private float key(KeyBindings.Stick s) {
+		return any(bind.keys(s)) ? 1f : 0f;
 	}
 
 	private static float pick(float keyValue, float axis) {
