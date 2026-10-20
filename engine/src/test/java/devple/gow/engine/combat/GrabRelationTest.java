@@ -123,7 +123,9 @@ class GrabRelationTest {
 			GrabRelation.Result free = GrabRelation.search(t, 5, 130, false);
 			assertNotNull(free, w);
 			assertTrue(free.contact() < 1f, w + " 밀기 없으면 첫 접촉 = 설계 관계: " + free);
-			GrabRelation.Result pushed = GrabRelation.search(t, 5, 130, true);
+			// 서 있는 사이클롭스 (잡기 원 상태, 변위 0) 는 자기를 밀지 않는다 (0x1EBB38, 32 문서) → 영웅이 캡슐 안 깊이 (수평 < 45.6) 에서 시작하는 모의는
+			// 원작에 생길 수 없다 (영웅은 걸어 들어오며 늘 자기를 밀어 경계 밖에 있음 — 플레이어는 정지 판정 없음). 하피 (날기 = 공중) 는 늘 자기를 민다
+			GrabRelation.Result pushed = GrabRelation.search(t, w.equals("R_CY2.WAD") ? 50 : 5, 130, true);
 			assertTrue(pushed.link() > free.link() + 5, w + " 원작 밀기로 첫 접촉은 설계 거리 밖: " + pushed + " / " + free);
 			assertTrue(pushed.contact() > 5f, w + ": " + pushed);
 			assertEquals(0f, pushed.error(), 1f, w + " 이벤트 19 끌기로 설계 관계 (±1): " + pushed);
@@ -133,7 +135,8 @@ class GrabRelationTest {
 			}
 			GrabRelation.Trial probe = t.get();
 			if (w.equals("R_CY2.WAD")) {
-				assertTrue(pushed.link() >= 45f, "사이클롭스 캡슐 경계 (영웅 쪽 수평 45.6, 사이클롭스 쪽 56.8): " + pushed);
+				// 캡슐 경계 (영웅 쪽 수평 45.6) 근처 — 밀기 후보는 질의 구에 닿는 사이클롭스 CDV 구가 있을 때만이라 (0x175648) 자세에 따라 조금 안쪽 (≈ 43)
+				assertTrue(pushed.link() >= 40f, "사이클롭스 캡슐 경계 근처: " + pushed);
 				CombatFile.Move m = probe.enemy().combat().data().move(240);
 				assertNotNull(SyncPull.linkedPullWindow(m, 0.5f), "적 240 이벤트 19 [0–0.86]");
 				assertNull(SyncPull.linkedPullWindow(m, 0.9f));

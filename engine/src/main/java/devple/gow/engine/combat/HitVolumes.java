@@ -143,6 +143,24 @@ public final class HitVolumes {
 	}
 
 	/**
+	 * 자기 CDV 의 현재 월드 구 (x, y, z, r) — 부착 무기 오브젝트 (별도 GO, 범주 +0xF4 = 0 → 0x80000000) 의 구는 뺀다.
+	 * 원작 충돌 세계 0x29C978 에 오른 생물 엔트리 = 이 구 하나씩 (경계 0x13A998 = 관절 행렬 × 로컬 중심, 반지름 × 관절 배율) [확실].
+	 * 첫 {@link #update} 전이면 null. 반환 배열은 내부 버퍼 (읽기만).
+	 */
+	public List<float[]> ownSpheres() {
+		if (!primed) {
+			return null; // 아직 포즈 없음 (첫 갱신 전) — 알 수 없음
+		}
+		List<float[]> out = new ArrayList<>();
+		for (int i = 0; i < srcs.size(); i++) {
+			if (srcs.get(i).attach == null) {
+				out.add(cur[i]);
+			}
+		}
+		return out;
+	}
+
+	/**
 	 * 공격 부위 part 의 구들이 이번 프레임 이동 중 상대의 몸(PartType 1) 구와 닿았는지 (스윕 판정).
 	 * 상대에 몸 구가 없으면 모든 구를 피격 볼륨으로 쓴다.
 	 */

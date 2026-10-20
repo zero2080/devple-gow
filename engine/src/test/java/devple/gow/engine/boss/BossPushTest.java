@@ -39,11 +39,20 @@ class BossPushTest {
 		assertEquals(11.2f, b.bodyRadius(), 1e-3f);
 		float d = heroPushedFrom(b, 5);
 		assertTrue(d > 15, "영웅이 메두사 캡슐 밖으로: " + d);
-		// 메두사도 자기 갱신에서 영웅 밖으로 자신을 민다
+		// 메두사도 자기 갱신에서 영웅 밖으로 자신을 민다 — 움직일 때만 (서 있으면 0x1EBB38 정지 → 밀지 않음)
+		b.setCrowd(List::of);
+		for (int i = 0; i < 120; i++) {
+			b.nav().rootMoved = false;
+			b.nav().update(b.pos, new Vector3f(), null, false, 1 / 60f); // 감속해 멈춤
+		}
+		assertEquals(0f, b.nav().speed(), 0f);
 		Vector3f heroPos = new Vector3f(b.pos).add(4, 0, 0);
 		BodyPush.Body hero = BodyPush.hero(heroPos, () -> false, null);
 		b.setCrowd(() -> List.of(hero, b));
 		Vector3f before = new Vector3f(b.pos);
+		b.nav().update(b.pos, new Vector3f(), null, false, 1 / 60f);
+		assertEquals(0f, flat(b.pos, before), 1e-4f, "서 있는 메두사는 자기를 밀지 않음");
+		b.nav().rootMoved = true; // 기술 루트 모션으로 움직이는 중
 		b.nav().update(b.pos, new Vector3f(), null, false, 1 / 60f);
 		assertTrue(flat(b.pos, before) > 5, "메두사가 밀려남 " + b.pos + " / " + before);
 	}
@@ -60,6 +69,7 @@ class BossPushTest {
 		BodyPush.Body hero = BodyPush.hero(heroPos, () -> false, null);
 		b.setCrowd(() -> List.of(hero, b));
 		Vector3f before = new Vector3f(b.pos);
+		b.nav().rootMoved = true; // 움직여도
 		b.nav().update(b.pos, new Vector3f(), null, false, 1 / 60f);
 		assertEquals(0f, flat(b.pos, before), 1e-4f, "BMI 는 자기를 밀지 않음");
 	}
@@ -72,8 +82,10 @@ class BossPushTest {
 		assertTrue(b.nav().noPush(), "Sold 250 +0x1C = 0x0E (비트 1)");
 		assertTrue(b.solid());
 		assertEquals(112f, b.nav().bodyRadius(), 1e-3f);
-		// 관절 상자: Sold +0xA4 BHA01JOCHEA1 (머리) 쪽으로 기준점이 옮겨짐
-		assertTrue(Math.hypot(b.refX(), b.refZ()) > 10, "머리 쪽 기준 이동 " + b.refX() + "," + b.refZ());
+		// 관절 상자 0x1E6DF0 은 플레이어 (+0x174 비트 31) 만 — Sold +0xA4 BHA01JOCHEA1 이 있어도 히드라는 Sold 상자 그대로
+		assertEquals(0f, b.refX(), 0f);
+		assertEquals(0f, b.refZ(), 0f);
+		assertEquals(112f, b.bodyRadius(), 1e-3f);
 	}
 
 	@Test

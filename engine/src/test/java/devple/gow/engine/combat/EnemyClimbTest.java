@@ -382,14 +382,15 @@ class EnemyClimbTest {
 	}
 
 	@Test
-	void deckSkeletonsDoNotStackOnEachOtherOrTheHero() throws Exception {
-		// 대상 없이 한 점에 쌓인 넷: 밀기 없으면 내내 겹침, 있으면 1 초 안에 갈라져 그대로
+	void deckSkeletonsSeparateOnlyWhenMoving() throws Exception {
+		// 대상 없이 한 점에 쌓인 넷: 밀기 없으면 내내 겹침. 밀기가 있어도 서 있는 생물은 자기를 밀지 않으므로 (0x1EBB38 정지 → 0x1E9470,
+		// 32 문서 §밀기 세부) 스폰 낙하 동안만 일부 갈라지고 나머지는 겹친 채 남는다 — 원작과 같음
 		int idleFree = deckCrowd(false, false), idlePushed = deckCrowd(true, false);
-		// 영웅을 둘러싸며 움직이는 넷 (포위 칸): 한 번 훑는 순차 밀어내기 (원작과 같이 자기만, 다른 몸 하나씩) 라 셋 이상 몰리면 한 프레임 남는 겹침은 있을 수 있다
+		// 영웅을 둘러싸며 움직이는 넷 (포위 칸): 움직이는 쪽이 자기를 밀어 갈라진다. 한 번 훑는 순차 밀어내기라 셋 이상 몰리면 한 프레임 남는 겹침은 있을 수 있다
 		int fight = deckCrowd(true, true);
 		System.out.println("deck crowd overlap idle " + idleFree + " → " + idlePushed + ", fighting " + fight);
 		assertTrue(idleFree > 6 * 400, "밀기 없음: 6 쌍 × 프레임 내내 " + idleFree);
-		assertEquals(0, idlePushed, "밀기: 겹침 없음");
+		assertTrue(idlePushed > 0 && idlePushed < idleFree, "서 있으면 겹친 채 남음 " + idlePushed);
 		assertTrue(fight < 10 * 420 / 100, "전투 중 1 % 미만 " + fight);
 	}
 

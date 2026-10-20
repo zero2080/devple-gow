@@ -508,14 +508,19 @@ public final class EnemyNav {
 			speed = target > speed ? Math.min(target, speed + rate) : Math.max(target, speed - rate);
 		}
 		pos.fma(speed * dt, heading); // 공중은 수평 속도 유지 (공중 조종 [근사])
+		boolean still = standing();
 		if (world == null) {
 			mode = Mode.GROUND;
 			float y = pos.y;
-			crowdPush(pos, null);
+			if (!still) {
+				crowdPush(pos, null);
+			}
 			pos.y = y; // 세계 없음 = 지상만: 바닥 붙이기 (0x1E3298) 대신 높이 유지 [근사]
 			return;
 		}
-		crowdPush(pos, null);
+		if (!still) {
+			crowdPush(pos, null);
+		}
 		// 벽 충돌 (0x1E2100, 생물 밀어내기 뒤): 허리 높이 구 [근사: 원작은 상자 모서리 레이]
 		float r = bodyRadius();
 		Vector3f c = new Vector3f(pos.x, pos.y + STEP + r, pos.z); // 구 아래 = 계단 높이 (턱은 넘음)
@@ -547,6 +552,21 @@ public final class EnemyNav {
 				noCatch = false;
 			}
 		}
+	}
+
+	/**
+	 * 이번 틱 루트 모션 변위가 있는지 ({@link EnemyFighter} 가 기술 루트 모션을 더할 때 세움 — 다음 이동 단계가 소비하는 변위, 0x1EC6D8).
+	 */
+	public boolean rootMoved;
+
+	/**
+	 * 정지 판정 (지상 이동 0x1EB3D8 끝 0x1EBB38–0x1EBBF4) [확실]: 지상 (+0x174 &amp; 1, 날기 0x40·벽/턱 0x30 아님, 플레이어 비트 31 아님) 이고
+	 * 발판 객체 +0x24C = 0, 속도 +0xE0 의 x·z = 0, 이번 변위 (루트 모션 + 내비) x·y·z = 0 이면 0x1EA5F0 (밀기·벽·바닥) 대신 0x1E9470 → <b>자기를 밀지 않는다</b>.
+	 * 다른 생물이 이 몸을 피해 자기를 미는 것은 그대로 (콜백은 상대의 정지를 보지 않음). 엔진: 내비 GROUND·날기 아님·속도 0·루트 변위 없음
+	 * [근사: 움직이는 발판 (+0x24C) 위 적은 엔진에 없음 — 정지로 본다].
+	 */
+	private boolean standing() {
+		return mode == Mode.GROUND && (caps & AiTemplate.CAP_FLY) == 0 && speed == 0 && !rootMoved;
 	}
 
 	/** 생물끼리 밀어내기 (0x1E2DD8). wallNormal = 벽 오르기 중이면 벽 법선. */

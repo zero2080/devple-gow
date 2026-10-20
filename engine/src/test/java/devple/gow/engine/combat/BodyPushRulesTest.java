@@ -89,6 +89,126 @@ class BodyPushRulesTest {
 		assertEquals(9.6f, b.radius, 1e-6f, "그 밖 (수영·붙잡기): Sold 상자");
 	}
 
+	/** CDV 구를 가진 고정 몸 (구는 월드 x, y, z, r). */
+	record Balls(Vector3f feet, float bodyRadius, float bodyHeight, float bodyBase, List<float[]> pushSpheres) implements BodyPush.Body {
+		public boolean airborne() {
+			return false;
+		}
+
+		public boolean solid() {
+			return true;
+		}
+	}
+
+	/**
+	 * 밀기 후보 = 질의 구 (기준점 + 위 × 키/2, 반지름 키/2 + R) 와 겹치는 상대 CDV 구 (0x11E8D0 → 0x175648) [확실]:
+	 * 캡슐이 겹쳐도 구가 질의 구에 닿지 않으면 콜백이 불리지 않고, 닿는 구 수만큼 콜백이 불린다.
+	 */
+	@Test
+	void pushCandidatesAreOverlappingCdvSpheres() {
+		// 영웅 (r 9.6, 키 35.2, 바닥 6.4) 발 (0,0,0) → 기준점 y −6.4, 질의 구 중심 (0, 11.2, 0), 반지름 27.2
+		BodyPush.Body hero = BodyPush.hero(new Vector3f(), () -> false, null);
+		// 상대 캡슐 r 20 은 겹치지만 CDV 구는 머리 위 높이 (y 100) 뿐 → 후보 아님
+		Balls tallHead = new Balls(new Vector3f(15, 0, 0), 20, 120, 0, List.<float[]>of(new float[]{15, 100, 0, 10}));
+		assertEquals(0, BodyPush.candidates(0, 11.2f, 0, 27.2f, tallHead));
+		Vector3f p = new Vector3f();
+		assertFalse(BodyPush.push(hero, p, List.of(tallHead), null), "CDV 구가 질의 구에 안 닿음 → 밀지 않음");
+		assertEquals(0f, p.x, 0f);
+		// 허리 높이 구 둘 → 후보 2 (콜백 두 번), 첫 번에 경계까지 밀려 결과는 한 번과 같다
+		Balls waist = new Balls(new Vector3f(15, 0, 0), 20, 120, 0, List.of(new float[]{15, 20, 0, 10}, new float[]{15, 30, 0, 10}));
+		assertEquals(2, BodyPush.candidates(0, 11.2f, 0, 27.2f, waist));
+		assertTrue(BodyPush.push(hero, p, List.of(waist), null));
+		Vector3f once = new Vector3f();
+		BodyPush.push(hero, once, List.of(new Balls(new Vector3f(15, 0, 0), 20, 120, 0, List.<float[]>of(new float[]{15, 20, 0, 10}))), null);
+		assertEquals(once.x, p.x, 1e-3f, "두 번째 콜백은 이미 경계 (R + r = 29.6) 라 그대로");
+		assertTrue(p.x < -14, "밀림 " + p);
+		// 구 정보 없는 몸 (시험 몸) 은 늘 후보
+		assertEquals(1, BodyPush.candidates(0, 0, 0, 1, new Fixed(new Vector3f(1000, 0, 0), 1, 1, 0, false)));
+	}
+
+	/** 해골 (R_SKS 020): 밀기 후보 구 = 자기 CDV 구 (첫 포즈 뒤), 관절 상자 없음 (Sold 상자 r 11.2 × 스케일). */
+	@Test
+	void skeletonCandidatesAreItsCdvSpheres() throws Exception {
+		Path rom = rom();
+		EnemyFactory.Kind k = EnemyFactory.load(rom.resolve("R_SKS.WAD"), WadFile.load(rom.resolve("R_PERMK.WAD")), -1);
+		EnemyFighter f = k.spawn(20);
+		f.holdAi = true;
+		f.update(1 / 60f);
+		List<float[]> sp = f.pushSpheres();
+		assertNotNull(sp);
+		assertFalse(sp.isEmpty());
+		assertEquals(f.nav().bodyRadius(), f.bodyRadius(), 0f, "적은 Sold 상자");
+		// 몸 옆 영웅 질의 구 (반지름 27.2) 는 구에 닿고, 멀리 있으면 후보가 아님
+		assertTrue(BodyPush.candidates(f.pos.x + 15, f.pos.y + 11.2f, f.pos.z, 27.2f, f) > 0);
+		assertEquals(0, BodyPush.candidates(f.pos.x + 500, f.pos.y + 11.2f, f.pos.z, 27.2f, f));
+	}
+
+	/** 서 있는 생물 (지상·속도 0·변위 0) 은 자기를 밀지 않는다 (0x1EBB38–0x1EBBF4 → 0x1EA5F0 대신 0x1E9470) — 움직이면 민다 [확실]. */
+	@Test
+	void standingCreatureDoesNotPushItself() {
+		List<BodyPush.Body> crowd = new ArrayList<>();
+		EnemyNavTest.Mob a = new EnemyNavTest.Mob(0, new Vector3f(100, 0, 200), crowd), b = new EnemyNavTest.Mob(0, new Vector3f(400, 0, 200), crowd);
+		for (int i = 0; i < 3; i++) { // 스폰 직후 공중 → 착지
+			a.tick(new Vector3f(), null);
+			b.tick(new Vector3f(), null);
+		}
+		assertEquals(EnemyNav.Mode.GROUND, b.nav.mode());
+		b.pos.set(a.pos).add(4, 0, 0);
+		for (int i = 0; i < 10; i++) {
+			a.tick(new Vector3f(), null);
+			b.tick(new Vector3f(), null);
+		}
+		assertEquals(4f, b.pos.x - a.pos.x, 1e-4f, "둘 다 서 있으면 겹친 채");
+		b.nav.rootMoved = true; // 기술 루트 모션 변위가 있는 틱
+		b.tick(new Vector3f(), null);
+		assertTrue(b.pos.x - a.pos.x > 20, "움직이는 b 는 a 밖으로 자기를 민다 " + b.pos);
+		b.nav.rootMoved = false;
+		b.pos.set(a.pos).add(4, 0, 0);
+		b.tick(new Vector3f(0, 0, 1), null); // 스틱 → 속도 ≠ 0
+		assertTrue(b.pos.x - a.pos.x > 20, "걸으면 민다 " + b.pos);
+	}
+
+	/**
+	 * 관절 상자 0x1E6DF0 의 조건 비트 [확실]: 동기 → 변위 전체 / 지상 (붙잡기 0x4000·착지 직후 0x800000 아님) → 관절 /
+	 * 공중은 기술 중이고 다이빙 0x100000·물 0x300·착지 직후 아닐 때만 관절, 아니면 5 번까지 이전 상자 유지 (0x29F0CC) 뒤 Sold / 물 0x380 은 유지.
+	 */
+	@Test
+	void jointBoxConditionBits() {
+		BodyPush.JointBox b = new BodyPush.JointBox();
+		float r = 9.6f, h = 35.2f;
+		// 인자: hasMove, sync, ground, air, attached, water, landed, diving
+		assertEquals(1, b.step(r, h, 0, -16, 0, new BodyPush.JointBox.State(false, false, true, false, false, false, false, false)));
+		assertEquals(14.4f, b.radius, 1e-4f, "지상: 관절 (기술 없어도)");
+		assertEquals(0, b.step(r, h, 0, -16, 0, new BodyPush.JointBox.State(false, false, true, false, true, false, false, false)));
+		assertEquals(9.6f, b.radius, 1e-6f, "붙잡기 0x4000: Sold");
+		assertEquals(0, b.step(r, h, 0, -16, 0, new BodyPush.JointBox.State(false, false, true, false, false, false, true, false)), "착지 직후: Sold");
+		assertEquals(2, b.step(r, h, 0, -16, 0, new BodyPush.JointBox.State(true, true, true, false, true, false, true, false)), "동기는 비트 무관");
+		assertEquals(17.6f, b.radius, 1e-4f);
+		// 공중 + 기술 → 관절
+		assertEquals(1, b.step(r, h, 0, -16, 0, new BodyPush.JointBox.State(true, false, false, true, false, false, false, false)));
+		assertEquals(14.4f, b.radius, 1e-4f);
+		// 공중 + 기술 없음 → 5 번 유지 뒤 Sold
+		BodyPush.JointBox.State airIdle = new BodyPush.JointBox.State(false, false, false, true, false, false, false, false);
+		for (int i = 0; i < 5; i++) {
+			assertEquals(3, b.step(r, h, 0, -16, 0, airIdle), "유지 " + i);
+			assertEquals(14.4f, b.radius, 1e-4f);
+		}
+		assertEquals(0, b.step(r, h, 0, -16, 0, airIdle));
+		assertEquals(9.6f, b.radius, 1e-6f, "6 번째: Sold");
+		// 다이빙 중 공중 기술 → 관절 아님 (카운터 5 그대로라 바로 Sold)
+		assertEquals(0, b.step(r, h, 0, -16, 0, new BodyPush.JointBox.State(true, false, false, true, false, false, false, true)));
+		// 지상으로 돌아오면 카운터 0 → 다시 공중 5 번 유지
+		b.step(r, h, 0, -16, 0, new BodyPush.JointBox.State(false, false, true, false, false, false, false, false));
+		assertEquals(3, b.step(r, h, 0, 0, 0, airIdle));
+		assertEquals(14.4f, b.radius, 1e-4f, "공중 첫 프레임은 지상 관절 상자 유지");
+		// 물: 그대로 (줄이지 않음)
+		assertEquals(3, b.step(r, h, 0, 0, 0, new BodyPush.JointBox.State(false, false, false, false, false, true, false, false)));
+		assertEquals(14.4f, b.radius, 1e-4f);
+		// 벽·턱·사다리·줄 (지상도 공중도 아님) → Sold
+		assertEquals(0, b.step(r, h, 0, -16, 0, new BodyPush.JointBox.State(true, false, false, false, false, false, false, false)));
+		assertEquals(9.6f, b.radius, 1e-6f);
+	}
+
 	/** Sold +0x1C 비트 1 (owner+0x2D8 비트 31) = 자기 이동에서 밀지 않음 — 상대에게는 여전히 단단함. */
 	@Test
 	void noPushBitSkipsOwnPushOnly() {
