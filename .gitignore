@@ -12,3 +12,6 @@ build/
 
 # Claude Code worktrees
 .claude/
+
+# LWJGL 네이티브 캐시
+.lwjgl/
