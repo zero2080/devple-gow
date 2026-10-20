@@ -183,7 +183,8 @@ public final class LevelFx implements AutoCloseable {
 			return;
 		}
 		if (bgQuad == null) {
-			float r = 0.05f, g = 0.04f, b = 0.04f; // Renderer.beginFrame 지움 색
+			float r = devple.gow.engine.render.Renderer.CLEAR_R, g = devple.gow.engine.render.Renderer.CLEAR_G,
+					b = devple.gow.engine.render.Renderer.CLEAR_B; // 원작 지움 색 (검정, 0x29CF64)
 			float[] v = new float[4 * devple.gow.engine.render.Mesh.STRIDE];
 			float[][] xy = {{-1, -1}, {1, -1}, {1, 1}, {-1, 1}};
 			for (int i = 0; i < 4; i++) {
