@@ -410,6 +410,55 @@ public final class CameraRig {
 				s == null || s.cam == null ? null : levelOf(s.cam), p, s == null ? -1 : s.t);
 	}
 
+	/**
+	 * 이음 도착 재현 (`--arrive FROM@x,y,z`, 넘겨받은 카메라 상태 없음) 전용 [근사: 하네스]. 원작은 이음에서 카메라 관리자가 그대로라 (0x29F16C)
+	 * 도착점에 CMV 후보가 없으면 떠나온 레벨에서 쓰던 카메라가 남는다 (0x1EE8E0: 후보 0 이면 현재 상태 유지). 그 상태가 없으므로 도착점에서 가장 가까운
+	 * (반지름 16 단위 수평 고리 ≤ 512, 위 ≤ 1024 · 아래 ≤ 256) 떠나온 레벨 CMV 후보 자리 — 걸어·떨어져 들어온 쪽 — 에서 먼저 한 번 고른다. 도착점에 후보가 있으면 아무것도 하지 않는다.
+	 * 첫 {@link #update} 전에 부른다. 반환 = 고른 자리 (없으면 null).
+	 */
+	public Vector3f seedApproach(Vector3f hero, float heroYaw, LevelData from) {
+		if (from == null || !shots.isEmpty() || hasCandidate(new Vector3f(hero).add(0, TARGET_HEIGHT, 0), null)) {
+			return null;
+		}
+		for (float r = 16; r <= 1024; r += 16) {
+			for (int k = 0; k < 34; k++) { // 수평 고리 32 + 바로 위·아래 (떨어져 들어온 걷기 도착: HDES01D Dcam11 → HDES01E; 아래는 짧게 — HDES01D ← 01C 의 1024 아래 ClimbCam3 제외)
+				double a = k * Math.PI / 16;
+				Vector3f p = k < 32 ? new Vector3f(hero.x + (float) (r * Math.sin(a)), hero.y, hero.z + (float) (r * Math.cos(a)))
+						: new Vector3f(hero.x, hero.y + (k == 32 ? r : -r), hero.z);
+				if ((k < 32 && r > 512) || (k == 33 && r > 256) || !hasCandidate(new Vector3f(p).add(0, TARGET_HEIGHT, 0), from)) {
+					continue;
+				}
+				update(0, p, heroYaw, false);
+				return p;
+			}
+		}
+		return null;
+	}
+
+	/** 점 t (대상 높이) 를 포함하는 켜진 CMV 가 있는지 (only = 그 레벨만, null = 두 슬롯 모두), 상태 마스크 통과. */
+	private boolean hasCandidate(Vector3f t, LevelData only) {
+		int mask = stateMask(heroBits, heroCombat);
+		for (LevelData lv : only != null ? List.of(only) : other != null ? List.of(data, other) : List.of(data)) {
+			for (LevelData.PlacedVolume v : lv.volumes) {
+				if (v.hull().kind != 1 || disabled.contains(v.owner().toLowerCase())) {
+					continue;
+				}
+				float[] l = new float[3];
+				Mat4.transformPoint(v.inverse(), t.x, t.y, t.z, l);
+				for (int i = 0; i < v.hull().hulls.size(); i++) {
+					if (inside(v.hull().hulls.get(i), l)) {
+						String n = v.hull().nameOf(i);
+						LevelData.PlacedCamera c = n == null ? null : lv.camera(n) != null ? lv.camera(n) : camera(n);
+						if (c != null && (c.def().p().flags() & mask) != 0) {
+							return true;
+						}
+					}
+				}
+			}
+		}
+		return false;
+	}
+
 	/** {@link #handoff()} 를 이어받는다 (새 레벨 장면의 첫 갱신 전). */
 	public void resume(Handoff h) {
 		active.clear();

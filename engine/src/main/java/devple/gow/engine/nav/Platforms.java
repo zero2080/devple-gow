@@ -203,6 +203,42 @@ public final class Platforms {
 		return bodies;
 	}
 
+	/** 오브젝트 애니 상태 (이음 넘기기: 떠나온 레벨은 원작에서 다른 슬롯에 그대로 남는다, 43 §13.8). */
+	public record State(String owner, String anim, float time, float rate, boolean playing, boolean loop, boolean pingPong) {
+	}
+
+	/** 애니가 한 번이라도 걸린 오브젝트의 상태. */
+	public List<State> states() {
+		List<State> out = new ArrayList<>();
+		for (Body b : bodies) {
+			if (b.anim != null) {
+				out.add(new State(b.owner, b.anim.name, b.time, b.rate, b.playing, b.loop, b.pingPong));
+			}
+		}
+		return out;
+	}
+
+	/** {@link #states()} 를 되살린다 (같은 레벨의 새 Platforms). */
+	public void restore(List<State> states) {
+		for (State s : states) {
+			Body b = body(s.owner());
+			if (b == null || b.anims == null) {
+				continue;
+			}
+			Animation a = b.anims.find(s.anim());
+			if (a == null) {
+				continue;
+			}
+			b.anim = a;
+			b.time = s.time();
+			b.rate = s.rate();
+			b.playing = s.playing();
+			b.loop = s.loop();
+			b.pingPong = s.pingPong();
+			b.pose();
+		}
+	}
+
 	public Body body(String owner) {
 		for (Body b : bodies) {
 			if (b.owner.equalsIgnoreCase(owner)) {
@@ -432,10 +468,21 @@ public final class Platforms {
 	 */
 	public Body settleUnder(Vector3f p, float tol) {
 		int[] j = new int[1];
+		// 생성 스크립트가 이미 재생 중인 발판 (PAND05B 시작 엘리베이터: 생성 센서 → Animator "!0", t=0 윗면 281 = Start 282) 은 그 자세가
+		// 도착점을 받치면 그대로 둔다 — 시간을 맞춰 멈추면 원작 하강 연출이 사라진다 (43 §13.8)
 		for (Body b : bodies) {
-			if (b.anims == null) {
+			if (b.playing && b.anim != null && !Float.isNaN(b.top(p.x, p.y + tol, p.z, 2 * tol, j))) {
+				return b;
+			}
+		}
+		for (Body b : bodies) {
+			if (b.anims == null || b.playing) {
 				continue;
 			}
+			Animation a0 = b.anim; // 맞지 않으면 원래 상태로 (이음으로 넘겨받은 열린 문 등, 43 §13.8)
+			float t0 = b.time;
+			boolean p0 = b.playing;
+			float[][] j0 = b.joints;
 			for (Animation a : b.anims.all()) {
 				for (float t = a.duration; t >= 0; t -= Math.max(a.duration / 60f, 1 / 30f)) {
 					b.anim = a;
@@ -449,8 +496,10 @@ public final class Platforms {
 					}
 				}
 			}
-			b.anim = null;
-			b.joints = LevelLayout.jointWorld(b.skeleton, b.inst);
+			b.anim = a0;
+			b.time = t0;
+			b.playing = p0;
+			b.joints = a0 == null ? LevelLayout.jointWorld(b.skeleton, b.inst) : j0;
 			b.prev = b.joints;
 		}
 		return null;
