@@ -673,15 +673,16 @@ ATHN07B (화면 전체), ATHN06B (방 안이 흐린 벽), PAND03I (주황 판) �
   +0x28 doubleSided, +0x2C SheetFX, +0x30 PartType. 평면마다 재질 번호 (BallHull off[9]) 가 따로 있다.
 - 충돌 질의 0x139218 (BallHull vtable 0x2BF3A0) 은 맞은 평면의 재질 (인스턴스 +0x70 = off[9] → +0x4C + 번호 × +0x48) bitfield0 (오프셋 [0x29C97C] = 스키마 "bitfield0")
   을 **질의 제외 마스크 0x3309F4** 와 AND — 0 이 아니면 그 면을 버리고 다음 후보 (0x1397A4). 시트 면 (0x16C3B8) 도 같은 검사.
-- 영웅 질의의 제외 마스크: 바닥 0x1E3298 · 몸 0x1E2100 = 호출 마스크 | 0x1010042 (Water·Death·AIBlock·GeneralGuide) | (영웅 +0x258 & 0x4300000).
+- 영웅 질의의 제외 마스크: 바닥 0x1E3298 = 호출 마스크 | 0x1010042 (Water·Death·AIBlock·GeneralGuide) | (영웅 +0x258 & 0x4300000).
+  (정정, 38 §18.4: 몸 0x1E2100 의 고정 부분은 0x10042 — GeneralGuide 없음.)
   영웅 +0x258 = 0x500000 (Player 생성 0x1D63E0) → NoPlayerCollision. 바닥 호출 마스크 0x8020000 (0x1C58D8 · 0x1CA1D8 …) = ClimbGuide · CombatGuide.
   → **이름 규칙 폐기**: 바닥 = 수직 선분이 들어가는 평면 재질이 제외 마스크에 안 걸림. 바닥 속성도 그 재질 (Slide·Narrow 발판은 그대로 미끄럼·균형).
 - 전 레벨 Animator CDV 발판 253 개 (윗면 법선 y > 0.7 인 hull 기준, `platforms_old_new.tsv`): 바뀐 것 144 — 늘어남 140 (전부 0 → 있음 121: PAND04F goelevator,
   PAND02C gocagelift2 · gocageelevator, 문·DMC 결계 윗면 …, 일부 → 전부: PAND04AA goelevatorlift 2/3 → 3/3, PAND02I goplat1–4 4/8 → 8/8, PAND02H 칼날 3/9 → 9/9,
   PAND00D 분쇄기 2/8 → 8/8 …), 줄어듦 4 (ATHN08B 세 벽 GeneralGuide 윗면, PAND04G goblocktranslatebg 의 NoPlayerCollision hull). ARENA27 goriseplat 은 전후 같음
   (groundR hull 이 받침, lambert hull 8 개는 NoPlayerCollision). 불 함정 DamageMat 은 NoPushPullCollision 만이라 영웅에게는 단단한 면.
-- 벽 (구 밀어내기): hull 의 모든 평면이 제외 마스크면 밀지 않는다. 단 GeneralGuide 만은 남긴다 [근사: 0x1E2100 도 제외하지만 ATHN01B goplayerblock "guideMat",
-  ATHN01E 꼬리 막이 등 플레이어를 막는 이름이 GeneralGuide — 따로 막는 질의가 있을 수 있음, 미확인]. 충돌 끔 (Vis Attr11_0 = 2) 인 GO 는 바닥도 아니다.
+- 벽 (구 밀어내기): hull 의 모든 평면이 제외 마스크면 밀지 않는다. 단 GeneralGuide 만은 남긴다 [확실: 38 §18.4 — 몸 질의 0x1E2100 의 마스크는 0x10042 | 호출 (0x20000 · 0x8000000 · 0x20000000)
+  로 GeneralGuide 를 빼지 않는다. ATHN01B goplayerblock "guideMat", ATHN01E 꼬리 막이 = 보이지 않는 막이 벽]. 충돌 끔 (Vis Attr11_0 = 2) 인 GO 는 바닥도 아니다.
 - **ATHN02A ← ATHN01F**: Warp_Jump 0x1B2E08 은 Start 월드 행렬 (0x1A9CD0 = 엔티티 × goshiptrans 관절 1) 로 SetMatrix 만 한다 — 배에 부모로 붙이지 않는다.
   goshiptrans 애니 (10.4 초) 는 관절 이동이 없고 CDV 는 생성 때 끔 (CDsOff) → 10 초 뒤 CDsOn. 도착점 바로 아래 (−623.8, 도착점 −624.1) 는
   **정박한 배 goshipgroup** (Animator 없는 CDV GO, 사다리·아테나 석상 Mime) 의 갑판이다. 엔진은 Animator·R1 오브젝트의 CDV 만 충돌에 넣어 −800 수로 바닥으로 떨어졌다.

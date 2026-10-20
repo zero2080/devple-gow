@@ -90,13 +90,19 @@ public final class AiData {
 	/**
 	 * 줄·짚라인·점프 Sold 필드 (m/s, 38 문서 §2.2 — 영웅과 같은 오프셋).
 	 *
-	 * @param jump     +0xC4 점프 수직 초속 (0x1E9E88) — 매단 줄에서 놓을 때 (AI 점프 버튼 0x1CF1C8)
+	 * @param jump     +0xC4 점프 수직 초속 (0x1E9E88)
 	 * @param zipSpeed +0x160 짚라인 목표 속도 / {@code zipAccel} +0x164 가속 (0x1C60F8 → 0x1E5FE0, 스틱 무관 · 낮은 끝으로)
 	 * @param climb    +0x138 매단 줄 오르내리기 (0x1C6578, × 스틱 — AI 스틱은 0 이라 쓰지 않음)
+	 * @param ropeJumpUp  +0x140 매단 줄 × 뛰어내리기 위 (0x1C55F4, 영웅과 같은 코드 — 전 적 Sold 53 개 모두 14) [확실]
+	 * @param ropeJumpOut +0x144 매단 줄 × 뛰어내리기 앞 (0x1C561C) [확실]
 	 */
-	public record Ride(float jump, float zipSpeed, float zipAccel, float climb) {
+	public record Ride(float jump, float zipSpeed, float zipAccel, float climb, float ropeJumpUp, float ropeJumpOut) {
 		/** Sold 가 없을 때 (크라토스 값). */
-		public static final Ride DEFAULT = new Ride(15.25f, 20f, 10f, 1.5f);
+		public static final Ride DEFAULT = new Ride(15.25f, 20f, 10f, 1.5f, 14f, 14f);
+
+		public Ride(float jump, float zipSpeed, float zipAccel, float climb) {
+			this(jump, zipSpeed, zipAccel, climb, 14f, 14f);
+		}
 	}
 
 	/** BlockMod 항목 하나 (0x19BEF0): 영웅 기술, 최소 횟수, 최소 방어 %, 한계 횟수. */
@@ -145,7 +151,8 @@ public final class AiData {
 					ByteBuffer sb = soldStruct(t.data(), 0x240);
 					if (sb != null) {
 						bodies.put(sid, new Body(sb.getFloat(0x234), sb.getFloat(0x238), sb.getFloat(0x23C), sb.getInt(0x1C), cstr(sb, 0xA4)));
-						rides.put(sid, new Ride(sb.getFloat(0xC4), sb.getFloat(0x160), sb.getFloat(0x164), sb.getFloat(0x138)));
+						rides.put(sid, new Ride(sb.getFloat(0xC4), sb.getFloat(0x160), sb.getFloat(0x164), sb.getFloat(0x138),
+								sb.getFloat(0x140), sb.getFloat(0x144)));
 					}
 				}
 			} catch (RuntimeException e) {

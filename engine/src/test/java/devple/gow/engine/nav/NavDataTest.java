@@ -497,6 +497,49 @@ class NavDataTest {
 		assertEquals(0, wallWalkSpots("ATHN06B", false)[0], "평균대 옆면은 벽 걷기 아님");
 	}
 
+	/**
+	 * 좁은 턱 윗면 (Narrow·NarrowNoBB 바닥) 에 공중에서 매달리기 = 0x1E3EE8 경로 (38 §18.1). 윗면 삼각형마다 수평 4 방향으로 떨어져
+	 * 손 높이를 지나며 턱 질의 — 잡힌 윗면 수 / 전체 (발 = 턱 − 35.2).
+	 */
+	@Test
+	void narrowLedgeTopsCatchFallingHero() throws Exception {
+		int[] a06 = narrowTopCatches("ATHN06B");
+		int[] p3e = narrowTopCatches("PAND03E");
+		int[] ar8 = narrowTopCatches("ARENA08");
+		System.out.printf("좁은 턱 윗면 잡힘: ATHN06B %d/%d, PAND03E %d/%d, ARENA08 %d/%d%n", a06[0], a06[1], p3e[0], p3e[1], ar8[0], ar8[1]);
+		assertArrayEquals(new int[] {88, 88}, a06, "ATHN06B 평균대 윗면 (Narrow) 모두");
+		assertArrayEquals(new int[] {59, 59}, p3e, "PAND03E 평균대 윗면 (Narrow) 모두");
+		assertEquals(160, ar8[0], "ARENA08 NarrowNoBB 기둥 윗면 (가장자리에 닿는 삼각형)");
+	}
+
+	private static int[] narrowTopCatches(String lv) throws Exception {
+		LevelCollision c = new LevelCollision(level(lv).sheets);
+		NavWorld w = new NavWorld(c);
+		HeroNavigator nav = new HeroNavigator(new HeroNavigatorTest.Body(), w, null);
+		int caught = 0, total = 0;
+		for (LevelCollision.Tri t : c.triangles()) {
+			if (t.n().y < 0.85f || !HeroNavigator.narrowLedge(t) || !t.solidForPlayer()) {
+				continue;
+			}
+			total++;
+			Vector3f ctr = new Vector3f(t.a()).add(t.b()).add(t.c()).div(3);
+			search:
+			for (int k = 0; k < 4; k++) {
+				Vector3f d = new Vector3f((float) Math.sin(k * Math.PI / 2), 0, (float) Math.cos(k * Math.PI / 2));
+				for (float r = 6; r <= 40; r += 2) {
+					Vector3f feet = new Vector3f(ctr).fma(r, d).sub(0, HeroNavigator.HANG + 0.6f, 0);
+					HeroNavigator.Ledge l = nav.probeLedge(feet, new Vector3f(feet).add(0, 0.5f, 0), new Vector3f(d).negate(), null);
+					if (l != null && HeroNavigator.narrowLedge(l.top())) {
+						assertEquals(l.y() - HeroNavigator.HANG, l.feet().y, 1e-3f);
+						caught++;
+						break search;
+					}
+				}
+			}
+		}
+		return new int[] {caught, total};
+	}
+
 	/** 레벨의 좁은 턱 벽 면마다 법선 쪽 12 앞 바닥에서 벽 쪽으로 걸어 본다: {붙음, 붙고 0.5 초 옆으로 걸음}. */
 	private static int[] wallWalkSpots(String lv, boolean back) throws Exception {
 		LevelCollision c = new LevelCollision(level(lv).sheets);

@@ -209,9 +209,11 @@ class EnemyNavTest {
 
 	@Test
 	void hangingRopeReleasesTowardGoalAwayFromAnchor() {
-		// 매단 줄: 목표가 아래이고 매단 점에서 수평 16 넘게 떨어져 있으면 놓음, 바로 밑이면 매달려 있음 (0x1CFD90)
+		// 매단 줄: 목표가 아래이고 매단 점에서 수평 16 넘게 떨어져 있으면 점프 버튼, 바로 밑이면 매달려 있음 (0x1CFD90).
+		// 점프 버튼 → 영웅과 같은 0x1C5488: 전역 0x29DBF8 > 0.5 일 때만 (적이 잡으면 0, 플레이어의 줄 갱신만 더함) [확실]
 		EnemyNav.Rope hang = new EnemyNav.Rope(new Vector3f(0, 200, 60), new Vector3f(0, 60, 60));
 		assertEquals(0, hang.sub(), "수직 = 매단 줄");
+		float[] clock = {3f};
 		EnemyNav n = new EnemyNav(AiTemplate.CAP_ROPE, SKEL, 1000);
 		n.setWorld(new EnemyNav.World() {
 			public float ground(float x, float y, float z, float drop) {
@@ -225,10 +227,19 @@ class EnemyNavTest {
 			public EnemyNav.Rope rope(Vector3f p, float r) {
 				return hang;
 			}
+
+			public float ropeClock() {
+				return clock[0];
+			}
+
+			public void ropeGrabbed() {
+				clock[0] = 0;
+			}
 		});
 		Vector3f p = new Vector3f(0, 100, 60);
 		n.update(p, new Vector3f(), null, false, DT);
 		assertEquals(EnemyNav.Mode.ROPE, n.mode());
+		assertEquals(0f, clock[0], "잡으면 0x29DBF8 = 0 (0x1C5D98)");
 		assertEquals(0, n.combatMask());
 		for (int i = 0; i < 30; i++) {
 			n.update(p, new Vector3f(), new Vector3f(5, 0, 60), false, DT);
@@ -236,24 +247,85 @@ class EnemyNavTest {
 		assertEquals(EnemyNav.Mode.ROPE, n.mode(), "목표가 매단 점 바로 밑 → 매달림");
 		float fx0 = (float) -Math.sin(n.ropeYaw());
 		assertTrue(fx0 > 0.7f, "가까운 목표(+x) 쪽으로는 돌았지만 (정렬) 매단 점에서 16 안이라 놓지 않음");
-		// 반대쪽 수평 80 > 16: 몸 정면(+x) 과 목표 방향(−x) 이 180° → 먼저 회전 입력 (1,0,0) 으로 돌고 (0x1CFEFC), 45° 안에 들면 점프 (0x1CFEE8)
+		// 반대쪽 수평 80 > 16: 몸 정면(+x) 과 목표 방향(−x) 이 180° → 먼저 회전 입력 (1,0,0) 으로 돌고 (0x1CFEFC), 45° 안에 들면 점프 버튼 (0x1CFEE8)
 		Vector3f goal = new Vector3f(-80, 0, 60);
-		int frames = 0;
-		while (n.mode() == EnemyNav.Mode.ROPE && frames++ < 120) {
+		int aligned = -1;
+		for (int frames = 1; frames <= 120; frames++) {
 			n.update(p, new Vector3f(), goal, false, DT);
 			assertEquals(0f, p.x, 1e-3, "매달린 동안 스틱 0 — 줄 위 제자리");
+			if (aligned < 0 && -Math.sin(n.ropeYaw()) < -0.7f) {
+				aligned = frames;
+			}
 		}
-		assertEquals(EnemyNav.Mode.AIR, n.mode(), "수평 80 > 16 → 놓음");
 		// 매단 줄 위 몸 방향 = 줄 축 4 방향 (0x1C6858): +x → +z → −x 두 번 90° (번호 + 1), 한 번에 보간 22 프레임 (0.1 × 1.1111^k → 1, 0x1E0DC0)
-		// → 첫 회전 22 프레임 + 둘째 회전에서 보이는 몸이 −x 45° 안에 드는 몇 프레임 ≈ 43
-		assertTrue(frames > 36 && frames < 50, "정렬까지 프레임 " + frames);
+		assertTrue(aligned > 36 && aligned < 50, "정렬까지 프레임 " + aligned);
+		assertEquals(EnemyNav.Mode.ROPE, n.mode(), "0x29DBF8 = 0 (영웅이 줄에 없음) → × 가 먹지 않아 매달린 채");
+		// 영웅이 다른 줄에 0.5 초 넘게 매달려 시계가 흐르면 같은 점프 버튼으로 뛰어내린다
+		clock[0] = 0.6f;
+		n.update(p, new Vector3f(), goal, false, DT);
+		assertEquals(EnemyNav.Mode.AIR, n.mode(), "수평 80 > 16 → 뛰어내림");
+		assertEquals(224f, n.speed(), 1e-3, "앞 = Sold+0x144 14 m/s (전 근사 40 폐기)");
 		float fx = (float) -Math.sin(n.ropeYaw()), fz = (float) -Math.cos(n.ropeYaw());
-		assertTrue(fx < -0.7f && Math.abs(fz) < 0.72f, "목표 쪽 45° 안 " + fx + "," + fz);
+		assertTrue(fx < -0.99f && Math.abs(fz) < 0.01f, "정면 = 줄 축 후보 (−x) " + fx + "," + fz);
+		float y0 = p.y, top = p.y;
 		for (int i = 0; i < 240 && n.mode() != EnemyNav.Mode.GROUND; i++) {
 			n.update(p, new Vector3f(), null, false, DT);
+			top = Math.max(top, p.y);
 		}
 		assertEquals(EnemyNav.Mode.GROUND, n.mode());
+		// 위 Sold+0x140 14 m/s = 224 → 정점 ≈ 224² / (2 × 800) = 31.4 (전 근사: 점프 Sold+0xC4 17 → 272)
+		assertEquals(224f * 224f / (2 * EnemyNav.GRAVITY), top - y0, 2f);
 		assertTrue(p.x < -20f, "정면으로 뛰어내림 x=" + p.x);
+	}
+
+	@Test
+	void traverseRopeEnemyHangsOnSharedSagSim() {
+		// 양끝 고정 수평 줄 (SCR f1): 적도 영웅과 같은 줄 오브젝트 시뮬레이션에 매달린다 (0x218200 / 0x2184E8) — 무게 최대 10 으로 처지고 손 = 줄 위 점
+		devple.gow.engine.nav.NavRope nr = new devple.gow.engine.nav.NavRope("gorope8", devple.gow.tools.level.RopeDef.Type.TRAVERSE, 0, 25f,
+				new Vector3f(-200, 130, 60), new Vector3f(200, 130, 60));
+		devple.gow.engine.nav.RopeSim sim = devple.gow.engine.nav.RopeSim.fixed(nr.top(), nr.end(), nr.joints());
+		EnemyNav.Rope r = new EnemyNav.Rope(nr.top(), nr.end(), EnemyNav.SUB_TRAVERSE, nr.axis(), nr.dirs(), nr);
+		float[] clock = {5f};
+		EnemyNav n = new EnemyNav(AiTemplate.CAP_ROPE, SKEL, 1000);
+		n.setWorld(new EnemyNav.World() {
+			public float ground(float x, float y, float z, float drop) {
+				return WORLD.ground(x, y, z, drop);
+			}
+
+			public EnemyNav.WallHit wall(Vector3f o, Vector3f dir, float dist) {
+				return null;
+			}
+
+			public EnemyNav.Rope rope(Vector3f p, float rr) {
+				Vector3f q = r.point(r.closest(p));
+				return q.distance(p) <= rr ? r : null;
+			}
+
+			public devple.gow.engine.nav.RopeSim sim(devple.gow.engine.nav.NavRope x) {
+				return x == nr ? sim : null;
+			}
+
+			public void ropeGrabbed() {
+				clock[0] = 0;
+			}
+		});
+		Vector3f p = new Vector3f(0, 130 - EnemyNav.HAND - 4, 60);
+		n.update(p, new Vector3f(), null, false, DT);
+		assertEquals(EnemyNav.Mode.ROPE, n.mode());
+		assertEquals(0f, clock[0], "적이 잡아도 0x29DBF8 = 0");
+		assertTrue(sim.attached(), "적이 줄 오브젝트에 매달림");
+		for (int i = 0; i < 240; i++) {
+			sim.update(DT);
+			n.update(p, new Vector3f(), null, false, DT);
+		}
+		assertEquals(sim.maxWeight(), sim.weight(), 1e-3, "무게 → 최대 10 (양끝 고정, 0x216D84)");
+		Vector3f hand = sim.pointAt(sim.dist(), new Vector3f()).mul(1);
+		assertEquals(hand.y - EnemyNav.HAND, p.y, 1e-3, "몸 = 시뮬레이션 줄 위 손 − 손 높이");
+		assertTrue(p.y < 130 - EnemyNav.HAND - 0.5f, "가운데가 처짐 y=" + p.y);
+		// 목표가 가파르게 아래 → × (0x1CFCE0) → 수평 줄은 비트 31 이 아니라 시간 조건 없이 놓음 (0x1C552C → 0x1E9030(2))
+		n.update(p, new Vector3f(), new Vector3f(p.x, -200, 60), false, DT);
+		assertEquals(EnemyNav.Mode.AIR, n.mode());
+		assertFalse(sim.attached(), "놓으면 매달림 해제 (0x218270)");
 	}
 
 	@Test
@@ -321,7 +393,7 @@ class EnemyNavTest {
 	}
 
 	@Test
-	void ziplineJumpsOffWhenGoalSteeplyBelow() {
+	void ziplineIgnoresJumpWhenGoalSteeplyBelow() {
 		EnemyNav.Rope zip = new EnemyNav.Rope(new Vector3f(-300, 300, 60), new Vector3f(1300, 100, 60), EnemyNav.SUB_ZIPLINE);
 		EnemyNav n = new EnemyNav(AiTemplate.CAP_ZIPLINE, SKEL, 1000);
 		n.setWorld(ropeWorld(zip));
@@ -331,10 +403,14 @@ class EnemyNavTest {
 			n.update(p, new Vector3f(), null, false, DT);
 		}
 		assertEquals(EnemyNav.Mode.ROPE, n.mode());
-		// 목표가 거의 바로 아래 (Δy < −16, 45° 보다 가파름) → 점프 버튼 (수평 줄과 같은 AI 분기 0x1CFCE0)
-		n.update(p, new Vector3f(), new Vector3f(p.x + 20, 0, 60), false, DT);
-		assertEquals(EnemyNav.Mode.AIR, n.mode());
-		assertTrue(n.speed() > 0, "짚라인 속도로 날아감 [근사]");
+		// 목표가 거의 바로 아래 (Δy < −16, 45° 보다 가파름) → AI 는 점프 버튼 (수평 줄과 같은 분기 0x1CFCE0) 을 누르지만
+		// 줄 갱신 0x1C5488 이 짚라인 (0x40000) 이면 바로 돌아간다 (영웅과 같은 코드) → 계속 탄다 [확실]
+		float x0 = p.x;
+		for (int i = 0; i < 10; i++) {
+			n.update(p, new Vector3f(), new Vector3f(p.x + 20, 0, 60), false, DT);
+		}
+		assertEquals(EnemyNav.Mode.ROPE, n.mode());
+		assertTrue(p.x > x0, "낮은 끝으로 계속");
 	}
 
 	@Test
