@@ -163,6 +163,9 @@ public final class AnimatedModel implements AutoCloseable {
 
 	private final float[] colorScale = {1, 1, 1};
 
+	/** 마지막 draw 의 라이트 묶음 (없으면 null) — 디버그 출력용. */
+	public devple.gow.engine.light.LightRig lastLights;
+
 	/**
 	 * 머티리얼 ANM 을 적용해 그린다 (이펙트 GO, 40 문서 §5): fxTime ≥ 0 이면 파트 머티리얼의 UV 스크롤(레이어 0)과
 	 * 불투명도(hdr8 = p28)를 시간 fxTime 으로, alpha 는 전체 불투명도 배율 (페이드 아웃).
@@ -180,6 +183,14 @@ public final class AnimatedModel implements AutoCloseable {
 		shader.set("uClipPlane", cp != null ? cp[0] : 0f, cp != null ? cp[1] : 0f, cp != null ? cp[2] : 0f, cp != null ? cp[3] : 0f);
 		shader.set("uModel", world);
 		shader.set("uTex", 0);
+		// 동적 라이트 (47 문서): 렌더 플래그 0x800 모델만 (원작 0x15986C), 구 = 관절 AABB [근사]
+		if ((model.renderFlags & devple.gow.engine.light.LightUniforms.LIT) != 0 && devple.gow.engine.light.LightServer.current() != null) {
+			org.joml.Vector4f sph = devple.gow.engine.light.LightServer.jointSphere(w, world, new org.joml.Vector4f());
+			lastLights = devple.gow.engine.light.LightUniforms.apply(shader, model.renderFlags, new org.joml.Vector3f(sph.x, sph.y, sph.z), sph.w);
+		} else {
+			devple.gow.engine.light.LightUniforms.off(shader);
+			lastLights = null;
+		}
 		// 패스 0 = OPAQUE + CUTOUT(알파 ≥ 0.75, 깊이 쓰기), 패스 1 = CUTOUT 가장자리 + ALPHA/ADD/SUB (깊이 쓰기 끔) — Renderer.draw 와 동일
 		for (int pass = 0; pass < 2; pass++) {
 			Boolean lastLocal = null;

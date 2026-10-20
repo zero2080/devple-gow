@@ -120,7 +120,7 @@ PAND03A WaterCam1/3/4/5·PoolLvrCam·PoolCam12/14/16 (4 bloodGel, 피 웅덩이)
 
 ### 2.3 남은 것
 - ~~궤적·사슬 렌더, god 머티리얼·God Mode Trail Tint, 보통 블레이드 불꽃 이미터~~ → §3.
-- LeftBladeLight / RightBladeLight (LGT) 라이트: 켜고 끄는 규칙은 §3.5 에서 해독, 엔진에 동적 라이트가 없어 미구현.
+- ~~LeftBladeLight / RightBladeLight (LGT) 라이트~~ → 47 문서 §4 (위치 = 블레이드 − Z × 8, 세기 램프 §3.5).
 
 ## 3. 블레이드 사슬 · 궤적 (`game/BladeChain`, `render/BladeChainRenderer`, `HeroRig.tickBlades/drawChains`)
 
@@ -181,7 +181,7 @@ PAND03A WaterCam1/3/4/5·PoolLvrCam·PoolCam12/14/16 (4 bloodGel, 피 웅덩이)
 - `BladeChainRenderer`: 무기 WAD 의 MAT_chainlink/chainglow/swordtrail (god 이면 MAT_god*), 파티클 셰이더, 깊이 검사만 (쓰기 없음), 컬링 끔. 영웅 다음에 그린다 (거울 패스에는 없음).
 - `MagicFx`: 보통 블레이드도 goMAIblade GO 를 붙여 이미터만 (`hideMesh`, 메시는 BladeModels), god 판과 같이 `emitterOff` = flame 이미터는 `Combatant.trail(side)` 일 때만.
 - `-Dgow.nochain` 사슬·궤적 끔 (비교용).
-- [근사] 0x1FAFC8 블레이드 벽 충돌, 그림자 띠, BladeLight 라이트 (엔진에 동적 라이트 없음), CombatFileSet "Trail Left/Right" 세트 플래그, GS CLAMP 미확인이라 궤적 V 는 아래 줄 텍셀 중심.
+- [근사] 0x1FAFC8 블레이드 벽 충돌, 그림자 띠, CombatFileSet "Trail Left/Right" 세트 플래그, GS CLAMP 미확인이라 궤적 V 는 아래 줄 텍셀 중심.
 
 ### 3.7 검증 (스크래치 `blade/`)
 - `combo_115/125/142.png` (ATHN01A, `-Dgow.script=SQUARE:1.0:0.05,SQUARE:1.35:0.05,SQUARE:1.7:0.05`): 손목에서 던진 블레이드까지 휘는 사슬 고리·빛, 블레이드 불꽃 (궤적 중).

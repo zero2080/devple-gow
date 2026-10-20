@@ -48,7 +48,7 @@ GOW_NORMALMAP=on ./gradlew :engine:run --args="--game ATHN04C"     # 켜고 시�
   이 값은 법선 없는 서브메시의 빈 법선 칸에 넣는다 — 그런 파트는 uLit = 0·환경 UV 꺼짐이라 원래 화면에서는 읽히지 않는다.
 - 원작은 레벨 메시 뒷면 제거를 안 하므로 (43 §8) 보이는 쪽을 정해야 한다: 화면 미분 면 법선 nf = cross(dFdx p, dFdy p) 를 눈 쪽 (V = vEye − p) 으로 뒤집고,
   부드러운 법선을 nf 쪽으로 맞춘다. 둘의 내적이 0.5 이하 (모서리) 면 nf 를 쓴다. `gl_FrontFacing` 은 감김이 섞여 있어 쓰지 않는다 — 거울 패스의 `glFrontFace(GL_CW)` 와도 무관.
-- 광원 L: 레벨 LGT 동적 조명은 미구현이고 (31 문서) 레벨 메시용 광원 데이터가 없다 → **카메라 위쪽에서 비추는 고정 방향** L = normalize(V + (0, 0.8, 0)).
+- 광원 L: 레벨 LGT 동적 조명은 렌더 플래그 0x800 모델 전용이라 (47 문서) 레벨 메시용 광원 데이터가 없다 → **카메라 위쪽에서 비추는 고정 방향** L = normalize(V + (0, 0.8, 0)).
 - 밝기 배율 (구운 정점색은 그대로 두고 곱함):
 
   `factor = clamp(1 + k·(dot(N_map, L) − dot(N_geom, L)), lo, hi)`, k = 1.0, lo = 0.6, hi = 1.4 (`NormalMaps.DETAIL_*`).

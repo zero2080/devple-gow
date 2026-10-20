@@ -19,7 +19,7 @@ import org.joml.Vector3f;
  *   매달린 무게 (j, j+1 에 거리 비율로). 무게는 붙으면 최대 × 0.5 /초로 늘고 떨어지면 줄어듦 (최대 = 매단 줄 100, 양끝 고정 10, 0x216D84).
  *   하위 단계 수 = int(8 · dt · 60 + 0.99). 감쇠 = clamp(감쇠 − 0.05 · dt, Global Damping, 1), 처음 0.2 (0x216D54).
  * </pre>
- * 노드 수는 원작에선 줄 모델의 사슬 관절 수 (0x216FC8), 엔진은 줄 오브젝트 관절 수 [추정].
+ * 노드 수는 줄 모델의 사슬 관절 수 (0x216FC8, {@link RopeSkin#chain}) — 엔진도 같다 (47 문서 §5).
  * <p>
  * <b>양끝 고정 줄</b> (SCR f1 = 수평 줄·짚라인, {@link #fixed}) [확실: 0x216FC8 / 0x218488 / 0x217748]: 같은 시뮬레이션에
  * 길이 = |끝점 − 매단 점|, 초기 자세 = 매단 점 → 끝점 곧은 선 (0x217174), 끝 노드 번호 +0x40 = int(길이 / 칸) (= n − 1) 를 끝점 +0x10 (미터) 에
@@ -155,6 +155,30 @@ public final class RopeSim {
 			anchor.set(a);
 			idle = 0;
 		}
+	}
+
+	/** 노드 수 (원작 +0x54 = 줄 모델 사슬 관절 수). */
+	public int nodes() {
+		return n;
+	}
+
+	/** 노드 i 위치 (월드 유닛, 원작 0x217EF0: ×16). */
+	public Vector3f node(int i, Vector3f out) {
+		return out.set(p[i]).mul(NavTuning.UNITS_PER_METER);
+	}
+
+	/** 모든 노드 위치 (월드 유닛) — 줄 스키닝 ({@link RopeSkin}). */
+	public Vector3f[] nodePositions() {
+		Vector3f[] out = new Vector3f[n];
+		for (int i = 0; i < n; i++) {
+			out[i] = node(i, new Vector3f());
+		}
+		return out;
+	}
+
+	/** 잠들었나 (0.2 초 넘게 움직임 없음 — 원작은 이때 관절 갱신도 건너뛴다, 0x217B38). */
+	public boolean sleeping() {
+		return idle > SLEEP_TIME;
 	}
 
 	/** 줄 위 거리 d (m) 의 점 (월드 유닛, 0x2184E8). */

@@ -235,6 +235,14 @@ public final class GameScene implements Scene {
 		magicFx.setGodBlades(session.rom.resolve("R_WPN" + hero.player.costume + "_" + Math.max(0, Math.min(5, hero.bladeLevel())) + ".WAD"),
 				() -> !hero.player.artemisEquipped); // 블레이드 god 판 (0x1FA9A0, 45 문서 §2)
 		hero.hideBlades = magicFx::godBladesOn;
+		// 동적 라이트 (47 문서): 레벨 WAD 의 LGT_ + 무기 WAD 의 블레이드 라이트. -Dgow.nolights 면 예전 고정 조명 (비교용)
+		if (System.getProperty("gow.nolights") == null) {
+			lights = new devple.gow.engine.light.LightServer();
+			int nl = lights.addAll(level.data().wad).size();
+			hero.attachBladeLights(lights);
+			devple.gow.engine.light.LightServer.setCurrent(lights);
+			System.out.printf("라이트: 레벨 %d, 블레이드 %d%n", nl, lights.lights().size() - nl);
+		}
 		magicFx.bindBlades(new devple.gow.engine.fx.MagicFx.Blades() { // 사슬이 정한 블레이드 행렬·궤적 (45 문서 §3)
 			public boolean world(int side, Matrix4f out) {
 				return hero.bladeWorld(side, out);
@@ -261,6 +269,7 @@ public final class GameScene implements Scene {
 		});
 		world = new ScriptWorld(level.data(), session.scriptHost, listener());
 		nav = new SceneNav(level.data(), col, hero, world, session.scriptHost, orbTweaks, navHost());
+		buildRopeVisuals();
 		if (otherName != null) {
 			nav.setOther(otherName, otherData, otherCol, nav.neighbourListener());
 		}
@@ -1209,6 +1218,7 @@ public final class GameScene implements Scene {
 		}
 		Vector3f p = hero.ctl.position;
 		nav.update(dt, p);
+		poseRopes();
 		for (var b : nav.platformBodies()) {
 			if (b.anim() != null) {
 				level.poseInstance(b.owner, b.joints(), b.hidden()); // 움직인 발판·문·회전방은 애니 자세로 (관절 숨김 포함: DMC 결계)
@@ -1228,6 +1238,56 @@ public final class GameScene implements Scene {
 		Vector3f fwd = new Vector3f(cam.target).sub(cam.eye).normalize();
 		session.sound.listener(cam.eye, fwd, new Vector3f(0, 1, 0));
 		session.sound.update(dt);
+	}
+
+	/** 줄 스키닝 렌더 (47 문서 §5, 38 §17): 줄 오브젝트 하나 = 정지 관절 + 사슬 관절 + 시뮬레이션. */
+	private record RopeVisual(String owner, float[][] base, int[] chain, devple.gow.engine.nav.RopeSim sim, boolean fixed) {
+	}
+
+	private final List<RopeVisual> ropeVisuals = new ArrayList<>();
+
+	/**
+	 * 레벨의 모든 줄에 시뮬레이션을 만든다 (원작은 SCR_RopeSkinned 마다 매 프레임 0x217A40 — 영웅이 없어도). -Dgow.norope 면 예전 정지 자세 (비교용).
+	 */
+	private void buildRopeVisuals() {
+		ropeVisuals.clear();
+		if (System.getProperty("gow.norope") != null) {
+			return;
+		}
+		for (devple.gow.engine.nav.NavRope r : nav.navWorld.ropes()) {
+			for (var pl : level.data().layout.placements()) {
+				if (!pl.instance().name().equals(r.owner()) || pl.object().skeleton() == null) {
+					continue;
+				}
+				int[] chain = devple.gow.engine.nav.RopeSkin.chain(pl.object().skeleton(), pl.jointWorld(), 0);
+				if (chain.length >= 2) {
+					ropeVisuals.add(new RopeVisual(r.owner(), pl.jointWorld(), chain, nav.navigator.sim(r),
+							r.type() != devple.gow.tools.level.RopeDef.Type.HANG));
+				}
+				break;
+			}
+		}
+		poseRopes(true);
+	}
+
+	private void poseRopes() {
+		poseRopes(false);
+	}
+
+	/** 잠든 줄은 관절을 갱신하지 않는다 (0x217B38 → 0x218168). */
+	private void poseRopes(boolean all) {
+		for (RopeVisual v : ropeVisuals) {
+			if (System.getProperty("gow.ropedebug") != null && v.sim().attached() && (lightFrame++ % 60) == 0) {
+				StringBuilder sb = new StringBuilder("줄 " + v.owner() + " 영웅 " + hero.ctl.position + " 노드");
+				for (Vector3f q : v.sim().nodePositions()) {
+					sb.append(String.format(java.util.Locale.ROOT, " (%.0f,%.0f,%.0f)", q.x, q.y, q.z));
+				}
+				System.out.println(sb);
+			}
+			if (all || !v.sim().sleeping()) {
+				level.poseInstance(v.owner(), devple.gow.engine.nav.RopeSkin.pose(v.base(), v.chain(), v.sim().nodePositions(), v.fixed()));
+			}
+		}
 	}
 
 	private EnemyFighter nearestEnemy() {
@@ -1494,6 +1554,9 @@ public final class GameScene implements Scene {
 					e.renderer().white());
 		}
 		hero.draw(cam, e.window().aspect(), alpha, e.renderer().white());
+		if (System.getProperty("gow.lightdebug") != null && hero.lastLights() != null && (lightFrame++ % 30) == 0) {
+			System.out.println("영웅 라이트: " + hero.lastLights() + " 블레이드 " + (hero.bladeLight(0) != null ? hero.bladeLight(0).dyn : -1f));
+		}
 		devple.gow.engine.fx.FxEnvironment.disableFog(hero.shader());
 		hero.drawChains(cam, e.window().aspect(), alpha, magicFx.godBladesOn()); // 사슬·궤적 (45 문서 §3)
 		devple.gow.engine.fx.FxEnvironment.disableFog(enemyShader);
@@ -1509,6 +1572,9 @@ public final class GameScene implements Scene {
 	}
 
 	private devple.gow.engine.render.CameraFilterRenderer filterRenderer;
+	/** 동적 라이트 서버 (47 문서). -Dgow.nolights 면 null. */
+	private devple.gow.engine.light.LightServer lights;
+	private int lightFrame;
 	private final Map<Integer, java.util.Optional<devple.gow.engine.fx.CameraFilter>> filters = new java.util.HashMap<>();
 
 	/** 이번 프레임 카메라 필터 번호 (0x1EFA14: 카메라 +0x910 대체 ≥ 0 이면 그것, 아니면 현재 카메라 CAM 0xB0). 테스트·디버그용. */
@@ -1564,6 +1630,9 @@ public final class GameScene implements Scene {
 
 	@Override
 	public void exit(Engine e) {
+		if (lights != null && devple.gow.engine.light.LightServer.current() == lights) {
+			devple.gow.engine.light.LightServer.setCurrent(null);
+		}
 		if (otherScene != null) {
 			otherScene.exit(e);
 			otherScene = null;
