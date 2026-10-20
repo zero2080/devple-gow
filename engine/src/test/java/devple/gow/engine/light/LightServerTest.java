@@ -80,6 +80,37 @@ class LightServerTest {
 		assertEquals(LightRig.MAX, h.x, 1e-6f, "VU minii 255 → 255/128 배");
 		assertEquals(0.5f, h.y, 1e-6f);
 		assertEquals(0f, hot.shade(new Vector3f(0, -1, 0), new Vector3f()).y, 0f, "뒷면 max(n·L, 0)");
+		// 머티리얼 색 M (qw 76) 은 자르기 전에 곱한다: 영웅 MAT 0.8 × 레이어 1 → 1.5 라이트 = 1.2 + 1/128
+		Vector3f m = new Vector3f(0.8f, 0.8f, 0.8f);
+		LightRig w = new LightRig();
+		w.dir0.set(0, 1, 0);
+		w.col0.set(1.5f, 1.5f, 1.5f, 1.5f);
+		assertEquals(1.2f + LightRig.BIAS, w.shade(new Vector3f(0, 1, 0), m, new Vector3f()).x, 1e-6f);
+		// 0.4 × 2.0 레이어 (텍스처 없는 조명 파트) 도 M = 0.8, 자르기는 M 곱한 뒤 255/128
+		assertEquals(LightRig.MAX, hot.shade(new Vector3f(0, 1, 0), new Vector3f(0.8f), new Vector3f()).x, 1e-6f);
+		assertEquals(0.4f + LightRig.BIAS, hot.shade(new Vector3f(0, 1, 0), new Vector3f(0.8f), new Vector3f()).y, 1e-6f);
+	}
+
+	@Test
+	void litColourIsHeaderTimesLayer() throws Exception {
+		// R_HERO0 MAT_maiFskinh: 헤더 (0.8, 0.8, 0.8), 레이어 rgba 1 → qw 76 = 0.8 (0x154410: 런타임 +0x10 = 파일 0x08, 레이어 +0x14 = 파일 0x28)
+		java.nio.file.Path f = java.nio.file.Path.of(System.getProperty("gow.rom", "../gow-rom")).resolve("R_HERO0.WAD");
+		org.junit.jupiter.api.Assumptions.assumeTrue(java.nio.file.Files.exists(f), "gow-rom 없음");
+		var tag = devple.gow.tools.wad.WadFile.load(f).find("MAT_maiFskinh").orElseThrow();
+		var mat = devple.gow.tools.texture.MaterialResource.parse(tag);
+		float[] lc = devple.gow.engine.asset.WadAssets.litColor(mat, mat.layers().getFirst());
+		assertEquals(0.8f, lc[0], 1e-6f);
+		assertEquals(0.8f, lc[2], 1e-6f);
+		assertEquals(0f, lc[3], 0f, "더할 색 qw 77 = 0");
+		// R_CNM MAT_lambert2: 더할 색 128 → qw 77 / 128 = 1 (자르기 전 더함)
+		java.nio.file.Path cnm = f.resolveSibling("R_CNM.WAD");
+		var m2 = devple.gow.tools.texture.MaterialResource.parse(devple.gow.tools.wad.WadFile.load(cnm).find("MAT_lambert2").orElseThrow());
+		assertEquals(1f, devple.gow.engine.asset.WadAssets.litColor(m2, m2.layers().getFirst())[3], 1e-6f);
+		LightRig r = new LightRig();
+		r.ambient.set(0.5f);
+		assertEquals(1f + 0.4f + LightRig.BIAS, r.shade(new Vector3f(0, 1, 0), new Vector3f(0.8f), new Vector3f(1f), new Vector3f()).x, 1e-6f);
+		r.ambient.set(1.5f);
+		assertEquals(LightRig.MAX, r.shade(new Vector3f(0, 1, 0), new Vector3f(0.8f), new Vector3f(1f), new Vector3f()).x, 1e-6f);
 	}
 
 	@Test

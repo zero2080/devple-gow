@@ -25,8 +25,13 @@ public record MaterialFx(Texture[] frames, MaterialAnim.Anim anim, List<Layer> l
 	 * @param blend   GS ALPHA 바이트 → 블렌드 (0x01 = INV)
 	 * @param tint    색 배율 (a = p38 등 반영)
 	 * @param env     법선이 있는 메시에서 구면 환경맵 UV 사용 [추정]
+	 * @param litColor 동적 라이트 경로의 머티리얼 색 (MAT 헤더 색 × 레이어 rgb, 47 §3.1)
 	 */
-	public record Layer(int index, Texture texture, Texture[] frames, RenderModel.Blend blend, float[] tint, boolean env) {
+	public record Layer(int index, Texture texture, Texture[] frames, RenderModel.Blend blend, float[] tint, boolean env, float[] litColor) {
+
+		public Layer(int index, Texture texture, Texture[] frames, RenderModel.Blend blend, float[] tint, boolean env) {
+			this(index, texture, frames, blend, tint, env, new float[]{tint[0], tint[1], tint[2], 0, 0, 0});
+		}
 	}
 
 	/** 시간 t(초)의 첫 레이어 텍스처. */

@@ -31,8 +31,15 @@ public record RenderModel(String name, List<Part> parts, float[] min, float[] ma
 		}
 	}
 
-	/** @param fx 머티리얼 부가 효과 (애니메이션 프레임 / UV 스크롤 / 추가 레이어, 16·31 문서). null = 없음 */
-	public record Part(Mesh mesh, Texture texture, Blend blend, float[] tint, boolean lit, MaterialFx fx) {
+	/**
+	 * @param fx 머티리얼 부가 효과 (애니메이션 프레임 / UV 스크롤 / 추가 레이어, 16·31 문서). null = 없음
+	 * @param litColor 동적 라이트 (렌더 플래그 0x800) 경로의 머티리얼 색 = MAT 헤더 색 × 레이어 rgb (VU qw 76, 0x154410, 47 §3.1), [3..5] = 더할 색 qw 77 / 128
+	 */
+	public record Part(Mesh mesh, Texture texture, Blend blend, float[] tint, boolean lit, MaterialFx fx, float[] litColor) {
+
+		public Part(Mesh mesh, Texture texture, Blend blend, float[] tint, boolean lit, MaterialFx fx) {
+			this(mesh, texture, blend, tint, lit, fx, new float[]{tint[0], tint[1], tint[2], 0, 0, 0});
+		}
 
 		public Part(Mesh mesh, Texture texture, Blend blend, float[] tint, boolean lit) {
 			this(mesh, texture, blend, tint, lit, null);

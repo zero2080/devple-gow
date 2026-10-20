@@ -108,6 +108,18 @@ public final class WadAssets implements AutoCloseable {
 	}
 
 	/** 레이어 색 배율: 텍스처 없는 레이어는 header.rgb × layer.rgb / 0.8 (중립 = 1, 16 문서 §3.3) [추정]. */
+	/**
+	 * 동적 라이트 경로의 머티리얼 색 (VU qw 76) = MAT 헤더 색 (런타임 +0x10, 파일 0x08) × 레이어 rgba (런타임 +0x14, 파일 0x28) × 물체 색 (기본 1).
+	 * 0x154410 이 만들고, 렌더 플래그 0x1000 (조명 모델 228 개 전부 0x1800) 이면 VU 플래그 4 → 커널이 이것 × 128 로 라이트 합을 곱한다 (47 §3.1) [확실].
+	 * 텍스처 유무와 무관 (조명 없는 경로의 {@link #layerTint} 중립 환산과 다르다).
+	 * 반환 [3..5] = 더할 색 qw 77 (MAT 파일 0x18, 런타임 +0x20) / 128 — 커널 vf29 = qw77 + 주변·M·128 이라 자르기 전에 더한다.
+	 */
+	public static float[] litColor(MaterialResource mat, MaterialResource.Layer l) {
+		float[] add = mat.addColor();
+		return new float[]{mat.color()[0] * l.rgba()[0], mat.color()[1] * l.rgba()[1], mat.color()[2] * l.rgba()[2],
+				add[0] / 128f, add[1] / 128f, add[2] / 128f};
+	}
+
 	static float[] layerTint(MaterialResource mat, MaterialResource.Layer l, boolean textured) {
 		float[] t = l.rgba().clone();
 		if (!textured) {
@@ -246,9 +258,11 @@ public final class WadAssets implements AutoCloseable {
 			Texture tex = null;
 			RenderModel.Blend blend = RenderModel.Blend.OPAQUE;
 			float[] tint = {1, 1, 1, 1};
+			float[] lit = null;
 			MaterialFx fx = null;
 			if (mat != null && !mat.layers().isEmpty()) {
 				MaterialResource.Layer l = mat.layers().getFirst();
+				lit = litColor(mat, l);
 				tex = s.hasUv ? texture(l.texture()) : null;
 				blend = classify(mat, tex != null);
 				tint = layerTint(mat, l, tex != null);
@@ -257,7 +271,8 @@ public final class WadAssets implements AutoCloseable {
 				}
 				fx = materialFx(mat, s.hasUv, s.hasNormal);
 			}
-			parts.add(new RenderModel.Part(new Mesh(v, idx, GL_TRIANGLES), tex, blend, tint, s.hasNormal, fx));
+			parts.add(new RenderModel.Part(new Mesh(v, idx, GL_TRIANGLES), tex, blend, tint, s.hasNormal, fx,
+					lit != null ? lit : new float[]{tint[0], tint[1], tint[2], 0, 0, 0}));
 		}
 		return new RenderModel(name, parts, min, max);
 	}
@@ -280,7 +295,7 @@ public final class WadAssets implements AutoCloseable {
 			tint[3] *= l.param38() * mat.param28();
 			// 레이어 렌더 플래그 bit1 (0x02) = 조명+환경맵 VU 프로그램 → 법선 있는 메시에서 구면 환경맵 UV [추정]
 			boolean env = (l.renderFlags() & 0x02) != 0 || (l.renderFlags() & 0x04) != 0;
-			layers.add(new MaterialFx.Layer(i, t, textureFrames(l.texture()), b, tint, env));
+			layers.add(new MaterialFx.Layer(i, t, textureFrames(l.texture()), b, tint, env, litColor(mat, l)));
 		}
 		if (anim == null && frames == null && layers.isEmpty()) {
 			return null;

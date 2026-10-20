@@ -28,8 +28,9 @@ public final class AnimatedModel implements AutoCloseable {
 
 	public static final int MAX_JOINTS = 128;
 
+	/** @param litColor 동적 라이트 경로의 머티리얼 색 (MAT 헤더 색 × 레이어 rgb, VU qw 76 — {@link WadAssets#litColor}) */
 	private record Part(SkinnedMesh mesh, Texture texture, RenderModel.Blend blend, float[] tint, boolean lit,
-						boolean jointLocal, devple.gow.tools.fx.MaterialAnim.Anim matAnim, int[] joints) {
+						boolean jointLocal, devple.gow.tools.fx.MaterialAnim.Anim matAnim, int[] joints, float[] litColor) {
 
 		/** 파트가 쓰는 관절이 모두 숨김이면 그리지 않는다 (ANM u8 가시성, 41 문서 §2). */
 		boolean hiddenBy(boolean[] hidden) {
@@ -151,15 +152,17 @@ public final class AnimatedModel implements AutoCloseable {
 			Texture tex = null;
 			RenderModel.Blend blend = RenderModel.Blend.OPAQUE;
 			float[] tint = {1, 1, 1, 1};
+			float[] litColor = {1, 1, 1, 0, 0, 0};
 			if (mat != null && !mat.layers().isEmpty()) {
 				MaterialResource.Layer l = mat.layers().getFirst();
+				litColor = WadAssets.litColor(mat, l);
 				tex = p.hasUv ? assets.texture(l.texture()) : null;
 				// 레벨과 같은 분류 (31 문서): GS 0x44 대부분은 반투명이 아니라 불투명 + 알파 테스트 0.75 (CUTOUT)
 				blend = assets.classify(mat, tex != null);
 				tint = l.rgba();
 			}
 			parts.add(new Part(new SkinnedMesh(v, idx), tex, blend, tint, p.hasNormal, p.jointLocal(), assets.materialAnim(p.material),
-					used.stream().mapToInt(Integer::intValue).toArray()));
+					used.stream().mapToInt(Integer::intValue).toArray(), litColor));
 		}
 	}
 
@@ -260,6 +263,10 @@ public final class AnimatedModel implements AutoCloseable {
 					op *= p.matAnim().value("hdr8", fxTime, 1f);
 				}
 				shader.set("uTint", new org.joml.Vector4f(t[0] * colorScale[0], t[1] * colorScale[1], t[2] * colorScale[2], t[3] * op));
+				// 동적 라이트 경로: M = 머티리얼 색 × 물체 색 (qw 76 = 0x154410 의 헤더 × 레이어 × 물체 +0xB0, 47 §3.1)
+				float[] lc = p.litColor();
+				shader.set("uLgtMat", lc[0] * colorScale[0], lc[1] * colorScale[1], lc[2] * colorScale[2]);
+				shader.set("uLgtAdd", lc[3], lc[4], lc[5]);
 				// 노멀맵 (원작에 없음, 44 문서): 첫 레이어 텍스처, 불투명·알파 블렌드만
 				boolean nm = (mode == RenderModel.Blend.OPAQUE || mode == RenderModel.Blend.ALPHA)
 						&& devple.gow.engine.render.Renderer.bindNormalMap(shader, p.texture());

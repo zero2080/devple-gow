@@ -110,13 +110,13 @@ public final class Renderer implements AutoCloseable {
 					tint = tint.clone();
 					tint[3] *= fx.opacity(fxTime, 1f);
 				}
-				drawLayer(p, tex, mode, tint, sc, false, true);
+				drawLayer(p, tex, mode, tint, sc, false, true, p.litColor());
 				if (fx != null && !fx.layers().isEmpty()) {
 					glDepthFunc(GL_LEQUAL);
 					for (MaterialFx.Layer l : fx.layers()) {
 						RenderModel.Blend lb = l.blend() == RenderModel.Blend.OPAQUE || l.blend() == RenderModel.Blend.CUTOUT
 								? RenderModel.Blend.ALPHA : l.blend();
-						drawLayer(p, fx.frame(l, fxTime), lb, l.tint(), fx.uv(l.index(), fxTime), l.env() && p.lit(), false);
+						drawLayer(p, fx.frame(l, fxTime), lb, l.tint(), fx.uv(l.index(), fxTime), l.env() && p.lit(), false, l.litColor());
 					}
 					glDepthFunc(GL_LESS);
 				}
@@ -161,23 +161,23 @@ public final class Renderer implements AutoCloseable {
 				if (b == RenderModel.Blend.CUTOUT) {
 					if (pass == 0) {
 						basic.set("uAlphaRef", 0.75f);
-						drawLayer(p, tex, RenderModel.Blend.OPAQUE, tint, sc, false, true);
+						drawLayer(p, tex, RenderModel.Blend.OPAQUE, tint, sc, false, true, p.litColor());
 						basic.set("uAlphaRef", 0f);
 					} else {
 						basic.set("uAlphaMax", 0.75f);
-						drawLayer(p, tex, RenderModel.Blend.ALPHA, tint, sc, false, true);
+						drawLayer(p, tex, RenderModel.Blend.ALPHA, tint, sc, false, true, p.litColor());
 						basic.set("uAlphaMax", 0f);
 						continue;   // 레이어는 패스 0 에서 이미 그렸다
 					}
 				} else {
-					drawLayer(p, tex, b, tint, sc, false, true);
+					drawLayer(p, tex, b, tint, sc, false, true, p.litColor());
 				}
 				if (fx != null && !fx.layers().isEmpty()) {
 					glDepthFunc(GL_LEQUAL);
 					for (MaterialFx.Layer l : fx.layers()) {
 						RenderModel.Blend lb = l.blend() == RenderModel.Blend.OPAQUE || l.blend() == RenderModel.Blend.CUTOUT
 								? RenderModel.Blend.ALPHA : l.blend();
-						drawLayer(p, fx.frame(l, fxTime), lb, l.tint(), fx.uv(l.index(), fxTime), l.env() && p.lit(), false);
+						drawLayer(p, fx.frame(l, fxTime), lb, l.tint(), fx.uv(l.index(), fxTime), l.env() && p.lit(), false, l.litColor());
 					}
 					glDepthFunc(GL_LESS);
 				}
@@ -190,7 +190,11 @@ public final class Renderer implements AutoCloseable {
 	}
 
 	/** @param base 머티리얼 첫 레이어 (노멀맵은 이것에만, 44 문서) */
-	private void drawLayer(RenderModel.Part p, Texture tex, RenderModel.Blend blend, float[] t, float[] scroll, boolean env, boolean base) {
+	private void drawLayer(RenderModel.Part p, Texture tex, RenderModel.Blend blend, float[] t, float[] scroll, boolean env, boolean base,
+						   float[] litColor) {
+		// 동적 라이트 경로의 머티리얼 색 M (qw 76, 47 §3.1) — uLgtOn = 0 이면 셰이더가 쓰지 않는다
+		basic.set("uLgtMat", litColor[0], litColor[1], litColor[2]);
+		basic.set("uLgtAdd", litColor[3], litColor[4], litColor[5]);
 		boolean opaque = blend == RenderModel.Blend.OPAQUE;
 		if (!opaque) {
 			glEnable(GL_BLEND);
