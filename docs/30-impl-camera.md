@@ -251,3 +251,9 @@ ESC: `EnemyIdleCamGroup-CreationSensor1` → VisOffInit (Attr11_1 = 2) 로 Idle2
 VisOff (13 초). 즉 IdleCam 팬 9.5 초 → Idle2Cam 3.5 초 → Boat1Cam4. 관절 애니 카메라 (§6.2) 가 이미 되므로 볼륨 후보 제외를 없앴다. Start CameraName 도 "IdleCam".
 ATHN01A 볼륨 관절 카메라는 이 둘뿐이다 (다른 레벨 관절 카메라는 스크립트 요청 전용 또는 생성 시 꺼짐: MedusaSpawnCam, DMCCam2, camTitanShot …).
 엔진 실행 (`ATHN01A`, 2200 프레임): IdleCam → Idle2Cam → Boat1Cam4 + 해골 도발. `CameraRigTest.boatRunFramesKratos` 가 생성 센서·9.5 초 끔을 흉내 낸다.
+
+### 8.4 near 평면 · 가시 칸 (43 문서 §11)
+- 원작 뷰포트 near = 10 (`+0x384 = −10`, 생성자 0x168DC8; far −10000 → SCR_FarClip), 투영 0x1692D8 / 클립 행렬 0x169768 이 이 값을 쓴다. 다른 쓰는 곳은 거울 뷰 복사 (0x12A81C) 와
+  한 패스 동안의 −0.005 깊이 바이어스 (0x15312C) 뿐 — 카메라가 바꾸지 않는다 [확실]. 엔진 `cam.near` 2 → **10** (`FxEnvironment.viewNear`).
+- 카메라 눈 위치가 SheetHdr 가시 칸을 골라 컨텍스트 (`CXT_bv…`) 단위로 레벨 오브젝트를 켜고 끈다 (43 §11). PAND01BB ← PAND00D 의 ConHallCam5 는 원작도 같은 카메라이고,
+  덮던 탑 외피 (`gosandarena`, CXT_bvoutside) 는 그 눈 위치 칸에서 꺼진다.

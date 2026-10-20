@@ -314,7 +314,7 @@ public final class LevelScene implements Scene {
 		}
 		collisionLines = buildCollisionLines();
 		volumeLines = buildVolumeLines();
-		cam.near = 2f;
+		cam.near = FxEnvironment.viewNear; // 원작 뷰포트 near (+0x384 = −10, 0x168DC8)
 		cam.far = 30000f;
 		cam.fovDeg = 60f;
 		placeStart(all);
@@ -556,6 +556,7 @@ public final class LevelScene implements Scene {
 		} else {
 			applyCamera();
 		}
+		updateContextVisibility(cam.eye);
 		fx.beforeRender(e, cam);
 		e.renderer().begin3d(cam);
 		fx.drawBackground(e, cam);
@@ -563,7 +564,7 @@ public final class LevelScene implements Scene {
 		// 하늘: 카메라 중심, 깊이 쓰기 끔 → 항상 맨 뒤
 		glDepthMask(false);
 		for (Instance i : instances) {
-			if (i.sky() && !dbgHidden("sky")) {
+			if (i.sky() && !dbgHidden("sky") && !ctxHidden.contains(i.name().toLowerCase(Locale.ROOT))) {
 				tmp.translation(cam.eye.x - i.offset().x, cam.eye.y - i.offset().y, cam.eye.z - i.offset().z);
 				e.renderer().draw(i.model(), tmp);
 			}
@@ -579,7 +580,7 @@ public final class LevelScene implements Scene {
 			for (Instance i : instances) {
 				String key = i.name().toLowerCase(Locale.ROOT);
 				if (!i.sky() && !fx.hidden(i) && !removed.contains(key) && !posed.containsKey(key) && !ambientKeys.contains(key)
-						&& !dbgHidden(key) && !(MIRRORS && !MODEL_PASSES && mirrorKeys.contains(key)) && inMainView(key)) {
+						&& !culled(key) && !(MIRRORS && !MODEL_PASSES && mirrorKeys.contains(key)) && inMainView(key)) {
 					Vector3f lc = litCenters.get(key);
 					if (lc != null) {
 						devple.gow.engine.light.LightUniforms.apply(e.renderer().basic(), litFlags.get(key), lc, 1f);
@@ -648,7 +649,7 @@ public final class LevelScene implements Scene {
 					break;
 				}
 			}
-			if (mi == null || removed.contains(m.key()) || fx.hidden(mi) || dbgHidden(m.key())) {
+			if (mi == null || removed.contains(m.key()) || fx.hidden(mi) || culled(m.key())) {
 				continue;
 			}
 			live.add(m);
@@ -704,7 +705,7 @@ public final class LevelScene implements Scene {
 				for (Instance i : instances) {
 					String key = i.name().toLowerCase(Locale.ROOT);
 					if ((viewMasks.getOrDefault(key, Mirrors.LEVEL_MODEL) & vm) != 0 && i != mi && !fx.hidden(i) && !removed.contains(key)
-							&& !posed.containsKey(key) && !ambientKeys.contains(key) && !dbgHidden(key)) {
+							&& !posed.containsKey(key) && !ambientKeys.contains(key) && !culled(key)) {
 						e.renderer().drawPass(i.model(), tmp, pass);
 					}
 				}
@@ -756,6 +757,41 @@ public final class LevelScene implements Scene {
 	/** 비교용: GOW_PASSORDER=model 이면 모델마다 두 패스 (이전 동작). */
 	private static final boolean MODEL_PASSES = "model".equals(System.getenv("GOW_PASSORDER"));
 
+	/** 비교용: GOW_VISCELLS=off 이면 가시 칸 컨텍스트를 무시하고 전부 그린다 (이전 동작). */
+	private static final boolean VIS_CELLS = !"off".equals(System.getenv("GOW_VISCELLS"));
+
+	/** 이번 프레임 가시 칸으로 숨은 인스턴스 (소문자, {@link LevelData#contextHidden}). */
+	private java.util.Set<String> ctxHidden = java.util.Set.of();
+	private final Vector3f ctxEye = new Vector3f(Float.NaN, 0, 0);
+
+	/**
+	 * 원작 0x152EC8: 매 프레임 마스크를 비우고 (0x16D6F0) 활성 뷰포트 카메라 위치로 칸 질의 (0x16DC60) 뒤 컨텍스트마다 뷰 마스크를 켜고 끈다
+	 * (0x16D6F8 → 0x134980: 컨텍스트 항목 중 MDL 0xF / PRT 0x13 / 0x1C / SHG 0x27 의 +0x48). 거울 뷰 카메라 위치는 합치지 않는다 [근사].
+	 */
+	private void updateContextVisibility(Vector3f eye) {
+		if (!VIS_CELLS || eye.equals(ctxEye)) {
+			return;
+		}
+		ctxEye.set(eye);
+		java.util.Set<String> h = data.contextHidden(eye.x, eye.y, eye.z);
+		if (System.getProperty("gow.debug.vis") != null && !h.equals(ctxHidden)) {
+			System.out.printf(Locale.ROOT, "[가시 칸] %s 눈 (%.0f, %.0f, %.0f) 숨김 %d: %s%n", data.wad.name(), eye.x, eye.y, eye.z, h.size(),
+					new java.util.TreeSet<>(h));
+		}
+		ctxHidden = h;
+		fx.setContextHidden(ctxHidden);
+	}
+
+	/** 지금 가시 칸으로 숨은 인스턴스 (소문자) — 테스트·디버그. */
+	public java.util.Set<String> contextHidden(Vector3f eye) {
+		updateContextVisibility(eye);
+		return ctxHidden;
+	}
+
+	private boolean culled(String key) {
+		return dbgHidden(key) || ctxHidden.contains(key.toLowerCase(Locale.ROOT));
+	}
+
 	private static boolean dbgHidden(String key) {
 		return !DBG_HIDE.isEmpty() && (DBG_HIDE.contains(key) || (!key.equals("sky") && DBG_HIDE.contains("*")));
 	}
@@ -780,7 +816,7 @@ public final class LevelScene implements Scene {
 		}
 		fx.env().applyFog(skinned, cam, e.window().height()); // 구운 메시와 같은 안개 (basic.frag 공유)
 		for (Map.Entry<String, float[][]> en : posed.entrySet()) {
-			if (removed.contains(en.getKey()) || dbgHidden(en.getKey()) || !view.test(en.getKey())) {
+			if (removed.contains(en.getKey()) || culled(en.getKey()) || !view.test(en.getKey())) {
 				continue;
 			}
 			drawPosed(e, cam, en.getKey(), en.getValue(), posedHidden.get(en.getKey()));
@@ -788,7 +824,7 @@ public final class LevelScene implements Scene {
 		// 반복 act 배치: 시작 시간 + 레벨 시간 (스크립트 Animator 가 잡으면 posed 가 우선)
 		float now = fx.env().time();
 		for (Ambient a : ambient) {
-			if (posed.containsKey(a.key()) || removed.contains(a.key()) || dbgHidden(a.key()) || fxHidden(a.key()) || !view.test(a.key())) {
+			if (posed.containsKey(a.key()) || removed.contains(a.key()) || culled(a.key()) || fxHidden(a.key()) || !view.test(a.key())) {
 				continue;
 			}
 			float t = a.start() + now;
@@ -838,12 +874,13 @@ public final class LevelScene implements Scene {
 	 * (36/37 문서: ATHN02D 메두사 방 = ATHN02C 지오메트리, 이음 전환 경계 너머).
 	 */
 	public void renderNeighbour(Engine e, Camera c) {
+		updateContextVisibility(c.eye); // 원작 질의는 충돌 월드의 시트 전부 (두 슬롯) 를 같은 카메라로 돈다 (0x11F098)
 		e.renderer().begin3d(c);
 		fx.beginWorld(e, c, false);
 		tmp.identity();
 		for (int pass = 0; pass < 2; pass++) {
 			for (Instance i : instances) {
-				if (!i.sky() && !fx.hidden(i) && !dbgHidden(i.name().toLowerCase(Locale.ROOT)) && inMainView(i.name().toLowerCase(Locale.ROOT))) {
+				if (!i.sky() && !fx.hidden(i) && !culled(i.name().toLowerCase(Locale.ROOT)) && inMainView(i.name().toLowerCase(Locale.ROOT))) {
 					e.renderer().drawPass(i.model(), tmp, pass);
 				}
 			}

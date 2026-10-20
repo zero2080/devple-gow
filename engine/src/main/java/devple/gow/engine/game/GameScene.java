@@ -293,7 +293,7 @@ public final class GameScene implements Scene {
 		respawn(spawn);
 		checkpoint.set(spawn);
 		cam.fovDeg = 60;
-		cam.near = 2;
+		cam.near = devple.gow.engine.fx.FxEnvironment.viewNear; // 원작 뷰포트 near (+0x384 = −10, 0x168DC8 — 43 §11)
 		cam.far = 30000;
 		bridge = new devple.gow.engine.boss.CombatScriptBridge(world);
 		if (boss != null) {

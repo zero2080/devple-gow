@@ -43,6 +43,11 @@ public final class LevelLayout {
 	public final List<GoInstance> instances = new ArrayList<>();
 	/** 인스턴스가 없는 오브젝트 이름 (템플릿 / 스크립트 생성). */
 	public final List<String> unplaced = new ArrayList<>();
+	/**
+	 * 인스턴스 이름(소문자) → 컨텍스트 이름 (`CXT_bvhall`, `CXT_default` …). WAD 끝의
+	 * {@code GROUP{ RES CXT_x (서버 0x80000001)  GROUP{하위 서버}…  RES go… (크기 0) }GROUP} — 컨텍스트 소속 (43 문서 §11).
+	 */
+	public final Map<String, String> contextOf = new LinkedHashMap<>();
 
 	public LevelLayout(WadFile wad) {
 		this.wadName = wad.name();
@@ -50,6 +55,18 @@ public final class LevelLayout {
 		for (int i = 0; i < tags.size(); i++) {
 			WadTag t = tags.get(i);
 			if (t.tag() != WadTagType.RESOURCE || !t.hasData()) {
+				continue;
+			}
+			if (t.name().startsWith("CXT_") && t.magic() == 0x80000001) {
+				for (int k = i + 1; k < tags.size(); k++) {
+					WadTag s = tags.get(k);
+					if (s.depth() < t.depth()) {
+						break;
+					}
+					if (s.depth() == t.depth() && s.tag() == WadTagType.RESOURCE && !s.hasData()) {
+						contextOf.putIfAbsent(s.name().toLowerCase(java.util.Locale.ROOT), t.name());
+					}
+				}
 				continue;
 			}
 			if (t.magic() == Skeleton.MAGIC) {
