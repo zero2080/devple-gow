@@ -26,12 +26,16 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class GrabTest {
 
-	private record Result(List<Integer> heroMoves, List<Integer> enemyMoves, RepeatPressQte.State qte) {
+	private record Result(List<Integer> heroMoves, List<Integer> enemyMoves, RepeatPressQte.State qte, int pullFrames, float pulledYawGap) {
 	}
 
 	private Result run(boolean mash) throws Exception {
+		return run(mash, "R_MIN.WAD", 20);
+	}
+
+	private Result run(boolean mash, String wadName, float enemyHp) throws Exception {
 		Path rom = Path.of(System.getProperty("gow.rom", "../gow-rom"));
-		Assumptions.assumeTrue(Files.exists(rom.resolve("R_MIN.WAD")), "gow-rom 없음");
+		Assumptions.assumeTrue(Files.exists(rom.resolve(wadName)), "gow-rom 없음");
 		WadFile hero = WadFile.load(rom.resolve("R_HERO0.WAD"));
 		WadFile perm = WadFile.load(rom.resolve("R_PERMK.WAD"));
 		Tweaks tw = new Tweaks();
@@ -54,12 +58,13 @@ class GrabTest {
 		};
 		CombatData cd = new CombatData(perm, CombatData.heroFiles(), set);
 		Combatant c = new Combatant(cd, an, owner);
-		EnemyFactory.Kind k = EnemyFactory.load(rom.resolve("R_MIN.WAD"), perm, -1);
+		EnemyFactory.Kind k = EnemyFactory.load(rom.resolve(wadName), perm, -1);
 		set.attachAll(k.assets().wad());
 		cd.reindexAnimations();
+		EnemyFighter.resetSpawnCount(); // 적 AI 난수 씨앗을 앞선 테스트와 무관하게
 		EnemyFighter en = k.spawn();
 		en.pos.set(0, 0, -50);
-		en.hp = 20; // 잡기 원(25) 아래
+		en.hp = enemyHp; // 미노타우로스 잡기 원(25) 아래 / 세이렌 MAISIRKILL 은 HP 0..10
 		en.setFoe(new Hittable() {
 			public Vector3f position() { return ctl.position; }
 			public float hp() { return 100; }
@@ -90,6 +95,8 @@ class GrabTest {
 		ScriptedInput in = new ScriptedInput(0, st);
 		GrabSync sync = new GrabSync(ctl, c);
 		RepeatPressQte.State qs = null;
+		int pulls = 0;
+		float yawGap = Float.NaN;
 		float dt = 1 / 60f;
 		for (float t = 0; t < 14f; t += dt) {
 			in.advance(dt);
@@ -107,11 +114,15 @@ class GrabTest {
 			if (sync.qte() != null) {
 				qs = sync.qte().state();
 			}
+			if (sync.pulling() == 2) {
+				pulls++;
+				yawGap = (float) Math.abs(Math.IEEEremainder(en.yaw - ctl.yaw - Math.PI, Math.PI * 2));
+			}
 			if (!sync.active()) {
 				ctl.separate(en.pos, 22);
 			}
 		}
-		return new Result(hm, em, qs);
+		return new Result(hm, em, qs, pulls, yawGap);
 	}
 
 	@Test
@@ -128,5 +139,18 @@ class GrabTest {
 		Result r = run(false);
 		assertEquals(RepeatPressQte.State.FAILED, r.qte());
 		assertTrue(r.enemyMoves().contains(403), "실패 → MAIMIN04(403): " + r.enemyMoves());
+	}
+
+	/**
+	 * 세이렌 처형 MAISIRKILL (영웅 002 의 421): 이벤트 22 가 영웅 기술에 [0.44–0.91] — 원작 0x204BF0 로 영웅이 세이렌을 synchJoint 관계로 끈다
+	 * (마주 봄). 미노타우로스 MAIMIN* 은 이벤트 22 가 없어 끌기 없음 (37 문서 §11).
+	 */
+	@Test
+	void sirenKillPullsEnemy() throws Exception {
+		Result r = run(false, "R_SIR.WAD", 5);
+		assertTrue(r.heroMoves().contains(421), "영웅 MAISIRKILL: " + r.heroMoves());
+		assertTrue(r.pullFrames() > 30, "이벤트 22 창 동안 영웅이 세이렌을 끈다: " + r.pullFrames() + " hero " + r.heroMoves() + " enemy " + r.enemyMoves());
+		assertTrue(r.pulledYawGap() < 0.1f, "세이렌이 영웅을 마주 봄: " + r.pulledYawGap());
+		assertEquals(0, run(false).pullFrames(), "MAIMIN* 는 이벤트 22 없음");
 	}
 }

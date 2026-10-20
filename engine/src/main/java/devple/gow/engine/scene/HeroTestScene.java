@@ -48,7 +48,8 @@ import static org.lwjgl.opengl.GL41C.GL_TRIANGLES;
  */
 public final class HeroTestScene implements Scene {
 
-	public enum Auto { NONE, RUN, COMBO, MAGIC }
+	/** GRAB: 적 HP 를 낮추고 정면 32 에 둔 뒤 ○ 잡기 → 처형 동기 ({@link devple.gow.engine.combat.GrabSync}, 미니게임 자동 입력 없음 — 스크린샷용). */
+	public enum Auto { NONE, RUN, COMBO, MAGIC, GRAB }
 
 	private final Path rom;
 	private final Auto auto;
@@ -85,6 +86,10 @@ public final class HeroTestScene implements Scene {
 	private devple.gow.engine.fx.MagicFx magicFx;
 
 	private String enemyWad = "R_MIN";
+	private devple.gow.engine.combat.GrabSync grab;
+	private Tweaks enemyTweaks;
+	private AnimationSet heroSet;
+	private CombatData heroData;
 
 	public HeroTestScene(Path rom, Auto auto, int bladeLevel, String enemyWad) {
 		this(rom, auto, bladeLevel);
@@ -118,6 +123,8 @@ public final class HeroTestScene implements Scene {
 		Animator animator = new Animator(sk, set, tw, "/Animation/goHero/");
 		ctl = new HeroController(animator);
 		CombatData data = new CombatData(perm, CombatData.heroFiles(), set);
+		heroSet = set;
+		heroData = data;
 		player = new PlayerState(GameRules.load(perm));
 		godMode = new devple.gow.engine.combat.GodMode(tw);
 		hitCounter = new devple.gow.engine.game.HitCounter(tw);
@@ -202,6 +209,9 @@ public final class HeroTestScene implements Scene {
 			skinnedMin = new Shader("skinned.vert", "basic.frag");
 			minModel = kind.buildModel(skinnedMin);
 			enemy = kind.spawn();
+			enemyTweaks = kind.tweaks();
+			heroSet.attachAll(kind.assets().wad()); // 영웅 처형 애니 외부 그룹 (maiCy2 등, 적 WAD 안)
+			heroData.reindexAnimations();
 			System.out.printf("적: %s AI1 %03d HP %.0f 전투 파일 %s%n", enemyWad, kind.ai1(), enemy.maxHp(), kind.combatFiles());
 			enemy.pos.set(0, 0, -120);
 			enemy.setFoe(heroHittable);
@@ -262,6 +272,14 @@ public final class HeroTestScene implements Scene {
 			}
 			st.add(new ScriptedInput.Step(4.0f, 0.05f, PadButton.TRIANGLE));
 			scripted = new ScriptedInput(e.window().handle(), st);
+		} else if (auto == Auto.GRAB && enemy != null) {
+			enemy.pos.set(0, 0, -32);
+			enemy.prevPos.set(enemy.pos);
+			enemy.yaw = 0; // 영웅(+z 쪽) 을 봄
+			enemy.hp = 5;
+			ctl.yaw = (float) Math.PI; // -z 의 적을 봄
+			grab = new devple.gow.engine.combat.GrabSync(ctl, combat);
+			scripted = new ScriptedInput(e.window().handle(), List.of(new ScriptedInput.Step(0.3f, 0.05f, PadButton.CIRCLE)));
 		} else if (auto == Auto.MAGIC) {
 			// ← 메두사 선택 → R2 홀드(광선, 석화) → □□ (석상 파괴) → ↑ 하데스 → R2 (영혼)
 			scripted = new ScriptedInput(e.window().handle(), List.of(new ScriptedInput.Step(0.2f, 0.05f, PadButton.LEFT),
@@ -332,7 +350,10 @@ public final class HeroTestScene implements Scene {
 			in = scripted;
 		}
 		camYaw -= in.rightX() * dt * 2;
-		combat.update(in, dt);
+		boolean locked = grab != null && grab.active();
+		if (!locked) {
+			combat.update(in, dt);
+		}
 		boolean godPress = (in.pressed(PadButton.L3) && in.held(PadButton.R3)) || (in.pressed(PadButton.R3) && in.held(PadButton.L3));
 		if (godMode.update(combat, godPress, bladeLevel, player.hp, dt)) {
 			System.out.println("신들의 분노 발동");
@@ -351,7 +372,9 @@ public final class HeroTestScene implements Scene {
 		magic.setTargets(() -> enemy != null ? List.of(enemy) : List.of(dummy));
 		magic.update(combat, in, dt);
 		magicFx.update(magic, ctl.position, ctl.yaw, enemy != null ? List.of(enemy) : List.of(dummy), dt, cam.eye);
-		if (combat.active()) {
+		if (locked) {
+			// 처형 결합 중: 영웅 애니·정렬은 GrabSync
+		} else if (combat.active()) {
 			Vector3f aim = enemy != null ? (enemy.dead() ? null : enemy.pos) : (dummy.hp > 0 ? dummy.pos : null);
 			ctl.updateCombat(combat, in, camYaw, dt, aim);
 		} else if (auto == Auto.RUN && (autoTime += dt) < 0.4f) {
@@ -379,7 +402,12 @@ public final class HeroTestScene implements Scene {
 				}
 				System.out.println(enemyWad + " 처치 → 붉은 오브 " + player.redOrbs);
 			}
-			ctl.separate(enemy.pos, 22);
+			if (grab != null) {
+				grab.update(in, enemy, enemyTweaks, dt);
+			}
+			if (grab == null || !grab.active()) {
+				ctl.separate(enemy.pos, 22);
+			}
 		} else {
 			dummy.update(dt);
 			ctl.separate(dummy.pos, 10);
