@@ -43,7 +43,15 @@ public final class Pose {
 	/** 관절 월드 행렬 (모델 공간). 같은 스켈레톤이면 처음 계산한 것을 돌려준다 (자세는 만든 뒤 바뀌지 않는다 — 읽기 전용). */
 	public float[][] world(Skeleton sk) {
 		if (worldSk != sk || worldMemo == null) {
-			worldMemo = sk.world(local(sk));
+			// 로컬 행렬은 스레드 작업 공간에, 월드 (돌려주는 값) 만 새 배열 — 예전 local() + world() 와 같은 값 (48 문서 §9)
+			int n = sk.size();
+			Skeleton.Work wk = Skeleton.Work.get(n);
+			for (int j = 0; j < n; j++) {
+				sk.localMatrixInto(j, rot[j], pos[j], scale[j], wk.local[j], wk);
+			}
+			float[][] w = new float[n][16];
+			sk.worldInto(wk.local, w, wk.done);
+			worldMemo = w;
 			worldSk = sk;
 		}
 		return worldMemo;

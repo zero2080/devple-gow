@@ -21,6 +21,12 @@ public final class Mat4 {
 	/** a · b */
 	public static float[] mul(float[] a, float[] b) {
 		float[] r = new float[16];
+		mulInto(a, b, r);
+		return r;
+	}
+
+	/** r = a · b ({@link #mul} 와 같은 계산 순서). r 은 a·b 와 겹치면 안 된다. */
+	public static void mulInto(float[] a, float[] b, float[] r) {
 		for (int i = 0; i < 4; i++) {
 			for (int j = 0; j < 4; j++) {
 				float s = 0;
@@ -30,7 +36,12 @@ public final class Mat4 {
 				r[i * 4 + j] = s;
 			}
 		}
-		return r;
+	}
+
+	/** m = 단위 행렬. */
+	public static void setIdentity(float[] m) {
+		java.util.Arrays.fill(m, 0, 16, 0f);
+		m[0] = m[5] = m[10] = m[15] = 1;
 	}
 
 	/** 점 변환 (w=1). */
@@ -49,15 +60,22 @@ public final class Mat4 {
 
 	/** 정규화된 쿼터니언 (x,y,z,w) → 3×3 회전 (행벡터 규약). */
 	public static float[] fromQuat(float x, float y, float z, float w) {
+		float[] m = new float[16];
+		fromQuatInto(x, y, z, w, m);
+		return m;
+	}
+
+	/** {@link #fromQuat} 를 m 에 (할당 없음, 같은 값). */
+	public static void fromQuatInto(float x, float y, float z, float w, float[] m) {
+		setIdentity(m);
 		float n = (float) Math.sqrt(x * x + y * y + z * z + w * w);
 		if (n == 0) {
-			return identity();
+			return;
 		}
 		x /= n;
 		y /= n;
 		z /= n;
 		w /= n;
-		float[] m = identity();
 		m[0] = 1 - 2 * (y * y + z * z);
 		m[1] = 2 * (x * y + z * w);
 		m[2] = 2 * (x * z - y * w);
@@ -67,41 +85,56 @@ public final class Mat4 {
 		m[8] = 2 * (x * z + y * w);
 		m[9] = 2 * (y * z - x * w);
 		m[10] = 1 - 2 * (x * x + y * y);
-		return m;
 	}
 
 	/** 오일러 각(라디안) → Rx · Ry · Rz (행벡터: X 먼저 적용). CXT 로컬 행렬과 일치 검증됨. */
 	public static float[] fromEuler(float ax, float ay, float az) {
+		float[] m = new float[16];
+		fromEulerInto(ax, ay, az, m, new float[16], new float[16], new float[16], new float[16]);
+		return m;
+	}
+
+	/**
+	 * {@link #fromEuler} 를 out 에 (같은 행렬 곱 순서 = 같은 값). rx·ry·rz·t 는 작업 공간 (out 과 겹치면 안 됨).
+	 */
+	public static void fromEulerInto(float ax, float ay, float az, float[] out, float[] rx, float[] ry, float[] rz, float[] t) {
 		float cx = (float) Math.cos(ax), sx = (float) Math.sin(ax);
 		float cy = (float) Math.cos(ay), sy = (float) Math.sin(ay);
 		float cz = (float) Math.cos(az), sz = (float) Math.sin(az);
-		float[] rx = identity();
+		setIdentity(rx);
 		rx[5] = cx;
 		rx[6] = sx;
 		rx[9] = -sx;
 		rx[10] = cx;
-		float[] ry = identity();
+		setIdentity(ry);
 		ry[0] = cy;
 		ry[2] = -sy;
 		ry[8] = sy;
 		ry[10] = cy;
-		float[] rz = identity();
+		setIdentity(rz);
 		rz[0] = cz;
 		rz[1] = sz;
 		rz[4] = -sz;
 		rz[5] = cz;
-		return mul(mul(rx, ry), rz);
+		mulInto(rx, ry, t);
+		mulInto(t, rz, out);
 	}
 
 	/** 위쪽 3×3 끼리의 곱 a·b (이동 성분 무시, 결과 이동 0). */
 	public static float[] mul3(float[] a, float[] b) {
-		float[] r = identity();
+		float[] r = new float[16];
+		mul3Into(a, b, r);
+		return r;
+	}
+
+	/** {@link #mul3} 를 r 에 (r 은 a·b 와 겹치면 안 된다). */
+	public static void mul3Into(float[] a, float[] b, float[] r) {
+		setIdentity(r);
 		for (int i = 0; i < 3; i++) {
 			for (int j = 0; j < 3; j++) {
 				r[i * 4 + j] = a[i * 4] * b[j] + a[i * 4 + 1] * b[4 + j] + a[i * 4 + 2] * b[8 + j];
 			}
 		}
-		return r;
 	}
 
 	/** 아핀 역행렬 (마지막 열 = 0,0,0,1 가정). */

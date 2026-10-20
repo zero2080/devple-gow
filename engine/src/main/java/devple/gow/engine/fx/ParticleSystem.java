@@ -83,6 +83,9 @@ public final class ParticleSystem implements AutoCloseable {
 	private final Shader shader;
 	private final int vao, vbo;
 	private final FloatBuffer buf;
+	/** 정점 모으기 (자바 배열, put) → upload 때 buf 로 한 번에 복사. sp = 다음 칸. */
+	private float[] stage;
+	private int sp;
 	private final Vector3f eye = new Vector3f();
 	private final Vector3f fwd = new Vector3f(0, 0, -1);
 	private final Vector3f centre = new Vector3f();
@@ -118,6 +121,7 @@ public final class ParticleSystem implements AutoCloseable {
 		owner = new Emitter[max];
 		shader = new Shader("particle.vert", "particle.frag");
 		buf = MemoryUtil.memAllocFloat(max * 6 * STRIDE);
+		stage = new float[Math.min(max * 6, 1024) * STRIDE]; // 필요하면 buf 용량까지 늘린다 (레벨마다 수 MB 를 미리 잡지 않게)
 		vao = devple.gow.engine.render.GlStats.vao(glGenVertexArrays());
 		glBindVertexArray(vao);
 		vbo = devple.gow.engine.render.GlStats.buf(glGenBuffers());
@@ -381,6 +385,28 @@ public final class ParticleSystem implements AutoCloseable {
 		if (count == 0) {
 			return;
 		}
+		long t0 = System.nanoTime();
+		try {
+			renderAll(cam, aspect);
+		} finally {
+			renderNanos += System.nanoTime() - t0;
+		}
+	}
+
+	/** 모든 파티클 시스템의 render 누적 시간 (진단, 메인 스레드). */
+	private static long renderNanos, renderNanosMark, framesMark, frames;
+
+	static {
+		// -Dgow.perf 줄에 프레임당 파티클 그리기 ms (CPU + GL 호출, 48 문서 §9)
+		devple.gow.engine.core.PerfMonitor.gauge("ptcMs", () -> {
+			long df = frames - framesMark, dn = renderNanos - renderNanosMark;
+			framesMark = frames;
+			renderNanosMark = renderNanos;
+			return String.format(java.util.Locale.ROOT, "%.2f", df == 0 ? 0 : dn / 1e6 / df);
+		});
+	}
+
+	private void renderAll(Camera cam, float aspect) {
 		Matrix4f vp = cam.viewProj(aspect);
 		Vector3f fw = new Vector3f(cam.target).sub(cam.eye).normalize();
 		Vector3f right = new Vector3f(fw).cross(0, 1, 0);
@@ -396,15 +422,16 @@ public final class ParticleSystem implements AutoCloseable {
 		glDepthMask(false);
 		glBindVertexArray(vao);
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
-		// 정의 목록은 살아 있는 파티클에서 모은다 (이미터를 지운 뒤에도 남은 파티클은 수명까지 그린다)
-		List<ParticleDef> defs = new ArrayList<>();
-		ParticleDef last = null;
-		for (int i = 0; i < count; i++) {
-			ParticleDef d = owner[i].def;
-			if (d != last && !defs.contains(d)) {
-				defs.add(d);
+		// 정의 목록은 살아 있는 파티클에서 모은다 (이미터를 지운 뒤에도 남은 파티클은 수명까지 그린다). 목록은 equals 로 합치고 (같은 내용의
+		// 다른 정의 객체는 처음 것만 — 그리기 루프는 동일성 비교라 나머지 파티클은 그리지 않는다, 예전 그대로), 정의 객체마다 파티클 색인을
+		// 한 번에 나눠 둔다 (48 문서 §9: 정의마다 전체 파티클을 훑던 것과 같은 순서). contains (깊은 equals) 는 정의 객체마다 한 번만
+		List<ParticleDef> defs = this.defs;
+		defs.clear();
+		bucket();
+		for (int k = 0; k < nSlots; k++) {
+			if (!defs.contains(slotDefs[k])) {
+				defs.add(slotDefs[k]);
 			}
-			last = d;
 		}
 		Vector3f a = new Vector3f(), bAx = new Vector3f(), tmp = new Vector3f();
 		// 열기 아지랑이 (종류 5) 는 렌더 버킷 6 (flags &amp; 0x4040) = 마지막 → 다른 파티클을 다 그린 뒤 프레임을 복사해 쓴다
@@ -423,16 +450,16 @@ public final class ParticleSystem implements AutoCloseable {
 				glBindBuffer(GL_ARRAY_BUFFER, vbo);
 			}
 			if (d.vu()) {
-				renderVu(d, cam, up, right);
+				int slot = slotOf.get(d);
+				renderVu(d, cam, up, right, slotStart[slot], slotStart[slot + 1]);
 				continue;
 			}
 			shader.set("uScreen", 0);
-			buf.clear();
+			sp = 0;
 			int verts = 0;
-			for (int i = 0; i < count; i++) {
-				if (owner[i].def != d) {
-					continue;
-				}
+			int slot = slotOf.get(d);
+			for (int q = slotStart[slot], qe = slotStart[slot + 1]; q < qe; q++) {
+				int i = order[q];
 				float t = age[i] / life[i];
 				float size = (d.size0() + (d.size1() - d.size0()) * t) * owner[i].sizeScale;
 				float[] c0 = d.color0(), c1 = d.color1();
@@ -478,8 +505,7 @@ public final class ParticleSystem implements AutoCloseable {
 			if (verts == 0) {
 				continue;
 			}
-			buf.flip();
-			glBufferSubData(GL_ARRAY_BUFFER, 0, buf);
+			upload(verts);
 			Texture tex = d.texture();
 			if (tex != null) {
 				tex.bind(0);
@@ -504,6 +530,58 @@ public final class ParticleSystem implements AutoCloseable {
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	}
 
+	/** 그리기 정의 목록 (프레임마다 다시). */
+	private final List<ParticleDef> defs = new ArrayList<>();
+	/** 정의 객체 (동일성) → 칸, 칸 → 정의, 칸별 파티클 색인 [slotStart[k], slotStart[k+1]) 의 order (색인 오름차순). */
+	private final java.util.IdentityHashMap<ParticleDef, Integer> slotOf = new java.util.IdentityHashMap<>();
+	private ParticleDef[] slotDefs = new ParticleDef[16];
+	private int[] slotStart = new int[17], slotFill = new int[16];
+	private int[] order = new int[0], pslot = new int[0];
+	private int nSlots;
+
+	/** 살아 있는 파티클을 정의 객체별로 나눈다 (계수 정렬, 칸 = 처음 나온 순서, 칸 안은 색인 순). */
+	private void bucket() {
+		slotOf.clear();
+		nSlots = 0;
+		if (pslot.length < count) {
+			pslot = new int[max];
+			order = new int[max];
+		}
+		ParticleDef last = null;
+		int lastSlot = -1;
+		for (int i = 0; i < count; i++) {
+			ParticleDef d = owner[i].def;
+			if (d != last) {
+				Integer k = slotOf.get(d);
+				if (k == null) {
+					k = nSlots++;
+					slotOf.put(d, k);
+					if (k >= slotDefs.length) {
+						slotDefs = java.util.Arrays.copyOf(slotDefs, k * 2);
+						slotFill = java.util.Arrays.copyOf(slotFill, k * 2);
+						slotStart = java.util.Arrays.copyOf(slotStart, k * 2 + 1);
+					}
+					slotDefs[k] = d;
+				}
+				lastSlot = k;
+				last = d;
+			}
+			pslot[i] = lastSlot;
+		}
+		java.util.Arrays.fill(slotFill, 0, nSlots, 0);
+		for (int i = 0; i < count; i++) {
+			slotFill[pslot[i]]++;
+		}
+		slotStart[0] = 0;
+		for (int k = 0; k < nSlots; k++) {
+			slotStart[k + 1] = slotStart[k] + slotFill[k];
+			slotFill[k] = slotStart[k];
+		}
+		for (int i = 0; i < count; i++) {
+			order[slotFill[pslot[i]]++] = i;
+		}
+	}
+
 	// ---- 원작 VU 식 렌더 (16 문서 §2.4) ----
 
 	private float aspect = 1;
@@ -522,7 +600,7 @@ public final class ParticleSystem implements AutoCloseable {
 	 * 원작 파티클 마이크로코드 그대로: 출력 0x222 색 (0x80 = 1.0), 위치·크기·방향은 종류별 ({@link PtcVu}). 블렌드 = PTC flags&amp;3
 	 * (0x44 알파 / 0x48 가산 / 0x42 감산), TEX0.TCC/TFX = flags 0x400 / bits 2–3, 깊이 쓰기 = flags 0x20000.
 	 */
-	private void renderVu(ParticleDef d, Camera cam, Vector3f up, Vector3f right) {
+	private void renderVu(ParticleDef d, Camera cam, Vector3f up, Vector3f right, int from, int to) {
 		FxResources.Shape sh = d.ptc();
 		PtcVu vu = sh.vu();
 		if (vu.kind == 5 && (frameTex == 0 || HEAT_OFF)) {
@@ -555,7 +633,7 @@ public final class ParticleSystem implements AutoCloseable {
 		glDepthMask(sh.depthWrite());
 		float texW = tex != null ? tex.width() * 16f : 1024f, texH = tex != null ? tex.height() * 16f : 1024f;
 		float tanHalf = (float) Math.tan(Math.toRadians(cam.fovDeg) / 2);
-		buf.clear();
+		sp = 0;
 		vuVerts = 0;
 		Vector3f a = new Vector3f(), b = new Vector3f(), p = new Vector3f(), t = new Vector3f();
 		int kind = vu.kind;
@@ -572,8 +650,9 @@ public final class ParticleSystem implements AutoCloseable {
 				dv1 = Math.max(b0, b1) / texH;
 			}
 		}
-		for (int i = 0; i < count; i++) {
-			if (owner[i].def != d || age[i] < 0) {
+		for (int q = from; q < to; q++) {
+			int i = order[q]; // 이 정의 객체의 파티클 (색인 순, bucket)
+			if (age[i] < 0) {
 				continue;   // 날씨: 볼륨 밖 (원작 출생 −1 → VU 가 건너뜀)
 			}
 			record(vu, i);
@@ -833,19 +912,30 @@ public final class ParticleSystem implements AutoCloseable {
 	}
 
 	private void ensure(int verts) {
-		if ((vuVerts + verts) * STRIDE > buf.capacity()) {
+		if ((vuVerts + verts) * STRIDE > buf.capacity()) { // 나눠 그리는 경계는 예전과 같은 GL 버퍼 용량 기준
 			flush();
 		}
 	}
 
 	private void flush() {
 		if (vuVerts > 0) {
-			buf.flip();
-			glBufferSubData(GL_ARRAY_BUFFER, 0, buf);
+			upload(vuVerts);
 			glDrawArrays(GL_TRIANGLES, 0, vuVerts);
 		}
-		buf.clear();
+		sp = 0;
 		vuVerts = 0;
+	}
+
+	/**
+	 * 모은 정점 (stage[0, sp)) 을 VBO 로. 48 문서 §9: 예전 glBufferSubData(0) 는 같은 프레임의 앞 그리기가 아직 읽는 버퍼를 덮어 GPU 를
+	 * 기다렸다 (PAND03G 메인 스레드 시간의 대부분) → glBufferData 로 저장소를 새로 받아 (orphan) 올린다. 올리는 바이트·그리기는 같다.
+	 */
+	private void upload(int verts) {
+		buf.clear();
+		buf.put(stage, 0, sp);
+		buf.flip();
+		hashUpload(buf, verts);
+		glBufferData(GL_ARRAY_BUFFER, buf, GL_STREAM_DRAW);
 	}
 
 	/** 사각형 p ± a ± b (a = 세로, b = 가로). */
@@ -935,7 +1025,56 @@ public final class ParticleSystem implements AutoCloseable {
 	}
 
 	private void put(float x, float y, float z, float u, float v, float r, float g, float b, float a) {
-		buf.put(x).put(y).put(z).put(u).put(v).put(r).put(g).put(b).put(a);
+		float[] st = stage; // 정점 9 개 float — 직접 배열에 (FloatBuffer 낱개 put 의 경계 검사 없이, 48 §9)
+		int o = sp;
+		if (o + STRIDE > st.length) {
+			st = stage = java.util.Arrays.copyOf(st, Math.min(buf.capacity(), Math.max(o + STRIDE, st.length * 2)));
+		}
+		st[o] = x;
+		st[o + 1] = y;
+		st[o + 2] = z;
+		st[o + 3] = u;
+		st[o + 4] = v;
+		st[o + 5] = r;
+		st[o + 6] = g;
+		st[o + 7] = b;
+		st[o + 8] = a;
+		sp = o + 9;
+	}
+
+	// ---- 검증: 정점 버퍼 해시 (-Dgow.ptcHash=파일, 48 문서 §9) — 최적화 전후 같은 출력인지 프레임마다 비교 ----
+	private static final java.io.PrintStream HASH_OUT = openHash();
+	private static long hash = 17, hashDraws, hashVerts;
+
+	private static java.io.PrintStream openHash() {
+		String f = System.getProperty("gow.ptcHash");
+		try {
+			return f == null ? null : new java.io.PrintStream(new java.io.FileOutputStream(f), true);
+		} catch (java.io.IOException ex) {
+			throw new java.io.UncheckedIOException(ex);
+		}
+	}
+
+	/** 올리는 정점 (flip 된 buf 전체) 과 그리기 정점 수를 누적 해시에. */
+	private static void hashUpload(FloatBuffer b, int verts) {
+		if (HASH_OUT == null) {
+			return;
+		}
+		long h = hash * 31 + verts;
+		for (int k = b.position(), n = b.limit(); k < n; k++) {
+			h = h * 1_000_003L ^ Float.floatToRawIntBits(b.get(k));
+		}
+		hash = h;
+		hashDraws++;
+		hashVerts += verts;
+	}
+
+	/** 프레임 끝 (Engine): 프레임 수 (ptcMs 게이지) + gow.ptcHash 면 "프레임 그리기 정점 해시" 한 줄. */
+	public static void hashFrame(long frame) {
+		frames++;
+		if (HASH_OUT != null) {
+			HASH_OUT.printf("%d %d %d %016x%n", frame, hashDraws, hashVerts, hash);
+		}
 	}
 
 	@Override

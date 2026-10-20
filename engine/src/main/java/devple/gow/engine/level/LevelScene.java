@@ -401,26 +401,63 @@ public final class LevelScene implements Scene {
 	@Override
 	public void enter(Engine e) {
 		prepare();
-		lensFlares = new devple.gow.engine.fx.LensFlares(envParams, data, assets); // SCR_LensFlare (46 문서)
-		for (PendingInstance q : pending) {
-			Instance inst = new Instance(q.name(), assets.upload(q.model()), q.sky(), q.off());
-			instances.add(inst);
-			if (q.shadow() != null) {
-				staticShadows.add(new StaticShadow(inst, q.name().toLowerCase(Locale.ROOT), q.shadow(), q.shadowJoints(), q.shadowHidden()));
-			}
-		}
-		pending = null;
-		envParams = null;
-		collisionLines = collisionMb.build(GL_LINES);
-		volumeLines = volumeMb.build(GL_LINES);
-		collisionMb = volumeMb = null;
-		fx = new LevelFx(e, assets, data, instances, wadPath);
+		glStep(e, Long.MAX_VALUE);
 		System.out.printf(Locale.ROOT, "레벨 %s: 렌더 인스턴스 %d (하늘 %d, 시작 act 자세 %d, 반복 재생 %d, 거울 %d), 충돌 삼각형 %d, 볼륨 %d, 카메라 %d%n",
 				assets.wad().name(), instances.size(), instances.stream().filter(Instance::sky).count(), startPosed, ambient.size(), mirrors.size(),
 				collision.triangles().size(), data.volumes.size(), data.placedCameras.size());
 		if (Boolean.getBoolean("gow.debug") && !ambient.isEmpty()) {
 			System.out.println("반복 재생 배치: " + ambientNames());
 		}
+	}
+
+	/** 올린 배치 수 (pending 앞에서부터, {@link #glStep}). */
+	private int uploaded;
+
+	/**
+	 * GL 단계를 deadline (System.nanoTime) 까지 이어서 한다: 렌즈 플레어 → 배치 하나씩 올리기 → 와이어 → LevelFx (예전 enter 와 같은 순서·내용).
+	 * 다 끝났으면 true. 장면 전환 페이드 동안 메인 스레드가 여러 프레임에 나눠 부른다 ({@link #preUpload}, 48 문서 §9); enter 는 남은 것을 한 번에.
+	 */
+	private boolean glStep(Engine e, long deadline) {
+		if (fx != null) {
+			return true;
+		}
+		if (lensFlares == null) {
+			lensFlares = new devple.gow.engine.fx.LensFlares(envParams, data, assets); // SCR_LensFlare (46 문서)
+		}
+		while (pending != null && uploaded < pending.size()) {
+			if (System.nanoTime() >= deadline) {
+				return false;
+			}
+			PendingInstance q = pending.get(uploaded++);
+			Instance inst = new Instance(q.name(), assets.upload(q.model()), q.sky(), q.off());
+			instances.add(inst);
+			if (q.shadow() != null) {
+				staticShadows.add(new StaticShadow(inst, q.name().toLowerCase(Locale.ROOT), q.shadow(), q.shadowJoints(), q.shadowHidden()));
+			}
+		}
+		if (pending != null) {
+			pending = null;
+			envParams = null;
+			collisionLines = collisionMb.build(GL_LINES);
+			volumeLines = volumeMb.build(GL_LINES);
+			collisionMb = volumeMb = null;
+		}
+		if (System.nanoTime() >= deadline) {
+			return false;
+		}
+		fx = new LevelFx(e, assets, data, instances, wadPath);
+		return true;
+	}
+
+	/**
+	 * 장면 전환 페이드 동안 GL 단계 일부를 미리 (48 문서 §9). {@link #prepare} 가 끝난 장면만. 결과는 enter 에서 한 번에 한 것과 같다
+	 * (같은 순서로 같은 GL 객체를 만든다 — 바뀌는 것은 어느 프레임에서인가뿐). 다 끝났으면 true.
+	 */
+	public boolean preUpload(Engine e, long deadline) {
+		if (!prepared) {
+			return false;
+		}
+		return glStep(e, deadline);
 	}
 
 	private final Map<String, devple.gow.tools.anim.AnimationSet> animSets = new HashMap<>();
@@ -1017,7 +1054,15 @@ public final class LevelScene implements Scene {
 	}
 
 	private void drawPosed(Engine e, Camera cam, String key, float[][] joints, boolean[] hidden) {
-		devple.gow.engine.asset.AnimatedModel m = posedModels.computeIfAbsent(key, this::posedModel);
+		// 모델이 없는 이름 (null) 도 기억한다 — computeIfAbsent 는 null 을 넣지 않아 그런 이름은 프레임마다 전체 배치의 관절 월드를 다시 만들었다
+		// (48 문서 §9: ATHN01A 할당 1 위 Mat4.fromEuler/mul 의 출처). posedModel 은 같은 이름에 같은 결과라 값은 같다
+		devple.gow.engine.asset.AnimatedModel m;
+		if (posedModels.containsKey(key)) {
+			m = posedModels.get(key);
+		} else {
+			m = posedModel(key);
+			posedModels.put(key, m);
+		}
 		if (m != null) {
 			m.hiddenJoints = hidden;
 			m.draw(cam, e.window().aspect(), tmp.identity(), joints, e.renderer().white(), -1f, 1f);
@@ -1149,6 +1194,30 @@ public final class LevelScene implements Scene {
 		FxEnvironment.disableFog(e.renderer().basic());
 	}
 
+	/**
+	 * {@link #exit} 를 {@link devple.gow.engine.render.GlDeferred} 로 미룬다 (48 문서 §9: 씬 교체 프레임의 GL 지우기 2–9 ms) — 같은 순서로, 배치는
+	 * 32 개씩 나눠. GL 해제뿐이라 게임에 보이는 차이는 없다. 동기 모드 (gow.syncLoad) 면 바로 exit.
+	 */
+	public void exitDeferred(Engine e) {
+		if (!devple.gow.engine.asset.Loader.async()) {
+			exit(e);
+			return;
+		}
+		List<Runnable> steps = new ArrayList<>();
+		steps.add(() -> {
+			fx.close();
+			lensFlares.close();
+			collisionLines.close();
+			volumeLines.close();
+		});
+		for (int i = 0; i < instances.size(); i += 32) {
+			List<Instance> part = instances.subList(i, Math.min(instances.size(), i + 32));
+			steps.add(() -> part.forEach(in -> in.model().close()));
+		}
+		steps.add(() -> exitRest(e));
+		devple.gow.engine.render.GlDeferred.addAll(steps);
+	}
+
 	@Override
 	public void exit(Engine e) {
 		fx.close();
@@ -1156,6 +1225,10 @@ public final class LevelScene implements Scene {
 		collisionLines.close();
 		volumeLines.close();
 		instances.forEach(i -> i.model().close());
+		exitRest(e);
+	}
+
+	private void exitRest(Engine e) {
 		// 레벨마다 새로 만드는 GL 객체도 함께 (48 문서 §4: 전환마다 셰이더 프로그램·쿼리·자세 GO 메시가 남았다)
 		posedModels.values().forEach(m -> {
 			if (m != null) {

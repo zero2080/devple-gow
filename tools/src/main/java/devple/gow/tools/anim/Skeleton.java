@@ -146,50 +146,111 @@ public final class Skeleton {
 	 * @param rot 쿼터니언 관절은 (x,y,z,w) 임의 스케일, 오일러 관절은 (x,y,z) 를 16384=1회전 단위로
 	 */
 	public float[] localMatrix(int j, float[] rot, float[] pos, float[] scale) {
+		float[] out = new float[16];
+		localMatrixInto(j, rot, pos, scale, out, Work.get(0));
+		return out;
+	}
+
+	/** {@link #localMatrix} 를 out 에 (같은 계산 순서·값, 작업 공간 wk — out 과 겹치면 안 됨). */
+	void localMatrixInto(int j, float[] rot, float[] pos, float[] scale, float[] out, Work wk) {
 		Joint jt = joints.get(j);
-		float[] r = jt.quaternion() ? Mat4.fromQuat(rot[0], rot[1], rot[2], rot[3])
-				: Mat4.fromEuler(rot[0] * EULER_UNIT, rot[1] * EULER_UNIT, rot[2] * EULER_UNIT);
-		if ((jt.flags & F_EXT_ROT) != 0 && jt.extIndex >= 0 && jt.extIndex < ext.length) {
-			r = Mat4.mul3(r, ext[jt.extIndex]);
+		boolean extRot = (jt.flags & F_EXT_ROT) != 0 && jt.extIndex >= 0 && jt.extIndex < ext.length;
+		float[] r = extRot ? wk.r : out;
+		if (jt.quaternion()) {
+			Mat4.fromQuatInto(rot[0], rot[1], rot[2], rot[3], r);
+		} else {
+			Mat4.fromEulerInto(rot[0] * EULER_UNIT, rot[1] * EULER_UNIT, rot[2] * EULER_UNIT, r, wk.rx, wk.ry, wk.rz, wk.t);
+		}
+		if (extRot) {
+			Mat4.mul3Into(r, ext[jt.extIndex], out);
 		}
 		if (scale != null) {
 			for (int row = 0; row < 3; row++) {
 				for (int c = 0; c < 3; c++) {
-					r[row * 4 + c] *= scale[row];
+					out[row * 4 + c] *= scale[row];
 				}
 			}
 		}
-		r[12] = pos[0];
-		r[13] = pos[1];
-		r[14] = pos[2];
-		return r;
+		out[12] = pos[0];
+		out[13] = pos[1];
+		out[14] = pos[2];
 	}
 
 	/** 로컬 행렬 배열 → 월드 행렬 (부모가 항상 앞 인덱스라는 성질 이용, 아니면 재귀). */
 	public float[][] world(float[][] local) {
-		float[][] w = new float[size()][];
-		for (int i = 0; i < size(); i++) {
-			worldOf(i, local, w);
-		}
+		float[][] w = new float[size()][16];
+		worldInto(local, w, Work.get(size()).done);
 		return w;
 	}
 
-	private float[] worldOf(int i, float[][] local, float[][] w) {
-		if (w[i] == null) {
-			int p = joints.get(i).parent;
-			w[i] = p < 0 ? local[i].clone() : Mat4.mul(local[i], worldOf(p, local, w));
+	/** 월드 행렬을 미리 만든 w (관절마다 float[16]) 에 ({@link #world} 와 같은 값). done = 작업 공간 (길이 ≥ 관절 수). */
+	void worldInto(float[][] local, float[][] w, boolean[] done) {
+		int n = size();
+		java.util.Arrays.fill(done, 0, n, false);
+		for (int i = 0; i < n; i++) {
+			worldOf(i, local, w, done);
 		}
-		return w[i];
+	}
+
+	private void worldOf(int i, float[][] local, float[][] w, boolean[] done) {
+		if (!done[i]) {
+			int p = joints.get(i).parent;
+			if (p < 0) {
+				System.arraycopy(local[i], 0, w[i], 0, 16);
+			} else {
+				worldOf(p, local, w, done);
+				Mat4.mulInto(local[i], w[p], w[i]);
+			}
+			done[i] = true;
+		}
+	}
+
+	/**
+	 * 자세 샘플용 스레드별 작업 공간 (48 문서 §9: 관절마다 로컬·회전 float[16] 할당 제거). 적재 스레드도 자세를 샘플하므로 스레드별.
+	 */
+	static final class Work {
+		private static final ThreadLocal<Work> TL = ThreadLocal.withInitial(Work::new);
+		final float[] r = new float[16], rx = new float[16], ry = new float[16], rz = new float[16], t = new float[16];
+		float[][] local = new float[0][];
+		boolean[] done = new boolean[0];
+
+		static Work get(int joints) {
+			Work w = TL.get();
+			if (w.local.length < joints) {
+				w.local = new float[joints][16];
+				w.done = new boolean[joints];
+			}
+			return w;
+		}
 	}
 
 	/** 월드 → 스키닝 행렬: inverse bind 가 있는 관절은 invBind · world, 없으면 world (정점이 관절 로컬). */
 	public float[][] skin(float[][] world) {
-		float[][] s = new float[size()][];
+		return skin(world, new float[size()][], null);
+	}
+
+	/**
+	 * {@link #skin(float[][])} 를 호출자 버퍼에: out (길이 ≥ 관절 수) 의 칸 = rows[i] (inverse bind 관절, 덮어씀) 또는 world[i].
+	 * rows 가 null 이거나 그 칸이 null 이면 새로 만든다. out 을 돌려준다.
+	 */
+	public float[][] skin(float[][] world, float[][] out, float[][] rows) {
 		for (int i = 0; i < size(); i++) {
 			Joint j = joints.get(i);
-			s[i] = j.hasInverseBind() ? Mat4.mul(inverseBind[j.invIndex], world[i]) : world[i];
+			if (j.hasInverseBind()) {
+				float[] r = rows != null ? rows[i] : null;
+				if (r == null) {
+					r = new float[16];
+					if (rows != null) {
+						rows[i] = r;
+					}
+				}
+				Mat4.mulInto(inverseBind[j.invIndex], world[i], r);
+				out[i] = r;
+			} else {
+				out[i] = world[i];
+			}
 		}
-		return s;
+		return out;
 	}
 
 	/** CXT 바인드 로컬 행렬 기준 월드 행렬. */
