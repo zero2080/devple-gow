@@ -638,9 +638,7 @@ ATHN07B (화면 전체), ATHN06B (방 안이 흐린 벽), PAND03I (주황 판) �
   데이터: 대상이 있는 Start 는 Warp 도착 5 곳 — PAND04AA WarpFrmCore (엘리베이터 AnimLiftUp · IdleOff), ATHN02A ShipTrans-Anim-WarpFrom1F (배 Animator · 소리 · CDsOn 10 초 · 체크포인트 11 초 ·
   PortCam 0.5 초), PAND00D WarpFrom2i (Load · 체크포인트), ATHN08C WarpFrm08B (음악), ATHN01F WarpfromD (Load).
 - 엔진 `ScriptWorld.fireStart` (GameScene Warp 도착, `placePlayer` 뒤).
-- 남는 것: PAND04AA 엘리베이터 CDV 바닥 hull 이름 `EntitiesPand04AA_SheetM` 이 엔진의 발판 판정 (이름에 ground/floor, `Platforms.walkable` [추정]) 에 걸리지 않아 영웅이 −239 로 떨어진다
-  (CDV 표면 레코드는 레벨 시트에 없음 — 같은 이름 규칙에서 빠지는 발판: PAND04F goelevator, PAND02I goplat1–4, PAND02C gocagelift2, ARENA27 goriseplat …) [미해결].
-  ATHN02A 배: Start 가 배 관절 1 에 붙어 있고 배 충돌은 10 초 뒤 CDsOn — 원작에서 영웅이 배를 어떻게 타는지 미확인 (엔진은 −800 바닥) [미해결].
+- ~~남는 것: PAND04AA 엘리베이터 바닥 이름 규칙~~ · ~~ATHN02A 배~~ → 아래 6.
 
 **4. Warp 로 바로 되돌아올 때의 레벨 상태** [확실: 0x1BC3A0 · 0x1BC110 (§13.9) / 근사: 넘기는 것은 화면 상태만]
 - 원작은 Warp 로 떠나온 레벨을 꺼진 채 메모리에 두고, 곧바로 그 레벨로 LoadForWarp/Warp 하면 다시 읽지 않는다 → 떠날 때의 Vis·Animator 상태가 남는다.
@@ -657,9 +655,9 @@ ATHN07B (화면 전체), ATHN06B (방 안이 흐린 벽), PAND03I (주황 판) �
 |---|---|---|
 | PAND00D ← PAND01BB | prefer 번갈기 | **해결** (1) |
 | HDES01E ← ATRET01A | rope3 흔들림 → Gcam6 벽 | **해결** (2) |
-| PAND04AA ← PAND00C | Start 대상 미발동 + 엘리베이터 바닥 판정 | 대상 **해결** (3), 발판 판정 미해결 |
+| PAND04AA ← PAND00C | Start 대상 미발동 + 엘리베이터 바닥 판정 | 대상 **해결** (3), 발판 판정 **해결** (6) |
 | OLYMP01 ← OLYMP02 Warp | goentrance 문 닫힘 (도착점이 OpenGates 안) | 실제 플레이 **해결** (4), 하네스는 상태 없음 |
-| ATHN02A ← ATHN01F | 배 타기 (3 남는 것) | 미해결 |
+| ATHN02A ← ATHN01F | 정박한 배 goshipgroup 갑판 충돌 없음 | **해결** (6) |
 | PAND03F/03J ← PAND00C, PAND02A ← PAND00C | CoreTubeCam4 / Follow | 데이터대로 (§13.9) |
 | DEST01 ↔ DEST02, OLYMP02 ← OLYMP01 걷기, PAND03H ← PAND03I, PAND05B ← PAND05A | 닫힌 문 · 겹친 좌표 · 수호자 가림 · camEleEnter | 기존 분류 (§13.8) |
 | ATHN01D ← ATHN01E, ATHN01B ← ATHN01A, ATHN01E ← ATHN01D (짚라인 끝 Follow), PAND01C ← PAND01B (도착 즉시 PAND01B 로 걷기 → Follow) | 이음 도착점이 돛대·상자 뒤 / 넘겨받을 카메라 없음 | 하네스 (이음 재현 위치·카메라 상태) |
@@ -667,3 +665,31 @@ ATHN07B (화면 전체), ATHN06B (방 안이 흐린 벽), PAND03I (주황 판) �
 | ATHN06C ← ATHN07, ATHN07 ← ATHN06C, ATHN07B ← OLYMP01 이음, PAND02AA ↔ PAND02B, PAND03A ← PAND03B, PAND03H ← PAND03G, PAND04J ← PAND05A | 이음 도착점 바로 앞 문·벽 (CMV 카메라, 시선 질의 없음 §13.9) | 데이터대로 [추정: 원작은 걸어 들어오는 카메라] |
 
 시선 탐침 (같은 탐침, 60 프레임 · 정적 충돌): 기본 시작 변화 없음, 도착 +1 (PAND00D ← PAND01BB). 엔진 테스트 394.
+
+**6. CDV 발판 밟기 판정 · ATHN02A 배 도착** [확실: 0x1E3298 · 0x1E2100 · 0x139218 · 0x1D63E0 / 추정: GO 생성 경로 0x11D498]
+스크린샷 (커밋 안 함): `/Users/obeomsu/.claude/jobs/6f65672f/tmp/plat/` — `p04aa_a240.png` (엘리베이터 위), `a02a_b20.png` (수정 전: 배 옆으로 낙하),
+`a02a_a20/90/400.png` (수정 후: 갑판, 0.5 초 뒤 PortCam), 전 레벨 목록 `platforms_old_new.tsv` · `static_cdv_bodies.txt`.
+- **CDV 재질 엔트리 = 시트 표면 레코드** (이름 24B + 데이터 40B, 스키마는 전 시트 공통 배치): +0x18 bitfield0 (Ground…NoCSMCollision), +0x1C bitfield1,
+  +0x28 doubleSided, +0x2C SheetFX, +0x30 PartType. 평면마다 재질 번호 (BallHull off[9]) 가 따로 있다.
+- 충돌 질의 0x139218 (BallHull vtable 0x2BF3A0) 은 맞은 평면의 재질 (인스턴스 +0x70 = off[9] → +0x4C + 번호 × +0x48) bitfield0 (오프셋 [0x29C97C] = 스키마 "bitfield0")
+  을 **질의 제외 마스크 0x3309F4** 와 AND — 0 이 아니면 그 면을 버리고 다음 후보 (0x1397A4). 시트 면 (0x16C3B8) 도 같은 검사.
+- 영웅 질의의 제외 마스크: 바닥 0x1E3298 · 몸 0x1E2100 = 호출 마스크 | 0x1010042 (Water·Death·AIBlock·GeneralGuide) | (영웅 +0x258 & 0x4300000).
+  영웅 +0x258 = 0x500000 (Player 생성 0x1D63E0) → NoPlayerCollision. 바닥 호출 마스크 0x8020000 (0x1C58D8 · 0x1CA1D8 …) = ClimbGuide · CombatGuide.
+  → **이름 규칙 폐기**: 바닥 = 수직 선분이 들어가는 평면 재질이 제외 마스크에 안 걸림. 바닥 속성도 그 재질 (Slide·Narrow 발판은 그대로 미끄럼·균형).
+- 전 레벨 Animator CDV 발판 253 개 (윗면 법선 y > 0.7 인 hull 기준, `platforms_old_new.tsv`): 바뀐 것 144 — 늘어남 140 (전부 0 → 있음 121: PAND04F goelevator,
+  PAND02C gocagelift2 · gocageelevator, 문·DMC 결계 윗면 …, 일부 → 전부: PAND04AA goelevatorlift 2/3 → 3/3, PAND02I goplat1–4 4/8 → 8/8, PAND02H 칼날 3/9 → 9/9,
+  PAND00D 분쇄기 2/8 → 8/8 …), 줄어듦 4 (ATHN08B 세 벽 GeneralGuide 윗면, PAND04G goblocktranslatebg 의 NoPlayerCollision hull). ARENA27 goriseplat 은 전후 같음
+  (groundR hull 이 받침, lambert hull 8 개는 NoPlayerCollision). 불 함정 DamageMat 은 NoPushPullCollision 만이라 영웅에게는 단단한 면.
+- 벽 (구 밀어내기): hull 의 모든 평면이 제외 마스크면 밀지 않는다. 단 GeneralGuide 만은 남긴다 [근사: 0x1E2100 도 제외하지만 ATHN01B goplayerblock "guideMat",
+  ATHN01E 꼬리 막이 등 플레이어를 막는 이름이 GeneralGuide — 따로 막는 질의가 있을 수 있음, 미확인]. 충돌 끔 (Vis Attr11_0 = 2) 인 GO 는 바닥도 아니다.
+- **ATHN02A ← ATHN01F**: Warp_Jump 0x1B2E08 은 Start 월드 행렬 (0x1A9CD0 = 엔티티 × goshiptrans 관절 1) 로 SetMatrix 만 한다 — 배에 부모로 붙이지 않는다.
+  goshiptrans 애니 (10.4 초) 는 관절 이동이 없고 CDV 는 생성 때 끔 (CDsOff) → 10 초 뒤 CDsOn. 도착점 바로 아래 (−623.8, 도착점 −624.1) 는
+  **정박한 배 goshipgroup** (Animator 없는 CDV GO, 사다리·아테나 석상 Mime) 의 갑판이다. 엔진은 Animator·R1 오브젝트의 CDV 만 충돌에 넣어 −800 수로 바닥으로 떨어졌다.
+  원작은 GO 를 만들 때 CDV 리소스마다 BallHull 인스턴스를 만들어 충돌 세계 0x29C978 에 올린다 (리소스 vtable 0x2BF75C → 0x11D498 → 0x138E70 → 0x138FD0) [추정: 경로].
+  → `Platforms.of` 가 **비헤이비어 없는 CDV GO 151 개** (전 레벨, `static_cdv_bodies.txt`: 정박한 배, 보이지 않는 벽·되돌아감 막이, HDES01C 죽음 굴림대 …) 도 정지 몸체로 넣는다
+  (시작 act 가 반복이면 렌더의 반복 재생 배치처럼 돌린다, 도착 자세 맞추기 대상 아님). 비헤이비어 GO (깨지는 물건·상자·밀기·크랭크) 는 각 시스템이 맡는다.
+- 0.5 초 PortCam: Start 대상 0x1A9C18 이 발동하는 `ShipTrans-SetCamPortCam` (Delay 0.5) — 데이터대로 원작 동작. 영웅이 갑판에 서면서 PortCam 이 크레토스·석상·부두를 비춘다 (`a02a_a90.png`).
+- 순회 검증: 강제 뒤에만 나온 전환 0 · 숨긴 채 쓴 상호작용 0 그대로, 보고서는 HEAD 와 같음 (개선·회귀 없음 — `--tests` 단독 실행 비교.
+  전체 묶음 실행에서는 ATHN02D 헤드리스 메두사 단계 기록이 테스트 순서에 따라 바뀐다: HEAD 도 같음, 이번 변경과 무관).
+- 시험: `WarpArrivalTest.pand04aaArrivalRidesElevator` (−239 가 아니라 엘리베이터, AnimLiftUp 끝 y ≈ 45), `cdvMaterialEntriesAreSurfaceRecords`,
+  `athn02aArrivalStandsOnDockedShipDeck`. 엔진 테스트 397.

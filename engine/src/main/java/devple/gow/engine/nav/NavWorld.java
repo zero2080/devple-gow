@@ -82,7 +82,7 @@ public final class NavWorld {
 		for (Platforms ps : new Platforms[]{platforms, neighbour}) {
 			Platforms.Support s = ps.floor(x, y, z, drop);
 			if (s != null && (best == null || s.y() > best.y)) {
-				best = new Floor(s.y(), SurfaceAttr.GROUND.bit(), s);
+				best = new Floor(s.y(), s.attrs(), s); // 윗면 평면 재질의 표면 속성 (CDV 재질 엔트리 = 시트 표면 레코드) // 윗면 평면 재질의 표면 속성 (CDV 재질 엔트리 = 시트 표면 레코드)
 			}
 		}
 		return best;

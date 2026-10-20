@@ -1374,12 +1374,12 @@ public final class GameScene implements Scene {
 		nav.update(dt, p);
 		poseRopes();
 		for (var b : nav.platformBodies()) {
-			if (b.anim() != null) {
+			if (b.anim() != null && b.scripted) { // 정지 CDV 오브젝트의 반복 act 는 렌더가 따로 돌린다 (반복 재생 배치)
 				level.poseInstance(b.owner, b.joints(), b.hidden()); // 움직인 발판·문·회전방은 애니 자세로 (관절 숨김 포함: DMC 결계)
 			}
 		}
 		for (var b : nav.neighbourPlatforms().bodies()) { // 다른 슬롯 레벨 문·발판 (43 §13.8)
-			if (b.anim() != null) {
+			if (b.anim() != null && b.scripted) {
 				otherPosed.put(b.owner, new Object[]{b.joints(), b.hidden()});
 			}
 		}

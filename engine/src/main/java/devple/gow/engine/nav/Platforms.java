@@ -7,6 +7,7 @@ import devple.gow.tools.anim.Skeleton;
 import devple.gow.tools.level.BallHull;
 import devple.gow.tools.level.LevelData;
 import devple.gow.tools.level.LevelLayout;
+import devple.gow.tools.level.SurfaceAttr;
 import org.joml.Vector3f;
 
 import java.util.ArrayList;
@@ -17,13 +18,14 @@ import java.util.List;
  * 움직이는 발판·엘리베이터: Animator 엔티티가 애니를 트는 레벨 오브젝트의 CDV(동적 충돌, BallHull 0) hull 윗면이 바닥이 된다.
  * hull 은 자기 관절(BallHull off[6]) 로컬 좌표이고, 관절 월드 = 오브젝트 애니 포즈 × 인스턴스 행렬 (38 문서 §5).
  * 영웅이 그 위에 서 있으면 지지 관절의 이번 틱 이동만큼 같이 옮긴다 (carry).
- * 밟을 수 있는 hull = 평면 이름(재질)이 시트 표면처럼 ground/floor 인 것 (예 entities_groundRock) — 칼날·불·화살 함정의 DamageMat 등은 제외
- * (전 레벨 Animator 오브젝트 CDV 253 개 조사).
+ * 바닥 = 수직 선분이 hull 로 들어가는 평면의 재질 (평면별 off[9] → 재질 엔트리 = 시트 표면 레코드와 같은 배치, +0x18 bitfield0) 이
+ * 영웅 질의 제외 마스크 {@link #HERO_EXCLUDE} 에 걸리지 않는 것 [확실: 0x1E3298 / 0x1E2100 → 0x139218 의 (재질 bitfield0 &amp; 0x3309F4) 거름].
+ * 이전의 이름 규칙 (재질 이름에 ground/floor) 은 폐기 — PAND04AA 엘리베이터 바닥 {@code EntitiesPand04AA_SheetM} 은 Ground 인데 빠졌다 (43 §13.10).
  */
 public final class Platforms {
 
 	/** 지지 바닥: 높이, 오브젝트, hull 관절. */
-	public record Support(float y, Body body, int joint) {
+	public record Support(float y, Body body, int joint, long attrs) {
 	}
 
 	/** 오브젝트 하나 (CDV hull + 애니). */
@@ -33,7 +35,10 @@ public final class Platforms {
 		final float[] inst;
 		final AnimationSet anims;
 		final BallHull hull;
-		final boolean[] walkable;
+		/** hull 별 평면별 영웅 질의에 걸리는지 (재질이 제외 마스크에 걸리지 않음). */
+		final boolean[][] heroPlane;
+		/** hull 별 평면별 표면 속성 마스크. */
+		final long[][] planeAttrs;
 		Animation anim;
 		float time;
 		boolean playing;
@@ -42,6 +47,8 @@ public final class Platforms {
 		boolean loop, pingPong;
 		float[][] joints;
 		float[][] prev;
+		/** 스크립트 Animator·R1 오브젝트 (false = 정지 CDV 오브젝트: 도착 자세 맞추기 대상 아님). */
+		public boolean scripted = true;
 		/** 충돌 켜짐 — 스크립트 Vis Attr11_0 (1 켬 / 2 끔: "collisionOFF", "DoorCollOff") [추정: 슬롯 이름은 미확정, 데이터 용례로]. */
 		public boolean solid = true;
 
@@ -51,11 +58,17 @@ public final class Platforms {
 			this.inst = inst;
 			this.anims = anims;
 			this.hull = hull;
-			walkable = new boolean[hull == null ? 0 : hull.hulls.size()];
-			for (int h = 0; h < walkable.length; h++) {
-				int ni = hull.hulls.get(h).nameIndex();
-				String n = ni >= 0 && ni < hull.names.size() ? hull.names.get(ni) : String.join(",", hull.names);
-				walkable[h] = walkable(n);
+			int hn = hull == null ? 0 : hull.hulls.size();
+			heroPlane = new boolean[hn][];
+			planeAttrs = new long[hn][];
+			for (int h = 0; h < hn; h++) {
+				int np = hull.hulls.get(h).planes().size();
+				heroPlane[h] = new boolean[np];
+				planeAttrs[h] = new long[np];
+				for (int k = 0; k < np; k++) {
+					planeAttrs[h][k] = hull.planeAttrs(h, k);
+					heroPlane[h][k] = heroSolid(planeAttrs[h][k]);
+				}
 			}
 			joints = LevelLayout.jointWorld(sk, inst);
 			prev = joints;
@@ -101,12 +114,35 @@ public final class Platforms {
 			return anim == null ? null : anim.hiddenJoints(skeleton, time);
 		}
 
-		/** (x, z) 수직선이 hull 들과 만나는 구간의 윗면 중 y+step 이하·y-drop 이상에서 가장 높은 것. 없으면 NaN. hull 관절은 out[0]. */
+		/**
+		 * hull h 가 영웅 몸을 막는지 — 평면 하나라도 {@link #WALL_EXCLUDE} 에 안 걸리면. 몸 질의 0x1E2100 의 제외 마스크는 바닥과 같지만
+		 * GeneralGuide 면 (ATHN01B goplayerblock 등 "플레이어 막이" 이름) 은 따로 막는 질의가 있을 수 있어 밀어내기에는 남긴다 [미확인].
+		 */
+		boolean wallHull(int h) {
+			for (long a : planeAttrs[h]) {
+				if ((a & WALL_EXCLUDE) == 0) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		/**
+		 * (x, z) 수직선이 hull 들과 만나는 구간의 윗면 중 y+step 이하·y-drop 이상에서 가장 높은 것. 없으면 NaN. hull 관절은 out[0],
+		 * 윗면 평면의 표면 속성은 attrsOut[0]. 윗면 평면 (아래로 내리는 선분이 처음 맞는 면) 의 재질이 영웅 질의 제외면 그 hull 은 바닥이 아니다.
+		 */
 		float top(float x, float y, float z, float drop, int[] jointOut) {
+			return top(x, y, z, drop, jointOut, null);
+		}
+
+		float top(float x, float y, float z, float drop, int[] jointOut, long[] attrsOut) {
 			float best = Float.NaN;
-			for (int h = 0; h < walkable.length; h++) {
+			if (!solid) {
+				return best; // 충돌 끔 (Vis Attr11_0 = 2) — 충돌 세계에서 빠짐
+			}
+			for (int h = 0; h < heroPlane.length; h++) {
 				BallHull.Hull hh = hull.hulls.get(h);
-				if (!walkable[h] || hh.planes().size() < 4) {
+				if (hh.planes().size() < 4) {
 					continue; // 평면 1 개 = 구 (ENV 전용 표기), 발판 아님
 				}
 				int j = Math.min(hull.hullJoint[h], joints.length - 1);
@@ -117,7 +153,10 @@ public final class Platforms {
 				Mat4.transformPoint(inv, x, 1, z, p1);
 				float dx = p1[0] - p0[0], dy = p1[1] - p0[1], dz = p1[2] - p0[2];
 				float lo = -1e9f, hi = 1e9f;
-				for (float[] pl : hh.planes()) {
+				int topPlane = -1;
+				List<float[]> planes = hh.planes();
+				for (int k = 0; k < planes.size(); k++) {
+					float[] pl = planes.get(k);
 					float a = pl[0] * dx + pl[1] * dy + pl[2] * dz;
 					float b = -(pl[0] * p0[0] + pl[1] * p0[1] + pl[2] * p0[2] + pl[3]);
 					if (Math.abs(a) < 1e-9f) {
@@ -125,14 +164,23 @@ public final class Platforms {
 							lo = 1e9f;
 						}
 					} else if (a > 0) {
-						hi = Math.min(hi, b / a);
+						if (b / a < hi) {
+							hi = b / a;
+							topPlane = k;
+						}
 					} else {
 						lo = Math.max(lo, b / a);
 					}
 				}
+				if (topPlane < 0 || !heroPlane[h][topPlane]) {
+					continue;
+				}
 				if (lo <= hi && hi <= y + 1e-3f && hi >= y - drop && (Float.isNaN(best) || hi > best)) {
 					best = hi;
 					jointOut[0] = j;
+					if (attrsOut != null) {
+						attrsOut[0] = planeAttrs[h][topPlane];
+					}
 				}
 			}
 			return best;
@@ -141,10 +189,20 @@ public final class Platforms {
 
 	private final List<Body> bodies = new ArrayList<>();
 
-	/** CDV 재질 이름이 밟는 면인지 (시트 표면 이름 규칙: groundRock, groundWood, Ground, floor …). */
-	public static boolean walkable(String material) {
-		String l = material == null ? "" : material.toLowerCase(java.util.Locale.ROOT);
-		return l.contains("ground") || l.contains("floor");
+	/**
+	 * 영웅 충돌 질의의 면 제외 마스크 [확실]: 바닥 0x1E3298 / 몸 0x1E2100 이 0x3309F4 = 호출 마스크 | 0x1010042 | (영웅 +0x258 &amp; 0x4300000) 로 둔다.
+	 * 0x1010042 = Water·Death·AIBlock·GeneralGuide, 영웅 +0x258 = 0x500000 (Player 생성 0x1D63E0) → NoPlayerCollision,
+	 * 바닥 호출 마스크 0x8020000 (0x1C58D8 등) = ClimbGuide·CombatGuide. 면 (시트 삼각형·CDV 평면) 재질 bitfield0 이 하나라도 걸리면 그 면은 건너뛴다.
+	 */
+	public static final long HERO_EXCLUDE = SurfaceAttr.WATER.bit() | SurfaceAttr.DEATH.bit() | SurfaceAttr.AI_BLOCK.bit()
+			| SurfaceAttr.GENERAL_GUIDE.bit() | SurfaceAttr.NO_PLAYER_COLLISION.bit() | SurfaceAttr.CLIMB_GUIDE.bit() | SurfaceAttr.COMBAT_GUIDE.bit();
+
+	/** 벽 (구 밀어내기) 제외 마스크 = {@link #HERO_EXCLUDE} − GeneralGuide [근사]. */
+	public static final long WALL_EXCLUDE = HERO_EXCLUDE & ~SurfaceAttr.GENERAL_GUIDE.bit();
+
+	/** 표면 속성의 면이 영웅 바닥 질의에 걸리는지 ({@link #HERO_EXCLUDE} 에 하나도 안 걸림). */
+	public static boolean heroSolid(long attrs) {
+		return (attrs & HERO_EXCLUDE) == 0;
 	}
 
 	public Platforms() {
@@ -159,12 +217,16 @@ public final class Platforms {
 
 	/**
 	 * posed = 충돌 볼륨이 없어도 자세만 갖는 오브젝트 (R1 레버·크랭크·문: 진행 시간으로 관절 자세 → Marker·렌더, {@link #poseAt}).
+	 * 그 밖에 CDV 가 있는 배치 GO 도 모두 넣는다 ({@link #staticOwner}) — 원작은 GO 를 만들 때 CDV 리소스마다 BallHull 인스턴스를 만들어
+	 * 충돌 세계 0x29C978 에 올린다 (리소스 vtable 0x2BF75C → 0x11D498 → 0x138E70 → 0x138FD0) [추정: 생성 경로]. 예 ATHN02A 정박한 배
+	 * goshipgroup 갑판 = ATHN01F Warp 도착점 바로 아래 (43 §13.10).
 	 */
 	public static Platforms of(LevelData lv, Collection<String> owners, Collection<String> posed) {
 		Platforms ps = new Platforms();
 		for (LevelLayout.Placement p : lv.layout.placements()) {
 			String name = p.instance().name();
-			if (!owners.contains(name) && !posed.contains(name) || p.object().skeleton() == null) {
+			boolean scripted = owners.contains(name) || posed.contains(name);
+			if (!scripted && !staticOwner(lv, p) || p.object().skeleton() == null) {
 				continue;
 			}
 			BallHull cdv = null;
@@ -188,11 +250,20 @@ public final class Platforms {
 				// 애니 없는 발판은 정지 상태로만
 			}
 			Body body = new Body(name, p.object().skeleton(), p.instance().matrix(), set, cdv);
+			body.scripted = scripted;
 			// 시작 자세 = 인스턴스 시작 act 를 시작 시간에 (원작 GO 리셋 0x1309C0, StartPose) — Marker·hull 도 렌더와 같은 자세
 			devple.gow.tools.level.StartPose sp = devple.gow.tools.level.StartPose.of(p, set);
 			if (sp.act() != null) {
 				body.joints = sp.jointWorld();
 				body.prev = body.joints;
+				if (!scripted && sp.act().looping() && sp.act().duration > 0 && sp.act().hasSkeletalData()) {
+					// 정지 CDV 오브젝트의 반복 시작 act (렌더의 반복 재생 배치와 같은 규칙, LevelScene) — 충돌도 그 자세를 따른다 (HDES01C 죽음 굴림대 등)
+					float d = sp.act().duration;
+					body.anim = sp.act();
+					body.time = ((sp.time() % d) + d) % d;
+					body.loop = true;
+					body.playing = true;
+				}
 			}
 			ps.bodies.add(body);
 		}
@@ -201,6 +272,30 @@ public final class Platforms {
 
 	public List<Body> bodies() {
 		return bodies;
+	}
+
+	/**
+	 * 스크립트가 움직이지 않는 CDV 오브젝트 (정지 충돌): 평면 hull 이 있는 CDV 를 갖고, 다른 시스템이 맡는 비헤이비어 GO (깨지는 물건·상자·밀기·크랭크 등,
+	 * {@code LevelData.behaviors}) 가 아닌 것.
+	 */
+	static boolean staticOwner(LevelData lv, LevelLayout.Placement p) {
+		String name = p.instance().name();
+		for (String b : lv.behaviors.keySet()) {
+			if (b.equalsIgnoreCase(name)) {
+				return false;
+			}
+		}
+		for (String r : p.object().refs()) {
+			BallHull h = lv.hulls.get(r);
+			if (h != null && h.kind == 0) {
+				for (BallHull.Hull hh : h.hulls) {
+					if (hh.planes().size() >= 4) {
+						return true;
+					}
+				}
+			}
+		}
+		return false;
 	}
 
 	/** 오브젝트 애니 상태 (이음 넘기기: 떠나온 레벨은 원작에서 다른 슬롯에 그대로 남는다, 43 §13.8). */
@@ -397,7 +492,7 @@ public final class Platforms {
 		boolean moved = false;
 		for (int h = 0; h < b.hull.hulls.size(); h++) {
 			BallHull.Hull hh = b.hull.hulls.get(h);
-			if (hh.planes().size() < 4) {
+			if (hh.planes().size() < 4 || !b.wallHull(h)) {
 				continue;
 			}
 			float[] m = b.joints[Math.min(b.hull.hullJoint[h], b.joints.length - 1)];
@@ -442,10 +537,11 @@ public final class Platforms {
 	public Support floor(float x, float y, float z, float drop) {
 		Support best = null;
 		int[] j = new int[1];
+		long[] at = new long[1];
 		for (Body b : bodies) {
-			float t = b.top(x, y, z, drop, j);
+			float t = b.top(x, y, z, drop, j, at);
 			if (!Float.isNaN(t) && (best == null || t > best.y)) {
-				best = new Support(t, b, j[0]);
+				best = new Support(t, b, j[0], at[0]);
 			}
 		}
 		return best;
@@ -480,7 +576,12 @@ public final class Platforms {
 			}
 		}
 		for (Body b : bodies) {
-			if (b.anims == null || b.playing) {
+			if (!b.scripted && !Float.isNaN(b.top(p.x, p.y + tol, p.z, 2 * tol, j))) {
+				return b; // 정지 CDV 오브젝트 바닥 (ATHN02A 정박한 배 갑판)
+			}
+		}
+		for (Body b : bodies) {
+			if (b.anims == null || b.playing || !b.scripted) {
 				continue;
 			}
 			Animation a0 = b.anim; // 맞지 않으면 원래 상태로 (이음으로 넘겨받은 열린 문 등, 43 §13.8)
