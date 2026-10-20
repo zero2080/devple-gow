@@ -31,6 +31,15 @@ public interface AudioBackend extends AutoCloseable {
 	/** 매 프레임: 스트림 버퍼 보충, 끝난 보이스 정리. */
 	void tick(float dt);
 
+	/** 클립의 장치 버퍼 해제 (뱅크를 내릴 때). 그 클립을 재생 중인 보이스는 멈춘다. */
+	default void release(AdpcmClip clip) {
+	}
+
+	/** 측정용 한 줄 (48 문서): 보이스·버퍼 수 등. */
+	default String stats() {
+		return "";
+	}
+
 	@Override
 	default void close() {
 	}

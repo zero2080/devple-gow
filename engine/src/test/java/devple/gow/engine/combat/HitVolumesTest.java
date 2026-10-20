@@ -118,7 +118,8 @@ class HitVolumesTest {
 		List<TriMesh> frames = new ArrayList<>();
 		List<String> labels = new ArrayList<>();
 		Path out = rom.toAbsolutePath().getParent().resolve("work/hitbox");
-		boolean draw = Files.isDirectory(out);
+		// 그림 시트는 요청할 때만 (-Dgow.test.draw): 테스트가 공유 work/ 폴더에 파일을 남기지 않게 (48 문서 §6)
+		boolean draw = System.getProperty("gow.test.draw") != null && Files.isDirectory(out);
 		int step = 0;
 		for (float t = 0; t < 1.6f; t += dt, step++) {
 			in.advance(dt);

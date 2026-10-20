@@ -327,6 +327,10 @@ public final class TraversalVerifier {
 	}
 
 	LevelResult run(String levelName, Neighbours nb) throws IOException {
+		// 적 AI 난수 씨앗 = 생성 순번 (EnemyFighter.spawnCount, JVM 전역) — 레벨마다 0 부터: 앞선 레벨·같은 JVM 의 다른 테스트가 만든 적 수에
+		// 결과가 좌우되지 않게 (전체 :engine:test 와 단독 실행의 ATHN02D 메두사 단계가 달랐다, 48 문서 §5)
+		devple.gow.engine.combat.EnemyFighter.resetSpawnCount();
+		devple.gow.engine.combat.AiTargets.clear(); // 앞 레벨 대상 슬롯 (보스 헤드리스 영웅) 정리
 		LevelResult r = new LevelResult(levelName);
 		LevelData lv = new LevelData(WadFile.load(rom.resolve(levelName + ".WAD")));
 		LevelCollision col = new LevelCollision(lv.sheets);

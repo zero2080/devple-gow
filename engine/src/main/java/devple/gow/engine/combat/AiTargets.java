@@ -170,6 +170,7 @@ public final class AiTargets {
 		return s;
 	}
 
+	/** 모든 대상 슬롯 버리기 (레벨을 떠날 때 — 슬롯 값이 키를 잡아 WeakHashMap 이 풀지 못한다, 48 문서 §4). */
 	public static synchronized void clear() {
 		SLOTS.clear();
 	}

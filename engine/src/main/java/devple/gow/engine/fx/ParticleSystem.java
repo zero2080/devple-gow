@@ -118,9 +118,9 @@ public final class ParticleSystem implements AutoCloseable {
 		owner = new Emitter[max];
 		shader = new Shader("particle.vert", "particle.frag");
 		buf = MemoryUtil.memAllocFloat(max * 6 * STRIDE);
-		vao = glGenVertexArrays();
+		vao = devple.gow.engine.render.GlStats.vao(glGenVertexArrays());
 		glBindVertexArray(vao);
-		vbo = glGenBuffers();
+		vbo = devple.gow.engine.render.GlStats.buf(glGenBuffers());
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
 		glBufferData(GL_ARRAY_BUFFER, (long) max * 6 * STRIDE * Float.BYTES, GL_STREAM_DRAW);
 		int s = STRIDE * Float.BYTES;
@@ -787,9 +787,9 @@ public final class ParticleSystem implements AutoCloseable {
 	 */
 	private void heat(Vector3f p, Vector3f up, Vector3f right, float s, int segs, float du, float ca, float ea) {
 		ensure(segs * 3);
+		float[][] cs = circle(segs);
 		for (int k = 0; k < segs; k++) {
-			double a0 = 2 * Math.PI * k / segs, a1 = 2 * Math.PI * (k + 1) / segs;
-			float c0 = (float) Math.cos(a0) * s, s0 = (float) Math.sin(a0) * s, c1 = (float) Math.cos(a1) * s, s1 = (float) Math.sin(a1) * s;
+			float c0 = cs[0][k] * s, s0 = cs[1][k] * s, c1 = cs[0][k + 1] * s, s1 = cs[1][k + 1] * s;
 			put(p.x, p.y, p.z, du, 0, 1, 1, 1, ca);
 			put(p.x + right.x * c0 + up.x * s0, p.y + right.y * c0 + up.y * s0, p.z + right.z * c0 + up.z * s0, 0, 0, 1, 1, 1, ea);
 			put(p.x + right.x * c1 + up.x * s1, p.y + right.y * c1 + up.y * s1, p.z + right.z * c1 + up.z * s1, 0, 0, 1, 1, 1, ea);
@@ -809,7 +809,7 @@ public final class ParticleSystem implements AutoCloseable {
 			return;
 		}
 		if (frameTex == 0) {
-			frameTex = glGenTextures();
+			frameTex = devple.gow.engine.render.GlStats.tex(glGenTextures());
 		}
 		glActiveTexture(GL_TEXTURE1);
 		glBindTexture(GL_TEXTURE_2D, frameTex);
@@ -870,26 +870,44 @@ public final class ParticleSystem implements AutoCloseable {
 			x1 = y1 = -1;
 		}
 		ensure(6);
-		float[][] v = {
-				{p.x + a.x * y0 + b.x * x0, p.y + a.y * y0 + b.y * x0, p.z + a.z * y0 + b.z * x0, u0, v0},
-				{p.x + a.x * y0 + b.x * x1, p.y + a.y * y0 + b.y * x1, p.z + a.z * y0 + b.z * x1, u1, v0},
-				{p.x + a.x * y1 + b.x * x0, p.y + a.y * y1 + b.y * x0, p.z + a.z * y1 + b.z * x0, u0, v1},
-				{p.x + a.x * y1 + b.x * x1, p.y + a.y * y1 + b.y * x1, p.z + a.z * y1 + b.z * x1, u1, v1}};
-		for (int k : QUAD) {
-			put(v[k][0], v[k][1], v[k][2], v[k][3], v[k][4], r, g, bl, al);
-		}
+		// 모서리 0..3 = (y0,x0) (y0,x1) (y1,x0) (y1,x1), 삼각형 0-1-3, 0-3-2 — 파티클마다 배열을 만들지 않게 직접 (48 문서 §3)
+		float c0x = p.x + a.x * y0 + b.x * x0, c0y = p.y + a.y * y0 + b.y * x0, c0z = p.z + a.z * y0 + b.z * x0;
+		float c1x = p.x + a.x * y0 + b.x * x1, c1y = p.y + a.y * y0 + b.y * x1, c1z = p.z + a.z * y0 + b.z * x1;
+		float c2x = p.x + a.x * y1 + b.x * x0, c2y = p.y + a.y * y1 + b.y * x0, c2z = p.z + a.z * y1 + b.z * x0;
+		float c3x = p.x + a.x * y1 + b.x * x1, c3y = p.y + a.y * y1 + b.y * x1, c3z = p.z + a.z * y1 + b.z * x1;
+		put(c0x, c0y, c0z, u0, v0, r, g, bl, al);
+		put(c1x, c1y, c1z, u1, v0, r, g, bl, al);
+		put(c3x, c3y, c3z, u1, v1, r, g, bl, al);
+		put(c0x, c0y, c0z, u0, v0, r, g, bl, al);
+		put(c3x, c3y, c3z, u1, v1, r, g, bl, al);
+		put(c2x, c2y, c2z, u0, v1, r, g, bl, al);
 		vuVerts += 6;
 	}
 
-	private static final int[] QUAD = {0, 1, 3, 0, 3, 2};
+	/** 원 분할 표 (segs → cos/sin(2πk/segs), k = 0..segs): 원반·아지랑이 파티클마다 삼각함수를 다시 부르지 않게. 값은 같은 식 그대로. */
+	private final java.util.Map<Integer, float[][]> circles = new java.util.HashMap<>();
+
+	private float[][] circle(int segs) {
+		float[][] c = circles.get(segs);
+		if (c == null) {
+			c = new float[2][segs + 1];
+			for (int k = 0; k <= segs; k++) {
+				double ang = 2 * Math.PI * k / segs;
+				c[0][k] = (float) Math.cos(ang);
+				c[1][k] = (float) Math.sin(ang);
+			}
+			circles.put(segs, c);
+		}
+		return c;
+	}
 
 	/** 원반 (종류 4, 0x3A1): 화면을 향한 부채꼴, 중심색 → 테두리색. */
 	private void fan(Vector3f p, Vector3f up, Vector3f right, float s, int segs, float r, float g, float bl, float al,
 					 float er, float eg, float eb, float ea) {
 		ensure(segs * 3);
+		float[][] cs = circle(segs);
 		for (int k = 0; k < segs; k++) {
-			double a0 = 2 * Math.PI * k / segs, a1 = 2 * Math.PI * (k + 1) / segs;
-			float c0 = (float) Math.cos(a0) * s, s0 = (float) Math.sin(a0) * s, c1 = (float) Math.cos(a1) * s, s1 = (float) Math.sin(a1) * s;
+			float c0 = cs[0][k] * s, s0 = cs[1][k] * s, c1 = cs[0][k + 1] * s, s1 = cs[1][k + 1] * s;
 			put(p.x, p.y, p.z, 0.5f, 0.5f, r, g, bl, al);
 			put(p.x + right.x * c0 + up.x * s0, p.y + right.y * c0 + up.y * s0, p.z + right.z * c0 + up.z * s0, 0.5f, 0.5f, er, eg, eb, ea);
 			put(p.x + right.x * c1 + up.x * s1, p.y + right.y * c1 + up.y * s1, p.z + right.z * c1 + up.z * s1, 0.5f, 0.5f, er, eg, eb, ea);
@@ -923,10 +941,10 @@ public final class ParticleSystem implements AutoCloseable {
 	@Override
 	public void close() {
 		if (frameTex != 0) {
-			glDeleteTextures(frameTex);
+			devple.gow.engine.render.GlStats.delTex(frameTex);
 		}
-		glDeleteBuffers(vbo);
-		glDeleteVertexArrays(vao);
+		devple.gow.engine.render.GlStats.delBuf(vbo);
+		devple.gow.engine.render.GlStats.delVao(vao);
 		MemoryUtil.memFree(buf);
 		shader.close();
 	}

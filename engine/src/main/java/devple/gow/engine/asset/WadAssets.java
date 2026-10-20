@@ -318,5 +318,9 @@ public final class WadAssets implements AutoCloseable {
 				t.close();
 			}
 		});
+		// 두 번 닫아도 같은 GL 이름을 두 번 지우지 않게
+		glFrames.clear();
+		models.clear();
+		glTextures.clear();
 	}
 }

@@ -13,7 +13,7 @@ import static org.lwjgl.opengl.GL41C.*;
 public final class CameraFilterRenderer implements AutoCloseable {
 
 	private final Shader shader = new Shader("camfilter.vert", "camfilter.frag");
-	private final int vao = glGenVertexArrays();
+	private final int vao = GlStats.vao(glGenVertexArrays());
 
 	/** 3D 장면 뒤 · HUD 앞에 한 번. */
 	public void draw(CameraFilter f, Camera cam) {
@@ -65,7 +65,7 @@ public final class CameraFilterRenderer implements AutoCloseable {
 
 	@Override
 	public void close() {
-		glDeleteVertexArrays(vao);
+		GlStats.delVao(vao);
 		shader.close();
 	}
 }

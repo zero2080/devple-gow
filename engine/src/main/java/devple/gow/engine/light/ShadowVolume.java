@@ -80,10 +80,13 @@ public final class ShadowVolume {
 	 */
 	public static int build(ShadowGeometry.Piece p, Matrix4fc m, Vector3f light, int mode, Vector4f plane, float factor, Out out) {
 		int nv = p.verts().length;
-		Vector3f[] w = new Vector3f[nv], near = new Vector3f[nv], far = new Vector3f[nv];
+		// 조각·프레임마다 정점 수 × 3 개의 Vector3f 를 만들던 것을 스레드별 작업 공간으로 (48 문서 §3, 값·순서는 같다)
+		Scratch sc = SCRATCH.get();
+		sc.ensure(nv, p.edges().length);
+		Vector3f[] w = sc.w, near = sc.near, far = sc.far;
 		for (int i = 0; i < nv; i++) {
 			float[] v = p.verts()[i];
-			w[i] = m.transformPosition(v[0], v[1], v[2], new Vector3f());
+			m.transformPosition(v[0], v[1], v[2], w[i]);
 		}
 		if (mode != MODE_EXTRUDE) {
 			float nl = plane.x * light.x + plane.y * light.y + plane.z * light.z;
@@ -94,31 +97,32 @@ public final class ShadowVolume {
 		for (int i = 0; i < nv; i++) {
 			switch (mode) {
 				case MODE_SLAB -> {
-					Vector3f q = project(w[i], light, plane, 0f);
-					if (q == null) {
+					if (!project(w[i], light, plane, 0f, sc.q)) {
 						return 0;
 					}
-					near[i] = new Vector3f(plane.x, plane.y, plane.z).mul(ABOVE).add(q);
-					far[i] = new Vector3f(plane.x, plane.y, plane.z).mul(-BELOW).add(q);
+					near[i] = sc.nearS[i].set(plane.x, plane.y, plane.z).mul(ABOVE).add(sc.q);
+					far[i] = sc.farS[i].set(plane.x, plane.y, plane.z).mul(-BELOW).add(sc.q);
 				}
 				case MODE_GROUND -> {
 					near[i] = w[i];
-					far[i] = project(w[i], light, plane, BELOW);
-					if (far[i] == null) {
+					if (!project(w[i], light, plane, BELOW, sc.farS[i])) {
 						return 0;
 					}
+					far[i] = sc.farS[i];
 				}
 				default -> {
 					near[i] = w[i];
-					far[i] = new Vector3f(w[i]).sub(light).mul(factor).add(w[i]);
+					far[i] = sc.farS[i].set(w[i]).sub(light).mul(factor).add(w[i]);
 				}
 			}
 		}
 		int nf = p.faces().length;
-		int[] count = new int[p.edges().length];
-		int[] side = new int[p.edges().length];
+		int[] count = sc.count;
+		int[] side = sc.side;
+		java.util.Arrays.fill(count, 0, p.edges().length, 0);
+		java.util.Arrays.fill(side, 0, p.edges().length, 0);
 		int start = out.size;
-		Vector3f n = new Vector3f(), t = new Vector3f(), e1 = new Vector3f(), e2 = new Vector3f(), c = new Vector3f();
+		Vector3f n = sc.n, t = sc.t, e1 = sc.e1, e2 = sc.e2, c = sc.c;
 		for (int f = 0; f < nf; f++) {
 			int cnt = p.faces()[f][0], s0 = p.faces()[f][1];
 			float[] fn = p.normals()[f];
@@ -149,7 +153,7 @@ public final class ShadowVolume {
 				out.tri(far[a], far[b], far[d]);
 			}
 		}
-		for (int e = 0; e < count.length; e++) {
+		for (int e = 0; e < p.edges().length; e++) {
 			if (count[e] != 1) {
 				continue;
 			}
@@ -176,15 +180,55 @@ public final class ShadowVolume {
 	 * v 가 L 보다 평면 쪽에 있지 않으면 null.
 	 */
 	public static Vector3f project(Vector3f v, Vector3f light, Vector4f plane, float drop) {
+		Vector3f r = new Vector3f();
+		return project(v, light, plane, drop, r) ? r : null;
+	}
+
+	/** {@link #project} 를 dest 에 (할당 없음). false = 투영 안 됨 (dest 그대로). */
+	static boolean project(Vector3f v, Vector3f light, Vector4f plane, float drop, Vector3f dest) {
 		float nv = plane.x * v.x + plane.y * v.y + plane.z * v.z;
 		float nl = plane.x * light.x + plane.y * light.y + plane.z * light.z;
 		float den = nv - nl;
 		if (den > -1e-4f) {
-			return null;
+			return false;
 		}
 		float tt = (nv + plane.w + drop) / den;
-		return new Vector3f(v).sub(light).mul(-tt).add(v);
+		dest.set(v).sub(light).mul(-tt).add(v);
+		return true;
 	}
+
+	/** build 작업 공간 (스레드별, 커지기만 함). near/far 는 w·nearS·farS 를 가리키는 참조 배열. */
+	private static final class Scratch {
+		Vector3f[] w = new Vector3f[0], nearS = w, farS = w, near = w, far = w;
+		int[] count = new int[0], side = count;
+		final Vector3f q = new Vector3f(), n = new Vector3f(), t = new Vector3f(), e1 = new Vector3f(), e2 = new Vector3f(), c = new Vector3f();
+
+		void ensure(int nv, int ne) {
+			if (w.length < nv) {
+				int k = Math.max(nv, w.length * 2);
+				w = fresh(k);
+				nearS = fresh(k);
+				farS = fresh(k);
+				near = new Vector3f[k];
+				far = new Vector3f[k];
+			}
+			if (count.length < ne) {
+				int k = Math.max(ne, count.length * 2);
+				count = new int[k];
+				side = new int[k];
+			}
+		}
+
+		private static Vector3f[] fresh(int k) {
+			Vector3f[] a = new Vector3f[k];
+			for (int i = 0; i < k; i++) {
+				a[i] = new Vector3f();
+			}
+			return a;
+		}
+	}
+
+	private static final ThreadLocal<Scratch> SCRATCH = ThreadLocal.withInitial(Scratch::new);
 
 	/**
 	 * 사슬 그림자 (Blades_Init 의 MAT_stencil 띠, 0x1FD218: 블레이드 +0xA8 bit 1 = 받는 평면 있음) — 사슬 점을 L 에서 평면에 투영한 얇은 판 [근사: 폭·두께].

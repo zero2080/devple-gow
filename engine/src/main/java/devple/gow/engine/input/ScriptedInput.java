@@ -28,6 +28,13 @@ public final class ScriptedInput extends Input {
 	private final Set<PadButton> down = EnumSet.noneOf(PadButton.class);
 	private final Set<PadButton> prev = EnumSet.noneOf(PadButton.class);
 	private float time;
+	/** 반복 주기 (초, 0 = 반복 없음): 장시간 측정용 (48 문서). */
+	private float loop;
+
+	public ScriptedInput loop(float period) {
+		loop = period;
+		return this;
+	}
 
 	public ScriptedInput(long window, List<Step> steps) {
 		super(window);
@@ -36,6 +43,7 @@ public final class ScriptedInput extends Input {
 
 	public void advance(float dt) {
 		time += dt;
+		float time = loop > 0 ? this.time % loop : this.time;
 		prev.clear();
 		prev.addAll(down);
 		down.clear();

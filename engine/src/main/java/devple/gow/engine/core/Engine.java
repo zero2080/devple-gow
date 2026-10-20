@@ -36,9 +36,13 @@ public final class Engine implements AutoCloseable {
 
 	public void run(Scene first) {
 		scenes.push(this, first);
+		PerfMonitor perf = PerfMonitor.fromSystem(); // -Dgow.perf=파일 (48 문서)
 		double prev = glfwGetTime();
 		double acc = 0;
 		while (!window.shouldClose()) {
+			if (perf != null) {
+				perf.frameStart();
+			}
 			double now = glfwGetTime();
 			acc += Math.min(now - prev, 0.25);
 			prev = now;
@@ -55,6 +59,9 @@ public final class Engine implements AutoCloseable {
 			if (++frames == captureFrame || (captureTick > 0 && ticks >= captureTick && captureFile != null)) {
 				captureTick = -1;
 				capture();
+			}
+			if (perf != null) {
+				perf.frameEnd(this);
 			}
 			window.swap();
 		}

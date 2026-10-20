@@ -91,7 +91,7 @@ public final class LensFlares implements AutoCloseable {
 		}
 		if (shader == null) {
 			shader = new Shader("lensflare.vert", "lensflare.frag");
-			vao = glGenVertexArrays();
+			vao = devple.gow.engine.render.GlStats.vao(glGenVertexArrays());
 		}
 		int vw, vh;
 		try (MemoryStack st = MemoryStack.stackPush()) {
@@ -192,7 +192,7 @@ public final class LensFlares implements AutoCloseable {
 	public void close() {
 		if (shader != null) {
 			shader.close();
-			glDeleteVertexArrays(vao);
+			devple.gow.engine.render.GlStats.delVao(vao);
 		}
 	}
 }

@@ -24,7 +24,7 @@ public final class Texture implements AutoCloseable {
 		width = w;
 		height = h;
 		this.repeat = repeat;
-		id = glGenTextures();
+		id = GlStats.tex(glGenTextures());
 		glBindTexture(GL_TEXTURE_2D, id);
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
@@ -118,7 +118,7 @@ public final class Texture implements AutoCloseable {
 
 	@Override
 	public void close() {
-		glDeleteTextures(id);
+		GlStats.delTex(id);
 		if (normalMap != null) {
 			normalMap.close();
 			normalMap = null;

@@ -49,6 +49,12 @@ public final class SoundManager implements AutoCloseable {
 		}
 	}
 
+	private record PackKey(VagPack pack, String name) {
+	}
+
+	/** VagPack 항목 → 디코드한 클립 (팩이 내려가면 버린다). */
+	private final Map<PackKey, AdpcmClip> packClips = new HashMap<>();
+
 	private record ClipKey(SoundBank bank, int off, int size, int rate) {
 	}
 
@@ -126,8 +132,27 @@ public final class SoundManager implements AutoCloseable {
 			byName.clear();
 			byHash.clear();
 			packEntries.clear();
-			clips.keySet().removeIf(k -> wads.values().stream().noneMatch(w -> w.banks().contains(k.bank())));
+			clips.entrySet().removeIf(e -> {
+				if (wads.values().stream().anyMatch(w -> w.banks().contains(e.getKey().bank()))) {
+					return false;
+				}
+				if (e.getValue() != null) {
+					backend.release(e.getValue()); // 장치 버퍼도 (48 문서 §4)
+				}
+				return true;
+			});
 			wads.values().forEach(this::index);
+			java.util.Set<VagPack> live = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+			wads.values().forEach(w -> live.addAll(w.packs()));
+			packClips.entrySet().removeIf(e -> {
+				if (live.contains(e.getKey().pack())) {
+					return false;
+				}
+				if (e.getValue() != null) {
+					backend.release(e.getValue());
+				}
+				return true;
+			});
 		}
 	}
 
@@ -467,7 +492,8 @@ public final class SoundManager implements AutoCloseable {
 		switch (p.kind()) {
 			case 0 -> {
 				VagPack pack = packEntries.get(p.name().toUpperCase());
-				AdpcmClip c = pack != null ? pack.clip(p.name()) : null;
+				// 팩 항목 클립은 한 번만 디코드 (예전: 재생마다 새 클립 → 백엔드 버퍼 캐시가 재생마다 자랐다, 48 문서 §4)
+				AdpcmClip c = pack != null ? packClips.computeIfAbsent(new PackKey(pack, p.name().toUpperCase()), k -> k.pack().clip(k.name())) : null;
 				if (c != null) {
 					in.addVoice(backend.play(c, v), c.looped());
 				}
@@ -493,6 +519,19 @@ public final class SoundManager implements AutoCloseable {
 			}
 		}
 		return 0;
+	}
+
+	/**
+	 * 레벨을 떠날 때: 낱개 VAG 파일 (대사·음악 조각, 레벨마다 다름) 캐시와 그 장치 버퍼를 비운다 — 다시 쓰면 다시 읽는다 (48 문서 §4).
+	 * 재생 중인 것은 {@link #stopAll} 뒤라 없다.
+	 */
+	public void trimFileCache() {
+		vagFiles.values().forEach(c -> {
+			if (c != null) {
+				backend.release(c);
+			}
+		});
+		vagFiles.clear();
 	}
 
 	private AdpcmClip vagFile(String name) {

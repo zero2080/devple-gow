@@ -50,9 +50,9 @@ public final class WaterSurface implements AutoCloseable {
 		h = new float[nx * nz];
 		prev = new float[nx * nz];
 		buf = MemoryUtil.memAllocFloat(nx * nz * Mesh.STRIDE);
-		vao = glGenVertexArrays();
+		vao = devple.gow.engine.render.GlStats.vao(glGenVertexArrays());
 		glBindVertexArray(vao);
-		vbo = glGenBuffers();
+		vbo = devple.gow.engine.render.GlStats.buf(glGenBuffers());
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
 		glBufferData(GL_ARRAY_BUFFER, (long) nx * nz * Mesh.STRIDE * Float.BYTES, GL_STREAM_DRAW);
 		int s = Mesh.STRIDE * Float.BYTES;
@@ -72,7 +72,7 @@ public final class WaterSurface implements AutoCloseable {
 		}
 		indexCount = ib.position();
 		ib.flip();
-		ebo = glGenBuffers();
+		ebo = devple.gow.engine.render.GlStats.buf(glGenBuffers());
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
 		glBufferData(GL_ELEMENT_ARRAY_BUFFER, ib, GL_STATIC_DRAW);
 		MemoryUtil.memFree(ib);
@@ -167,9 +167,9 @@ public final class WaterSurface implements AutoCloseable {
 
 	@Override
 	public void close() {
-		glDeleteBuffers(vbo);
-		glDeleteBuffers(ebo);
-		glDeleteVertexArrays(vao);
+		devple.gow.engine.render.GlStats.delBuf(vbo);
+		devple.gow.engine.render.GlStats.delBuf(ebo);
+		devple.gow.engine.render.GlStats.delVao(vao);
 		MemoryUtil.memFree(buf);
 	}
 }

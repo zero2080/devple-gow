@@ -108,14 +108,29 @@ public final class Animator {
 		return current != null && !current.looping() && time >= current.duration;
 	}
 
+	/**
+	 * 지금 자세. 같은 틱 안에서 여러 번 불린다 (그리기·관절 조회·밀기 상자·히트 볼륨·이펙트 부착 — 관절마다) → 마지막 결과를 재생 상태
+	 * (클립·시간·페이드) 가 같으면 그대로 돌려준다 (48 문서 §3: 프레임 할당 1 위). 돌려준 Pose 는 읽기 전용으로 쓴다.
+	 */
 	public Pose pose() {
-		Pose cur = current.sample(skeleton, time, current.looping());
-		if (fade >= 1f || previous == null) {
-			return cur;
+		if (memo != null && memoCur == current && memoPrev == previous && memoTime == time && memoPrevTime == prevTime && memoFade == fade) {
+			return memo;
 		}
-		Pose prev = previous.sample(skeleton, prevTime, previous.looping());
-		return PoseBlend.lerp(skeleton, prev, cur, fade);
+		Pose cur = current.sample(skeleton, time, current.looping());
+		Pose out = fade >= 1f || previous == null ? cur
+				: PoseBlend.lerp(skeleton, previous.sample(skeleton, prevTime, previous.looping()), cur, fade);
+		memo = out;
+		memoCur = current;
+		memoPrev = previous;
+		memoTime = time;
+		memoPrevTime = prevTime;
+		memoFade = fade;
+		return out;
 	}
+
+	private Pose memo;
+	private Animation memoCur, memoPrev;
+	private float memoTime, memoPrevTime, memoFade;
 
 	public Skeleton skeleton() {
 		return skeleton;

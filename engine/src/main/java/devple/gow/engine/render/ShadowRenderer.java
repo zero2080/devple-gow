@@ -18,9 +18,9 @@ public final class ShadowRenderer implements AutoCloseable {
 	public static final float DARKEN = 0.4f;
 
 	private final Shader shader = new Shader("shadow.vert", "shadow.frag");
-	private final int vao = glGenVertexArrays();
-	private final int vbo = glGenBuffers();
-	private final int screenVao = glGenVertexArrays();
+	private final int vao = GlStats.vao(glGenVertexArrays());
+	private final int vbo = GlStats.buf(glGenBuffers());
+	private final int screenVao = GlStats.vao(glGenVertexArrays());
 	private FloatBuffer buf = MemoryUtil.memAllocFloat(9 * 1024);
 
 	public ShadowRenderer() {
@@ -97,9 +97,11 @@ public final class ShadowRenderer implements AutoCloseable {
 	@Override
 	public void close() {
 		shader.close();
-		glDeleteBuffers(vbo);
-		glDeleteVertexArrays(vao);
-		glDeleteVertexArrays(screenVao);
+		MemoryUtil.memFree(buf); // 네이티브 정점 버퍼 (레벨마다 새 렌더러)
+		buf = null;
+		GlStats.delBuf(vbo);
+		GlStats.delVao(vao);
+		GlStats.delVao(screenVao);
 		MemoryUtil.memFree(buf);
 	}
 }

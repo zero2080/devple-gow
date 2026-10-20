@@ -37,9 +37,16 @@ public final class Pose {
 		return l;
 	}
 
-	/** 관절 월드 행렬 (모델 공간). */
+	private Skeleton worldSk;
+	private float[][] worldMemo;
+
+	/** 관절 월드 행렬 (모델 공간). 같은 스켈레톤이면 처음 계산한 것을 돌려준다 (자세는 만든 뒤 바뀌지 않는다 — 읽기 전용). */
 	public float[][] world(Skeleton sk) {
-		return sk.world(local(sk));
+		if (worldSk != sk || worldMemo == null) {
+			worldMemo = sk.world(local(sk));
+			worldSk = sk;
+		}
+		return worldMemo;
 	}
 
 	/** 스키닝 행렬 (정점 · skin[j] = 포즈된 위치). */
