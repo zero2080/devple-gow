@@ -1,5 +1,6 @@
 package devple.gow.engine.ui;
 
+import devple.gow.tools.content.Content;
 import devple.gow.engine.game.BonusMenu;
 import devple.gow.engine.game.ShellBinding;
 import devple.gow.tools.ui.FlpFile;
@@ -189,7 +190,7 @@ class BonusMenuTest {
 				"Bonus17", "Bonus18", "Bonus24", "Bonus19"), movies);
 		Path rom = FlpPlayerTest.rom();
 		for (String m : movies) {
-			assertTrue(Files.exists(rom.resolve(m.toUpperCase() + ".PSS")) || !Files.exists(rom.resolve("BONUS01.PSS")), m);
+			assertTrue(Files.exists(Content.file(rom, m.toUpperCase() + ".PSS")) || !Files.exists(Content.file(rom, "BONUS01.PSS")), m);
 		}
 	}
 

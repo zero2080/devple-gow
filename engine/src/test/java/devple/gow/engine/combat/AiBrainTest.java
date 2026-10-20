@@ -1,5 +1,7 @@
 package devple.gow.engine.combat;
 
+import devple.gow.tools.content.Content;
+import devple.gow.tools.content.Region;
 import devple.gow.tools.combat.CombatFile;
 import devple.gow.tools.wad.WadFile;
 import devple.gow.tools.wad.WadTag;
@@ -26,7 +28,7 @@ class AiBrainTest {
 
 	private static Path rom() {
 		Path rom = Path.of(System.getProperty("gow.rom", "../gow-rom"));
-		Assumptions.assumeTrue(Files.exists(rom.resolve("R_PERMK.WAD")), "gow-rom 없음");
+		Assumptions.assumeTrue(Files.exists(Content.file(rom, Region.of(rom).perm())), "gow-rom 없음");
 		return rom;
 	}
 
@@ -35,9 +37,9 @@ class AiBrainTest {
 	private static EnemyFactory.Kind kind(String wad) throws Exception {
 		Path rom = rom();
 		if (permk == null) {
-			permk = WadFile.load(rom.resolve("R_PERMK.WAD"));
+			permk = WadFile.load(Content.file(rom, Region.of(rom).perm()));
 		}
-		return EnemyFactory.load(rom.resolve(wad), permk, -1);
+		return EnemyFactory.load(Content.file(rom, wad), permk, -1);
 	}
 
 	/** 움직이지 않는 대상 (영웅 대역). 맞아도 무시. */
@@ -340,7 +342,7 @@ class AiBrainTest {
 	void everyEnemyKindRunsTenSeconds() throws Exception {
 		Path rom = rom();
 		if (permk == null) {
-			permk = WadFile.load(rom.resolve("R_PERMK.WAD"));
+			permk = WadFile.load(Content.file(rom, Region.of(rom).perm()));
 		}
 		Map<String, List<Integer>> wads = new TreeMap<>();
 		try (DirectoryStream<Path> ds = Files.newDirectoryStream(rom, "R_*.WAD")) {
@@ -361,7 +363,7 @@ class AiBrainTest {
 		for (Map.Entry<String, List<Integer>> e : wads.entrySet()) {
 			EnemyFactory.Kind k;
 			try {
-				k = EnemyFactory.load(rom.resolve(e.getKey()), permk, -1);
+				k = EnemyFactory.load(Content.file(rom, e.getKey()), permk, -1);
 			} catch (IllegalArgumentException ex) {
 				continue; // 스켈레톤 없는 사운드 전용 WAD (R_A1A … "FkSnd")
 			}

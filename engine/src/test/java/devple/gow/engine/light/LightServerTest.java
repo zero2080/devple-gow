@@ -1,5 +1,6 @@
 package devple.gow.engine.light;
 
+import devple.gow.tools.content.Content;
 import devple.gow.tools.wad.WadFile;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
@@ -164,7 +165,7 @@ class LightServerTest {
 
 	static Path rom() {
 		Path rom = Path.of(System.getProperty("gow.rom", "../gow-rom"));
-		Assumptions.assumeTrue(Files.exists(rom.resolve("PAND01A.WAD")), "gow-rom 없음");
+		Assumptions.assumeTrue(Files.exists(Content.file(rom, "PAND01A.WAD")), "gow-rom 없음");
 		return rom;
 	}
 

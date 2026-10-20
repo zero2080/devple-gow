@@ -1,5 +1,7 @@
 package devple.gow.engine.game;
 
+import devple.gow.tools.content.Content;
+import devple.gow.tools.content.Region;
 import devple.gow.engine.combat.GodMode;
 import devple.gow.tools.wad.WadFile;
 import org.junit.jupiter.api.Assumptions;
@@ -17,10 +19,10 @@ class RewardsTest {
 
 	private static Tweaks load(String... wads) throws Exception {
 		Path rom = Path.of(System.getProperty("gow.rom", "../gow-rom"));
-		Assumptions.assumeTrue(Files.exists(rom.resolve("R_PERMK.WAD")), "gow-rom 없음");
+		Assumptions.assumeTrue(Files.exists(Content.file(rom, Region.of(rom).perm())), "gow-rom 없음");
 		Tweaks t = new Tweaks();
 		for (String w : wads) {
-			t.load(WadFile.load(rom.resolve(w)));
+			t.load(WadFile.load(Content.file(rom, w)));
 		}
 		return t;
 	}

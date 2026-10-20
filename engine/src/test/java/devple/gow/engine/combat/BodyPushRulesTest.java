@@ -1,5 +1,7 @@
 package devple.gow.engine.combat;
 
+import devple.gow.tools.content.Content;
+import devple.gow.tools.content.Region;
 import devple.gow.tools.wad.WadFile;
 import org.joml.Vector3f;
 import org.junit.jupiter.api.Assumptions;
@@ -19,7 +21,7 @@ class BodyPushRulesTest {
 
 	private static Path rom() {
 		Path rom = Path.of(System.getProperty("gow.rom", "../gow-rom"));
-		Assumptions.assumeTrue(Files.exists(rom.resolve("R_PERMK.WAD")), "gow-rom 없음");
+		Assumptions.assumeTrue(Files.exists(Content.file(rom, Region.of(rom).perm())), "gow-rom 없음");
 		return rom;
 	}
 
@@ -130,7 +132,7 @@ class BodyPushRulesTest {
 	@Test
 	void skeletonCandidatesAreItsCdvSpheres() throws Exception {
 		Path rom = rom();
-		EnemyFactory.Kind k = EnemyFactory.load(rom.resolve("R_SKS.WAD"), WadFile.load(rom.resolve("R_PERMK.WAD")), -1);
+		EnemyFactory.Kind k = EnemyFactory.load(Content.file(rom, "R_SKS.WAD"), WadFile.load(Content.file(rom, Region.of(rom).perm())), -1);
 		EnemyFighter f = k.spawn(20);
 		f.holdAi = true;
 		f.update(1 / 60f);
@@ -226,19 +228,19 @@ class BodyPushRulesTest {
 	@Test
 	void soldPushFlagsAndBoxJoints() throws Exception {
 		Path rom = rom();
-		AiData cy = AiData.load(WadFile.load(rom.resolve("R_CY2.WAD")));
+		AiData cy = AiData.load(WadFile.load(Content.file(rom, "R_CY2.WAD")));
 		assertFalse(cy.body(41).noPush(), "사이클롭스 4 = 밀기");
 		assertNull(cy.body(41).joint(), "일반 적: 관절 없음 (루트)");
 		assertEquals(48f, cy.body(41).half() * 16, 1e-4f);
-		AiData perm = AiData.load(WadFile.load(rom.resolve("R_PERMK.WAD")));
+		AiData perm = AiData.load(WadFile.load(Content.file(rom, Region.of(rom).perm())));
 		assertEquals("head", perm.body(0).joint(), "크라토스 +0xA4 = head");
 		assertFalse(perm.body(0).noPush());
-		Assumptions.assumeTrue(Files.exists(rom.resolve("ATHN01E.WAD")));
-		AiData hy = AiData.load(WadFile.load(rom.resolve("ATHN01E.WAD")));
+		Assumptions.assumeTrue(Files.exists(Content.file(rom, "ATHN01E.WAD")));
+		AiData hy = AiData.load(WadFile.load(Content.file(rom, "ATHN01E.WAD")));
 		assertTrue(hy.body(250).noPush(), "히드라 머리 250 (0x0E) = 밀기 끔");
 		assertTrue(hy.body(253).noPush());
 		assertEquals("BHA01JOCHEA1", hy.body(250).joint());
-		AiData pg = AiData.load(WadFile.load(rom.resolve("PAND03G.WAD")));
+		AiData pg = AiData.load(WadFile.load(Content.file(rom, "PAND03G.WAD")));
 		assertFalse(pg.body(200).noPush(), "BMI 의 Sold 는 4 — 밀기 끔은 Think 0x1C0A48 이 매 프레임");
 		assertEquals(136f, pg.body(200).half() * 16, 1e-3f);
 	}
@@ -247,8 +249,8 @@ class BodyPushRulesTest {
 	@Test
 	void flyingHarpyDoesNotPushGroundHero() throws Exception {
 		Path rom = rom();
-		Assumptions.assumeTrue(Files.exists(rom.resolve("R_HAR.WAD")));
-		EnemyFactory.Kind k = EnemyFactory.load(rom.resolve("R_HAR.WAD"), WadFile.load(rom.resolve("R_PERMK.WAD")), -1);
+		Assumptions.assumeTrue(Files.exists(Content.file(rom, "R_HAR.WAD")));
+		EnemyFactory.Kind k = EnemyFactory.load(Content.file(rom, "R_HAR.WAD"), WadFile.load(Content.file(rom, Region.of(rom).perm())), -1);
 		EnemyFighter har = k.spawn();
 		assertNotEquals(0, har.nav().caps() & AiTemplate.CAP_FLY);
 		assertTrue(har.airborne(), "날기 0x40");

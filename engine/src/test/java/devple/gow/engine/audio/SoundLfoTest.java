@@ -1,5 +1,7 @@
 package devple.gow.engine.audio;
 
+import devple.gow.tools.content.Content;
+import devple.gow.tools.content.Region;
 import devple.gow.tools.audio.SoundBank;
 import devple.gow.tools.wad.WadFile;
 import org.junit.jupiter.api.Test;
@@ -42,7 +44,7 @@ class SoundLfoTest {
 	void torchLoopWobblesVolume() throws Exception {
 		var rom = SoundBankTest.rom();
 		SoundManager m = SoundManager.headless(rom);
-		m.load(WadFile.load(rom.resolve("R_PERMK.WAD")));
+		m.load(WadFile.load(Content.file(rom, Region.of(rom).perm())));
 		assertTrue(m.has("SND_TORCH_LOOP"));
 		int h = m.play("SND_TORCH_LOOP", null);
 		assertTrue(h > 0);

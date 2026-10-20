@@ -1,5 +1,7 @@
 package devple.gow.engine.fx;
 
+import devple.gow.tools.content.Content;
+import devple.gow.tools.content.Region;
 import devple.gow.engine.asset.RenderModel;
 import devple.gow.engine.combat.Combatant;
 import devple.gow.engine.combat.HadesSouls;
@@ -123,7 +125,7 @@ public final class MagicFx implements AutoCloseable {
 		this.fx = new EffectSystem(8192);
 		this.ps = new ParticleSystem(4096);
 		if (rom != null) {
-			Path permk = rom.resolve("R_PERMK.WAD");
+			Path permk = Content.file(rom, Region.of(rom).perm());
 			if (fx.add(permk)) {
 				try {
 					tw.load(WadFile.load(permk));
@@ -237,9 +239,9 @@ public final class MagicFx implements AutoCloseable {
 			return;
 		}
 		stageLoaded.put(prefix, st);
-		Path p = rom.resolve(prefix + Math.max(0, Math.min(2, st)) + ".WAD");
+		Path p = Content.file(rom, prefix + Math.max(0, Math.min(2, st)) + ".WAD");
 		if (!Files.exists(p)) {
-			p = rom.resolve(prefix + "0.WAD");
+			p = Content.file(rom, prefix + "0.WAD");
 		}
 		fx.add(p);
 	}

@@ -1,5 +1,7 @@
 package devple.gow.engine.scene;
 
+import devple.gow.tools.content.Content;
+import devple.gow.tools.content.Region;
 import devple.gow.engine.anim.Animator;
 import devple.gow.engine.anim.HeroController;
 import devple.gow.engine.asset.AnimatedModel;
@@ -114,8 +116,8 @@ public final class HeroTestScene implements Scene {
 	public void enter(Engine e) {
 		WadFile perm;
 		try {
-			hero = new WadAssets(rom.resolve("R_HERO0.WAD"));
-			perm = WadFile.load(rom.resolve("R_PERMK.WAD"));
+			hero = new WadAssets(Content.file(rom, "R_HERO0.WAD"));
+			perm = WadFile.load(Content.file(rom, Region.of(rom).perm()));
 		} catch (IOException ex) {
 			throw new UncheckedIOException(ex);
 		}
@@ -171,7 +173,7 @@ public final class HeroTestScene implements Scene {
 		combat.setDamageScale(() -> rules.playerScale(1, 0, bladeLevel, godMode.active()));
 		try {
 			// 원작 CDV 히트박스 + 블레이드 모델 (34 문서)
-			Path wpn = rom.resolve("R_WPN0_" + Math.max(0, Math.min(5, bladeLevel)) + ".WAD");
+			Path wpn = Content.file(rom, "R_WPN0_" + Math.max(0, Math.min(5, bladeLevel)) + ".WAD");
 			combat.setHitVolumes(devple.gow.engine.combat.HitVolumes.forHero(hero.wad(), sk,
 					java.nio.file.Files.exists(wpn) ? WadFile.load(wpn) : null));
 			blades = devple.gow.engine.asset.BladeModels.load(rom, 0, bladeLevel, skinned);
@@ -210,7 +212,7 @@ public final class HeroTestScene implements Scene {
 			}
 		};
 		try {
-			var kind = devple.gow.engine.combat.EnemyFactory.load(rom.resolve(enemyWad + ".WAD"), perm, -1);
+			var kind = devple.gow.engine.combat.EnemyFactory.load(Content.file(rom, enemyWad + ".WAD"), perm, -1);
 			minAssets = kind.assets();
 			skinnedMin = new Shader("skinned.vert", "basic.frag");
 			minModel = kind.buildModel(skinnedMin);
@@ -226,7 +228,7 @@ public final class HeroTestScene implements Scene {
 			orbTweaks = new Tweaks();
 			orbTweaks.load(perm);
 			orbTweaks.load(minAssets.wad());
-			java.nio.file.Path lvl = rom.resolve("PAND03A.WAD"); // Orb 템플릿 정의가 있는 레벨
+			java.nio.file.Path lvl = Content.file(rom, "PAND03A.WAD"); // Orb 템플릿 정의가 있는 레벨
 			if (java.nio.file.Files.exists(lvl)) {
 				orbTweaks.load(WadFile.load(lvl));
 			}
@@ -236,7 +238,7 @@ public final class HeroTestScene implements Scene {
 				System.out.println(enemyWad + " 석상 파괴 (Stone Kill)");
 				magicFx.effect("shatter", en0.pos);
 			});
-			hud = new UiLayer(new WadAssets(rom.resolve("R_PERMK.WAD")), true, "FLP_HUDK", MessageTable.fromWad(perm).orElse(null), new devple.gow.engine.ui.UiVariables());
+			hud = new UiLayer(new WadAssets(Content.file(rom, Region.of(rom).perm())), true, Region.of(rom).flpHud(), MessageTable.fromWad(perm).orElse(null), new devple.gow.engine.ui.UiVariables());
 		} catch (IOException ex) {
 			throw new UncheckedIOException(ex);
 		}
@@ -287,7 +289,7 @@ public final class HeroTestScene implements Scene {
 			ctl.yaw = 0;
 			var fin = devple.gow.engine.combat.GrabRelation.finisher(heroData, enemy.classId(), enemy.hp);
 			// 시작 거리: 같은 데이터로 헤드리스 모의 (새 영웅·적) 를 돌려 결합 순간 (끌기 전) 오차가 가장 작은 거리
-			Path wpnPath = rom.resolve("R_WPN0_" + Math.max(0, Math.min(5, bladeLevel)) + ".WAD");
+			Path wpnPath = Content.file(rom, "R_WPN0_" + Math.max(0, Math.min(5, bladeLevel)) + ".WAD");
 			var kindF = enemyKind;
 			var res = fin == null ? null : devple.gow.engine.combat.GrabRelation.search(() -> devple.gow.engine.combat.GrabRelation.Trial.create(
 					sk, set, tw, data, () -> {

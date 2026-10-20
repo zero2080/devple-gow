@@ -1,5 +1,6 @@
 package devple.gow.engine.asset;
 
+import devple.gow.tools.content.Content;
 import devple.gow.engine.render.Camera;
 import devple.gow.engine.render.Shader;
 import devple.gow.engine.render.Texture;
@@ -32,7 +33,7 @@ public final class BladeModels implements AutoCloseable {
 
 	/** 없으면 null. */
 	public static BladeModels load(Path rom, int costume, int level, Shader skinned) throws IOException {
-		Path p = rom.resolve("R_WPN" + costume + "_" + Math.max(0, Math.min(5, level)) + ".WAD");
+		Path p = Content.file(rom, "R_WPN" + costume + "_" + Math.max(0, Math.min(5, level)) + ".WAD");
 		if (!Files.exists(p)) {
 			return null;
 		}

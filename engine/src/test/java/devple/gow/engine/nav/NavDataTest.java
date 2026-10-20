@@ -1,5 +1,6 @@
 package devple.gow.engine.nav;
 
+import devple.gow.tools.content.Content;
 import devple.gow.engine.game.SceneNav;
 import devple.gow.engine.game.Tweaks;
 import devple.gow.engine.level.LevelCollision;
@@ -31,7 +32,7 @@ class NavDataTest {
 
 	static Path rom() {
 		Path rom = Path.of(System.getProperty("gow.rom", "../gow-rom"));
-		Assumptions.assumeTrue(Files.exists(rom.resolve("ATHN01D.WAD")), "gow-rom 없음");
+		Assumptions.assumeTrue(Files.exists(Content.file(rom, "ATHN01D.WAD")), "gow-rom 없음");
 		return rom;
 	}
 

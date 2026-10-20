@@ -1,5 +1,6 @@
 package devple.gow.engine.game;
 
+import devple.gow.tools.content.Content;
 import devple.gow.engine.anim.Animator;
 import devple.gow.engine.anim.HeroController;
 import devple.gow.engine.asset.AnimatedModel;
@@ -71,7 +72,7 @@ public final class HeroRig implements AutoCloseable {
 
 	/** @param existing 레벨 전환 시 이어받을 진행 상태 (null 이면 새 게임) */
 	public HeroRig(Path rom, WadFile permk, int costume, PlayerState existing) throws IOException {
-		assets = new WadAssets(rom.resolve("R_HERO" + costume + ".WAD"));
+		assets = new WadAssets(Content.file(rom, "R_HERO" + costume + ".WAD"));
 		tweaks.load(permk);
 		tweaks.load(assets.wad());
 		player = existing != null ? existing : new PlayerState(GameRules.load(permk));
@@ -92,7 +93,7 @@ public final class HeroRig implements AutoCloseable {
 		combat.setDamageScale(() -> rules.playerScale(difficulty, player.costume, bladeLevel(), godMode.active(),
 				player.artemisEquipped ? Math.min(2, player.level.get(Weapon.ARTEMIS)) : -1));
 		// 원작 CDV 히트 볼륨: CDV_hero + 블레이드(R_WPN<costume>_<level> 의 CDV_MAIBlade, 레벨 무관하게 같은 구) — 34 문서
-		Path wpn = rom.resolve("R_WPN" + costume + "_" + Math.max(0, Math.min(5, bladeLevel())) + ".WAD");
+		Path wpn = Content.file(rom, "R_WPN" + costume + "_" + Math.max(0, Math.min(5, bladeLevel())) + ".WAD");
 		combat.setHitVolumes(HitVolumes.forHero(assets.wad(), sk, java.nio.file.Files.exists(wpn) ? WadFile.load(wpn) : null));
 		blades = devple.gow.engine.asset.BladeModels.load(rom, costume, bladeLevel(), shader);
 		chain = BladeChain.fromTweaks(tweaks);

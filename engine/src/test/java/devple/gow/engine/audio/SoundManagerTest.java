@@ -1,5 +1,6 @@
 package devple.gow.engine.audio;
 
+import devple.gow.tools.content.Content;
 import devple.gow.tools.tweak.TweakFile;
 import devple.gow.tools.wad.WadFile;
 import org.joml.Vector3f;
@@ -21,7 +22,7 @@ class SoundManagerTest {
 		Path rom = SoundBankTest.rom();
 		SoundManager m = SoundManager.headless(rom);
 		for (String w : wads) {
-			m.load(WadFile.load(rom.resolve(w)));
+			m.load(WadFile.load(Content.file(rom, w)));
 		}
 		return m;
 	}

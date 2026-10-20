@@ -1,5 +1,7 @@
 package devple.gow.engine.audio;
 
+import devple.gow.tools.content.Content;
+import devple.gow.tools.content.Region;
 import devple.gow.tools.wad.WadFile;
 import org.junit.jupiter.api.Test;
 
@@ -13,7 +15,7 @@ class UnderwaterTest {
 	void underwaterMixesGroups() throws Exception {
 		var rom = SoundBankTest.rom();
 		SoundManager m = SoundManager.headless(rom);
-		m.load(WadFile.load(rom.resolve("R_PERMK.WAD")));
+		m.load(WadFile.load(Content.file(rom, Region.of(rom).perm())));
 		assertEquals(1f, m.groupGain(0), 1e-6);
 		m.setUnderwater(true);
 		m.update(0.05f);

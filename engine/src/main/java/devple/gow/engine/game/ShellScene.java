@@ -1,5 +1,7 @@
 package devple.gow.engine.game;
 
+import devple.gow.tools.content.Content;
+import devple.gow.tools.content.Region;
 import devple.gow.engine.core.Engine;
 import devple.gow.engine.scene.Scene;
 import devple.gow.engine.ui.UiLayer;
@@ -32,7 +34,7 @@ public final class ShellScene implements Scene {
 	@Override
 	public void enter(Engine e) {
 		try {
-			ui = UiLayer.load(rom.resolve("R_SHELLK.WAD"), "FLP_ShellK", null);
+			ui = UiLayer.load(Content.file(rom, Region.of(rom).shell()), Region.of(rom).flpShell(), null);
 		} catch (IOException ex) {
 			throw new UncheckedIOException(ex);
 		}
@@ -42,10 +44,10 @@ public final class ShellScene implements Scene {
 		ShellBinding.init(v, unlock);
 		ShellBinding.bindAudio(v, snd);
 		try {
-			if (!snd.loaded().containsKey("R_PERMK.WAD")) {
-				snd.load(devple.gow.tools.wad.WadFile.load(rom.resolve("R_PERMK.WAD")));
+			if (!snd.loaded().containsKey(Region.of(rom).perm())) {
+				snd.load(devple.gow.tools.wad.WadFile.load(Content.file(rom, Region.of(rom).perm())));
 			}
-			snd.load(devple.gow.tools.wad.WadFile.load(rom.resolve("R_SHELLK.WAD")));
+			snd.load(devple.gow.tools.wad.WadFile.load(Content.file(rom, Region.of(rom).shell())));
 		} catch (IOException ex) {
 			throw new UncheckedIOException(ex);
 		}
@@ -122,7 +124,7 @@ public final class ShellScene implements Scene {
 			s.difficulty = Math.max(0, Math.min(3, difficulty));
 			// 코스튬: 해금(Costumes_Unlocked) 시 셸 의상 화면이 PS2_Costume_Choice 를 쓴다. R_HERO<n> 이 없으면 0
 			int c = parseInt(num(ui.variables().get("PS2_Costume_Choice")), 0);
-			s.costume = c >= 0 && java.nio.file.Files.exists(rom.resolve("R_HERO" + c + ".WAD")) ? c : 0;
+			s.costume = c >= 0 && java.nio.file.Files.exists(Content.file(rom, "R_HERO" + c + ".WAD")) ? c : 0;
 			s.openingPending = level.equals(GameFlow.START_LEVEL);
 			System.out.println("새 게임: " + level + " 난이도 " + s.difficulty + " (" + devple.gow.engine.combat.DamageRules.DIFFICULTY[s.difficulty] + ") 코스튬 " + s.costume);
 			e.scenes().transitionTo(new GameScene(s, level, null, 0));

@@ -1,5 +1,7 @@
 package devple.gow.tools.wad;
 
+import devple.gow.tools.content.WadPatches;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -39,7 +41,8 @@ public final class WadFile {
 	}
 
 	public static WadFile load(Path p) throws IOException {
-		return new WadFile(p.getFileName().toString(), ByteBuffer.wrap(Files.readAllBytes(p)));
+		String n = p.getFileName().toString();
+		return new WadFile(n, WadPatches.apply(n, ByteBuffer.wrap(Files.readAllBytes(p)))); // 모드 태그 교체 (49 문서 §5)
 	}
 
 	private List<WadTag> parse() {

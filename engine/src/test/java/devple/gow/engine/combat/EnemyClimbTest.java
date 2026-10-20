@@ -1,5 +1,7 @@
 package devple.gow.engine.combat;
 
+import devple.gow.tools.content.Content;
+import devple.gow.tools.content.Region;
 import devple.gow.engine.level.LevelCollision;
 import devple.gow.engine.nav.NavRope;
 import devple.gow.engine.nav.NavWorld;
@@ -30,7 +32,7 @@ class EnemyClimbTest {
 
 	private static Path rom() {
 		Path rom = Path.of(System.getProperty("gow.rom", "../gow-rom"));
-		Assumptions.assumeTrue(Files.exists(rom.resolve("R_PERMK.WAD")), "gow-rom 없음");
+		Assumptions.assumeTrue(Files.exists(Content.file(rom, Region.of(rom).perm())), "gow-rom 없음");
 		return rom;
 	}
 

@@ -79,7 +79,7 @@ public final class MovieScene implements Scene {
 				System.err.println("[movie] " + name + " 열기 실패: " + e.getMessage());
 			}
 			if (player == null) {
-				System.err.println("[movie] " + name + " 없음 (gow-rom/*.PSS 또는 P2_gow_kor.iso 필요) — 건너뜀");
+				System.err.println("[movie] " + name + " 없음 (rom 디렉터리의 *.PSS 또는 *.iso 필요) — 건너뜀");
 			}
 		}
 		renderer = new MovieRenderer();

@@ -1,5 +1,7 @@
 package devple.gow.engine.ui;
 
+import devple.gow.tools.content.Content;
+import devple.gow.tools.content.Region;
 import devple.gow.engine.asset.WadAssets;
 import devple.gow.engine.core.Engine;
 import devple.gow.engine.render.Texture;
@@ -15,7 +17,7 @@ import java.nio.file.Path;
 /**
  * FLP 무비 하나 = 플레이어 + 렌더러 + 공유 변수. 게임 씬이 소유하고 update/render 를 위임한다.
  * <pre>
- *   UiLayer hud = UiLayer.load(rom.resolve("R_PERMK.WAD"), "FLP_HUDK", null);
+ *   UiLayer hud = UiLayer.load(Content.file(rom, Region.of(rom).perm()), "FLP_HUDK", null);
  *   hud.variables().set("PS2_HealthMeter_Value", 80).event("PS2_MeterBar_Event", 1);
  *   hud.update(engine);  // 고정 틱
  *   hud.render(engine);  // 3D 위에 덮어 그림
@@ -42,13 +44,13 @@ public final class UiLayer implements AutoCloseable {
 	}
 
 	/**
-	 * WAD 에서 FLP 를 연다. 메시지 테이블이 없으면(R_SHELLK 등) 같은 폴더의 R_PERMK.WAD 에서 읽는다.
+	 * WAD 에서 FLP 를 연다. 메시지 테이블이 없으면(R_SHELL 등) 같은 폴더의 R_PERM (지역판 접미사, 49 문서 §4) 에서 읽는다.
 	 * 메모리: 글로벌 변수는 vars 가 null 이면 새로 만든다.
 	 */
 	public static UiLayer load(Path wad, String flpName, UiVariables vars) throws IOException {
 		WadAssets a = new WadAssets(wad);
 		MessageTable msgs = MessageTable.fromWad(a.wad()).orElse(null);
-		Path perm = wad.resolveSibling("R_PERMK.WAD");
+		Path perm = Content.sibling(wad, Region.current().perm());
 		if (msgs == null && Files.exists(perm)) {
 			msgs = MessageTable.fromWad(WadFile.load(perm)).orElse(null);
 		}

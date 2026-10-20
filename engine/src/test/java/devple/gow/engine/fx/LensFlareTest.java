@@ -1,5 +1,6 @@
 package devple.gow.engine.fx;
 
+import devple.gow.tools.content.Content;
 import devple.gow.tools.fx.EnvParams;
 import devple.gow.tools.wad.WadFile;
 import org.junit.jupiter.api.Assumptions;
@@ -16,25 +17,25 @@ class LensFlareTest {
 
 	private static Path rom() {
 		Path rom = Path.of(System.getProperty("gow.rom", "../gow-rom"));
-		Assumptions.assumeTrue(Files.exists(rom.resolve("OLYMP01.WAD")), "gow-rom 없음");
+		Assumptions.assumeTrue(Files.exists(Content.file(rom, "OLYMP01.WAD")), "gow-rom 없음");
 		return rom;
 	}
 
 	@Test
 	void levelData() throws Exception {
 		Path rom = rom();
-		List<LensFlare.Def> o = LensFlare.defs(new EnvParams(WadFile.load(rom.resolve("OLYMP01.WAD"))));
+		List<LensFlare.Def> o = LensFlare.defs(new EnvParams(WadFile.load(Content.file(rom, "OLYMP01.WAD"))));
 		assertEquals(1, o.size());
 		assertEquals("gosunflare", o.getFirst().owner());
 		assertEquals(256f, o.getFirst().size());
 		assertEquals(8f, o.getFirst().occlusion());
 		assertEquals("MAT_starFlare", o.getFirst().material());
-		List<LensFlare.Def> g = LensFlare.defs(new EnvParams(WadFile.load(rom.resolve("PAND04G.WAD"))));
+		List<LensFlare.Def> g = LensFlare.defs(new EnvParams(WadFile.load(Content.file(rom, "PAND04G.WAD"))));
 		assertEquals(2, g.size());
 		assertEquals("MAT_FLARE", g.getFirst().material());
 		assertEquals(64f, g.getFirst().occlusion());
 		assertEquals(700f, g.get(1).size());
-		assertEquals(1, LensFlare.defs(new EnvParams(WadFile.load(rom.resolve("PAND04F.WAD")))).size());
+		assertEquals(1, LensFlare.defs(new EnvParams(WadFile.load(Content.file(rom, "PAND04F.WAD")))).size());
 	}
 
 	@Test

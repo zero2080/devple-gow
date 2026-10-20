@@ -1,0 +1,14 @@
+# 실행 설정 예시 (docs/49-extensibility.md §2). gow.properties 로 복사해서 쓴다 (gow.properties 는 커밋하지 않음).
+# 같은 키를 -Dgow.<키> 로 주면 그쪽이 우선한다.
+
+# 추출된 디스크 파일 디렉터리
+rom=gow-rom
+
+# 동영상을 ISO 에서 바로 읽을 때 (비우면 작업 디렉터리의 *.iso 를 찾는다)
+#iso=P2_gow_kor.iso
+
+# 언어 접미사 (R_PERM<접미사>.WAD). 비우면 rom 에서 자동 감지, '-' = 접미사 없음
+#region=K
+
+# 켤 모드 (mods/ 아래 디렉터리 이름, 쉼표 구분, 뒤에 적을수록 우선)
+#mods=mymod

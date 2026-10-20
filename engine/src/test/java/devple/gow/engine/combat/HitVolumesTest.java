@@ -1,5 +1,7 @@
 package devple.gow.engine.combat;
 
+import devple.gow.tools.content.Content;
+import devple.gow.tools.content.Region;
 import devple.gow.engine.anim.Animator;
 import devple.gow.engine.anim.HeroController;
 import devple.gow.engine.game.Tweaks;
@@ -38,22 +40,22 @@ class HitVolumesTest {
 
 	private static Path rom() {
 		Path rom = Path.of(System.getProperty("gow.rom", "../gow-rom"));
-		Assumptions.assumeTrue(Files.exists(rom.resolve("R_HERO0.WAD")) && Files.exists(rom.resolve("R_WPN0_2.WAD")), "gow-rom 없음");
+		Assumptions.assumeTrue(Files.exists(Content.file(rom, "R_HERO0.WAD")) && Files.exists(Content.file(rom, "R_WPN0_2.WAD")), "gow-rom 없음");
 		return rom;
 	}
 
 	@Test
 	void cdvPartTypes() throws Exception {
 		Path rom = rom();
-		WadFile hero = WadFile.load(rom.resolve("R_HERO0.WAD"));
+		WadFile hero = WadFile.load(Content.file(rom, "R_HERO0.WAD"));
 		Skeleton sk = Skeleton.loadAll(hero).stream().filter(s -> s.name.equals("hero")).findFirst().orElseThrow();
 		BallHull h = HitVolumes.cdvFor(hero, sk);
 		assertArrayEquals(new int[]{4, 56, 60, 1, 1}, h.ballJoint, "CDV_hero 관절 (vertebrae4, 발 2, pelvis 2)");
 		assertArrayEquals(new int[]{1, 7, 9}, h.materialPart, "Body 1 / rightFoot 7 / extra1 9");
 		assertArrayEquals(new int[]{501, 0, 0}, h.materialFx, "SheetFX: 몸 501 Hero Flesh");
-		WeaponAttach w = WeaponAttach.blades(WadFile.load(rom.resolve("R_WPN0_2.WAD")));
+		WeaponAttach w = WeaponAttach.blades(WadFile.load(Content.file(rom, "R_WPN0_2.WAD")));
 		assertArrayEquals(new int[]{2, 11}, w.cdv.materialPart, "weaponLeftMat 2 / weaponTwinCollisionMat 11");
-		HitVolumes v = HitVolumes.forHero(hero, sk, WadFile.load(rom.resolve("R_WPN0_2.WAD")));
+		HitVolumes v = HitVolumes.forHero(hero, sk, WadFile.load(Content.file(rom, "R_WPN0_2.WAD")));
 		assertTrue(v.hasPart(2) && v.hasPart(3) && v.hasPart(11) && v.hasPart(9) && v.hasPart(1));
 	}
 
@@ -81,9 +83,9 @@ class HitVolumesTest {
 	@Test
 	void chainSweepHitsAlongSegment() throws Exception {
 		Path rom = rom();
-		WadFile heroWad = WadFile.load(rom.resolve("R_HERO0.WAD"));
-		WadFile perm = WadFile.load(rom.resolve("R_PERMK.WAD"));
-		WadFile wpn = WadFile.load(rom.resolve("R_WPN0_2.WAD"));
+		WadFile heroWad = WadFile.load(Content.file(rom, "R_HERO0.WAD"));
+		WadFile perm = WadFile.load(Content.file(rom, Region.of(rom).perm()));
+		WadFile wpn = WadFile.load(Content.file(rom, "R_WPN0_2.WAD"));
 		Tweaks tw = new Tweaks();
 		tw.load(perm);
 		tw.load(heroWad);
@@ -104,7 +106,7 @@ class HitVolumesTest {
 		};
 		Combatant c = new Combatant(new CombatData(perm, CombatData.heroFiles(), set), animator, owner);
 		c.setHitVolumes(HitVolumes.forHero(heroWad, sk, wpn));
-		EnemyFighter min = EnemyFactory.load(rom.resolve("R_MIN.WAD"), perm, -1).spawn();
+		EnemyFighter min = EnemyFactory.load(Content.file(rom, "R_MIN.WAD"), perm, -1).spawn();
 		min.pos.set(0, 0, -400);
 		c.setTarget(min);
 		ScriptedInput in = new ScriptedInput(0, List.of(new ScriptedInput.Step(0.1f, 0.05f, PadButton.SQUARE)));
@@ -160,9 +162,9 @@ class HitVolumesTest {
 
 	private Result swing(float z, String tag) throws Exception {
 		Path rom = rom();
-		WadFile heroWad = WadFile.load(rom.resolve("R_HERO0.WAD"));
-		WadFile perm = WadFile.load(rom.resolve("R_PERMK.WAD"));
-		WadFile wpn = WadFile.load(rom.resolve("R_WPN0_2.WAD"));
+		WadFile heroWad = WadFile.load(Content.file(rom, "R_HERO0.WAD"));
+		WadFile perm = WadFile.load(Content.file(rom, Region.of(rom).perm()));
+		WadFile wpn = WadFile.load(Content.file(rom, "R_WPN0_2.WAD"));
 		Tweaks tw = new Tweaks();
 		tw.load(perm);
 		tw.load(heroWad);
@@ -183,7 +185,7 @@ class HitVolumesTest {
 		};
 		Combatant c = new Combatant(new CombatData(perm, CombatData.heroFiles(), set), animator, owner);
 		c.setHitVolumes(HitVolumes.forHero(heroWad, sk, wpn));
-		EnemyFactory.Kind kind = EnemyFactory.load(rom.resolve("R_MIN.WAD"), perm, -1);
+		EnemyFactory.Kind kind = EnemyFactory.load(Content.file(rom, "R_MIN.WAD"), perm, -1);
 		EnemyFighter min = kind.spawn();
 		min.pos.set(0, 0, z);
 		min.yaw = z < 0 ? 0 : (float) Math.PI; // 영웅 쪽을 봄 (정면 -Z 규약)

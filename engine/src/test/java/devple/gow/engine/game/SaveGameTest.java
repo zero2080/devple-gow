@@ -1,5 +1,7 @@
 package devple.gow.engine.game;
 
+import devple.gow.tools.content.Content;
+import devple.gow.tools.content.Region;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -14,7 +16,7 @@ class SaveGameTest {
 	@Test
 	void roundTrip(@TempDir Path tmp) throws Exception {
 		Path rom = Path.of(System.getProperty("gow.rom", "../gow-rom"));
-		Assumptions.assumeTrue(Files.exists(rom.resolve("R_PERMK.WAD")), "gow-rom 없음");
+		Assumptions.assumeTrue(Files.exists(Content.file(rom, Region.of(rom).perm())), "gow-rom 없음");
 		GameSession s = new GameSession(rom);
 		s.player = new PlayerState(GameRules.load(s.permk));
 		s.difficulty = 2;

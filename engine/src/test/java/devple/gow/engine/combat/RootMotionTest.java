@@ -1,5 +1,7 @@
 package devple.gow.engine.combat;
 
+import devple.gow.tools.content.Content;
+import devple.gow.tools.content.Region;
 import devple.gow.engine.anim.Animator;
 import devple.gow.engine.anim.HeroController;
 import devple.gow.engine.game.Tweaks;
@@ -36,9 +38,9 @@ class RootMotionTest {
 
 	private static Rig rig(String wad, int ai1, String skeleton) throws Exception {
 		Path rom = Path.of(System.getProperty("gow.rom", "../gow-rom"));
-		Assumptions.assumeTrue(Files.exists(rom.resolve(wad)), "gow-rom 없음");
-		WadFile heroWad = WadFile.load(rom.resolve("R_HERO0.WAD"));
-		WadFile perm = WadFile.load(rom.resolve("R_PERMK.WAD"));
+		Assumptions.assumeTrue(Files.exists(Content.file(rom, wad)), "gow-rom 없음");
+		WadFile heroWad = WadFile.load(Content.file(rom, "R_HERO0.WAD"));
+		WadFile perm = WadFile.load(Content.file(rom, Region.of(rom).perm()));
 		Tweaks tw = new Tweaks();
 		tw.load(perm);
 		tw.load(heroWad);
@@ -59,7 +61,7 @@ class RootMotionTest {
 		};
 		CombatData cd = new CombatData(perm, CombatData.heroFiles(), set);
 		Combatant c = new Combatant(cd, an, owner);
-		EnemyFactory.Kind k = EnemyFactory.load(rom.resolve(wad), perm, ai1, skeleton);
+		EnemyFactory.Kind k = EnemyFactory.load(Content.file(rom, wad), perm, ai1, skeleton);
 		set.attachAll(k.assets().wad());
 		cd.reindexAnimations();
 		EnemyFighter.resetSpawnCount();

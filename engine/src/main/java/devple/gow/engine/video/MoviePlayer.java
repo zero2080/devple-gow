@@ -71,7 +71,7 @@ public final class MoviePlayer implements AutoCloseable {
 
 	/** 이름(스크립트 PlayMovie 인자, 대소문자 무관)으로 연다. 없으면 null. */
 	public static MoviePlayer open(String name, boolean widescreen) throws IOException {
-		Path rom = Path.of(System.getProperty("gow.rom", "gow-rom"));
+		Path rom = devple.gow.tools.content.Content.romDir();
 		MovieSource s = MovieSource.open(name, rom, isoPath(rom), widescreen);
 		if (s == null) {
 			return null;
@@ -79,24 +79,9 @@ public final class MoviePlayer implements AutoCloseable {
 		return new MoviePlayer(s, s.name().endsWith(".PSW"), 0, 1f, false);
 	}
 
-	/**
-	 * ISO 위치: -Dgow.iso → ./P2_gow_kor.iso → gow-rom 실제 경로의 부모 디렉터리 (워크트리의 gow-rom 심볼릭 링크 대응).
-	 */
+	/** ISO 위치: 설정 iso (-Dgow.iso) → 작업 디렉터리의 *.iso → rom 실제 경로의 부모의 *.iso (49 문서 §2). */
 	public static Path isoPath(Path rom) {
-		String p = System.getProperty("gow.iso");
-		if (p != null) {
-			return Path.of(p);
-		}
-		Path local = Path.of("P2_gow_kor.iso");
-		if (Files.isRegularFile(local)) {
-			return local;
-		}
-		try {
-			Path parent = rom.toRealPath().getParent();
-			return parent == null ? null : parent.resolve("P2_gow_kor.iso");
-		} catch (IOException e) {
-			return null;
-		}
+		return devple.gow.tools.content.Content.isoPath(rom);
 	}
 
 	private void decodeLoop() {

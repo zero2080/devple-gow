@@ -1,5 +1,7 @@
 package devple.gow.engine.game;
 
+import devple.gow.tools.content.Content;
+import devple.gow.tools.content.Region;
 import devple.gow.engine.asset.AnimatedModel;
 import devple.gow.engine.asset.WadAssets;
 import devple.gow.engine.combat.EnemyFactory;
@@ -209,12 +211,12 @@ public final class GameScene implements Scene {
 		if (!devple.gow.engine.asset.Loader.async()) {
 			return;
 		}
-		java.nio.file.Path wad = session.rom.resolve(this.levelName + ".WAD");
+		java.nio.file.Path wad = Content.file(session.rom, this.levelName + ".WAD");
 		java.nio.file.Path rom = session.rom;
 		levelPrep = devple.gow.engine.asset.Loader.submit("level " + this.levelName, () -> {
 			LevelScene s = new LevelScene(wad, -2, false).prepare();
 			for (String name : EnemyFactory.resourceWads(s.data().wad)) {
-				WadAssets.prefetch(rom.resolve(name + ".WAD"), devple.gow.tools.fx.EffectLibrary::preparse); // + wireEffects 의 이펙트 GO 표
+				WadAssets.prefetch(Content.file(rom, name + ".WAD"), devple.gow.tools.fx.EffectLibrary::preparse); // + wireEffects 의 이펙트 GO 표
 			}
 			devple.gow.tools.fx.EffectLibrary.preparse(s.assets().wad()); // wireEffects (MagicFx.addWad(레벨)) 의 이펙트 GO 표 (48 §9)
 			for (int i = levelWadReopens(s.data().wad, levelName); i > 0; i--) {
@@ -228,18 +230,18 @@ public final class GameScene implements Scene {
 			}
 			return s;
 		});
-		WadAssets.prefetch(session.rom.resolve("R_PERMK.WAD")); // HUD
-		WadAssets.prefetch(session.rom.resolve("R_PERMK.WAD"), devple.gow.tools.fx.EffectLibrary::preparse); // MagicFx 이펙트 GO (EffectSystem)
+		WadAssets.prefetch(Content.file(session.rom, Region.of(session.rom).perm())); // HUD
+		WadAssets.prefetch(Content.file(session.rom, Region.of(session.rom).perm()), devple.gow.tools.fx.EffectLibrary::preparse); // MagicFx 이펙트 GO (EffectSystem)
 		int costume = session.player != null ? session.player.costume : session.costume;
-		WadAssets.prefetch(session.rom.resolve("R_HERO" + costume + ".WAD"));
+		WadAssets.prefetch(Content.file(session.rom, "R_HERO" + costume + ".WAD"));
 		if (session.player != null) { // 블레이드 모델 (HeroRig → BladeModels)
-			WadAssets.prefetch(session.rom.resolve("R_WPN" + costume + "_" + Math.max(0, Math.min(5, session.player.level.getOrDefault(Weapon.BLADES, 1))) + ".WAD"));
+			WadAssets.prefetch(Content.file(session.rom, "R_WPN" + costume + "_" + Math.max(0, Math.min(5, session.player.level.getOrDefault(Weapon.BLADES, 1))) + ".WAD"));
 		}
 	}
 
 	/** 블레이드 god 판 (0x1FA9A0, 45 문서 §2): 영웅 코스튬·블레이드 레벨의 R_WPN 이펙트 GO. */
 	private void setGodBlades(devple.gow.engine.fx.MagicFx fx, HeroRig h) {
-		fx.setGodBlades(session.rom.resolve("R_WPN" + h.player.costume + "_" + Math.max(0, Math.min(5, h.bladeLevel())) + ".WAD"),
+		fx.setGodBlades(Content.file(session.rom, "R_WPN" + h.player.costume + "_" + Math.max(0, Math.min(5, h.bladeLevel())) + ".WAD"),
 				() -> !h.player.artemisEquipped);
 	}
 
@@ -297,7 +299,7 @@ public final class GameScene implements Scene {
 			}
 			case 1 -> {
 				preVars = new UiVariables();
-				preHud = new UiLayer(new WadAssets(session.rom.resolve("R_PERMK.WAD")), true, "FLP_HUDK", session.messages, preVars);
+				preHud = new UiLayer(new WadAssets(Content.file(session.rom, Region.of(session.rom).perm())), true, Region.of(session.rom).flpHud(), session.messages, preVars);
 				preStep++;
 				return "hud";
 			}
@@ -347,7 +349,7 @@ public final class GameScene implements Scene {
 				// 레벨 RSRCS 적 종류 (EnemyFactory.load = WAD·튜닝·스켈레톤·애니 해석, GL·소리 없음). 소리 뱅크·튜닝 합치기·영웅 애니 연결은 enter 에서
 				// 예전 순서로 (이전 씬 exit 의 소리 내리기보다 뒤여야 한다)
 				for (String name : EnemyFactory.resourceWads(preLevel.data().wad)) {
-					var path = session.rom.resolve(name + ".WAD");
+					var path = Content.file(session.rom, name + ".WAD");
 					if (!preKinds.containsKey(name) && Files.exists(path)) {
 						try {
 							preKinds.put(name, EnemyFactory.load(path, session.permk, -1));
@@ -420,7 +422,7 @@ public final class GameScene implements Scene {
 		long enterT0 = System.nanoTime();
 		try {
 			level = preLevel != null ? preLevel : levelPrep != null ? devple.gow.engine.asset.Loader.join(levelPrep, "level " + levelName)
-					: new LevelScene(session.rom.resolve(levelName + ".WAD"), -2, false);
+					: new LevelScene(Content.file(session.rom, levelName + ".WAD"), -2, false);
 			levelPrep = null;
 			long ph = devple.gow.engine.core.PerfMonitor.phase(". join", enterT0);
 			level.enter(e); // GL 올리기 (CPU 단계는 페이드 동안 끝났으면 건너뜀)
@@ -438,7 +440,7 @@ public final class GameScene implements Scene {
 			session.player = hero.player;
 			ph = devple.gow.engine.core.PerfMonitor.phase(". hero", ph);
 			UiVariables vars = preVars != null ? preVars : new UiVariables();
-			hud = preHud != null ? preHud : new UiLayer(new WadAssets(session.rom.resolve("R_PERMK.WAD")), true, "FLP_HUDK", session.messages, vars);
+			hud = preHud != null ? preHud : new UiLayer(new WadAssets(Content.file(session.rom, Region.of(session.rom).perm())), true, Region.of(session.rom).flpHud(), session.messages, vars);
 			levelHud = preLevelHudDone ? preLevelHud : loadLevelHud(vars);
 			ph = devple.gow.engine.core.PerfMonitor.phase(". hud", ph);
 			session.sound.load(level.data().wad);
@@ -551,7 +553,7 @@ public final class GameScene implements Scene {
 		ph = devple.gow.engine.core.PerfMonitor.phase(". wireEffects", ph);
 		hudBinding.castable = hero.magic::has;
 		boolean seamless = arrival != null && (arrival.kind() == LevelLink.Kind.SEAMLESS || arrival.kind() == LevelLink.Kind.WALK);
-		link = new LevelLink(levelName, seamless ? arrival.from() : null, w -> Files.exists(session.rom.resolve(w + ".WAD")));
+		link = new LevelLink(levelName, seamless ? arrival.from() : null, w -> Files.exists(Content.file(session.rom, w + ".WAD")));
 		if (link.other() != null) {
 			loadOther(link.other());
 		}
@@ -662,7 +664,7 @@ public final class GameScene implements Scene {
 	/** 레벨이 쓰는 적 리소스: RSRCS 태그(0x1F4)의 24바이트 이름들 → R_&lt;이름&gt;.WAD (11 문서 §6.3 Slots 힙). */
 	private void loadEnemyKinds() throws IOException {
 		for (String name : EnemyFactory.resourceWads(level.data().wad)) {
-			var path = session.rom.resolve(name + ".WAD");
+			var path = Content.file(session.rom, name + ".WAD");
 			if (!kinds.containsKey(name) && Files.exists(path)) {
 				try {
 					Object pre = preKinds.remove(name);
@@ -699,7 +701,7 @@ public final class GameScene implements Scene {
 		for (devple.gow.tools.wad.WadTag t : level.data().wad.tags()) {
 			if (t.hasData() && t.name().startsWith("FLP_") && t.magic() == devple.gow.tools.ui.FlpFile.MAGIC) {
 				try {
-					UiLayer u = new UiLayer(new WadAssets(session.rom.resolve(levelName + ".WAD")), true, t.name(), session.messages, vars);
+					UiLayer u = new UiLayer(new WadAssets(Content.file(session.rom, levelName + ".WAD")), true, t.name(), session.messages, vars);
 					u.acceptInput = false;
 					System.out.println("레벨 HUD: " + t.name());
 					return u;
@@ -792,7 +794,7 @@ public final class GameScene implements Scene {
 		if (!devple.gow.engine.asset.Loader.async() || otherDataPrep.containsKey(wad)) {
 			return;
 		}
-		java.nio.file.Path p = session.rom.resolve(wad + ".WAD");
+		java.nio.file.Path p = Content.file(session.rom, wad + ".WAD");
 		otherDataPrep.put(wad, devple.gow.engine.asset.Loader.submit("otherData " + wad, () -> {
 			LevelData d = new LevelData(devple.gow.tools.wad.WadFile.load(p));
 			try {
@@ -887,7 +889,7 @@ public final class GameScene implements Scene {
 				}
 				otherCol = (LevelCollision) r[1];
 			} else {
-				otherData = new LevelData(devple.gow.tools.wad.WadFile.load(session.rom.resolve(wad + ".WAD")));
+				otherData = new LevelData(devple.gow.tools.wad.WadFile.load(Content.file(session.rom, wad + ".WAD")));
 				otherCol = new LevelCollision(otherData.sheets);
 			}
 			if (lights != null && System.getProperty("gow.noneighbourlights") == null) { // 다른 슬롯 레벨의 LGT 도 같은 서버에 (원작 두 슬롯 상주, 0x151F08)
@@ -1424,7 +1426,7 @@ public final class GameScene implements Scene {
 		if (!kinds.containsKey(key)) {
 			EnemyFactory.Kind k = null;
 			try {
-				k = EnemyFactory.load(session.rom.resolve(levelName + ".WAD"), session.permk, ai1, obj);
+				k = EnemyFactory.load(Content.file(session.rom, levelName + ".WAD"), session.permk, ai1, obj);
 			} catch (IOException | RuntimeException ex) {
 				System.out.println("레벨 템플릿 " + ai1 + " (" + obj + ") 로드 실패: " + ex.getMessage());
 			}
@@ -2250,7 +2252,7 @@ public final class GameScene implements Scene {
 
 	/** 다른 슬롯 레벨 그리기용 장면의 CPU 단계 시작 (이미 진행 중이면 그대로). */
 	private void prepareOther(String wad) {
-		java.nio.file.Path p = session.rom.resolve(wad + ".WAD");
+		java.nio.file.Path p = Content.file(session.rom, wad + ".WAD");
 		if (otherPrep.containsKey(wad) || !Files.exists(p)) {
 			return;
 		}

@@ -1,5 +1,7 @@
 package devple.gow.engine.verify;
 
+import devple.gow.tools.content.Content;
+import devple.gow.tools.content.Region;
 import devple.gow.engine.verify.TraversalVerifier.LevelResult;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
@@ -23,7 +25,7 @@ class TraversalTest {
 	@BeforeAll
 	static void run() throws IOException {
 		Path rom = Path.of(System.getProperty("gow.rom", "../gow-rom"));
-		Assumptions.assumeTrue(Files.exists(rom.resolve("R_PERMK.WAD")), "gow-rom 없음");
+		Assumptions.assumeTrue(Files.exists(Content.file(rom, Region.of(rom).perm())), "gow-rom 없음");
 		v = new TraversalVerifier(rom).runAll();
 		Path out = rom.toRealPath().getParent().resolve("work/verify");
 		if (Files.isDirectory(out)) {

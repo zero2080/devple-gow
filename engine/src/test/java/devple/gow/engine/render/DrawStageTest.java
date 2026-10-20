@@ -1,5 +1,6 @@
 package devple.gow.engine.render;
 
+import devple.gow.tools.content.Content;
 import devple.gow.engine.asset.WadAssets;
 import devple.gow.tools.texture.MaterialResource;
 import devple.gow.tools.texture.TextureLibrary;
@@ -46,9 +47,9 @@ class DrawStageTest {
 	@Test
 	void heroDrawsAfterShadowCompositeLevelEnemiesBefore() throws Exception {
 		Path rom = Path.of(System.getProperty("gow.rom", "../gow-rom"));
-		Assumptions.assumeTrue(Files.exists(rom.resolve("R_HERO0.WAD")) && Files.exists(rom.resolve("PAND01A.WAD")), "gow-rom 없음");
+		Assumptions.assumeTrue(Files.exists(Content.file(rom, "R_HERO0.WAD")) && Files.exists(Content.file(rom, "PAND01A.WAD")), "gow-rom 없음");
 		// 원작 영웅 머티리얼은 모두 flags2 0x100 → 반투명 단계 = 자기 그림자에 어두워지지 않는다
-		TextureLibrary hero = new TextureLibrary(WadFile.load(rom.resolve("R_HERO0.WAD")));
+		TextureLibrary hero = new TextureLibrary(WadFile.load(Content.file(rom, "R_HERO0.WAD")));
 		int heroLate = 0;
 		for (MaterialResource m : hero.materials()) {
 			if (m.name().startsWith("MAT_mai")) {
@@ -58,7 +59,7 @@ class DrawStageTest {
 		}
 		assertTrue(heroLate >= 5, "MAT_maiF* 피부·옷");
 		// 레벨 (적 포함) 은 대부분 flags2 0 의 0x44 → 불투명 단계
-		TextureLibrary lvl = new TextureLibrary(WadFile.load(rom.resolve("PAND01A.WAD")));
+		TextureLibrary lvl = new TextureLibrary(WadFile.load(Content.file(rom, "PAND01A.WAD")));
 		long early = lvl.materials().stream().filter(m -> !WadAssets.lateStage(m)).count();
 		assertTrue(early > lvl.materials().size() / 2, early + " / " + lvl.materials().size());
 	}

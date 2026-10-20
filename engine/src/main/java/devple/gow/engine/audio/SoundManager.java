@@ -1,5 +1,6 @@
 package devple.gow.engine.audio;
 
+import devple.gow.tools.content.Content;
 import devple.gow.tools.audio.AdpcmClip;
 import devple.gow.tools.audio.SoundBank;
 import devple.gow.tools.audio.SoundEmitter;
@@ -552,7 +553,7 @@ public final class SoundManager implements AutoCloseable {
 		if (romDir == null) {
 			return null;
 		}
-		Path f = romDir.resolve(file.toUpperCase());
+		Path f = Content.file(romDir, file.toUpperCase());
 		return Files.exists(f) ? f : null;
 	}
 

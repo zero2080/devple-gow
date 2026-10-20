@@ -1,5 +1,7 @@
 package devple.gow.engine.verify;
 
+import devple.gow.tools.content.Content;
+import devple.gow.tools.content.Region;
 import devple.gow.engine.combat.EnemyFactory;
 import devple.gow.engine.game.LevelEntry;
 import devple.gow.engine.game.LevelLink;
@@ -172,7 +174,7 @@ public final class TraversalVerifier {
 
 	public TraversalVerifier(Path rom) throws IOException {
 		this.rom = rom;
-		this.permk = WadFile.load(rom.resolve("R_PERMK.WAD"));
+		this.permk = WadFile.load(Content.file(rom, Region.of(rom).perm()));
 		this.messages = MessageTable.fromWad(permk).orElseThrow();
 		permNames.addAll(names(permk));
 	}
@@ -186,12 +188,12 @@ public final class TraversalVerifier {
 	}
 
 	public boolean wadExists(String name) {
-		return Files.isRegularFile(rom.resolve(name.toUpperCase(Locale.ROOT) + ".WAD"));
+		return Files.isRegularFile(Content.file(rom, name.toUpperCase(Locale.ROOT) + ".WAD"));
 	}
 
 	private boolean movieExists(String name) {
 		String b = MovieNames.fileBase(name);
-		return Files.isRegularFile(rom.resolve(b + ".PSS")) || Files.isRegularFile(rom.resolve(b + ".PSW"));
+		return Files.isRegularFile(Content.file(rom, b + ".PSS")) || Files.isRegularFile(Content.file(rom, b + ".PSW"));
 	}
 
 	private static Set<String> names(WadFile w) {
@@ -332,7 +334,7 @@ public final class TraversalVerifier {
 		devple.gow.engine.combat.EnemyFighter.resetSpawnCount();
 		devple.gow.engine.combat.AiTargets.clear(); // 앞 레벨 대상 슬롯 (보스 헤드리스 영웅) 정리
 		LevelResult r = new LevelResult(levelName);
-		LevelData lv = new LevelData(WadFile.load(rom.resolve(levelName + ".WAD")));
+		LevelData lv = new LevelData(WadFile.load(Content.file(rom, levelName + ".WAD")));
 		LevelCollision col = new LevelCollision(lv.sheets);
 		r.floorCells = floorCells(col);
 		checkResources(lv, r);
@@ -1210,7 +1212,7 @@ public final class TraversalVerifier {
 	private List<EnemyInfo> enemyKinds(LevelData lv, LevelResult r) {
 		List<EnemyInfo> out = new ArrayList<>();
 		for (String name : EnemyFactory.resourceWads(lv.wad)) {
-			Path p = rom.resolve(name + ".WAD");
+			Path p = Content.file(rom, name + ".WAD");
 			if (!Files.exists(p)) {
 				r.missing.add("RSRCS " + name + ".WAD");
 				continue;
@@ -1274,7 +1276,7 @@ public final class TraversalVerifier {
 		for (String n : EnemyFactory.resourceWads(lv.wad)) {
 			extra.addAll(wadNames.computeIfAbsent(n, k -> {
 				try {
-					Path p = rom.resolve(k + ".WAD");
+					Path p = Content.file(rom, k + ".WAD");
 					return Files.exists(p) ? names(WadFile.load(p)) : Set.of();
 				} catch (IOException ex) {
 					return Set.of();
@@ -1519,7 +1521,7 @@ public final class TraversalVerifier {
 		}
 		for (Map.Entry<String, List<Object[]>> in : incoming.entrySet()) {
 			LevelResult dst = results.get(in.getKey());
-			LevelData lv = new LevelData(WadFile.load(rom.resolve(in.getKey() + ".WAD")));
+			LevelData lv = new LevelData(WadFile.load(Content.file(rom, in.getKey() + ".WAD")));
 			LevelCollision col = new LevelCollision(lv.sheets);
 			ScriptWorld w = new ScriptWorld(lv, new ScriptHost(), null);
 			for (Object[] o : in.getValue()) {
@@ -1529,7 +1531,7 @@ public final class TraversalVerifier {
 					case SEAMLESS -> {
 						float[] p = e.pos();
 						float d = floorDistance(col, p);
-						float[] inVol = d <= WALK_REACH ? null : fallInto(col, new LevelCollision(new LevelData(WadFile.load(rom.resolve(from + ".WAD"))).sheets),
+						float[] inVol = d <= WALK_REACH ? null : fallInto(col, new LevelCollision(new LevelData(WadFile.load(Content.file(rom, from + ".WAD"))).sheets),
 								results.get(from).loadCheckSamples.get(dst.level));
 						dst.arrivals.add(new Arrival(from, e.kind(), String.format(Locale.ROOT, "(%.0f, %.0f, %.0f) %s", p[0], p[1], p[2],
 								d == 0 ? "바닥 있음" : d < Float.MAX_VALUE ? "대상 바닥까지 " + (int) d

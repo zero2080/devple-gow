@@ -1,5 +1,7 @@
 package devple.gow.engine.fx;
 
+import devple.gow.tools.content.Content;
+import devple.gow.tools.content.Region;
 import devple.gow.engine.game.Tweaks;
 import devple.gow.tools.level.LevelData;
 import devple.gow.tools.wad.WadFile;
@@ -16,7 +18,7 @@ class CameraFilterTest {
 
 	private static Path rom() {
 		Path rom = Path.of(System.getProperty("gow.rom", "../gow-rom"));
-		Assumptions.assumeTrue(Files.exists(rom.resolve("R_PERMK.WAD")), "gow-rom 없음");
+		Assumptions.assumeTrue(Files.exists(Content.file(rom, Region.of(rom).perm())), "gow-rom 없음");
 		return rom;
 	}
 

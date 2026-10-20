@@ -9,6 +9,9 @@ import devple.gow.engine.scene.ModelViewerScene;
 import devple.gow.engine.scene.Scene;
 import devple.gow.engine.ui.UiScene;
 
+import devple.gow.tools.content.Content;
+import devple.gow.tools.content.Region;
+
 import java.nio.file.Path;
 
 /**
@@ -36,8 +39,9 @@ public final class GowMain {
 		boolean levelCol = false;
 		Path level = null;
 		// 인자 없이 실행 = 원작처럼 메인 메뉴부터
-		Scene first = java.nio.file.Files.exists(Path.of("gow-rom", "R_SHELLK.WAD"))
-				? new devple.gow.engine.game.ShellScene(Path.of("gow-rom")) : new DebugScene(0.2f);
+		Path romDir = Content.romDir(); // gow.properties rom= / -Dgow.rom (49 문서 §2)
+		Scene first = java.nio.file.Files.exists(Content.file(romDir, Region.of(romDir).shell()))
+				? new devple.gow.engine.game.ShellScene(romDir) : new DebugScene(0.2f);
 		if (java.util.Arrays.asList(args).contains("--boss-demo")) {
 			System.setProperty("gow.boss.demo", "1"); // 보스전 자동 연출 (37 문서)
 		}
@@ -64,7 +68,7 @@ public final class GowMain {
 				int ri = java.util.Arrays.asList(args).indexOf("--auto-run");
 				int ei = java.util.Arrays.asList(args).indexOf("--entry"); // 시작 인스턴스/오브젝트 이름 (진입점)
 				try {
-					var session = new devple.gow.engine.game.GameSession(Path.of("gow-rom"));
+					var session = new devple.gow.engine.game.GameSession(romDir);
 					int ci = java.util.Arrays.asList(args).indexOf("--costume"); // 코스튬 n (R_HERO<n>)
 					session.costume = ci >= 0 ? Integer.parseInt(args[ci + 1]) : 0;
 					int ai = java.util.Arrays.asList(args).indexOf("--arrive"); // 도착 재현: FROM (Warp) 또는 FROM@x,y,z[,요°] (이음)
@@ -88,7 +92,7 @@ public final class GowMain {
 					throw new java.io.UncheckedIOException(ex);
 				}
 			} else if (args[i].equals("--hero")) {
-				String rom = i + 1 < args.length && !args[i + 1].startsWith("--") ? args[++i] : "gow-rom";
+				String rom = i + 1 < args.length && !args[i + 1].startsWith("--") ? args[++i] : romDir.toString();
 				java.util.List<String> al = java.util.Arrays.asList(args);
 				int bi = al.indexOf("--blade");
 				int ai = al.indexOf("--auto");
@@ -142,7 +146,7 @@ public final class GowMain {
 		java.util.List<String> al = java.util.Arrays.asList(args);
 		boolean wide = al.contains("--wide");
 		int si = al.indexOf("--movie-start");
-		Path rom = Path.of("gow-rom");
+		Path rom = Content.romDir();
 		try {
 			devple.gow.tools.video.MovieSource src = devple.gow.tools.video.MovieSource.open(name, rom,
 					devple.gow.engine.video.MoviePlayer.isoPath(rom), wide);

@@ -15,3 +15,8 @@ build/
 
 # LWJGL 네이티브 캐시
 .lwjgl/
+
+# 실행 설정·모드·개인 설정 (docs/49) — 원본 파생 자산이 섞이기 쉬움
+gow.properties
+mods/
+config/

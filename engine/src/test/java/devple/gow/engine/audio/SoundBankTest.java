@@ -1,5 +1,7 @@
 package devple.gow.engine.audio;
 
+import devple.gow.tools.content.Content;
+import devple.gow.tools.content.Region;
 import devple.gow.tools.audio.AdpcmClip;
 import devple.gow.tools.audio.SoundBank;
 import devple.gow.tools.audio.VagPack;
@@ -21,7 +23,7 @@ class SoundBankTest {
 
 	static Path rom() {
 		Path rom = Path.of(System.getProperty("gow.rom", "../gow-rom"));
-		Assumptions.assumeTrue(Files.exists(rom.resolve("R_PERMK.WAD")), "gow-rom 없음");
+		Assumptions.assumeTrue(Files.exists(Content.file(rom, Region.of(rom).perm())), "gow-rom 없음");
 		return rom;
 	}
 

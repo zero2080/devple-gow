@@ -1,5 +1,7 @@
 package devple.gow.engine.combat;
 
+import devple.gow.tools.content.Content;
+import devple.gow.tools.content.Region;
 import devple.gow.tools.wad.WadFile;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
@@ -15,8 +17,8 @@ class EnemyFactoryTest {
 
 	private static EnemyFactory.Kind load(String wad) throws Exception {
 		Path rom = Path.of(System.getProperty("gow.rom", "../gow-rom"));
-		Assumptions.assumeTrue(Files.exists(rom.resolve("R_PERMK.WAD")), "gow-rom 없음");
-		return EnemyFactory.load(rom.resolve(wad), WadFile.load(rom.resolve("R_PERMK.WAD")), -1);
+		Assumptions.assumeTrue(Files.exists(Content.file(rom, Region.of(rom).perm())), "gow-rom 없음");
+		return EnemyFactory.load(Content.file(rom, wad), WadFile.load(Content.file(rom, Region.of(rom).perm())), -1);
 	}
 
 	@Test
@@ -45,14 +47,14 @@ class EnemyFactoryTest {
 	@Test
 	void levelLocalTemplateUsesLevelObject() throws Exception {
 		Path rom = Path.of(System.getProperty("gow.rom", "../gow-rom"));
-		Assumptions.assumeTrue(Files.exists(rom.resolve("ATHN01D.WAD")), "gow-rom 없음");
-		WadFile lvl = WadFile.load(rom.resolve("ATHN01D.WAD"));
+		Assumptions.assumeTrue(Files.exists(Content.file(rom, "ATHN01D.WAD")), "gow-rom 없음");
+		WadFile lvl = WadFile.load(Content.file(rom, "ATHN01D.WAD"));
 		devple.gow.engine.game.Tweaks tw = new devple.gow.engine.game.Tweaks();
 		tw.load(lvl);
 		assertEquals("aoxf1", EnemyFactory.levelTemplateObject(tw, 301));
 		assertEquals("aoxf4", EnemyFactory.levelTemplateObject(tw, 303));
 		assertNull(EnemyFactory.levelTemplateObject(tw, 20));
-		EnemyFactory.Kind k = EnemyFactory.load(rom.resolve("ATHN01D.WAD"), WadFile.load(rom.resolve("R_PERMK.WAD")), 301, "aoxf1");
+		EnemyFactory.Kind k = EnemyFactory.load(Content.file(rom, "ATHN01D.WAD"), WadFile.load(Content.file(rom, Region.of(rom).perm())), 301, "aoxf1");
 		assertEquals("aoxf1", k.skeleton().name);
 		assertEquals("MDL_aoXF1", k.model());
 		assertEquals(301, k.ai1());

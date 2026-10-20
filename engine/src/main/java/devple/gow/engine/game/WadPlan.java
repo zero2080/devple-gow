@@ -1,5 +1,6 @@
 package devple.gow.engine.game;
 
+import devple.gow.tools.content.Region;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -23,9 +24,9 @@ public final class WadPlan {
 
 	public static List<String> required(GameState state, PlayerState p, String level, String nextLevel) {
 		List<String> out = new ArrayList<>();
-		out.add("R_PERMK");
+		out.add(Region.current().perm().replace(".WAD", ""));
 		if (!state.inLevel() && state != GameState.LEVEL_LOADING && state != GameState.LOAD_APPLY) {
-			out.add("R_SHELLK");
+			out.add(Region.current().shell().replace(".WAD", ""));
 			return out;
 		}
 		out.add("R_HERO" + p.costume);

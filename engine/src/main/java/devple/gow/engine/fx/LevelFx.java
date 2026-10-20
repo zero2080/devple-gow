@@ -87,7 +87,7 @@ public final class LevelFx implements AutoCloseable {
 	/** 상주 R_PERMK (날씨 GO gosnow/goplankton/godust/goembers/gogroundfog) — 처음 필요할 때 읽는다. */
 	private WadAssets permk() {
 		if (permk == null && wadPath != null) {
-			java.nio.file.Path pk = wadPath.resolveSibling("R_PERMK.WAD");
+			java.nio.file.Path pk = devple.gow.tools.content.Content.sibling(wadPath, devple.gow.tools.content.Region.current().perm());
 			if (java.nio.file.Files.exists(pk)) {
 				try {
 					permk = new WadAssets(pk);

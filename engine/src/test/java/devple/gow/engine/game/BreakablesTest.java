@@ -1,5 +1,7 @@
 package devple.gow.engine.game;
 
+import devple.gow.tools.content.Content;
+import devple.gow.tools.content.Region;
 import devple.gow.engine.anim.Animator;
 import devple.gow.engine.anim.HeroController;
 import devple.gow.engine.combat.CombatData;
@@ -31,9 +33,9 @@ class BreakablesTest {
 	@Test
 	void heroBreaksPotsAndScriptCounts() throws Exception {
 		Path rom = Path.of(System.getProperty("gow.rom", "../gow-rom"));
-		Assumptions.assumeTrue(Files.exists(rom.resolve("ARENA06.WAD")), "gow-rom 없음");
-		WadFile perm = WadFile.load(rom.resolve("R_PERMK.WAD")), hero = WadFile.load(rom.resolve("R_HERO0.WAD"));
-		LevelData lv = new LevelData(WadFile.load(rom.resolve("ARENA06.WAD")));
+		Assumptions.assumeTrue(Files.exists(Content.file(rom, "ARENA06.WAD")), "gow-rom 없음");
+		WadFile perm = WadFile.load(Content.file(rom, Region.of(rom).perm())), hero = WadFile.load(Content.file(rom, "R_HERO0.WAD"));
+		LevelData lv = new LevelData(WadFile.load(Content.file(rom, "ARENA06.WAD")));
 		Tweaks tw = new Tweaks();
 		tw.load(perm);
 		tw.load(hero);

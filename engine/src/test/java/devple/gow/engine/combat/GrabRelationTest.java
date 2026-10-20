@@ -1,5 +1,7 @@
 package devple.gow.engine.combat;
 
+import devple.gow.tools.content.Content;
+import devple.gow.tools.content.Region;
 import devple.gow.engine.game.Tweaks;
 import devple.gow.engine.input.ScriptedInput;
 import devple.gow.tools.anim.AnimationSet;
@@ -28,23 +30,23 @@ class GrabRelationTest {
 
 	private static Path rom() {
 		Path rom = Path.of(System.getProperty("gow.rom", "../gow-rom"));
-		Assumptions.assumeTrue(Files.exists(rom.resolve("R_MIN.WAD")), "gow-rom 없음");
+		Assumptions.assumeTrue(Files.exists(Content.file(rom, "R_MIN.WAD")), "gow-rom 없음");
 		return rom;
 	}
 
 	/** 같은 데이터로 매번 새 영웅·적을 만드는 공급자. */
 	private static Supplier<GrabRelation.Trial> trials(String wad) throws Exception {
 		Path rom = rom();
-		WadFile heroWad = WadFile.load(rom.resolve("R_HERO0.WAD"));
-		WadFile perm = WadFile.load(rom.resolve("R_PERMK.WAD"));
-		WadFile wpn = WadFile.load(rom.resolve("R_WPN0_1.WAD"));
+		WadFile heroWad = WadFile.load(Content.file(rom, "R_HERO0.WAD"));
+		WadFile perm = WadFile.load(Content.file(rom, Region.of(rom).perm()));
+		WadFile wpn = WadFile.load(Content.file(rom, "R_WPN0_1.WAD"));
 		Tweaks tw = new Tweaks();
 		tw.load(perm);
 		tw.load(heroWad);
 		Skeleton sk = Skeleton.loadAll(heroWad).stream().filter(s -> s.name.equals("hero")).findFirst().orElseThrow();
 		AnimationSet set = AnimationSet.load(heroWad, "ANM_hero");
 		CombatData cd = new CombatData(perm, CombatData.heroFiles(), set);
-		EnemyFactory.Kind k = EnemyFactory.load(rom.resolve(wad), perm, -1);
+		EnemyFactory.Kind k = EnemyFactory.load(Content.file(rom, wad), perm, -1);
 		set.attachAll(k.assets().wad());
 		cd.reindexAnimations();
 		return () -> {
@@ -215,16 +217,16 @@ class GrabRelationTest {
 	@Test
 	void lonePullUsesAttackTargetNotNearest() throws Exception {
 		Path rom = rom();
-		Assumptions.assumeTrue(Files.exists(rom.resolve("ATHN01C.WAD")));
-		WadFile heroWad = WadFile.load(rom.resolve("R_HERO0.WAD"));
-		WadFile perm = WadFile.load(rom.resolve("R_PERMK.WAD"));
+		Assumptions.assumeTrue(Files.exists(Content.file(rom, "ATHN01C.WAD")));
+		WadFile heroWad = WadFile.load(Content.file(rom, "R_HERO0.WAD"));
+		WadFile perm = WadFile.load(Content.file(rom, Region.of(rom).perm()));
 		Tweaks tw = new Tweaks();
 		tw.load(perm);
 		tw.load(heroWad);
 		Skeleton sk = Skeleton.loadAll(heroWad).stream().filter(s -> s.name.equals("hero")).findFirst().orElseThrow();
 		AnimationSet set = AnimationSet.load(heroWad, "ANM_hero");
 		CombatData cd = new CombatData(perm, CombatData.heroFiles(), set);
-		EnemyFactory.Kind k = EnemyFactory.load(rom.resolve("ATHN01C.WAD"), perm, 252, "hydra enc2");
+		EnemyFactory.Kind k = EnemyFactory.load(Content.file(rom, "ATHN01C.WAD"), perm, 252, "hydra enc2");
 		set.attachAll(k.assets().wad());
 		cd.reindexAnimations();
 		GrabRelation.Trial tr = GrabRelation.Trial.create(sk, set, tw, cd, null, k);

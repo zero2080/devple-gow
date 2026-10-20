@@ -1,5 +1,7 @@
 package devple.gow.engine.ui;
 
+import devple.gow.tools.content.Content;
+import devple.gow.tools.content.Region;
 import devple.gow.engine.core.Engine;
 import devple.gow.engine.game.GameRules;
 import devple.gow.engine.game.PlayerState;
@@ -71,7 +73,7 @@ public final class UiScene implements Scene {
 						});
 				ui.player().addCommandListener(bonus::command);
 			} else if (!mode.equals("menu")) {
-				Path perm = Files.exists(wad.resolveSibling("R_PERMK.WAD")) ? wad.resolveSibling("R_PERMK.WAD") : wad;
+				Path perm = Files.exists(Content.sibling(wad, Region.current().perm())) ? Content.sibling(wad, Region.current().perm()) : wad;
 				ps = new PlayerState(GameRules.load(WadFile.load(perm)));
 				demoState(ps);
 			}

@@ -1,5 +1,6 @@
 package devple.gow.engine.boss;
 
+import devple.gow.tools.content.Content;
 import devple.gow.engine.asset.WadAssets;
 import devple.gow.engine.combat.EnemyFighter;
 import devple.gow.engine.input.Input;
@@ -56,7 +57,7 @@ public final class EvilKratosFight extends BossFight {
 
 	EvilKratosFight(Path rom, WadFile permk) throws IOException {
 		super(LEVEL);
-		var assets = new WadAssets(rom.resolve(LEVEL + ".WAD"));
+		var assets = new WadAssets(Content.file(rom, LEVEL + ".WAD"));
 		kinds.put(FAMILY, BossKinds.load(assets, permk, List.of(), "xmc", FAMILY, FAMILY));
 		for (int t : CLONES) {
 			kinds.put(t, BossKinds.load(assets, permk, List.of(), "evi", t, t == 669 ? 669 : 666));

@@ -1,5 +1,6 @@
 package devple.gow.engine.boss;
 
+import devple.gow.tools.content.Content;
 import devple.gow.engine.anim.Animator;
 import devple.gow.engine.anim.HeroController;
 import devple.gow.engine.combat.CombatData;
@@ -50,7 +51,7 @@ public final class HeadlessBoss {
 
 	private HeadlessBoss(BossFight fight, Path rom, WadFile permk, WadFile levelWad, ScriptWorld world) throws IOException {
 		this.fight = fight;
-		WadFile heroWad = WadFile.load(rom.resolve("R_HERO0.WAD"));
+		WadFile heroWad = WadFile.load(Content.file(rom, "R_HERO0.WAD"));
 		Tweaks tw = new Tweaks();
 		tw.load(permk);
 		tw.load(heroWad);

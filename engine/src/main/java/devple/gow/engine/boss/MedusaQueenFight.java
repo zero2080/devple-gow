@@ -1,5 +1,6 @@
 package devple.gow.engine.boss;
 
+import devple.gow.tools.content.Content;
 import devple.gow.engine.combat.Combatant;
 import devple.gow.engine.combat.EnemyFighter;
 import devple.gow.engine.input.Input;
@@ -42,7 +43,7 @@ public final class MedusaQueenFight extends BossFight {
 	MedusaQueenFight(Path rom, WadFile permk) throws IOException {
 		super(LEVEL);
 		this.rom = rom;
-		kinds.put(62, BossKinds.load(rom.resolve(LEVEL + ".WAD"), permk, List.of(), "me3", 62, 62));
+		kinds.put(62, BossKinds.load(Content.file(rom, LEVEL + ".WAD"), permk, List.of(), "me3", 62, 62));
 		silent.addAll(java.util.List.of(901));
 		bossTemplates.add(62);
 	}
@@ -53,7 +54,7 @@ public final class MedusaQueenFight extends BossFight {
 	 */
 	@Override
 	public List<Path> heroAnimWads() {
-		Path p = rom.resolve("R_MEW.WAD");
+		Path p = Content.file(rom, "R_MEW.WAD");
 		return java.nio.file.Files.exists(p) ? List.of(p) : List.of();
 	}
 

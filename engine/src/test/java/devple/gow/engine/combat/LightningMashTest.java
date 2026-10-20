@@ -1,5 +1,7 @@
 package devple.gow.engine.combat;
 
+import devple.gow.tools.content.Content;
+import devple.gow.tools.content.Region;
 import devple.gow.engine.game.Tweaks;
 import devple.gow.tools.wad.WadFile;
 import org.junit.jupiter.api.Assumptions;
@@ -59,9 +61,9 @@ class LightningMashTest {
 	@Test
 	void tweakValues() throws Exception {
 		Path rom = Path.of(System.getProperty("gow.rom", "../gow-rom"));
-		Assumptions.assumeTrue(Files.exists(rom.resolve("R_PERMK.WAD")), "gow-rom 없음");
+		Assumptions.assumeTrue(Files.exists(Content.file(rom, Region.of(rom).perm())), "gow-rom 없음");
 		Tweaks tw = new Tweaks();
-		tw.load(WadFile.load(rom.resolve("R_PERMK.WAD")));
+		tw.load(WadFile.load(Content.file(rom, Region.of(rom).perm())));
 		String n = "/Player/Lightning/";
 		assertEquals(12, tw.i16(n, "Damage Freq", 0));
 		assertEquals(20, tw.i16(n, "From Above Bolt Freq", 0));

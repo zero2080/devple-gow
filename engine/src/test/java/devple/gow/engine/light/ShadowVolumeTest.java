@@ -1,5 +1,6 @@
 package devple.gow.engine.light;
 
+import devple.gow.tools.content.Content;
 import devple.gow.tools.anim.Skeleton;
 import devple.gow.tools.wad.WadFile;
 import org.joml.Matrix4f;
@@ -23,7 +24,7 @@ class ShadowVolumeTest {
 
 	static Path rom() {
 		Path rom = Path.of(System.getProperty("gow.rom", "../gow-rom"));
-		Assumptions.assumeTrue(Files.exists(rom.resolve("R_HERO0.WAD")), "gow-rom 없음");
+		Assumptions.assumeTrue(Files.exists(Content.file(rom, "R_HERO0.WAD")), "gow-rom 없음");
 		return rom;
 	}
 

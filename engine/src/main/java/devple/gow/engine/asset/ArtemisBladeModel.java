@@ -1,5 +1,6 @@
 package devple.gow.engine.asset;
 
+import devple.gow.tools.content.Content;
 import devple.gow.engine.render.Camera;
 import devple.gow.engine.render.Shader;
 import devple.gow.engine.render.Texture;
@@ -30,7 +31,7 @@ public final class ArtemisBladeModel implements AutoCloseable {
 
 	/** 없으면 null. */
 	public static ArtemisBladeModel load(Path rom, int stage, Shader skinned) throws IOException {
-		Path p = rom.resolve("R_BRSRK" + Math.max(0, Math.min(2, stage)) + ".WAD");
+		Path p = Content.file(rom, "R_BRSRK" + Math.max(0, Math.min(2, stage)) + ".WAD");
 		if (!Files.exists(p)) {
 			return null;
 		}

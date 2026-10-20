@@ -96,7 +96,7 @@ public interface MovieSource extends AutoCloseable {
 		String[] exts = widescreen ? new String[]{".PSW", ".PSS"} : new String[]{".PSS", ".PSW"};
 		if (romDir != null) {
 			for (String ext : exts) {
-				Path p = romDir.resolve(base + ext);
+				Path p = devple.gow.tools.content.Content.file(romDir, base + ext); // 모드 rom/ 교체 (49 문서 §3)
 				if (Files.isRegularFile(p)) {
 					return ofFile(p);
 				}

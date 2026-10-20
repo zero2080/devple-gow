@@ -1,5 +1,7 @@
 package devple.gow.engine.game;
 
+import devple.gow.tools.content.Content;
+import devple.gow.tools.content.Region;
 import devple.gow.engine.audio.SoundManager;
 import devple.gow.engine.script.ScriptHost;
 import devple.gow.tools.ui.MessageTable;
@@ -45,7 +47,7 @@ public final class GameSession {
 
 	public GameSession(Path rom) throws IOException {
 		this.rom = rom;
-		this.permk = WadFile.load(rom.resolve("R_PERMK.WAD"));
+		this.permk = WadFile.load(Content.file(rom, Region.of(rom).perm()));
 		this.messages = MessageTable.fromWad(permk).orElse(null);
 		this.sound = sharedSound(rom);
 		if (!sound.loaded().containsKey(permk.name())) {

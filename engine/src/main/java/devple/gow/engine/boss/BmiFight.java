@@ -1,5 +1,6 @@
 package devple.gow.engine.boss;
 
+import devple.gow.tools.content.Content;
 import devple.gow.engine.combat.CombatInput;
 import devple.gow.engine.combat.Combatant;
 import devple.gow.engine.combat.EnemyFighter;
@@ -92,7 +93,7 @@ public final class BmiFight extends BossFight {
 
 	BmiFight(Path rom, WadFile permk) throws IOException {
 		super(LEVEL);
-		var kind = BossKinds.load(rom.resolve(LEVEL + ".WAD"), permk, List.of(), "bmi", TEMPLATE, TEMPLATE);
+		var kind = BossKinds.load(Content.file(rom, LEVEL + ".WAD"), permk, List.of(), "bmi", TEMPLATE, TEMPLATE);
 		kinds.put(TEMPLATE, kind);
 		silent.addAll(List.of(202, 257)); // AB2/AMISoundbankLoad
 		bossTemplates.add(TEMPLATE);
