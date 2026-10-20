@@ -194,6 +194,12 @@ public final class LevelScene implements Scene {
 		}
 	}
 
+	/** 자세를 모두 잊는다 (불러올 때의 정지 자세로) — 다시 쓰는 이웃 슬롯 장면 (GameScene 이웃 캐시, 48 §8). */
+	public void clearPoses() {
+		posed.clear();
+		posedHidden.clear();
+	}
+
 	/** 인스턴스를 더 그리지 않는다 (부서지는 물체 파괴, 스크립트 Vis 숨김). */
 	public void hideInstance(String name) {
 		removed.add(name.toLowerCase(Locale.ROOT));
@@ -222,8 +228,26 @@ public final class LevelScene implements Scene {
 		external = c;
 	}
 
-	@Override
-	public void enter(Engine e) {
+	/** {@link #prepare} 의 배치 결과 (GL 전): 렌더 인스턴스 하나와 그 정적 그림자. */
+	private record PendingInstance(String name, WadAssets.Prepared model, boolean sky, Vector3f off,
+								   devple.gow.engine.light.ShadowGeometry shadow, float[][] shadowJoints, boolean[] shadowHidden) {
+	}
+
+	/** null = 아직 준비 안 함 / 올리기 끝남. */
+	private List<PendingInstance> pending;
+	private MeshBuilder collisionMb, volumeMb;
+	private devple.gow.tools.fx.EnvParams envParams;
+	private boolean prepared;
+
+	/**
+	 * CPU 단계 (48 문서 §8): WAD 해석·레벨 데이터·충돌·배치 메시 굽기 (시작 자세)·텍스처 해독·거울 평면·와이어 정점. GL 을 부르지 않으므로
+	 * 백그라운드 스레드 ({@link devple.gow.engine.asset.Loader}) 에서 돌려도 된다. 그 뒤 {@link #enter} (메인 스레드) 가 GL 로 올린다.
+	 * 결과는 어느 스레드에서 돌려도 같다.
+	 */
+	public LevelScene prepare() {
+		if (prepared) {
+			return this;
+		}
 		try {
 			assets = new WadAssets(wadPath);
 		} catch (IOException ex) {
@@ -232,12 +256,12 @@ public final class LevelScene implements Scene {
 		data = new LevelData(assets.wad());
 		collision = new LevelCollision(data.sheets);
 		List<TriMesh> all = new ArrayList<>();
-		devple.gow.tools.fx.EnvParams envParams = new devple.gow.tools.fx.EnvParams(assets.wad());
+		envParams = new devple.gow.tools.fx.EnvParams(assets.wad());
+		pending = new ArrayList<>();
 		java.util.Set<String> skyNames = skyNames(envParams);
 		Map<String, int[]> mirrorOwners = Mirrors.owners(envParams);
 		shadowOwners = scriptOwners(envParams, "SCR_Shadow");
 		java.util.Set<String> aiTemplates = aiTemplateObjects(assets.wad());
-		lensFlares = new devple.gow.engine.fx.LensFlares(envParams, data, assets); // SCR_LensFlare (46 문서)
 		for (LevelLayout.Placement p : data.layout.placements()) {
 			String mdl = p.model();
 			GowModel gm = mdl == null ? null : assets.gowModel(mdl);
@@ -282,8 +306,7 @@ public final class LevelScene implements Scene {
 				float[] j0 = p.jointWorld()[0];
 				off.set(j0[12], j0[13], j0[14]);
 			}
-			Instance inst = new Instance(p.instance().name(), assets.build(p.instance().name(), tm), sky, off);
-			instances.add(inst);
+			devple.gow.engine.light.ShadowGeometry shadow = null;
 			if (!sky && p.object().skeleton() != null && System.getProperty("gow.noshadow") == null
 					&& !aiTemplates.contains(p.object().name().toLowerCase(Locale.ROOT))) {
 				// 레벨 GO 그림자 (47 문서 §11): SHG_<모델> 이 있는 스키닝 GO — 자세 (posed/반복 act) 가 아니면 시작 자세 관절로
@@ -294,11 +317,10 @@ public final class LevelScene implements Scene {
 						return java.util.Optional.empty();
 					}
 				}).orElse(null);
-				if (g != null) {
-					staticShadows.add(new StaticShadow(inst, p.instance().name().toLowerCase(Locale.ROOT), g,
-							sp.act() == null ? p.jointWorld() : sp.jointWorld(), sp.act() == null ? null : sp.hidden()));
-				}
+				shadow = g;
 			}
+			pending.add(new PendingInstance(p.instance().name(), assets.prepare(p.instance().name(), tm, true), sky, off, shadow,
+					sp.act() == null ? p.jointWorld() : sp.jointWorld(), sp.act() == null ? null : sp.hidden()));
 			if (!sky && (gm.renderFlags & devple.gow.engine.light.LightUniforms.LIT) != 0) {
 				// 렌더 플래그 0x800 정적 오브젝트: 원작 0x141EF8 은 구 = (오브젝트 위치, 1) 로 라이트를 모은다 (47 문서)
 				float[] j0 = p.jointWorld()[0];
@@ -347,13 +369,51 @@ public final class LevelScene implements Scene {
 				}
 			}
 		}
-		collisionLines = buildCollisionLines();
-		volumeLines = buildVolumeLines();
+		collisionMb = buildCollisionLines();
+		volumeMb = buildVolumeLines();
 		cam.near = FxEnvironment.viewNear; // 원작 뷰포트 near (+0x384 = −10, 0x168DC8)
 		cam.far = 30000f;
 		cam.fovDeg = 60f;
 		placeStart(all);
 		camMode = startCam;
+		prepared = true;
+		return this;
+	}
+
+	/** 준비 결과 요약 (시험용: 스레드와 무관하게 같은 값인지) — 배치 이름·정점·색인·그림자 관절의 해시. */
+	long preparedHash() {
+		long h = 17;
+		for (PendingInstance q : pending) {
+			h = h * 31 + q.name().hashCode();
+			h = h * 31 + Boolean.hashCode(q.sky()) + q.off().hashCode();
+			for (float[] v : q.model().vertices()) {
+				h = h * 31 + java.util.Arrays.hashCode(v);
+			}
+			for (int[] ix : q.model().indices()) {
+				h = h * 31 + java.util.Arrays.hashCode(ix);
+			}
+			h = h * 31 + (q.shadow() == null ? 0 : java.util.Arrays.deepHashCode(q.shadowJoints()));
+		}
+		return h * 31 + collision.triangles().size();
+	}
+
+	/** GL 단계 (메인 스레드). {@link #prepare} 를 먼저 하지 않았으면 여기서 (예전과 같은 한 번에 적재). */
+	@Override
+	public void enter(Engine e) {
+		prepare();
+		lensFlares = new devple.gow.engine.fx.LensFlares(envParams, data, assets); // SCR_LensFlare (46 문서)
+		for (PendingInstance q : pending) {
+			Instance inst = new Instance(q.name(), assets.upload(q.model()), q.sky(), q.off());
+			instances.add(inst);
+			if (q.shadow() != null) {
+				staticShadows.add(new StaticShadow(inst, q.name().toLowerCase(Locale.ROOT), q.shadow(), q.shadowJoints(), q.shadowHidden()));
+			}
+		}
+		pending = null;
+		envParams = null;
+		collisionLines = collisionMb.build(GL_LINES);
+		volumeLines = volumeMb.build(GL_LINES);
+		collisionMb = volumeMb = null;
 		fx = new LevelFx(e, assets, data, instances, wadPath);
 		System.out.printf(Locale.ROOT, "레벨 %s: 렌더 인스턴스 %d (하늘 %d, 시작 act 자세 %d, 반복 재생 %d, 거울 %d), 충돌 삼각형 %d, 볼륨 %d, 카메라 %d%n",
 				assets.wad().name(), instances.size(), instances.stream().filter(Instance::sky).count(), startPosed, ambient.size(), mirrors.size(),
@@ -446,7 +506,7 @@ public final class LevelScene implements Scene {
 		}
 	}
 
-	private Mesh buildCollisionLines() {
+	private MeshBuilder buildCollisionLines() {
 		MeshBuilder mb = new MeshBuilder();
 		for (LevelCollision.Tri t : collision.triangles()) {
 			float r = t.floor() ? 0.2f : 1f, g = t.floor() ? 1f : 0.25f, b = 0.2f;
@@ -454,10 +514,10 @@ public final class LevelScene implements Scene {
 			mb.line(t.b().x, t.b().y, t.b().z, t.c().x, t.c().y, t.c().z, r, g, b);
 			mb.line(t.c().x, t.c().y, t.c().z, t.a().x, t.a().y, t.a().z, r, g, b);
 		}
-		return mb.build(GL_LINES);
+		return mb;
 	}
 
-	private Mesh buildVolumeLines() {
+	private MeshBuilder buildVolumeLines() {
 		MeshBuilder mb = new MeshBuilder();
 		float[] a = new float[3];
 		float[] b = new float[3];
@@ -492,7 +552,7 @@ public final class LevelScene implements Scene {
 				}
 			}
 		}
-		return mb.build(GL_LINES);
+		return mb;
 	}
 
 	private static float[] circle(float[] s, int axis, double t) {

@@ -1,6 +1,7 @@
 # 48. 장시간 실행 안정성 · 성능 · 테스트 위생
 
 코드: `core/PerfMonitor` (측정), `render/GlStats` (GL 객체 수), `GameScene` 체인 (`-Dgow.chain`), `ScriptedInput` 반복·스틱.
+백그라운드 적재 (§8): `asset/Loader`, `asset/WadAssets` (prefetch · prepare/upload), `level/LevelScene.prepare`, `GameScene` (prefetch · 이웃 장면 캐시).
 수정: `combat/AiTargets` (정적 슬롯 정리), `level/LevelScene.exit`, `game/GameScene.exit`, `audio/OpenAlBackend`·`SoundManager` (클립 버퍼),
 `fx/MagicFx.unbind`, `anim/Animator.pose` · `tools/anim/Pose.world` (메모), `render/Shader.loc`, `light/ShadowVolume` (작업 공간), `fx/ParticleSystem`.
 테스트 위생: `test/.../StaticStateReset` (+ `junit-platform.properties`, `META-INF/services`), `EnemyNavTest`, `HitVolumesTest`, `TraversalVerifier.run`.
@@ -18,6 +19,10 @@
 | `-Dgow.chain=A,B,…` / `gow.chain.secs` | 각 레벨에서 n 초 (기본 20) 뒤 다음 레벨로 LoadWad. 떠나기 직전 한 줄 더 |
 | `-Dgow.script=…` + `gow.script.loop=초` | 스크립트 입력 반복. 새 항목 `LS:시작:길이:x:y` / `RS:…` (스틱) |
 | `-Dgow.novsync` | 스왑 간격 0 |
+| (`-Dgow.perf` 안) `# load 시각 이름 ms [스레드]` | 적재 구간 (§8): `enter 레벨` (GameScene.enter), `swap` (씬 교체 프레임의 exit+enter), `other 레벨` (이웃 충돌·스크립트 데이터), `otherScene 레벨` (이웃 그리기 장면 GL), `prep …` (적재 스레드 CPU 단계), `wait …` (메인이 기다린 시간) |
+| (`-Dgow.perf` 안) `# hitch 시각 work ms gap ms` | 프레임 작업이 `gow.perf.hitch` ms (기본 25) 이상인 프레임 |
+| `-Dgow.syncLoad` | 적재를 제출한 자리에서 (예전과 같은 프레임 순서). `--screenshot` 이면 자동 |
+| `-Dgow.otherCache=n` | 떠난 이웃 그리기 장면을 GL 에 붙잡아 둘 개수 (기본 2, 동기 모드는 0) |
 
 `GlStats` 는 텍스처·버퍼·VAO·FBO·프로그램·쿼리의 생성/삭제 지점 (13 파일) 을 감싸 센다 — 음수가 되면 이중 삭제다.
 OpenAL 쪽은 `AudioBackend.stats()` (`slots/buf/clips`).
@@ -137,9 +142,8 @@ CPU 상위는 PAND03G 에서 파티클 VU 에뮬레이션 (`renderVu` 27 %, `Ptc
 
 ## 7. 남은 문제
 
-1. **동기 적재 히치**: LoadWad·이음은 메인 스레드에서 WAD 읽기·해석·GL 올리기를 한 번에 한다 (원작은 백그라운드). DEST01 처럼 두 이웃 (DEST00/02) 경계를
-   오가면 50–80 ms 히치가 되풀이되고 (같은 WAD 를 매번 다시 읽음), 레벨 전환은 130–350 ms. 해석 결과 1 칸 캐시나 백그라운드 해석이 후보 (LevelCollision·LevelScene
-   상태 공유 검토 필요).
+1. ~~**동기 적재 히치**: LoadWad·이음은 메인 스레드에서 WAD 읽기·해석·GL 올리기를 한 번에 한다. DEST01 이웃 교체 50–80 ms 되풀이, 레벨 전환 130–350 ms~~
+   → §8 (이웃 재교체 히치 없음, 처음 교체 ≤ 27 ms, 전환 프레임 65–156 ms). 남은 메인 스레드 몫은 §8.5.
 2. PAND03G 프레임 작업 12.8 ms (p99 15.7) — 60 Hz 예산 16.7 ms 에 가깝다. 대부분 파티클 VU 에뮬레이션 (`PtcVu.eval`, 파티클마다 VU 프로그램 해석).
    VU 프로그램별 미리 컴파일 (식 트리 → 람다) 이 후보.
 3. 애니메이션 샘플 자체 (`Skeleton.localMatrix`·`Mat4.mul` 이 관절마다 `float[16]`) 는 Animator 당 틱 1 회로 줄었지만 남아 있다 — 할당 1 위.
@@ -148,3 +152,66 @@ CPU 상위는 PAND03G 에서 파티클 VU 에뮬레이션 (`renderVu` 27 %, `Ptc
 6. ATHN02D 헤드리스 메두사의 "영웅 석화" 단계는 씨앗에 따라 나오거나 안 나온다 — 이제 결정적이지만 지금 씨앗에서는 안 나온다
    (석화 자체는 `MedusaQueenFightTest.gazePetrifiesHeroAndWiggleBreaksOut` 가 따로 검사).
 7. 게임 안의 적 씨앗 순번은 여전히 앱 전체 (레벨을 넘어) 이어진다 — 원작 난수와 무관한 엔진 근사라 그대로 둠.
+
+## 8. 백그라운드 적재 · 이웃 슬롯 캐시 (§7.1 해결)
+
+### 8.1 원작
+- LoadWad / LoadForWarp 는 백그라운드 읽기다: 스크립트의 LoadCheck 는 "적재 끝남" 을 묻고 (엔진 `loadCheck` = 슬롯에 올라 있음), 슬롯은 2 개.
+- 다른 슬롯이 다른 레벨로 바뀌면 0x1BC110 이 그 슬롯을 비우고 (`+0x68 & 4` → 0x1BBA20(1)) 새로 읽는다. 같은 레벨로 LoadForWarp 하면 다시 읽지 않는다 (= 1).
+  Warp 는 떠난 레벨을 메모리에 둔 채 컨텍스트만 끈다 (0x1BC3A0, 43 §13.9) [확실].
+- 엔진의 Warp 정책 (다른 슬롯 없이 시작, 떠난 레벨 화면 상태는 `GameSession.warpLeft`) 은 그대로. 여기서 바꾼 것은 **언제·어느 스레드에서 읽는가** 와 **그리기용 GL 장면을 다시 쓰는가** 뿐이다.
+
+### 8.2 측정 (수정 전, `# load` 계측)
+- DEST01 (24 초 반복 스크립트, 90 초): 이웃 교체 8 회 (DEST00 ↔ DEST02 번갈아). 교체마다 `other` (게임용 LevelData + 충돌) 2–5 ms + `otherScene` (그리기용 `LevelScene` 생성·enter)
+  38–61 ms → 프레임 작업 45–77 ms. `otherScene` 안: WAD 해석 5–8, 레벨 데이터 2, 배치 굽기 (시작 자세·PlacedMesh·SHG·거울) ≈ 20, 정점 배열·텍스처 해독·GL 올리기 19–27, LevelFx 2–3 ms.
+  **같은 WAD 를 매번 처음부터 읽고 굽고 올렸다.**
+- 레벨 체인 10 레벨 (`ATHN01A,ATHN02A,ATHN02D,PAND03G,PAND04AA,DEST01,OLYMP02,ATHN08B,HDES01A,ATHN01A`, 각 8 초): `GameScene.enter` 64–258 ms, 그중 레벨 장면 45–60 %,
+  R_HERO 12–70, HUD (R_PERMK 를 매번 다시 해석) 10–35, 적 종류 WAD 10–17, MagicFx (R_PERMK 이펙트 GO) 10–30 ms. 이음 도착이면 이웃 그리기 장면 53–106 ms 가 다음 프레임에 더해졌다.
+
+### 8.3 수정
+| 수정 | 내용 |
+|---|---|
+| `asset/Loader` | 적재 스레드 2 개 (데몬, 낮은 우선순위). `submit` → Future, `join` (안 끝났으면 기다림, 예외 그대로). `-Dgow.syncLoad` 면 제출 자리에서 실행 |
+| `LevelScene.prepare()` | `enter` 를 CPU 단계 / GL 단계로 나눔. CPU: WAD 해석·`LevelData`·`LevelCollision`·EnvParams·배치 굽기·SHG·거울 평면·뷰 마스크·정점 배열·텍스처 해독·충돌/볼륨 와이어 정점. GL (`enter`): 메시·텍스처 올리기·정적 그림자·렌즈 플레어·LevelFx. `prepare` 없이 `enter` 하면 예전처럼 한 번에 |
+| `WadAssets.prepare/upload` | `build(name, tm) = upload(prepare(name, tm, false))`. 레벨 준비만 `decodeTextures` = 쓸 텍스처 (upload 의 `texture()` 와 같은 조건·이름) 를 미리 해독 → 첫 `texture()` 가 꺼내 씀 |
+| `WadAssets.prefetch(path)` | 해석 (WadFile·TextureLibrary·MDL·머티리얼 ANM) 을 미리, 다음 `new WadAssets(같은 경로)` 가 한 번 꺼내 씀 (나눠 쓰지 않음). 쓰이지 않은 것은 `GameScene.enter` 끝에 버림. 적재 스레드끼리는 기다리지 않음 (교착 방지) |
+| `GameScene` 생성 = 페이드 시작 | `SceneManager` 페이드 아웃 0.4 초 동안 레벨 장면 `prepare` + 그 RSRCS 적 WAD · R_PERMK × 2 (HUD·이펙트) · R_HERO · R_WPN 해석. 이음 도착이면 떠나온 레벨 (다른 슬롯) 그리기 장면도. `enter` 는 결과를 받아 GL 만 |
+| 이웃 그리기 장면 | `loadOther` 가 CPU 단계를 적재 스레드로 보내고, 끝난 프레임에 메인이 GL 로 올린다 (그 사이 이웃은 안 그려짐 — 원작도 슬롯을 비우고 읽는 동안 없다) |
+| 이웃 장면 캐시 | 떠난 이웃 장면을 닫지 않고 최근 2 개 (`gow.otherCache`) 를 GL 에 둔다. 다시 그 레벨이 이웃이 되면 자세만 지우고 (`clearPoses`, 숨김·자세는 매 프레임 다시 넣음) 그대로. 넘치면 오래된 것부터 닫고, 레벨을 떠날 때 모두 닫는다 |
+
+- 게임 진행은 바뀌지 않는다: 게임용 이웃 데이터 (`other`: LevelData·충돌·이웃 스크립트) 는 예전처럼 그 틱에 동기로 읽고, 레벨 장면은 `enter` 에서 끝난 결과를 받는다 (값은 스레드와 무관 —
+  `BackgroundLoadTest`: 적재 스레드의 DEST00 준비 결과 해시 = 호출 스레드, 미리 해석한 R_PERMK = 바로 해석). 시간에 따라 달라지는 것은 이웃이 화면에 나타나는 프레임뿐.
+- [엔진 근사] 이웃 장면 캐시는 원작과 다르다 (원작은 바뀐 슬롯을 다시 읽음). 화면 차이: 다시 쓴 장면의 반복 재생 배치 (깃발 등) 위상이 처음 상태가 아니라 이어진다.
+- 동기 모드 (`gow.syncLoad`, `--screenshot` 자동) 는 캐시 0 · 제출 자리 실행이라 예전과 같은 프레임에 같은 장면이 나타난다. 전 레벨 순회 보고서 `work/verify/report.md` 는 수정 전후 같다 (GameScene 을 쓰지 않음).
+
+### 8.4 결과 (같은 시나리오, 수정 뒤)
+DEST01 이웃 교체:
+
+| | 수정 전 | 수정 뒤 |
+|---|---|---|
+| 처음 교체 (DEST00 · DEST02 각 1 회) | other 4–5 + otherScene 54–61 → 프레임 63–77 ms | other 4–6 (메인) + 준비 40–42 (적재 스레드) + GL 12–13 (메인) → 프레임 ≤ 27 ms |
+| 다시 교체 (6 회) | other 2–5 + otherScene 38–52 → 프레임 45–65 ms | other 2–4 ms 뿐 (캐시) → 25 ms 넘는 프레임 없음 |
+
+레벨 체인 10 레벨 (전환 프레임 = 씬 교체 + 첫 프레임 작업):
+
+| 레벨 | enter 전 → 뒤 (ms) | 최대 프레임 전 → 뒤 (ms) |
+|---|---|---|
+| ATHN02A (JIT 덜 데워짐) | 258 → 107 | 347 → 156 |
+| ATHN02D | 100 → 78 | 226 → 101 |
+| PAND03G | 164 → 91 | 186 → 113 |
+| PAND04AA | 126 → 63 | 144 → 81 |
+| DEST01 | 239 → 90 | 258 → 109 |
+| OLYMP02 | 82 → 41 | 114 → 72 |
+| ATHN08B | 121 → 71 | 144 → 94 |
+| HDES01A | 140 → 46 | 169 → 76 |
+| ATHN01A (두 번) | 76 / 64 → 39 / 38 | 158 / 152 → 66 / 65 |
+
+- 이음 도착 이웃 장면: 메인 53–106 ms → 적재 스레드 41–126 ms + 메인 GL 15–22 ms (도착 다음 몇 프레임).
+- 누수: 4 레벨 × 2 바퀴 + 매번 전체 GC (`ATHN02A,PAND03G,DEST01,OLYMP02` × 2, 각 20 초) — 바퀴마다 같은 레벨의 살아 있는 힙 (PAND03G 258/258, DEST01 265/265, OLYMP02 183/183 MB) 과
+  GL tex/buf/vao (PAND03G 106/621/315, DEST01 127/2380/1196, OLYMP02 74/1349/680) 가 같다. 떠나기 직전 측정은 다음 레벨 준비분 (≈ 40 MB, 페이드 동안) 이 더해져 보인다.
+- 시험 399 (+2 `BackgroundLoadTest`) 통과.
+
+### 8.5 남은 메인 스레드 적재 (전환 프레임 40–110 ms)
+레벨 장면 GL 올리기 7–31 · HeroRig (스키닝 모델 GL·튜닝·전투 데이터) 12–16 · HUD FLP 4–30 · `Tweaks.load` (R_PERMK·레벨, 매번 해석) 5–10 · MagicFx (EffectSystem GL) 11–15 ·
+스크립트 시작·도착 배치 0–30 ms. 그리고 이웃 교체의 게임용 데이터 (`other`) 2–6 ms 는 그 틱에 필요해 동기로 둔다. 후보: GL 올리기를 여러 프레임에 나누기 (페이드 인 동안),
+R_PERMK 튜닝·HUD 를 세션에 상주 (레벨마다 같은 내용).

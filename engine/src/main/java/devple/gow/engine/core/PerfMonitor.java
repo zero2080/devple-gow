@@ -43,6 +43,21 @@ public final class PerfMonitor {
 		reportRequested = true;
 	}
 
+	/** 지금 측정 중인 모니터 (적재 시간 기록용, 없으면 null). */
+	private static volatile PerfMonitor active;
+	/** 이 이상 걸린 프레임은 한 줄 따로 (`# hitch`). */
+	private static final double HITCH_MS = Double.parseDouble(System.getProperty("gow.perf.hitch", "25"));
+
+	/** 적재 구간 시간 (48 문서 §8): {@code -Dgow.perf} 일 때만 `# load 시각 이름 ms` 한 줄. */
+	public static void loadTime(String what, long startNanos) {
+		PerfMonitor p = active;
+		if (p != null) {
+			long now = System.nanoTime();
+			p.out.printf(java.util.Locale.ROOT, "# load %.3f %s %.1f [%s]%n", (now - p.t0) / 1e9, what, (now - startNanos) / 1e6,
+					Thread.currentThread().getName());
+		}
+	}
+
 	private static final boolean FULL_GC = System.getProperty("gow.perf.fullgc") != null;
 	private final PrintWriter out;
 	private final double interval;
@@ -84,6 +99,7 @@ public final class PerfMonitor {
 		long[] g = gcTotals();
 		gcCount0 = g[0];
 		gcTime0 = g[1];
+		active = this;
 		out.println("# t(s) ticks frames workAvg workP99 workMax(ms) gapAvg gapP99 gapMax(ms) heapUsed heapCommitted(MB) gcN gcMs gcMaxPause(ms) direct(MB) gl... gauges...");
 	}
 
@@ -125,6 +141,9 @@ public final class PerfMonitor {
 		n++;
 		lastSwap = now;
 		double t = (now - t0) / 1e9;
+		if (work[n - 1] / 1e6 >= HITCH_MS) {
+			out.printf(java.util.Locale.ROOT, "# hitch %.3f work %.1f gap %.1f%n", t, work[n - 1] / 1e6, gap[n - 1] / 1e6);
+		}
 		if (t - lastReport >= interval || reportRequested) {
 			reportRequested = false;
 			lastReport = t;

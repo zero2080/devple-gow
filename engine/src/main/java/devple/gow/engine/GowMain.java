@@ -53,6 +53,9 @@ public final class GowMain {
 		if (java.util.Arrays.asList(args).contains("--no-fx")) {
 			System.setProperty("gow.nofx", "1"); // 비·파티클 끔 (스크린샷 확인용)
 		}
+		if (java.util.Arrays.asList(args).contains("--screenshot") && System.getProperty("gow.syncLoad") == null) {
+			System.setProperty("gow.syncLoad", "true"); // 스크린샷 하네스: 적재를 제출 자리에서 (이웃 슬롯이 나타나는 프레임이 시간과 무관, 48 §8)
+		}
 		for (int i = 0; i < args.length; i++) {
 			if (args[i].equals("--screenshot") && i + 1 < args.length) {
 				shot = args[++i];

@@ -184,19 +184,56 @@ public final class GameScene implements Scene {
 		this.levelName = levelName.toUpperCase();
 		this.entry = entry;
 		this.autoRun = autoRun;
+		prefetch();
 	}
 
 	/** 레벨 전환으로 들어옴. */
 	public GameScene(GameSession session, String levelName, Arrival arrival) {
 		this(session, levelName, null, 0);
 		this.arrival = arrival;
+		if (devple.gow.engine.asset.Loader.async() && arrival != null && arrival.from() != null
+				&& (arrival.kind() == LevelLink.Kind.SEAMLESS || arrival.kind() == LevelLink.Kind.WALK)) {
+			prepareOther(arrival.from().toUpperCase(java.util.Locale.ROOT)); // 이음: 떠나온 레벨 = 다른 슬롯 (그리기용 장면도 미리, LevelLink.norm 과 같은 이름)
+		}
+	}
+
+	/** 이 레벨 장면 (CPU 단계를 미리 돌림, null = enter 에서 한 번에). */
+	private java.util.concurrent.Future<LevelScene> levelPrep;
+
+	/**
+	 * 장면 전환 페이드 (0.4 초, SceneManager) 동안 GL 없는 적재를 백그라운드로 (48 문서 §8): 레벨 장면 CPU 단계, 레벨 RSRCS 적 WAD·R_PERMK (HUD·이펙트)·
+	 * R_HERO·R_WPN 해석. enter 가 결과를 받아 (끝나지 않았으면 기다려) GL 만 올린다. 결과 값은 동기 적재와 같다.
+	 */
+	private void prefetch() {
+		if (!devple.gow.engine.asset.Loader.async()) {
+			return;
+		}
+		java.nio.file.Path wad = session.rom.resolve(this.levelName + ".WAD");
+		java.nio.file.Path rom = session.rom;
+		levelPrep = devple.gow.engine.asset.Loader.submit("level " + this.levelName, () -> {
+			LevelScene s = new LevelScene(wad, -2, false).prepare();
+			for (String name : EnemyFactory.resourceWads(s.data().wad)) {
+				WadAssets.prefetch(rom.resolve(name + ".WAD"));
+			}
+			return s;
+		});
+		WadAssets.prefetch(session.rom.resolve("R_PERMK.WAD")); // HUD
+		WadAssets.prefetch(session.rom.resolve("R_PERMK.WAD")); // MagicFx 이펙트 GO (EffectSystem)
+		int costume = session.player != null ? session.player.costume : session.costume;
+		WadAssets.prefetch(session.rom.resolve("R_HERO" + costume + ".WAD"));
+		if (session.player != null) { // 블레이드 모델 (HeroRig → BladeModels)
+			WadAssets.prefetch(session.rom.resolve("R_WPN" + costume + "_" + Math.max(0, Math.min(5, session.player.level.getOrDefault(Weapon.BLADES, 1))) + ".WAD"));
+		}
 	}
 
 	@Override
 	public void enter(Engine e) {
+		long enterT0 = System.nanoTime();
 		try {
-			level = new LevelScene(session.rom.resolve(levelName + ".WAD"), -2, false);
-			level.enter(e);
+			level = levelPrep != null ? devple.gow.engine.asset.Loader.join(levelPrep, "level " + levelName)
+					: new LevelScene(session.rom.resolve(levelName + ".WAD"), -2, false);
+			levelPrep = null;
+			level.enter(e); // GL 올리기 (CPU 단계는 페이드 동안 끝났으면 건너뜀)
 			level.setExternalCamera(cam);
 			level.setDeferEffects(true);
 			// SCR_Mirror 반사 패스의 영웅 (원작 0x1DAEC0: 영웅 모델 bit 61, 마스크 0x40 → 거울 뷰 0x80, 값 [4] ≠ 0 인 거울은 뺀다 — 43 문서 §9)
@@ -390,6 +427,8 @@ public final class GameScene implements Scene {
 		devple.gow.engine.core.PerfMonitor.gauge("al", () -> snd.backend().stats());
 		System.out.printf("레벨 %s (진입점 %s): 시작 (%.0f, %.0f, %.0f), 적 종류 %s%n", levelName, entry, spawn.x, spawn.y,
 				spawn.z, kinds.keySet());
+		WadAssets.dropPrefetched(); // 쓰지 않은 미리 해석 (예: 소리 전용 RSRCS) 은 버린다
+		devple.gow.engine.core.PerfMonitor.loadTime("enter " + levelName, enterT0);
 	}
 
 	/** 레벨이 쓰는 적 리소스: RSRCS 태그(0x1F4)의 24바이트 이름들 → R_&lt;이름&gt;.WAD (11 문서 §6.3 Slots 힙). */
@@ -569,10 +608,14 @@ public final class GameScene implements Scene {
 		if (lights != null && otherName != null) {
 			lights.removeSource(otherName); // 이전 다른 슬롯 레벨의 라이트 빼기 (47 문서 §8)
 		}
+		long t0 = System.nanoTime();
 		otherName = wad;
 		otherHidden.clear();
 		otherPosed.clear();
-		otherScenePending = true; // 렌더 스레드에서 지오메트리 적재 (render)
+		otherScenePending = true; // 렌더 스레드에서 지오메트리 교체 (render)
+		if (!otherCache.containsKey(wad)) {
+			prepareOther(wad); // 그리기용 장면 CPU 단계는 백그라운드로 (48 §8)
+		}
 		otherCol = null;
 		otherData = null;
 		try {
@@ -590,6 +633,7 @@ public final class GameScene implements Scene {
 		if (cameraRig != null) {
 			cameraRig.setOther(otherData);
 		}
+		devple.gow.engine.core.PerfMonitor.loadTime("other " + wad, t0);
 	}
 
 	/** 현재 + 다른 슬롯 레벨 바닥 + 움직이는 발판 중 높은 것 (NaN = 없음). */
@@ -1849,24 +1893,68 @@ public final class GameScene implements Scene {
 		filterRenderer.draw(f.get(), cam);
 	}
 
-	/** 다른 슬롯 레벨 지오메트리 (처음 필요할 때 적재, 바뀌면 교체). */
+	/** 다른 슬롯 레벨 그리기용 장면 (CPU 단계 진행 중, 레벨 이름 → 결과). */
+	private final Map<String, java.util.concurrent.Future<LevelScene>> otherPrep = new HashMap<>();
+	/**
+	 * 떠난 다른 슬롯 장면 (GL 상주, 최근 순) — DEST01 처럼 두 이웃 (DEST00/02) 경계를 오가면 LoadWad 가 같은 레벨을 번갈아 올린다.
+	 * 다시 읽고 올리는 대신 최근 {@code OTHER_CACHE} 개를 붙잡아 둔다 [엔진 근사: 원작 슬롯은 2 개라 바뀐 슬롯은 다시 읽는다, 48 §8].
+	 * 이 레벨을 떠날 때 모두 닫는다.
+	 */
+	private final java.util.LinkedHashMap<String, LevelScene> otherCache = new java.util.LinkedHashMap<>(4, 0.75f, true);
+	private static final int OTHER_CACHE = devple.gow.engine.asset.Loader.async() ? Integer.getInteger("gow.otherCache", 2) : 0; // 동기 = 예전 그대로
+	private String otherSceneName;
+
+	/** 다른 슬롯 레벨 그리기용 장면의 CPU 단계 시작 (이미 진행 중이면 그대로). */
+	private void prepareOther(String wad) {
+		java.nio.file.Path p = session.rom.resolve(wad + ".WAD");
+		if (otherPrep.containsKey(wad) || !Files.exists(p)) {
+			return;
+		}
+		otherPrep.put(wad, devple.gow.engine.asset.Loader.submit("other " + wad, () -> new LevelScene(p, -2, false).prepare()));
+	}
+
+	/** 다른 슬롯 레벨 지오메트리 (바뀌면 교체: 캐시 → 준비 끝난 장면 GL 올리기, 준비 중이면 다음 프레임). */
 	private void renderOtherSlot(Engine e) {
 		if (otherScenePending) {
 			otherScenePending = false;
 			if (otherScene != null) {
-				otherScene.exit(e);
+				otherCache.put(otherSceneName, otherScene); // 닫지 않고 캐시로
 				otherScene = null;
+				otherSceneName = null;
 			}
-			if (otherName != null && Files.exists(session.rom.resolve(otherName + ".WAD"))) {
+			if (otherName != null) {
+				LevelScene c = otherCache.remove(otherName);
+				if (c != null) {
+					c.clearPoses(); // 새로 읽은 것과 같은 정지 자세에서 (자세·숨김은 매 프레임 다시 넣음)
+					otherScene = c;
+					otherSceneName = otherName;
+				} else {
+					prepareOther(otherName);
+				}
+			}
+			while (otherCache.size() > OTHER_CACHE) {
+				var it = otherCache.entrySet().iterator();
+				it.next().getValue().exit(e);
+				it.remove();
+			}
+		}
+		if (otherScene == null && otherName != null) {
+			var f = otherPrep.get(otherName);
+			if (f != null && f.isDone()) {
+				otherPrep.remove(otherName);
 				try {
-					LevelScene s = new LevelScene(session.rom.resolve(otherName + ".WAD"), -2, false);
+					long t0 = System.nanoTime();
+					LevelScene s = devple.gow.engine.asset.Loader.join(f, "other " + otherName);
 					s.enter(e);
 					otherScene = s;
+					otherSceneName = otherName;
+					devple.gow.engine.core.PerfMonitor.loadTime("otherScene " + otherName, t0);
 				} catch (RuntimeException ex) {
 					System.out.println("이웃 레벨 렌더 실패 " + otherName + ": " + ex.getMessage());
 				}
 			}
 		}
+		otherPrep.keySet().removeIf(k -> !k.equals(otherName)); // 지나간 요청 (끝나면 버려짐, GL 없음)
 		if (otherScene != null) {
 			otherScene.setRemoved(otherHidden); // 이웃 스크립트 Vis 숨김 (SceneNav.Host.neighbourVisible)
 			otherPosed.forEach((k, v) -> otherScene.poseInstance(k, (float[][]) v[0], (boolean[]) v[1]));
@@ -1888,6 +1976,12 @@ public final class GameScene implements Scene {
 		if (otherScene != null) {
 			otherScene.exit(e);
 			otherScene = null;
+		}
+		otherCache.values().forEach(s -> s.exit(e));
+		otherCache.clear();
+		otherPrep.clear(); // 진행 중인 CPU 단계는 끝나면 버려진다 (GL 없음)
+		if (levelPrep != null) { // enter 없이 버려진 장면 (없어야 정상)
+			levelPrep = null;
 		}
 		session.sound.stopAll();
 		session.sound.unload(level.data().wad.name());
