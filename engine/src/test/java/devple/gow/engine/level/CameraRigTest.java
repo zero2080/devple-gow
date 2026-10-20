@@ -117,4 +117,35 @@ class CameraRigTest {
 		assertEquals(160f, rig.pose().dist, 0.01f); // 거리 [10,10]×16
 		assertEquals(hero.y + CameraRig.TARGET_HEIGHT, rig.pose().target.y, 1e-3f);
 	}
+	/**
+	 * PAND05B camEleEnter (43 §13.11): 관절 카메라 갱신 경로 해독 — 0x1F3768 (0x100 없음, 0x40000) 은 카메라 GO 월드 행렬 (0x1303D0: CAM 로컬 ×
+	 * 소유 GO 애니 관절 행렬 0x136990) 을 그대로 상태로 쓰고 주시점 = 행렬 × (0,0,−567.8). 활성화 0x1F3A38 는 카메라 노드 +0x104 (0x13EC10:
+	 * 애니 관절에 붙으면 1) 이고 플래그 0x1000 이면 소유 GO 애니를 처음부터 (0x1004B8 · 0x131038). 눈은 고정 (1080.6, 20.8, 1311.5),
+	 * 관절 camEleEnter 오일러 (656, 2249) → (−959, 0) = 피치 +14.4° → −21.1°, 요 49.4° → 0° (1 초 정지 뒤 패닝, 11.33 초).
+	 */
+	@Test
+	void eleEnterJointCameraPans() throws Exception {
+		LevelData d = load("PAND05B");
+		CameraRig rig = new CameraRig(d);
+		Vector3f hero = new Vector3f(832, 288, 960); // WarpFrom05A (엘리베이터 위)
+		rig.update(0, hero, 0, false);
+		rig.setVolumeQuery(false); // startWad-start: Internal 0x9(false) + SwitchCamera camEleEnter
+		rig.request("camEleEnter");
+		rig.update(1 / 60f, hero, 0, false);
+		assertEquals("camEleEnter", rig.current());
+		assertEquals(0, rig.animTime(), 0.05f, "0x1000: 활성화 때 애니 처음부터");
+		Vector3f e0 = rig.eye(), f0 = rig.pose().forward(new Vector3f());
+		assertEquals(1080.6f, e0.x, 0.5f);
+		assertEquals(20.8f, e0.y, 0.5f);
+		assertEquals(1311.5f, e0.z, 0.5f);
+		assertEquals(14.4, Math.toDegrees(Math.asin(f0.y)), 0.5);
+		for (int i = 0; i < 12 * 60; i++) {
+			rig.update(1 / 60f, hero, 0, false);
+		}
+		assertEquals("camEleEnter", rig.current(), "질의 끔 → 유지");
+		Vector3f e1 = rig.eye(), f1 = rig.pose().forward(new Vector3f());
+		assertTrue(e1.distance(e0) < 0.5f, "눈 고정 " + e1);
+		assertEquals(-21.1, Math.toDegrees(Math.asin(f1.y)), 0.5);
+		assertEquals(0, Math.toDegrees(Math.atan2(-f1.x, -f1.z)), 1.0, "요 0 (−z)");
+	}
 }

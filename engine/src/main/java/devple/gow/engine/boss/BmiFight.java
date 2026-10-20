@@ -47,7 +47,9 @@ public final class BmiFight extends BossFight {
 			SCR_ON_PLATFORM = 0xf84955d3;
 	/** 통나무 Arrow/060 "BMILogLauncher": Damage 1000, Context 456, Velocity 150 (×16/초). */
 	public static final int LOG_DAMAGE = 1000, LOG_TAG = 456, RIDE_MOUNT = 450, RIDE_FAIL = 454, RIDE_WIN = 455, LOG_STUN = 208,
-			FINAL_LOG_STUN = 243, DEATH = 245;
+			FINAL_LOG_STUN = 243, DEATH = 245,
+			/** 발판 잡아 던지기: 202 의 104 BMIPLATFORMGRAB 적중 → BMI 205 / 영웅 002 의 460 BMIPLATFORMGRABTOSS (37 문서 §11.6). */
+			PLATFORM_TOSS = 460;
 	static final float HIGH = 96f;
 
 	// ---- /GlobGame/BMI ----
@@ -94,7 +96,9 @@ public final class BmiFight extends BossFight {
 		kinds.put(TEMPLATE, kind);
 		silent.addAll(List.of(202, 257)); // AB2/AMISoundbankLoad
 		bossTemplates.add(TEMPLATE);
-		sync = new BossSync(id -> id >= RIDE_MOUNT && id <= RIDE_WIN);
+		// 동기 쌍 = 같은 ID 기술 (0x2097A8: 플래그 0x20 기술 시작 때 +0x84 = 공격 대상). 올라타기 450–455 와 발판 잡아 던지기 460
+		// (BMI 205 의 460 플래그 0x130 · 영웅 002 의 460 플래그 0x140, BMI 460 이벤트 19 [0–0.4] → BMI 가 영웅을 끈다, 37 문서 §11.6) [확실: 데이터]
+		sync = new BossSync(id -> (id >= RIDE_MOUNT && id <= RIDE_WIN) || id == PLATFORM_TOSS);
 		Tweaks tw = kind.tweaks();
 		ventDamage = tw.f(NODE, "Damage Per Vent Stage", 100);
 		armorDamage = tw.f(NODE, "Damage Per Armor Stage", 150);
