@@ -214,4 +214,33 @@ class StartCameraTest {
 		float up = v.dot(new Vector3f(f).cross(0, 1, 0).cross(f).normalize()) / v.dot(f);
 		assertEquals(Math.tan(Math.toRadians(want)), up, 0.01); // 대상이 시선 축 아래
 	}
+	/**
+	 * Warp 도착 Start 의 CameraName 은 Start 의 컨텍스트 범위에서만 찾는다 (43 §13.11): 0x1A8E10 이 Start GO 의 컨텍스트 (GO 핸들러 +0x88) 를
+	 * 그 서버 vt+0x80 으로 세운 뒤 SwitchCamera 0x1EE658 → 0x17A7B8 (범위 조회 0x186990), 끝나면 [0x330134] vt+0x88 로 내린다.
+	 * 데이터의 두 곳 — PAND02A WarpFromHub "Lvl2HallCam2", PAND00D WarpFrm1BB "ConHallCam4" — 은 떠나온 레벨 카메라라 찾지 못한다
+	 * (떠나온 레벨은 꺼진 채 상주하지만 도착 Start 의 범위 밖) → 볼륨 선택 그대로. 다른 슬롯이 없는 엔진 Warp 와 같다.
+	 */
+	@Test
+	void warpStartCameraNameScopedToArrivalLevel() throws Exception {
+		String[][] cases = {{"PAND02A", "PAND00C", "Lvl2HallCam2", "Follow"}, {"PAND00D", "PAND01BB", "ConHallCam4", "Lv1TunCam4"}};
+		for (String[] c : cases) {
+			LevelData d = load(c[0]), left = load(c[1]);
+			LevelCollision col = new LevelCollision(d.sheets);
+			LevelEntry.Spot s = LevelEntry.resolve(d, new ScriptWorld(d, new ScriptHost(), null), null, c[1]);
+			assertEquals(c[2], s.camera(), c[0]);
+			assertNull(d.camera(c[2]), c[0] + " 에는 없음");
+			assertNotNull(left.camera(c[2]), c[1] + " 카메라");
+			float[] p = s.pos();
+			float g = col.groundHeight(p[0], p[1] + LevelEntry.UP, p[2], LevelEntry.DROP);
+			Vector3f feet = new Vector3f(p[0], Float.isNaN(g) ? p[1] : g, p[2]);
+			CameraRig rig = new CameraRig(d); // Warp: 다른 슬롯 없음
+			rig.update(0, feet, 0, false);
+			rig.request(s.camera());
+			rig.update(0, feet, 0, false);
+			for (int i = 0; i < 120; i++) {
+				rig.update(1 / 60f, feet, 0, false);
+			}
+			assertEquals(c[3], rig.current(), c[0]);
+		}
+	}
 }

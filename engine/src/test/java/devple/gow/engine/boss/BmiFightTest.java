@@ -117,6 +117,43 @@ class BmiFightTest {
 		assertTrue(until(r, 1, () -> move(b) == 210), "A210 BMILOGHIT: " + r.bossMoves);
 	}
 
+	/**
+	 * 발판 잡기 (37 문서 §11.6): BMI 202 의 104 BMIPLATFORMGRAB (SET_1B0 = 460) 이 영웅에 맞으면 영웅 002 A460 (EV_HIT_REACT tag 460, tgt 200)
+	 * → 영웅 460, BMI 는 HIT_CONFIRM → 205 의 460 (플래그 0x20 = 동기 시작, 0x2097A8 연결). BMI 460 의 이벤트 19 창 [0–0.4] 동안 BMI 가 영웅을
+	 * 0x204BF0 으로 끈다 (0x205B28 의 0x24 검사) — 창 끝에서 두 synchJoint 가 설계 관계 (오차 &lt; 2), 창 뒤는 두 쪽 루트 모션.
+	 */
+	@Test
+	void platformGrabTossPairsAndPulls() throws Exception {
+		BossRig r = spawned();
+		BmiFight fight = (BmiFight) r.fight;
+		EnemyFighter b = fight.boss();
+		front(r, 70);
+		r.ctl.yaw = b.yaw + (float) Math.PI; // 마주 봄
+		assertTrue(b.combat().forceMove(104), "BMI 104");
+		r.tick();
+		var atk = b.combat().move().attacks().getFirst();
+		var res = r.heroHit.receive(atk, b.combat(), 0, new org.joml.Vector3f());
+		assertEquals(devple.gow.engine.combat.Hittable.Result.HIT, res);
+		b.combat().fire(devple.gow.engine.combat.CombatInput.EV_HIT_CONFIRM, -1, null);
+		assertTrue(until(r, 0.2f, () -> fight.sync().pairedMove() == BmiFight.PLATFORM_TOSS),
+				"460 동기 쌍: boss " + r.bossMoves + " hero " + r.heroMoves);
+		int pulls = 0;
+		float first = -1, last = -1;
+		StringBuilder errs = new StringBuilder();
+		for (int i = 0; i < 180 && fight.sync().pairedMove() == BmiFight.PLATFORM_TOSS; i++) {
+			r.tick();
+			if (fight.sync().pulling() == 1) { // 이벤트 19 창 [0–0.4] 안
+				pulls++;
+				last = devple.gow.engine.combat.SyncPull.target(b.pos, b.yaw, b.animator(), b.scale, r.ctl.animator(), 1f)
+						.getTranslation(new org.joml.Vector3f()).distance(r.ctl.position);
+				first = first < 0 ? last : first;
+				errs.append(String.format(" %.1f", last));
+			}
+		}
+		assertTrue(pulls >= 15, "BMI 460 이벤트 19 창에서 영웅을 끈다: " + pulls);
+		assertTrue(last < 2 && last <= first, "설계 관계 오차 (끌린 틱마다)" + errs);
+	}
+
 	@Test
 	void dodgesLogWhenNotStunned() throws Exception {
 		BossRig r = spawned();
