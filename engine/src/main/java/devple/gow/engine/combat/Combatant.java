@@ -921,15 +921,22 @@ public final class Combatant {
 		return 0;
 	}
 
+	/** 마지막 {@link #chainSweep} 에서 선분이 개체를 지났는가 (0x337C18). */
+	public boolean chainTouched;
+
 	/**
 	 * 블레이드 사슬 적 스윕 (0x1FAFC8 의 0x1FB1B4 – 0x1FB2C0, 45 문서 §3.7) [확실: 조건·부위 / 추정: 피격 구 필터]:
 	 * 손 밖 블레이드의 부위 part (왼쪽 2 / 오른쪽 3) 나 쌍 11 의 피해가 0 이 아니면 (0x209D00 두 번), 시작점 (영웅 x, 골반 y, 영웅 z) →
 	 * 끝점마다 선분 질의 (0x11E190, 질의 0x100003, 콜백 0x1FAF40) 에 걸린 개체에 OnContact (0x203AF0) 를 부위 part 와 11 로 두 번.
 	 * 같은 (개체, 공격 번호) 는 기술당 한 번 (손 기술 판정과 같은 기록).
 	 *
+	 * {@link #chainTouched} = 이번 호출에서 선분이 개체 피격 구를 하나라도 지남 (콜백 0x1FAF40 이 OnContact 결과와 관계없이 0x337C18 = 1 →
+	 * 블레이드 +0xA4 = 0, 피 묻은 블레이드 시간).
+	 *
 	 * @return 이번에 새로 맞힌 공격 수
 	 */
 	public int chainSweep(int part, Vector3f from, java.util.List<Vector3f> to) {
+		chainTouched = false;
 		if (to.isEmpty() || activeDamage(part) == 0 && activeDamage(HitVolumes.PART_TWIN) == 0) {
 			return 0;
 		}
@@ -959,6 +966,7 @@ public final class Combatant {
 			if (!touch) {
 				continue;
 			}
+			chainTouched = true;
 			for (int p : new int[]{part, HitVolumes.PART_TWIN}) {
 				for (Attack a : move.attacks()) {
 					if (t < a.start() || t > a.end() || a.part() != p) {

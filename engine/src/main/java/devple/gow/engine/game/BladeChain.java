@@ -57,15 +57,32 @@ public final class BladeChain {
 	 */
 	public static final long WALL_EXCLUDE = SurfaceAttr.fromRecord(0x0B130000, 0, 0);
 
+	/**
+	 * 벽 질의 종류 마스크 (0x3309F0) [확실: 0x1FB2D0 / 0x1FB3B4]. 충돌 세계 0x29C978 의 엔트리 범주 = 소유 GO +0xF4 (0 이면 0x80000000, 0x11D608)
+	 * 와 AND 해 0 이 아닌 엔트리만 본다 (0x175648). 첫 질의 0xFF9CE00F = 범주 비트 0–3 (영웅 1 · 적 1|2 …) · 13–15 · 18–20 · 23–31 (0x80000000 = 범주 없는 GO 와
+	 * 정적 시트), 빠지는 것 = 비트 4–12 · 16·17 · 21·22. 둘째 질의 0x80000000 = 범주 없는 GO·정적 시트만.
+	 */
+	public static final int TYPES_WALL = 0xFF9CE00F, TYPES_WORLD = 0x80000000;
+	/** 엔트리 범주: 소유 GO +0xF4 = 0 (문·발판 같은 일반 CDV GO, 정적 시트) → 0x80000000 [확실: 0x11D608 / 정적 시트는 추정], 적 = 1 또는 2 (AI 초기화 0x1D0890). */
+	public static final int CAT_WORLD = 0x80000000, CAT_CREATURE = 0x3;
+
+	/**
+	 * 벽 질의 결과 (접촉 기록 0x2C8F10: +0x00 점, +0x10 면 법선, +0x24 개체, +0x2C 재질 엔트리 → SheetFX).
+	 *
+	 * @param bit31 맞은 개체가 없거나 (정적 시트) 개체 +0xF4 bit 31 (0x1FB344 – 0x1FB350) — 이때만 첫 질의 점으로 당긴다
+	 */
+	public record WallHit(Vector3f point, Vector3f normal, int sheetFx, boolean bit31) {
+	}
+
 	/** 블레이드 벽 질의 (0x1FAFC8 → 선분 질의 0x11E190, 가장 가까운 충돌 = 모드 2). */
 	@FunctionalInterface
 	public interface Walls {
 		/**
-		 * from → to 의 첫 충돌 면 (면 표면 속성 &amp; exclude ≠ 0 인 면은 건너뜀).
+		 * from → to 의 가장 가까운 충돌 (면 표면 속성 &amp; exclude ≠ 0 인 면은 건너뜀, 엔트리 범주 &amp; types = 0 인 것도 건너뜀).
 		 *
-		 * @return {x, y, z, nx, ny, nz, sheetFx} 또는 null
+		 * @return 없으면 null
 		 */
-		float[] cast(Vector3f from, Vector3f to, long exclude);
+		WallHit cast(Vector3f from, Vector3f to, long exclude, int types);
 	}
 
 	/** /Player/ 튜닝 (Player_RegisterTweaks 0x1D5B8C…: 0x29F294…0x29F2B4). */
@@ -108,11 +125,24 @@ public final class BladeChain {
 		/** 블레이드 Z 축 (정규화): 칼끝 = P3 − Z · Weapon Length. */
 		public final Vector3f bladeZ = new Vector3f(0, 0, 1);
 		boolean init;
-		/** 이번 틱 벽에 막힘 (0x1FAFC8 이 블레이드를 충돌점까지 당김). */
+		/** 이번 틱 첫 벽 질의가 맞음 → 그 점에 불꽃 0x202248 (맞은 것이 적 몸이어도). */
 		public boolean wallHit;
-		/** 벽 충돌점·면 법선·면 SheetFX (wallHit 일 때). */
+		/** 이번 틱 블레이드를 당김 (첫 질의가 bit 31 이거나, 아니면 둘째 질의 0x80000000 이 맞음). */
+		public boolean pulled;
+		/** 첫 벽 질의 충돌점·면 법선·면 SheetFX (wallHit 일 때) — 불꽃 위치. */
 		public final Vector3f wallPoint = new Vector3f(), wallNormal = new Vector3f();
 		public int wallSheetFx;
+		/**
+		 * 블레이드 라이트 위치 = 당기기 전 블레이드 점 B, 방향 = O − B (0x1FB10C – 0x1FB13C → 0x151928 / 0x151978) [확실].
+		 * 블레이드 GO 가 보일 때 상태와 관계없이 (손 밖 검사 0x1FB148 앞) 매 틱. lightValid = 이번 틱 정함.
+		 */
+		public final Vector3f lightPoint = new Vector3f(), lightDir = new Vector3f();
+		public boolean lightValid;
+		/**
+		 * +0xA4 피 묻은 블레이드 시간 (초): Blades_Init 0x1FA5B0 이 100, 0x1FB508 이 매 프레임 += 1/60, 사슬 적 스윕이 무엇이든 맞으면
+		 * (콜백 0x1FAF40 → 0x337C18 = 1) 0 (0x1FB2C8) [확실].
+		 */
+		public float bloodTime = 100f;
 		/** 블레이드 쪽 +0x50: 당긴 양 (충돌점 − 블레이드 점), 매 틱 0 으로 시작. */
 		public final Vector3f pull = new Vector3f();
 		/** 적 스윕 (0x1FB1B4 – 0x1FB2C0): 시작점 = (영웅 x, 골반 y, 영웅 z), 끝점들 = 이전 → 지금 블레이드 점 사이 (t = 1 부터). 손 밖이 아니면 비어 있음. */
@@ -133,6 +163,32 @@ public final class BladeChain {
 		public boolean valid() {
 			return init;
 		}
+
+		/** 사슬 적 스윕이 맞음 (0x1FB2C0: 0x337C18 이면 +0xA4 = 0). */
+		public void bleed() {
+			bloodTime = 0;
+		}
+
+		/**
+		 * 블레이드 GO 부착물 종류 1 blooddrip / 2 bloodspray 의 생성률 배율 (0x1FB508 – 0x1FB574 → 0x201FB0: 부착 파티클 컴포넌트 +0xB4) [확실]:
+		 * blooddrip = clamp(4 − t, 0, 1) (3 초까지 1, 4 초에 0), bloodspray = clamp(2 · (1 − t / 0.1), 0, 1) (0.05 초까지 1, 0.1 초에 0).
+		 * 그 밖의 종류는 1.
+		 */
+		public float blood(int kind) {
+			return bloodRate(kind, bloodTime);
+		}
+	}
+
+	public static final int ATTACH_BLOODDRIP = 1, ATTACH_BLOODSPRAY = 2;
+
+	/** {@link Side#blood} 의 식 (t = +0xA4). */
+	public static float bloodRate(int kind, float t) {
+		float v = switch (kind) {
+			case ATTACH_BLOODDRIP -> 4f - t;
+			case ATTACH_BLOODSPRAY -> 2f * (1f - t / 0.1f);
+			default -> 1f;
+		};
+		return Math.max(0f, Math.min(1f, v));
 	}
 
 	public void reset() {
@@ -162,6 +218,7 @@ public final class BladeChain {
 		boolean havePelvis = root != null && j.world(PELVIS, pelvis);
 		Matrix4f chain = new Matrix4f(), chainW = new Matrix4f(), ih = new Matrix4f(), oh = new Matrix4f(), back = new Matrix4f();
 		for (Side s : sides) {
+			s.bloodTime += dt; // 0x1FB508: +0xA4 += 1/60 (프레임마다, 적 스윕보다 먼저)
 			String[] n = JOINTS[s.index];
 			if (!j.world(n[0], chain) || !j.world(n[1], chainW) || !j.world(n[2], ih) || !j.world(n[3], oh) || !j.world(n[4], back)) {
 				continue;
@@ -194,12 +251,20 @@ public final class BladeChain {
 			s.pos.lerp(target.getTranslation(new Vector3f()), t);
 			Vector3f prevPos = new Vector3f(pos0);
 			s.wallHit = false;
+			s.pulled = false;
+			s.lightValid = false;
 			s.pull.zero();
 			s.sweepTo.clear();
-			if (havePelvis && s.mode == OUT_HAND) {
+			if (havePelvis) {
 				Vector3f z = new Vector3f(0, 0, 1).rotate(s.rot);
 				Vector3f from = new Vector3f(root.x, pelvis.m31(), root.z);
-				collide(s, from, prevPos, z, walls);
+				// 0x1FB0F0 – 0x1FB13C: 블레이드 라이트 = 당기기 전 블레이드 점 B, 방향 O − B (상태 검사 0x1FB148 앞)
+				s.lightPoint.set(z).mul(-BLADE_POINT_BACK).add(s.pos);
+				s.lightDir.set(from).sub(s.lightPoint);
+				s.lightValid = true;
+				if (s.mode == OUT_HAND) {
+					collide(s, from, prevPos, z, walls);
+				}
 			}
 			// +0x9C += (+0xA0 − +0x9C) · 0.1 (프레임마다)
 			s.scale += (s.scaleTarget - s.scale) * step(0.1f, frames);
@@ -220,8 +285,10 @@ public final class BladeChain {
 	 *   <li>블레이드 점 B = 블레이드 위치 − Z × 8, 시작점 O = (영웅 x, 골반 y, 영웅 z).</li>
 	 *   <li>적 스윕 끝점: 이전 블레이드 점 (이전 GO 위치 − 지금 Z × 8) → B 를 간격 s = min(1, 6.4 / |B − 이전|) 로,
 	 *       t = 1, 1 − s, … (다음 t − s ≥ 0 인 동안) — 원작 루프 그대로 (t = 0 쪽 마지막 구간은 빠질 수 있다).</li>
-	 *   <li>벽: O → B 선분 질의 (제외 마스크 {@link #WALL_EXCLUDE}, 가장 가까운 면). 맞으면 블레이드 위치 = 충돌점 + Z × 8
-	 *       (= 블레이드 점을 충돌점에 놓음), +0x50 = 충돌점 − B. 블레이드 상태 행렬 (+0x30) 에 쓰므로 다음 틱 slerp 의 시작도 당긴 위치.</li>
+	 *   <li>벽 (0x1FB2CC): O → B 선분 질의 (면 제외 {@link #WALL_EXCLUDE}, 종류 {@link #TYPES_WALL}, 가장 가까운 것). 맞으면 그 점에 불꽃
+	 *       ({@link Side#wallHit}, 0x202248 — 적 몸이어도). 맞은 개체가 없거나 +0xF4 bit 31 이면 블레이드 위치 = 충돌점 + Z × 8
+	 *       (= 블레이드 점을 충돌점에 놓음), +0x50 = 충돌점 − B. 아니면 종류 {@link #TYPES_WORLD} 로 다시 질의해 맞으면 같은 식으로 당긴다 (불꽃 없음).
+	 *       블레이드 상태 행렬 (+0x30) 에 쓰므로 다음 틱 slerp 의 시작도 당긴 위치.</li>
 	 * </ol>
 	 */
 	void collide(Side s, Vector3f from, Vector3f prevPos, Vector3f z, Walls walls) {
@@ -233,15 +300,20 @@ public final class BladeChain {
 		if (walls == null) {
 			return;
 		}
-		float[] h = walls.cast(from, b, WALL_EXCLUDE);
+		WallHit h = walls.cast(from, b, WALL_EXCLUDE, TYPES_WALL);
 		if (h == null) {
 			return;
 		}
 		s.wallHit = true;
-		s.wallPoint.set(h[0], h[1], h[2]);
-		s.wallNormal.set(h[3], h[4], h[5]);
-		s.wallSheetFx = (int) h[6];
-		s.pull.set(s.wallPoint).sub(b);
+		s.wallPoint.set(h.point());
+		s.wallNormal.set(h.normal());
+		s.wallSheetFx = h.sheetFx();
+		WallHit p = h.bit31() ? h : walls.cast(from, b, WALL_EXCLUDE, TYPES_WORLD); // 0x1FB3A8 – 0x1FB420
+		if (p == null) {
+			return;
+		}
+		s.pulled = true;
+		s.pull.set(p.point()).sub(b);
 		s.pos.add(s.pull);
 	}
 

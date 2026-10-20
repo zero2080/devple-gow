@@ -363,6 +363,39 @@ class NavDataTest {
 		assertNotNull(ps.floor(-944, 690, 1098, 40));
 	}
 
+	/**
+	 * 블레이드 벽 질의의 CDV GO 몸체 (45 §3.8): ATHN05D 엘리베이터 (gowarpelevator5d) 바닥 hull 을 위에서 아래로 지나는 선분이 윗면 (677) 에 맞고,
+	 * 엔트리는 GO 몸체 (정적 시트가 아님 → 첫 질의 bit 31 아님, 둘째 질의 0x80000000 이 같은 몸체를 맞혀 당김).
+	 */
+	@Test
+	void bladeQueryHitsCdvBody() throws Exception {
+		LevelData d = level("ATHN05D");
+		ScriptWorld w = new ScriptWorld(d, new ScriptHost(), null);
+		Platforms ps = Platforms.of(d, SceneNav.animatorOwners(w));
+		assertNotNull(ps.settleUnder(new Vector3f(-944, 677, 1098), 24));
+		assertEquals(677, ps.floor(-944, 690, 1098, 40).y(), 4);
+		NavWorld nw = new NavWorld(LevelCollision.of(List.of()));
+		nw.setPlatforms(ps);
+		Vector3f from = new Vector3f(-944, 720, 1098), to = new Vector3f(-944, 600, 1098);
+		NavWorld.Contact c = nw.bodyContact(from, to, devple.gow.engine.game.BladeChain.WALL_EXCLUDE);
+		assertNotNull(c);
+		assertEquals("gowarpelevator5d", c.owner());
+		assertEquals(677, c.point().y, 4);
+		assertTrue(Math.abs(c.normal().y) > 0.9f, "윗면 법선 " + c.normal());
+		assertNull(nw.staticContact(from, to, devple.gow.engine.game.BladeChain.WALL_EXCLUDE));
+		devple.gow.engine.game.BladeWalls bw = new devple.gow.engine.game.BladeWalls(() -> nw, List::of);
+		devple.gow.engine.game.BladeChain.WallHit h = bw.cast(from, to, devple.gow.engine.game.BladeChain.WALL_EXCLUDE,
+				devple.gow.engine.game.BladeChain.TYPES_WALL);
+		assertNotNull(h);
+		assertFalse(h.bit31(), "GO +0xF4 = 0 → 첫 질의는 불꽃만");
+		devple.gow.engine.game.BladeChain.WallHit h2 = bw.cast(from, to, devple.gow.engine.game.BladeChain.WALL_EXCLUDE,
+				devple.gow.engine.game.BladeChain.TYPES_WORLD);
+		assertEquals(h.point().y, h2.point().y, 1e-4f, "둘째 질의가 같은 몸체 → 당김");
+		assertNull(bw.cast(from, to, devple.gow.engine.game.BladeChain.WALL_EXCLUDE, devple.gow.engine.game.BladeChain.CAT_CREATURE));
+		ps.setSolid("gowarpelevator5d", false);
+		assertNull(nw.bodyContact(from, to, devple.gow.engine.game.BladeChain.WALL_EXCLUDE), "충돌 끈 GO 는 빠짐");
+	}
+
 	/** ATHN01D 돛대 그물 (Climbable) 을 실제 충돌로 끝까지 오르면 돛대 꼭대기 발판 → 짚라인으로 ATHN01E 갑판 (38 문서 §6). */
 	@Test
 	void athn01dMastNetClimbThenZiplineToHydraDeck() throws Exception {

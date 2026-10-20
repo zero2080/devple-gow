@@ -195,6 +195,45 @@ public final class HitVolumes {
 		return false;
 	}
 
+	/**
+	 * 선분 a → b 가 처음 들어가는 피격 구 (몸 PartType 1, 없으면 전부 — {@link #segmentHit} 와 같은 거름) — 블레이드 벽 질의 (0x1FB2CC, 종류 0xFF9CE00F 에
+	 * 생물 범주 1|2 가 든다). 시작점이 구 안이면 그 구는 건너뜀 [추정].
+	 *
+	 * @return {t, x, y, z, nx, ny, nz, sheetFx} (t = 선분 비율, 법선 = 구 중심 → 접촉점) 또는 null
+	 */
+	public float[] segmentCast(Vector3f a, Vector3f b) {
+		boolean anyBody = hasPart(PART_BODY);
+		float dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+		float dd = dx * dx + dy * dy + dz * dz;
+		if (dd < 1e-12f) {
+			return null;
+		}
+		float[] best = null;
+		for (int k = 0; k < srcs.size(); k++) {
+			if (anyBody && srcs.get(k).part != PART_BODY) {
+				continue;
+			}
+			float[] c = cur[k];
+			float ox = a.x - c[0], oy = a.y - c[1], oz = a.z - c[2];
+			float bq = ox * dx + oy * dy + oz * dz, cq = ox * ox + oy * oy + oz * oz - c[3] * c[3];
+			float disc = bq * bq - dd * cq;
+			if (cq <= 0 || disc < 0) {
+				continue;
+			}
+			float t = (-bq - (float) Math.sqrt(disc)) / dd;
+			if (t < 0 || t > 1 || best != null && t >= best[0]) {
+				continue;
+			}
+			float px = a.x + dx * t, py = a.y + dy * t, pz = a.z + dz * t;
+			Vector3f n = new Vector3f(px - c[0], py - c[1], pz - c[2]);
+			if (n.lengthSquared() > 1e-12f) {
+				n.normalize();
+			}
+			best = new float[]{t, px, py, pz, n.x, n.y, n.z, srcs.get(k).fx};
+		}
+		return best;
+	}
+
 	/** 마지막으로 맞은 구의 SheetFX (MFX 템플릿 번호, 피격 기록이 없으면 −1). */
 	public int lastHitFx() {
 		return lastValid ? lastFx : -1;

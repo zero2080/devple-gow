@@ -120,8 +120,13 @@ public final class Platforms {
 		 * → GeneralGuide 면 (ATHN01B goplayerblock "guideMat" 등) 은 몸을 막는다 [확실] (38 §18.4).
 		 */
 		boolean wallHull(int h) {
+			return wallHull(h, WALL_EXCLUDE);
+		}
+
+		/** hull h 가 몸 제외 마스크 exclude ({@code NavWorld.bodyExclude}) 아래에서 몸을 막는지. */
+		boolean wallHull(int h, long exclude) {
 			for (long a : planeAttrs[h]) {
-				if ((a & WALL_EXCLUDE) == 0) {
+				if ((a & exclude) == 0) {
 					return true;
 				}
 			}
@@ -199,8 +204,9 @@ public final class Platforms {
 			| SurfaceAttr.GENERAL_GUIDE.bit() | SurfaceAttr.NO_PLAYER_COLLISION.bit() | SurfaceAttr.CLIMB_GUIDE.bit() | SurfaceAttr.COMBAT_GUIDE.bit();
 
 	/**
-	 * 벽 (구 밀어내기) 제외 마스크 = {@link #HERO_EXCLUDE} − GeneralGuide [확실: 0x1E2224 고정 0x10042]. ClimbGuide 는 벽 상태가 아닐 때만,
-	 * CombatGuide 는 플레이어 전투 기술 (기술 +0x13 = 2) 이 아닐 때만 빠진다 (0x1EA6B4 / 0x1EA6C0) — 엔진은 늘 뺌 [근사].
+	 * 벽 (구 밀어내기) 기본 제외 마스크 = {@link #HERO_EXCLUDE} − GeneralGuide [확실: 0x1E2224 고정 0x10042] = 기술 없는 영웅
+	 * ({@code NavWorld.HERO_BODY_EXCLUDE}). ClimbGuide 는 벽에 붙어 있을 때, CombatGuide 는 플레이어가 피격 반응 (+0x13 = 2) 이 아닌 전투 기술 중일 때
+	 * 막는다 (0x1EA6A0 / 0x1EA6C0) — 상태별 마스크는 {@code NavWorld.bodyExclude} 로 {@link #collideSphere(Vector3f, float, Collection, long)} 에 넘긴다.
 	 */
 	public static final long WALL_EXCLUDE = HERO_EXCLUDE & ~SurfaceAttr.GENERAL_GUIDE.bit();
 
@@ -476,12 +482,17 @@ public final class Platforms {
 	 * @return 밀렸으면 true
 	 */
 	public boolean collideSphere(org.joml.Vector3f c, float r, Collection<String> skip) {
+		return collideSphere(c, r, skip, WALL_EXCLUDE);
+	}
+
+	/** {@link #collideSphere(Vector3f, float, Collection)} 를 몸 제외 마스크 exclude 로 ({@code NavWorld.bodyExclude}, 38 §18.6). */
+	public boolean collideSphere(org.joml.Vector3f c, float r, Collection<String> skip, long exclude) {
 		boolean moved = false;
 		for (int iter = 0; iter < 3; iter++) {
 			boolean any = false;
 			for (Body b : bodies) {
 				if (b.solid && b.hull != null && !skip.contains(b.owner)) {
-					any |= pushOut(b, c, r);
+					any |= pushOut(b, c, r, exclude);
 				}
 			}
 			moved |= any;
@@ -492,11 +503,11 @@ public final class Platforms {
 		return moved;
 	}
 
-	private static boolean pushOut(Body b, org.joml.Vector3f c, float r) {
+	private static boolean pushOut(Body b, org.joml.Vector3f c, float r, long exclude) {
 		boolean moved = false;
 		for (int h = 0; h < b.hull.hulls.size(); h++) {
 			BallHull.Hull hh = b.hull.hulls.get(h);
-			if (hh.planes().size() < 4 || !b.wallHull(h)) {
+			if (hh.planes().size() < 4 || !b.wallHull(h, exclude)) {
 				continue;
 			}
 			float[] m = b.joints[Math.min(b.hull.hullJoint[h], b.joints.length - 1)];
@@ -527,6 +538,70 @@ public final class Platforms {
 			}
 		}
 		return moved;
+	}
+
+	/**
+	 * 선분 from → to 가 처음 들어가는 CDV hull 면 (볼록 hull 평면 클리핑, hull 관절 로컬). 들어가는 평면의 재질 표면 속성 &amp; exclude ≠ 0 이면 그 hull 은 지나간다
+	 * (면 거름 0x139218 [근사: 원작은 평면마다 거른 뒤 다음 면을 본다 — 볼록 hull 이라 같은 hull 의 뒤쪽 면은 들어가는 면이 아님]). 시작점이 hull 안이면 맞지 않음.
+	 * 충돌 꺼진 (Vis Attr11_0 = 2) 오브젝트는 빠진다.
+	 *
+	 * @return 가장 가까운 접촉 (없으면 null)
+	 */
+	public NavWorld.Contact segment(Vector3f from, Vector3f to, long exclude) {
+		NavWorld.Contact best = null;
+		float[] a = new float[3], b = new float[3];
+		for (Body bd : bodies) {
+			if (!bd.solid || bd.hull == null) {
+				continue;
+			}
+			for (int h = 0; h < bd.hull.hulls.size(); h++) {
+				BallHull.Hull hh = bd.hull.hulls.get(h);
+				List<float[]> planes = hh.planes();
+				if (planes.size() < 4) {
+					continue;
+				}
+				float[] m = bd.joints[Math.min(bd.hull.hullJoint[h], bd.joints.length - 1)];
+				float[] inv = Mat4.invertAffine(m);
+				Mat4.transformPoint(inv, from.x, from.y, from.z, a);
+				Mat4.transformPoint(inv, to.x, to.y, to.z, b);
+				float dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2];
+				float t0 = -Float.MAX_VALUE, t1 = 1f;
+				int enter = -1;
+				boolean miss = false;
+				for (int k = 0; k < planes.size() && !miss; k++) {
+					float[] pl = planes.get(k);
+					float sa = pl[0] * a[0] + pl[1] * a[1] + pl[2] * a[2] + pl[3];
+					float sd = pl[0] * dx + pl[1] * dy + pl[2] * dz;
+					if (Math.abs(sd) < 1e-9f) {
+						miss = sa > 0;
+					} else if (sd < 0) {
+						float t = -sa / sd;
+						if (t > t0) {
+							t0 = t;
+							enter = k;
+						}
+					} else {
+						t1 = Math.min(t1, -sa / sd);
+					}
+				}
+				if (miss || enter < 0 || t0 < 0 || t0 > t1 || (bd.planeAttrs[h][enter] & exclude) != 0
+						|| best != null && t0 >= best.t()) {
+					continue;
+				}
+				float[] pl = planes.get(enter);
+				float[] n = new float[3];
+				Mat4.transformDir(m, pl[0], pl[1], pl[2], n);
+				Vector3f nw = new Vector3f(n[0], n[1], n[2]);
+				if (nw.lengthSquared() > 1e-12f) {
+					nw.normalize();
+				}
+				int[] pm = hh.planeMaterials();
+				int mat = enter < pm.length ? pm[enter] : -1;
+				int fx = mat >= 0 && mat < bd.hull.materialFx.length ? bd.hull.materialFx[mat] : 0;
+				best = new NavWorld.Contact(t0, new Vector3f(from).lerp(to, t0), nw, fx, bd.owner);
+			}
+		}
+		return best;
 	}
 
 	/** 소유 GO 의 충돌 켜고 끄기 (스크립트 Vis Attr11_0). */

@@ -131,8 +131,11 @@ class HitVolumesTest {
 			if (!sawWindow) {
 				sawWindow = true;
 				miss = c.chainSweep(HitVolumes.PART_LEFT, from, List.of(new Vector3f(300, 20, -500)));
+				assertFalse(c.chainTouched, "비켜간 선분 = 0x337C18 그대로");
 				hit = c.chainSweep(HitVolumes.PART_LEFT, from, List.of(new Vector3f(300, 20, -100), new Vector3f(0, 20, -500)));
+				assertTrue(c.chainTouched);
 				again = c.chainSweep(HitVolumes.PART_LEFT, from, List.of(new Vector3f(0, 20, -500)));
+				assertTrue(c.chainTouched, "이미 맞힌 공격이어도 닿으면 피 시간 0 (콜백 0x1FAF40 은 늘 0x337C18 = 1)");
 			}
 		}
 		assertTrue(sawWindow, "COMBO 의 블레이드 공격 창");
@@ -142,6 +145,14 @@ class HitVolumesTest {
 		assertEquals(0, again, "같은 (개체, 공격) 은 기술당 한 번");
 		assertEquals(510, min.hitVolumes().lastHitFx(), "맞은 구 SheetFX");
 		assertTrue(min.hitVolumes().lastHitPoint().z < -350);
+		// 블레이드 벽 질의 (종류 0xFF9CE00F 에 생물 범주 1|2): 선분이 처음 들어가는 몸 구 표면, SheetFX 510
+		float[] cast = min.hitVolumes().segmentCast(from, new Vector3f(0, 20, -500));
+		org.junit.jupiter.api.Assertions.assertNotNull(cast);
+		assertTrue(cast[0] > 0 && cast[0] < 1);
+		assertEquals(510, (int) cast[7]);
+		assertTrue(cast[3] > -400 && cast[3] < -300, "몸 앞면 z=" + cast[3]);
+		assertTrue(cast[6] > 0.3f, "법선은 영웅 쪽 (구 중심 → 접촉점)");
+		org.junit.jupiter.api.Assertions.assertNull(min.hitVolumes().segmentCast(from, new Vector3f(0, 20, -100)), "몸에 못 미침");
 	}
 
 	private record Result(int hits, int fx) {

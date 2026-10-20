@@ -1618,4 +1618,92 @@ class HeroNavigatorTest {
 		tick(nav, b, w, in);
 		assertEquals(c, w.ropeClock(), 1e-6f, "줄 밖에서는 시계가 서 있음");
 	}
+
+	/**
+	 * 몸 질의 0x1E2100 의 면 제외 마스크 (38 §18.6): 호출 마스크 (0x1EA200 / 0x1EA5F0) | 0x10042 | (+0x258 &amp; 0x4300000).
+	 * ClimbGuide 는 벽에 붙어 있을 때만, CombatGuide 는 플레이어의 (피격 반응이 아닌) 전투 기술 중에만 막는다.
+	 */
+	@Test
+	void bodyQueryMasksFollowStateBits() {
+		long hero = NavWorld.bodyExclude(true, false, false, false, 0, 0);
+		assertEquals(NavWorld.HERO_BODY_EXCLUDE, hero);
+		assertEquals(Platforms.WALL_EXCLUDE, hero, "기본 = 예전 CDV 몸 마스크");
+		for (SurfaceAttr a : new SurfaceAttr[]{SurfaceAttr.WATER, SurfaceAttr.DEATH, SurfaceAttr.AI_BLOCK, SurfaceAttr.NO_PLAYER_COLLISION,
+				SurfaceAttr.CLIMB_GUIDE, SurfaceAttr.COMBAT_GUIDE}) {
+			assertTrue((hero & a.bit()) != 0, a.name());
+		}
+		assertEquals(0, hero & (SurfaceAttr.GENERAL_GUIDE.bit() | SurfaceAttr.NO_AI_COLLISION.bit() | SurfaceAttr.NO_CSM_COLLISION.bit()));
+		assertEquals(0, NavWorld.bodyExclude(true, false, false, true, 0, 0) & SurfaceAttr.COMBAT_GUIDE.bit(), "공격 기술 중 CombatGuide 막음");
+		assertEquals(0, NavWorld.bodyExclude(true, false, false, true, 0, 1) & SurfaceAttr.COMBAT_GUIDE.bit(), "방어 기술 (+0x13 = 1) 도");
+		assertNotEquals(0, NavWorld.bodyExclude(true, false, false, true, 0, 2) & SurfaceAttr.COMBAT_GUIDE.bit(), "피격 반응 (+0x13 = 2) 은 지나감");
+		assertNotEquals(0, NavWorld.bodyExclude(false, false, false, true, 0, 0) & SurfaceAttr.COMBAT_GUIDE.bit(), "적은 늘 지나감");
+		assertEquals(0, NavWorld.bodyExclude(true, false, true, false, 0, 0) & SurfaceAttr.CLIMB_GUIDE.bit(), "벽 위에서 ClimbGuide 막음");
+		long free = NavWorld.bodyExclude(true, true, true, true, 0x40, 0);
+		assertNotEquals(0, free & SurfaceAttr.CLIMB_GUIDE.bit(), "자유 이동 0x1EA200 = 0x8020000");
+		assertNotEquals(0, free & SurfaceAttr.COMBAT_GUIDE.bit());
+		assertNotEquals(0, free & SurfaceAttr.NO_CSM_COLLISION.bit(), "기술 flags & 0x60 → 0x20000000");
+		long enemy = NavWorld.bodyExclude(false, false, false, false, 0, 0);
+		assertNotEquals(0, enemy & SurfaceAttr.NO_AI_COLLISION.bit(), "AI +0x258 0xA00000");
+		assertEquals(0, enemy & SurfaceAttr.NO_PLAYER_COLLISION.bit(), "적은 NoPlayerCollision 벽에 막힘");
+		// 정적 시트 몸 밀어내기
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		wallZ(t, -20, -100, 100, 0, 100, SurfaceAttr.CLIMB_GUIDE);
+		wallZ(t, 20, -100, 100, 0, 100, SurfaceAttr.COMBAT_GUIDE);
+		wallZ(t, 60, -100, 100, 0, 100, SurfaceAttr.WATER);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		long attack = NavWorld.bodyExclude(true, false, false, true, 0, 0);
+		for (float z : new float[]{-15, 15, 55}) {
+			Vector3f c = v(0, 20, z);
+			assertFalse(w.collideSphere(c, 9.6f, hero), "기술 없는 지상: ClimbGuide·CombatGuide·Water 지나감 z=" + z);
+		}
+		assertTrue(w.collideSphere(v(0, 20, 15), 9.6f, attack), "공격 중 CombatGuide 에 막힘");
+		assertFalse(w.collideSphere(v(0, 20, -15), 9.6f, attack), "공격 중에도 ClimbGuide 는 지나감");
+		assertTrue(w.collideSphere(v(0, 20, -15), 9.6f, NavWorld.bodyExclude(true, false, true, false, 0, 0)), "벽 위 마스크는 ClimbGuide 에 막힘");
+		assertFalse(w.collideSphere(v(0, 20, 55), 9.6f, attack), "Water 벽은 늘 지나감 (물은 바닥 질의로)");
+	}
+
+	/** 벽 위 몸 질의 0x1E25E0: 오르는 벽에 수직인 ClimbGuide 막이가 옆으로 가는 몸을 막는다 (몸 가운데 = 발 + 키/2, 반폭 9.6). */
+	@Test
+	void climbGuideFencesWallClimbing() {
+		for (boolean fence : new boolean[]{true, false}) {
+			List<LevelCollision.Tri> t = new ArrayList<>();
+			floor(t, -200, -20, 200, 200, 0, SurfaceAttr.GROUND);
+			wallZ(t, -20, -100, 100, 0, 200, SurfaceAttr.CLIMBABLE);
+			if (fence) {
+				quad(t, v(20, 0, -20), v(20, 0, 30), v(20, 200, 30), v(20, 200, -20), SurfaceAttr.CLIMB_GUIDE);
+			}
+			NavWorld w = new NavWorld(LevelCollision.of(t));
+			Body b = new Body();
+			HeroNavigator nav = new HeroNavigator(b, w, null);
+			Pad in = new Pad();
+			in.ly = 1;
+			in.down.add(PadButton.CROSS);
+			b.pos.set(0, 0, -8);
+			tick(nav, b, w, in);
+			assertEquals(NavState.WALL_CLIMB, nav.state());
+			for (int i = 0; i < 40; i++) {
+				in.ly = 1;
+				tick(nav, b, w, in);
+			}
+			for (int i = 0; i < 180 && nav.state() == NavState.WALL_CLIMB; i++) {
+				in.ly = 0;
+				in.lx = 1;
+				tick(nav, b, w, in);
+			}
+			assertEquals(NavState.WALL_CLIMB, nav.state());
+			if (fence) {
+				assertEquals(20 - HeroNavigator.BODY_W * 0.5f, b.pos.x, 0.05f, "막이 앞 반폭에서 멈춤 " + b.pos);
+			} else {
+				assertTrue(b.pos.x > 40, "막이가 없으면 계속 감 " + b.pos);
+			}
+		}
+		// 직접: 위 선분 (0x40) 이 천장에 막혀 발이 내려간다
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -100, -20, 100, 20, 50, SurfaceAttr.GROUND);
+		HeroNavigator nav = new HeroNavigator(new Body(), new NavWorld(LevelCollision.of(t)), null);
+		Vector3f feet = v(0, 30, 0);
+		int f = nav.wallBody(feet, v(1, 0, 0));
+		assertEquals(0x40, f & 0x40);
+		assertEquals(50 - HeroNavigator.ROPE_HAND, feet.y, 1e-3f, "머리 = 천장");
+	}
 }

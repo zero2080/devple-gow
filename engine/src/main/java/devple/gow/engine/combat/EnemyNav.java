@@ -36,8 +36,6 @@ public final class EnemyNav {
 
 	/** 줄 잡기 반경 (0x1C5CF0 lui 0x4200 = 32) [확실]. */
 	public static final float ROPE_GRAB = 32f;
-	/** 손 높이 (발 위) — 영웅 줄 손 32.7 (38 문서 §2.1) 과 같은 값 [근사]. */
-	public static final float HAND = 30f;
 	/** 벽에서 몸 중심까지 / 가슴 높이 / 벽 탐색 거리 (영웅 HeroNavigator 와 같은 값) [근사]. */
 	public static final float WALL_OFF = 10f, CHEST = 20f, WALL_REACH = 34f;
 	/** 중력 = 원작 전역 /GlobGame/ "Gravity" 50 m/s² (영웅과 같은 값, 0x1EBC0C, 38 §2.2). */
@@ -116,6 +114,11 @@ public final class EnemyNav {
 			return false;
 		}
 
+		/** {@link #collide(Vector3f, float)} 를 몸 질의 면 제외 마스크로 ({@link NavWorld#bodyExclude}). 기본 = 마스크 무시. */
+		default boolean collide(Vector3f c, float r, long exclude) {
+			return collide(c, r);
+		}
+
 		/** 줄 오브젝트의 질점 시뮬레이션 (영웅과 같은 것, {@link NavWorld#sim}) — 없으면 곧은 선분. */
 		default RopeSim sim(NavRope r) {
 			return null;
@@ -170,7 +173,11 @@ public final class EnemyNav {
 			}
 
 			public boolean collide(Vector3f c, float r) {
-				return nw.collideSphere(c, r);
+				return collide(c, r, bodyExclude(false, -1));
+			}
+
+			public boolean collide(Vector3f c, float r, long exclude) {
+				return nw.collideSphere(c, r, exclude);
 			}
 
 			public RopeSim sim(NavRope r) {
@@ -278,6 +285,14 @@ public final class EnemyNav {
 	/** 키 (월드). */
 	public float bodyHeight() {
 		return body.height() * 16f * scale;
+	}
+
+	/**
+	 * 줄 손 높이 = 키 (Sold +0x238 × 16 × 스케일, 내비 +0x120.y) [확실]: 잡기 0x1C5C20 이 위치 + 위 × +0x120.y 로 줄을 찾고 (0x1C5C68),
+	 * 줄 위 몸은 줄 점 (0x2184E8) − 위 × +0x120.y (0x1C66E4 – 0x1C66F4) — 영웅 {@link HeroNavigator#ROPE_HAND} 35.2 와 같은 식.
+	 */
+	public float hand() {
+		return bodyHeight();
 	}
 
 	/** 바닥 높이 (월드). */
@@ -454,7 +469,7 @@ public final class EnemyNav {
 		}
 		float r = bodyRadius();
 		Vector3f c = new Vector3f(pos.x, pos.y + STEP + r, pos.z);
-		if (world.collide(c, r)) {
+		if (world.collide(c, r, bodyExclude(true, moveFlags))) { // 0x1EA200
 			pos.x = c.x;
 			pos.z = c.z;
 		}
@@ -466,6 +481,16 @@ public final class EnemyNav {
 
 	/** 자유 이동 중 밀어내기 (stateMask 비트 2, 0x1ECDEC). */
 	public boolean pushInFree;
+	/** 지금 전투 기술 flags (+0x0E, 기술이 없으면 −1) — 몸 질의 마스크 ({@link #bodyExclude(boolean, int)}). */
+	public int moveFlags = -1;
+
+	/**
+	 * 적 몸 질의 면 제외 마스크 ({@link NavWorld#bodyExclude}, 플레이어 아님 → +0x258 0xA00000 &amp; 0x4300000 = NoAICollision,
+	 * CombatGuide 는 늘 지나감, ClimbGuide 는 지상·공중에서 지나감) [확실: 0x1EA200 / 0x1EA5F0 공용].
+	 */
+	static long bodyExclude(boolean free, int moveFlags) {
+		return NavWorld.bodyExclude(false, free, false, moveFlags >= 0, Math.max(moveFlags, 0), 0);
+	}
 
 	private void ground(Vector3f pos, Vector3f stick, float dt) {
 		if (free) {
@@ -494,7 +519,7 @@ public final class EnemyNav {
 		// 벽 충돌 (0x1E2100, 생물 밀어내기 뒤): 허리 높이 구 [근사: 원작은 상자 모서리 레이]
 		float r = bodyRadius();
 		Vector3f c = new Vector3f(pos.x, pos.y + STEP + r, pos.z); // 구 아래 = 계단 높이 (턱은 넘음)
-		if (world.collide(c, r)) {
+		if (world.collide(c, r, bodyExclude(false, moveFlags))) { // 0x1EA5F0
 			pos.x = c.x;
 			pos.z = c.z;
 		}
@@ -534,7 +559,7 @@ public final class EnemyNav {
 	/** 공중 잡기: 줄 (0x1C5C20, 공중 0x4C 상태에서만) → 벽 (0x1EBCE4 → 0x1C7828, 능력 Climb). */
 	private boolean tryCatch(Vector3f pos) {
 		if ((caps & AiTemplate.CAP_ANY_ROPE) != 0) {
-			Vector3f hand = new Vector3f(pos).add(0, HAND, 0);
+			Vector3f hand = new Vector3f(pos).add(0, hand(), 0);
 			Rope r = world.rope(hand, ROPE_GRAB);
 			if (r != null) {
 				rope = r;
@@ -686,7 +711,7 @@ public final class EnemyNav {
 		} else {
 			p = rope.point(ropeT);
 		}
-		pos.set(p.x, p.y - HAND, p.z);
+		pos.set(p.x, p.y - hand(), p.z);
 	}
 
 	/**
@@ -734,7 +759,7 @@ public final class EnemyNav {
 		Vector3f gp = rope.point(tGoal);
 		float along = (tGoal - ropeT) * len;
 		float flatGoal = (float) Math.hypot(goal.x - gp.x, goal.z - gp.z);
-		boolean goalOnRope = clinging != null ? clinging : goal.y > gp.y - HAND - STEP && flatGoal < ROPE_GRAB;
+		boolean goalOnRope = clinging != null ? clinging : goal.y > gp.y - hand() - STEP && flatGoal < ROPE_GRAB;
 		Vector3f d = new Vector3f(goal).sub(pos);
 		float dl = d.length();
 		if (rope.sub() == SUB_TRAVERSE) {

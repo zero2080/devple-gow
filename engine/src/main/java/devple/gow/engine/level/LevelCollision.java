@@ -252,12 +252,20 @@ public final class LevelCollision {
 	 * @return 한 번이라도 밀렸으면 true
 	 */
 	public boolean collideSphere(Vector3f center, float radius) {
+		return collideSphere(center, radius, SurfaceAttr.NO_PLAYER_COLLISION.bit());
+	}
+
+	/**
+	 * {@link #collideSphere(Vector3f, float)} 에서 면 속성 &amp; exclude ≠ 0 인 면은 지나간다 (몸 질의 0x1E2100 의 0x3309F4 거름 —
+	 * {@code NavWorld.bodyExclude}).
+	 */
+	public boolean collideSphere(Vector3f center, float radius, long exclude) {
 		boolean moved = false;
 		Vector3f cp = new Vector3f();
 		for (int iter = 0; iter < 3; iter++) {
 			boolean any = false;
 			for (Tri t : candidates(center.x - radius, center.z - radius, center.x + radius, center.z + radius)) {
-				if (t.floor() || !t.solidForPlayer()) {
+				if (t.floor() || (t.attrs & exclude) != 0) {
 					continue;
 				}
 				closestPoint(center, t, cp);

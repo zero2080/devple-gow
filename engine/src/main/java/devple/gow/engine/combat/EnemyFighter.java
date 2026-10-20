@@ -312,6 +312,7 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 		if (rootMotionOff || !combat.active()) {
 			root.reset();
 			nav.free = false;
+			nav.moveFlags = -1;
 			return;
 		}
 		root.step(anim, scale, yaw, rootHold);
@@ -323,6 +324,7 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 		int mask = combat.move().stateMask();
 		nav.free = (mask & 0x1C) == 0;
 		nav.pushInFree = (mask & 2) != 0;
+		nav.moveFlags = combat.move().flags(); // 몸 질의 마스크: flags & 0x60 → NoCSMCollision 지나감 (0x1EA6FC)
 		if (nav.free && nav.mode() != EnemyNav.Mode.WALL && nav.mode() != EnemyNav.Mode.ROPE) {
 			pos.y += root.dy;
 		}

@@ -162,14 +162,14 @@ class BladeChainTest {
 		};
 		float wallZ = -30;
 		List<Long> masks = new ArrayList<>();
-		BladeChain.Walls walls = (from, to, exclude) -> {
+		BladeChain.Walls walls = (from, to, exclude, types) -> {
 			masks.add(exclude);
 			if (to.z >= wallZ) {
 				return null;
 			}
 			float t = (wallZ - from.z) / (to.z - from.z);
 			Vector3f h = new Vector3f(from).lerp(to, t);
-			return new float[]{h.x, h.y, h.z, 0, 0, 1, 20};
+			return new BladeChain.WallHit(h, new Vector3f(0, 0, 1), 20, true);
 		};
 		BladeChain c = new BladeChain();
 		Vector3f root = new Vector3f(0, 0, 0);
@@ -208,6 +208,96 @@ class BladeChainTest {
 		idle.update(j, false, false, dt, root, walls);
 		assertTrue(masks.isEmpty());
 		assertTrue(idle.sides[0].sweepTo.isEmpty());
+	}
+
+	/**
+	 * 0x1FB2CC – 0x1FB420: 첫 질의 (종류 0xFF9CE00F) 가 bit 31 이 아닌 것 (적 몸) 을 맞히면 그 점에 불꽃만, 둘째 질의 (0x80000000) 가 맞힌 벽으로 당긴다.
+	 * 블레이드 라이트 = 당기기 전 블레이드 점 B, 방향 O − B (0x1FB10C).
+	 */
+	@Test
+	void wallQueryTypesSparkPullAndLight() {
+		assertEquals(0xFF9CE00F, BladeChain.TYPES_WALL);
+		assertNotEquals(0, BladeChain.TYPES_WALL & BladeChain.CAT_CREATURE, "생물 범주 1|2 가 첫 질의에 든다");
+		assertNotEquals(0, BladeChain.TYPES_WALL & BladeChain.CAT_WORLD);
+		assertEquals(0, BladeChain.TYPES_WALL & 0x1FF0, "비트 4–12 (상자 0xC00·0x1000 등) 는 빠짐");
+		assertEquals(0x80000000, BladeChain.TYPES_WORLD);
+		Vector3f oh = new Vector3f(0, 20, -60);
+		BladeChain.Joints j = (name, out) -> {
+			switch (name) {
+				case "lWeapOH", "rWeapOH" -> out.translation(oh);
+				case "lChainW", "rChainW" -> out.translation(oh.x, oh.y, oh.z + 3);
+				case "Pelvis" -> out.translation(0, 20, 0);
+				default -> out.translation(0, 20, 5);
+			}
+			return true;
+		};
+		float enemyZ = -25, wallZ = -30;
+		for (boolean wallBehind : new boolean[]{true, false}) {
+			List<Integer> types = new ArrayList<>();
+			BladeChain.Walls walls = (from, to, exclude, ty) -> {
+				types.add(ty);
+				if ((ty & BladeChain.CAT_CREATURE) != 0 && to.z < enemyZ) {
+					Vector3f h = new Vector3f(from).lerp(to, (enemyZ - from.z) / (to.z - from.z));
+					return new BladeChain.WallHit(h, new Vector3f(0, 0, 1), 500, false);
+				}
+				if (wallBehind && to.z < wallZ) {
+					Vector3f h = new Vector3f(from).lerp(to, (wallZ - from.z) / (to.z - from.z));
+					return new BladeChain.WallHit(h, new Vector3f(0, 0, 1), 30, true);
+				}
+				return null;
+			};
+			BladeChain c = new BladeChain();
+			Vector3f root = new Vector3f();
+			BladeChain.Side s = c.sides[0];
+			boolean spark = false, pulled = false;
+			for (int f = 0; f < 60; f++) {
+				c.update(j, true, false, 1 / 60f, root, walls);
+				assertTrue(s.lightValid);
+				if (s.wallHit) {
+					spark = true;
+					assertEquals(enemyZ, s.wallPoint.z, 1e-3f, "불꽃 = 첫 질의 점 (적 몸)");
+					assertEquals(500, s.wallSheetFx);
+					assertEquals(BladeChain.TYPES_WORLD, (int) types.getLast(), "bit 31 이 아니면 0x80000000 으로 다시 질의");
+				}
+				Vector3f point = new Vector3f(s.bladeZ).mul(-BladeChain.BLADE_POINT_BACK).add(s.blade.getTranslation(new Vector3f()));
+				if (s.pulled) {
+					pulled = true;
+					assertEquals(wallZ, point.z, 1e-3f, "당김 = 둘째 질의 벽 점");
+					assertTrue(s.lightPoint.z < wallZ - 1e-3f, "라이트 = 당기기 전 B (벽 너머) " + s.lightPoint.z);
+					assertEquals(s.pull.z, wallZ - s.lightPoint.z, 1e-3f, "+0x50 = H − B");
+				} else if (s.wallHit) {
+					assertTrue(point.z < enemyZ, "적 몸에는 당기지 않음");
+				}
+				assertEquals(0f, new Vector3f(0, 20, 0).sub(s.lightPoint).distance(s.lightDir), 1e-3f, "라이트 방향 = O − B");
+			}
+			assertTrue(spark);
+			assertEquals(wallBehind, pulled);
+		}
+	}
+
+	/** 0x1FB508: +0xA4 += 1/60, blooddrip = clamp(4 − t), bloodspray = clamp(2 (1 − t / 0.1)); 초기 100 (0x1FA5E4), 스윕 적중 = 0. */
+	@Test
+	void bloodTimerDrivesBladeBloodAttachments() {
+		assertEquals(1f, BladeChain.bloodRate(BladeChain.ATTACH_BLOODDRIP, 0), 0f);
+		assertEquals(1f, BladeChain.bloodRate(BladeChain.ATTACH_BLOODDRIP, 3f), 1e-6f);
+		assertEquals(0.5f, BladeChain.bloodRate(BladeChain.ATTACH_BLOODDRIP, 3.5f), 1e-6f);
+		assertEquals(0f, BladeChain.bloodRate(BladeChain.ATTACH_BLOODDRIP, 4f), 0f);
+		assertEquals(1f, BladeChain.bloodRate(BladeChain.ATTACH_BLOODSPRAY, 0.05f), 1e-6f);
+		assertEquals(0.5f, BladeChain.bloodRate(BladeChain.ATTACH_BLOODSPRAY, 0.075f), 1e-5f);
+		assertEquals(0f, BladeChain.bloodRate(BladeChain.ATTACH_BLOODSPRAY, 0.1f), 1e-6f);
+		BladeChain c = new BladeChain();
+		BladeChain.Side s = c.sides[1];
+		assertEquals(0f, s.blood(BladeChain.ATTACH_BLOODDRIP), 0f, "처음 100 초 = 피 없음");
+		s.bleed();
+		BladeChain.Joints none = (n, out) -> false;
+		c.update(none, false, false, 1 / 60f);
+		assertEquals(1 / 60f, s.bloodTime, 1e-6f, "관절이 없어도 시간은 흐름");
+		assertEquals(1f, s.blood(BladeChain.ATTACH_BLOODSPRAY), 0f);
+		for (int i = 0; i < 5; i++) {
+			c.update(none, false, false, 1 / 60f);
+		}
+		assertEquals(0f, s.blood(BladeChain.ATTACH_BLOODSPRAY), 1e-5f, "0.1 초에 bloodspray 끝");
+		assertEquals(1f, s.blood(BladeChain.ATTACH_BLOODDRIP), 0f);
 	}
 
 	@Test
@@ -259,12 +349,12 @@ class BladeChainTest {
 		// 같은 콤보를 정면 (−Z) 25 앞 벽이 있는 사슬로도 (0x1FAFC8)
 		BladeChain walled = BladeChain.fromTweaks(tw);
 		float wallZ = -25;
-		BladeChain.Walls wall = (from, to, exclude) -> {
+		BladeChain.Walls wall = (from, to, exclude, types) -> {
 			if (to.z >= wallZ || from.z < wallZ) {
 				return null;
 			}
 			Vector3f h = new Vector3f(from).lerp(to, (wallZ - from.z) / (to.z - from.z));
-			return new float[]{h.x, h.y, h.z, 0, 0, 1, 20};
+			return new BladeChain.WallHit(h, new Vector3f(0, 0, 1), 20, true);
 		};
 		int wallHits = 0;
 		boolean sawOut = false, sawTrail = false, sawLag = false;

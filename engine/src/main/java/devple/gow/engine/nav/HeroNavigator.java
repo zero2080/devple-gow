@@ -924,6 +924,17 @@ public final class HeroNavigator {
 				return;
 			}
 		}
+		float candY = cand.y;
+		wallBody(cand, right); // 벽 위 몸 질의 0x1E2100 → 0x1E25E0: ClimbGuide 막이·천장·바닥에 막힘
+		if (vy > 0 && cand.y < candY - 1e-3f) {
+			// 머리가 위 면에 막힘: 그 면이 몸 바로 위에 걸친 발판 (돛대 꼭대기) 이면 올라선다 — 아래 꼭대기 보조와 같은 조건 (엔진 보조 [근사])
+			NavWorld.Floor above = world.floor(p.x, p.y + FOOT + HANG + 16, p.z, FOOT + HANG + 8);
+			if (above != null && above.y() > p.y + 8) {
+				p.y = above.y();
+				land(ladder ? "ANILDis1" : "ANIWallPullup");
+				return;
+			}
+		}
 		WallProbe w = probeWall(cand, into, wallN);
 		if (w != null) {
 			wallN.set(w.n());
@@ -970,6 +981,40 @@ public final class HeroNavigator {
 			a = NavAnims.CLIMB[sx > 0 ? 1 : 3];
 		}
 		body.play(a, false);
+	}
+
+	/** 벽 위 몸 질의 0x1E25E0 의 선분 10 개: 몸 오른쪽 축 × w 계수, 위 × 키/2 계수, 맞으면 세울 반환 비트 [확실: 0x1E26E8 – 0x1E2870]. */
+	private static final float[][] WALL_BODY_SEGS = {
+			{1, 1, 0x40}, {-1, 1, 0x100}, {0, 1, 0x40}, {1, -1, 0x40}, {-1, -1, 0x100}, {0, -1, 0x40},
+			{1, 1 / 3f, 0x40}, {-1, 1 / 3f, 0x100}, {1, -1 / 3f, 0x40}, {-1, -1 / 3f, 0x100}};
+
+	/**
+	 * 벽 위 몸 질의 (0x1E2100 이 +0x174 0x20 이고 0x300000 이 아닐 때 부르는 0x1E25E0) [확실: 디스어셈블]: 몸 가운데
+	 * c = 내비 위치 + 위 × (+0x140 − 키/2) = 발 + 키/2 에서 벽 평면 안의 선분 10 개 (± 반폭 × 오른쪽, ± 키/2 · 키/6 × 위, 위·아래) 를 차례로
+	 * 0x11E190 (가장 가까운 것) 으로 쏘고, 맞을 때마다 c −= n · (n · (끝 − 충돌점)) — 끝점이 그 면 위에 오도록 민다 (0x1E1F28).
+	 * 면 거름 = 0x1EA5F0 의 벽 마스크 ({@link NavWorld#bodyExclude}: <b>ClimbGuide 는 막고</b> CombatGuide·Water·Death·AIBlock·NoPlayerCollision 은 지나감).
+	 * 앞뒤 성분 (0x50(sp)) 은 0 이라 오르는 벽 자체에는 닿지 않는다.
+	 *
+	 * @return 반환 비트 (0x40 = 위·아래·왼쪽 선분 — 원작 그대로, 0x100 = 오른쪽 축 반대쪽 선분)
+	 */
+	int wallBody(Vector3f feet, Vector3f right) {
+		long ex = NavWorld.bodyExclude(true, false, true, false, 0, 0);
+		float w = BODY_W * 0.5f, hh = ROPE_HAND * 0.5f;
+		Vector3f c = new Vector3f(feet).add(0, hh, 0);
+		Vector3f end = new Vector3f();
+		int flags = 0;
+		for (float[] s : WALL_BODY_SEGS) {
+			end.set(right).mul(s[0] * w).add(c).add(0, s[1] * hh, 0);
+			NavWorld.Contact h = world.contact(c, end, ex);
+			if (h != null) {
+				Vector3f n = h.normal();
+				float d = n.dot(end.x - h.point().x, end.y - h.point().y, end.z - h.point().z);
+				c.fma(-d, n);
+				flags |= (int) s[2];
+			}
+		}
+		feet.set(c).sub(0, hh, 0);
+		return flags;
 	}
 
 	/**

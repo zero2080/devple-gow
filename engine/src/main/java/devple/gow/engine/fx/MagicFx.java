@@ -1132,6 +1132,11 @@ public final class MagicFx implements AutoCloseable {
 		boolean world(int side, Matrix4f out);
 
 		boolean trail(int side);
+
+		/** 부착물 종류 1 blooddrip / 2 bloodspray 의 생성률 배율 (0x1FB508 → 0x201FB0, 블레이드 +0xA4 피 시간). 기본 0 (피 없음). */
+		default float blood(int side, int kind) {
+			return 0f;
+		}
 	}
 
 	private Blades blades;
@@ -1164,6 +1169,29 @@ public final class MagicFx implements AutoCloseable {
 		return ed -> flame(ed) && (blades == null || !blades.trail(side));
 	}
 
+	/**
+	 * 블레이드 GO 부착물 (0x201A08, GO 를 붙이거나 바꿀 때): 종류 &lt; 0xB 인 파티클 컴포넌트의 이름을 strncmp 로 "blooddrip" (9) → 종류 1,
+	 * "bloodspray" (10) → 2, "flame" (5) → 3 순서로 가른다 [확실]. 종류 1·2 는 매 프레임 생성률 배율 (+0xB4) = {@link Blades#blood}
+	 * (0x1FB508 → 0x201FB0), 종류 3 은 궤적 중에만 ({@link #flameGate}). 출시 데이터의 goMAIblade / goMAIgodblade (R_WPN 36 개) 에는
+	 * blooddrip·bloodspray 파티클이 없어 종류 1·2 목록은 늘 비어 있다 [확실: 데이터 전수].
+	 */
+	private void bladeAttachments(EffectSystem.Effect e, int side) {
+		e.emitterOff = flameGate(side);
+		e.emitterRate = ed -> {
+			int kind = bladeAttachKind(ed);
+			return kind == 1 || kind == 2 ? (blades != null ? blades.blood(side, kind) : 0f) : 1f;
+		};
+	}
+
+	/** 0x201A08 의 이름 분류: 1 blooddrip, 2 bloodspray, 3 flame, 0 그 밖 (불티·EG — 늘 켜짐). */
+	public static int bladeAttachKind(devple.gow.tools.fx.EffectLibrary.EmitterDef ed) {
+		String n = ed.ptc() != null ? ed.ptc().shape() : null;
+		if (n == null) {
+			return 0;
+		}
+		return n.startsWith("blooddrip") ? 1 : n.startsWith("bloodspray") ? 2 : n.startsWith("flame") ? 3 : 0;
+	}
+
 	/** 0x201A08 의 strncmp(파티클 이름, "flame", 5) — PTC 안 이름 (예 PTC_flame6 의 "flame6Shape"). */
 	public static boolean flame(devple.gow.tools.fx.EffectLibrary.EmitterDef ed) {
 		return ed.ptc() != null && ed.ptc().shape() != null && ed.ptc().shape().startsWith("flame");
@@ -1178,7 +1206,7 @@ public final class MagicFx implements AutoCloseable {
 				e = fx.play(NORMAL_BLADE, bladeAnchor(i), Float.MAX_VALUE);
 				if (e != null) {
 					e.hideMesh = true;
-					e.emitterOff = flameGate(i);
+					bladeAttachments(e, i);
 				}
 				normalBlades[i] = e;
 			} else if (!want && e != null) {
@@ -1223,7 +1251,7 @@ public final class MagicFx implements AutoCloseable {
 			for (int side = 0; side < 2; side++) {
 				EffectSystem.Effect b = fx.play(GOD_BLADE, bladeAnchor(side), Float.MAX_VALUE);
 				if (b != null) {
-					b.emitterOff = flameGate(side);
+					bladeAttachments(b, side);
 					godFx.add(b);
 					godBladesOn = true;
 				}
