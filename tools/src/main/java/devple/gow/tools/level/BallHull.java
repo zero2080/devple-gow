@@ -23,7 +23,12 @@ import java.util.List;
  */
 public final class BallHull {
 
-	public record Hull(float[] center, List<float[]> planes, int nameIndex) {
+	/**
+	 * @param nameIndex      첫 평면의 이름 (재질 엔트리) 번호
+	 * @param planeMaterials 평면별 재질 엔트리 번호 (off[9] u8) — CDV 는 평면마다 표면 속성이 다르다 (충돌 질의 0x139218 이 맞은 평면의
+	 *                       재질 +0x18 bitfield0 을 질의 제외 마스크와 비교)
+	 */
+	public record Hull(float[] center, List<float[]> planes, int nameIndex, int[] planeMaterials) {
 	}
 
 	public final String name;
@@ -48,6 +53,14 @@ public final class BallHull {
 	 * /TweakTemplates/MFX/&lt;n&gt;/ 을 찾는다). 히어로 몸 501 "Hero Flesh", 미노타우로스 510, 키클롭스 506, 0 = 없음.
 	 */
 	public final int[] materialFx;
+	/**
+	 * 재질 엔트리별 표면 속성 ({@link SurfaceAttr} 마스크). 재질 엔트리 = 충돌 시트 표면 레코드와 같은 배치 (이름 24B + 데이터 40B):
+	 * +0x18 bitfield0 (Ground 0 … NoCSMCollision 29), +0x1C bitfield1 (TakeDamage 0 … NoShadows 8), +0x28 doubleSided,
+	 * +0x2C SheetFX, +0x30 PartType — 스키마는 전 시트 공통 배치 그대로 (38 문서 §1).
+	 */
+	public final long[] materialAttrs;
+	/** 재질 엔트리 원값 (bitfield0, bitfield1) — 검증·조사용. */
+	public final int[][] materialRaw;
 
 	public BallHull(String name, ByteBuffer d) {
 		this.name = name;
@@ -74,10 +87,16 @@ public final class BallHull {
 		}
 		materialPart = new int[nameCount];
 		materialFx = new int[nameCount];
+		materialAttrs = new long[nameCount];
+		materialRaw = new int[nameCount][2];
 		for (int i = 0; i < nameCount; i++) {
 			if (nameStride >= 0x34 && off[0] + i * nameStride + 0x34 <= d.limit()) {
-				materialPart[i] = d.getInt(off[0] + i * nameStride + 0x30);
-				materialFx[i] = d.getInt(off[0] + i * nameStride + 0x2C);
+				int e = off[0] + i * nameStride;
+				materialPart[i] = d.getInt(e + 0x30);
+				materialFx[i] = d.getInt(e + 0x2C);
+				materialRaw[i][0] = d.getInt(e + 0x18);
+				materialRaw[i][1] = d.getInt(e + 0x1C);
+				materialAttrs[i] = SurfaceAttr.fromRecord(materialRaw[i][0], materialRaw[i][1], d.getInt(e + 0x28));
 			}
 		}
 		ballJoint = new int[ballCount];
@@ -111,12 +130,22 @@ public final class BallHull {
 			List<float[]> ps = new ArrayList<>();
 			// 평면 수 = hull 별 평면 수의 합 (0x38 은 평면 수가 아니다)
 			int nameIndex = off[9] + plane < d.limit() ? d.get(off[9] + plane) & 0xFF : 0;
-			for (int k = 0; k < n && off[10] + plane * 16 + 16 <= d.limit(); k++, plane++) {
+			int[] pm = new int[n];
+			int k = 0;
+			for (; k < n && off[10] + plane * 16 + 16 <= d.limit(); k++, plane++) {
 				int o = off[10] + plane * 16;
 				ps.add(new float[]{d.getFloat(o), d.getFloat(o + 4), d.getFloat(o + 8), d.getFloat(o + 12)});
+				pm[k] = off[9] + plane < d.limit() ? d.get(off[9] + plane) & 0xFF : 0;
 			}
-			hulls.add(new Hull(c, ps, nameIndex));
+			hulls.add(new Hull(c, ps, nameIndex, java.util.Arrays.copyOf(pm, k)));
 		}
+	}
+
+	/** hull h 의 평면 k 의 표면 속성 마스크 (재질이 없으면 0). */
+	public long planeAttrs(int h, int k) {
+		int[] pm = hulls.get(h).planeMaterials;
+		int m = k < pm.length ? pm[k] : -1;
+		return m >= 0 && m < materialAttrs.length ? materialAttrs[m] : 0;
 	}
 
 	/** ball b 의 SheetFX = MFX 템플릿 (재질 엔트리 +0x2C, 0 = 없음). */

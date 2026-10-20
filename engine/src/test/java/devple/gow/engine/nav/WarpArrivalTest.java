@@ -105,4 +105,72 @@ class WarpArrivalTest {
 			assertEquals(2, r.joints(), c[1]);
 		}
 	}
+
+	/**
+	 * 43 §13.10 / 38 §4: CDV 발판 바닥 = 윗면 평면 재질 (재질 엔트리 = 시트 표면 레코드, +0x18 bitfield0) 이 영웅 질의 제외 마스크에 안 걸리는 것
+	 * [확실: 0x1E3298 → 0x139218]. PAND04AA 엘리베이터 바닥 hull 재질 {@code EntitiesPand04AA_SheetM} 은 이름에 ground 가 없지만 Ground —
+	 * 도착점 WarpFrmCore 아래 정적 바닥 (−239) 이 아니라 엘리베이터에 서서 AnimLiftUp ("!0") 끝까지 실려 올라간다.
+	 */
+	@Test
+	void pand04aaArrivalRidesElevator() throws Exception {
+		LevelData d = level("PAND04AA");
+		ScriptWorld sw = new ScriptWorld(d, new ScriptHost(), null);
+		float[] p = sw.warpTarget("PAND00C").position();
+		NavWorld w = new NavWorld(new LevelCollision(d.sheets));
+		w.setPlatforms(Platforms.of(d, devple.gow.engine.game.SceneNav.animatorOwners(sw)));
+		NavWorld.Floor f = w.floor(p[0], p[1] + 24, p[2], 400);
+		assertNotNull(f);
+		assertNotNull(f.platform(), "엘리베이터 바닥 " + f.y());
+		assertEquals("goelevatorlift", f.platform().body().owner);
+		assertEquals(p[1], f.y(), 3);
+		assertTrue(f.has(devple.gow.tools.level.SurfaceAttr.GROUND));
+		assertEquals(-239, w.statics().getFirst().floorAt(p[0], p[1], p[2], 400).y(), 1, "그 아래 정적 바닥");
+		assertTrue(w.platforms().play("goelevatorlift", "!0", 0x8, 1, 0));
+		org.joml.Vector3f r = new org.joml.Vector3f(p[0], f.y(), p[2]);
+		for (float t = 0; t < 4; t += 1 / 60f) {
+			w.platforms().update(1 / 60f);
+			NavWorld.Floor q = w.floor(r.x, r.y + 4, r.z, 16);
+			assertNotNull(q, "t=" + t + " " + r);
+			assertNotNull(q.platform(), "t=" + t);
+			Platforms.carry(r, q.platform());
+		}
+		assertEquals(45, r.y, 4, "엘리베이터 끝 (애니 3 초)");
+	}
+
+	/** CDV 재질 엔트리 = 시트 표면 레코드 배치: 불 함정 DamageMat 은 NoPushPullCollision (Ground 아님), 엘리베이터 SheetM 은 Ground. */
+	@Test
+	void cdvMaterialEntriesAreSurfaceRecords() throws Exception {
+		devple.gow.tools.level.BallHull el = level("PAND04AA").hulls.get("CDV_ElevatorLift");
+		int m = el.names.indexOf("EntitiesPand04AA_SheetM");
+		assertTrue(m >= 0);
+		assertEquals(devple.gow.tools.level.SurfaceAttr.GROUND.bit() | devple.gow.tools.level.SurfaceAttr.TAKE_DAMAGE.bit(), el.materialAttrs[m]);
+		devple.gow.tools.level.BallHull fire = level("PAND02C").hulls.get("CDV_LeftFire");
+		assertEquals(devple.gow.tools.level.SurfaceAttr.NO_PUSH_PULL_COLLISION.bit() | devple.gow.tools.level.SurfaceAttr.TAKE_DAMAGE.bit(), fire.materialAttrs[0]);
+		assertFalse(Platforms.heroSolid(devple.gow.tools.level.SurfaceAttr.NO_PLAYER_COLLISION.bit()));
+		assertTrue(Platforms.heroSolid(fire.materialAttrs[0]));
+	}
+
+	/**
+	 * 43 §13.10: ATHN02A ← ATHN01F Warp. Start ShipTrans-Anim-WarpFrom1F 는 goshiptrans 관절 1 에 붙어 있지만 Warp_Jump 0x1B2E08 은 그 순간의
+	 * 월드 행렬 (0x1A9CD0) 로 SetMatrix 만 한다 (부모 붙이기 없음). 영웅이 서는 곳은 정박한 배 goshipgroup (Animator 없는 정지 CDV GO) 의 갑판.
+	 */
+	@Test
+	void athn02aArrivalStandsOnDockedShipDeck() throws Exception {
+		LevelData d = level("ATHN02A");
+		ScriptWorld sw = new ScriptWorld(d, new ScriptHost(), null);
+		ScriptEntity st = sw.warpTarget("ATHN01F");
+		assertEquals("ShipTrans-Anim-WarpFrom1F", st.name());
+		assertEquals("goshiptrans", st.ownerName());
+		float[] p = st.position();
+		NavWorld w = new NavWorld(new LevelCollision(d.sheets));
+		w.setPlatforms(Platforms.of(d, devple.gow.engine.game.SceneNav.animatorOwners(sw), java.util.Set.of()));
+		Platforms.Body ship = w.platforms().body("goshipgroup");
+		assertNotNull(ship, "정지 CDV GO 도 충돌");
+		assertFalse(ship.scripted);
+		NavWorld.Floor f = w.floor(p[0], p[1] + 24, p[2], 400);
+		assertNotNull(f.platform());
+		assertEquals("goshipgroup", f.platform().body().owner);
+		assertEquals(p[1], f.y(), 2, "갑판 = 도착점 높이");
+		assertEquals(-800, w.statics().getFirst().floorAt(p[0], p[1], p[2], 400).y(), 1, "정적 시트만이면 수로 바닥");
+	}
 }

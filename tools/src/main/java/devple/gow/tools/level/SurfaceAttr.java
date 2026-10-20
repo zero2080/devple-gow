@@ -35,6 +35,44 @@ public enum SurfaceAttr {
 		return null;
 	}
 
+	/** bitfield0 의 비트 번호 (Ground … NoCSMCollision), bitfield1 의 비트 번호 (TakeDamage … NoShadows) — 전 시트 스키마 공통 배치. */
+	private static final SurfaceAttr[] BF0 = new SurfaceAttr[32], BF1 = new SurfaceAttr[32];
+
+	static {
+		SurfaceAttr[] lo = {GROUND, WATER, NARROW, CLIMBABLE, LADDER, SLIDE, DEATH};
+		for (int i = 0; i < lo.length; i++) {
+			BF0[i] = lo[i];
+		}
+		SurfaceAttr[] hi = {AI_BLOCK, CLIMB_GUIDE, PUSH_PULL_SLIDE, BACK_PRESS, NO_PLAYER_COLLISION, NO_AI_COLLISION, NO_PLAYER_USE, NO_AI_USE,
+				GENERAL_GUIDE, NO_DIVING, NO_PUSH_PULL_COLLISION, COMBAT_GUIDE, NARROW_NO_BB, NO_CSM_COLLISION};
+		for (int i = 0; i < hi.length; i++) {
+			BF0[16 + i] = hi[i];
+		}
+		SurfaceAttr[] b1 = {TAKE_DAMAGE, NO_IK, NO_DECALS, DARK_SURFACE, NO_WALL_HANG, CAM_REL_CONTROL, NO_LADDER_SLIDING, NO_BACK_JUMPS, NO_SHADOWS};
+		for (int i = 0; i < b1.length; i++) {
+			BF1[i] = b1[i];
+		}
+	}
+
+	/**
+	 * 표면 레코드 데이터 (스키마 없이 공통 배치) → 마스크. CDV BallHull 재질 엔트리처럼 스키마가 같이 실리지 않는 레코드용.
+	 */
+	public static long fromRecord(int bitfield0, int bitfield1, int doubleSided) {
+		long m = 0;
+		for (int i = 0; i < 32; i++) {
+			if ((bitfield0 >>> i & 1) != 0 && BF0[i] != null) {
+				m |= BF0[i].bit();
+			}
+			if ((bitfield1 >>> i & 1) != 0 && BF1[i] != null) {
+				m |= BF1[i].bit();
+			}
+		}
+		if (doubleSided != 0) {
+			m |= DOUBLE_SIDED.bit();
+		}
+		return m;
+	}
+
 	/** 마스크 → "Ground,Climbable" 형식. */
 	public static String names(long mask) {
 		StringBuilder sb = new StringBuilder();

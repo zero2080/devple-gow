@@ -222,7 +222,10 @@ PAND05B `pBoxPand05B-Marker511` → `semoMovieHaveBox-…-semo08marker511` (Filt
 - 이벤트 1048/1049 (붙잡기/놓기)·Marker 이동 (`world.moveOwnerBy`) 그대로. PAND05B Pandora's Box 는 하네스가 Marker 를 센서로 옮기므로 속도와 무관.
 
 ## 4. 움직이는 발판 (`Platforms`)
-- 후보: Animator 엔티티(타입 5/6)가 가리키는 GO 중 CDV(BallHull 0) 가 있는 것. 밟는 hull = 평면 재질 이름에 ground/floor (전 레벨 253 개 조사 — 칼날·불·화살 함정 DamageMat 제외).
+- 후보: Animator 엔티티(타입 5/6)가 가리키는 GO 중 CDV(BallHull 0) 가 있는 것 + **비헤이비어 없는 CDV GO (정지 몸체)** — 원작은 GO 마다 CDV 를 충돌 세계에 올린다 (43 §13.10 6, ATHN02A 정박한 배).
+- ~~밟는 hull = 평면 재질 이름에 ground/floor~~ → **밟는 면 = 수직 선분이 들어가는 평면의 재질 (off[9] → 재질 엔트리 = 시트 표면 레코드, +0x18 bitfield0) 이
+  영웅 질의 제외 마스크 (Water·Death·AIBlock·GeneralGuide·NoPlayerCollision·ClimbGuide·CombatGuide) 에 안 걸리는 것** [확실: 0x1E3298 / 0x1E2100 → 0x139218, 43 §13.10 6].
+  바닥 속성 = 그 재질 (`NavWorld.Floor.attrs`). 이름 규칙에서 빠졌던 PAND04AA 엘리베이터 `SheetM`, PAND04F goelevator, PAND02C 우리 승강기 등 해결.
 - **BallHull off[6] = hull 별 관절 번호** [확실: 엘리베이터 hull 0 → 관절 2, hull 1 → 관절 1]. 이전에는 모든 볼륨을 관절 0 에 붙였다 (ENV/CMV 쪽은 그대로).
 - **오브젝트 애니 타입 11 (unk10 = 4) = 관절 이동** (이동 타입 5 가 없는 세트만) [추정, 수치 일치]: ATHN05D `WarpElevator5D` 스트림 5/9 (관절 1/2 의 Y) 절대값 138.47 = 바인드 로컬 Y, 가산으로 −52.2 까지 → 발판 윗면 871 → **677 = Warp 도착점 WarpFrom4A 높이**. (`Animation.objectTracks`)
 - 윗면 = hull 평면들로 수직선 구간을 잘라 위 끝. 서 있으면 지지 관절의 틱 간 이동을 영웅에 적용 (carry). Animator `AnimName "!n"` = n 번째 act [추정].
