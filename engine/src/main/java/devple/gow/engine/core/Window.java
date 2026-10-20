@@ -41,6 +41,38 @@ public final class Window implements AutoCloseable {
 		fbWidth = fw[0];
 		fbHeight = fh[0];
 		glEnable(GL_DEPTH_TEST);
+		// macOS: Gradle 데몬 등 터미널 밖에서 띄운 프로세스는 앞으로 오지 않아 키 입력이 터미널로 갈 수 있다 → 창을 앞으로, 포커스 변화 로그
+		glfwShowWindow(handle);
+		activateApp();
+		glfwFocusWindow(handle);
+		glfwSetWindowFocusCallback(handle, (w, focused) ->
+				System.out.println(focused ? "창 포커스: 키 입력 받음" : "창 포커스 잃음: 창을 클릭하면 키 입력이 다시 들어온다"));
+		if (System.getProperty("gow.keylog") != null) { // 키 진단: -Dgow.keylog (Gradle -PgowKeyLog)
+			glfwSetKeyCallback(handle, (w, key, scancode, action, mods) -> {
+				if (action != GLFW_REPEAT) {
+					System.out.printf("키 %s %s (scancode %d)%n", glfwGetKeyName(key, scancode) != null ? glfwGetKeyName(key, scancode) : key,
+							action == GLFW_PRESS ? "누름" : "뗌", scancode);
+				}
+			});
+		}
+	}
+
+	/**
+	 * macOS: [NSApp activateIgnoringOtherApps:YES] — 터미널·Gradle 에서 띄운 번들 없는 프로세스는 최근 macOS 에서 스스로 앞으로 오지 않아
+	 * 창이 보여도 키 입력이 들어오지 않는다. 다른 OS 에서는 아무것도 안 한다.
+	 */
+	private static void activateApp() {
+		if (org.lwjgl.system.Platform.get() != org.lwjgl.system.Platform.MACOSX) {
+			return;
+		}
+		try {
+			long send = org.lwjgl.system.macosx.ObjCRuntime.getLibrary().getFunctionAddress("objc_msgSend");
+			long nsApp = org.lwjgl.system.JNI.invokePPP(org.lwjgl.system.macosx.ObjCRuntime.objc_getClass("NSApplication"),
+					org.lwjgl.system.macosx.ObjCRuntime.sel_getUid("sharedApplication"), send);
+			org.lwjgl.system.JNI.invokePPV(nsApp, org.lwjgl.system.macosx.ObjCRuntime.sel_getUid("activateIgnoringOtherApps:"), true, send);
+		} catch (RuntimeException | UnsatisfiedLinkError ex) {
+			System.out.println("앱 활성화 실패: " + ex.getMessage());
+		}
 	}
 
 	public long handle() {

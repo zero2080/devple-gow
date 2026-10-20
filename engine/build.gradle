@@ -39,6 +39,9 @@ run {
 	if (project.hasProperty('gowFxLog')) {
 		systemProperty 'gow.fxlog', 'true'   // 이펙트 GO 재생·해석 로그 (40 문서)
 	}
+	if (project.hasProperty('gowKeyLog')) {
+		systemProperty 'gow.keylog', 'true'   // 키 입력 진단 로그 (창 포커스·누름/뗌)
+	}
 	if (project.hasProperty('gowUnlockAll')) {
 		systemProperty 'gow.unlockAll', 'true'   // 귀중품(보너스) 메뉴 전부 해금 (39 문서)
 	}
