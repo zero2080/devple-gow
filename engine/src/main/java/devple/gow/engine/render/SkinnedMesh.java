@@ -21,9 +21,9 @@ public final class SkinnedMesh implements AutoCloseable {
 	private final int count;
 
 	public SkinnedMesh(float[] vertices, int[] indices) {
-		vao = glGenVertexArrays();
+		vao = GlStats.vao(glGenVertexArrays());
 		glBindVertexArray(vao);
-		vbo = glGenBuffers();
+		vbo = GlStats.buf(glGenBuffers());
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
 		FloatBuffer fb = MemoryUtil.memAllocFloat(vertices.length).put(vertices).flip();
 		glBufferData(GL_ARRAY_BUFFER, fb, GL_STATIC_DRAW);
@@ -34,7 +34,7 @@ public final class SkinnedMesh implements AutoCloseable {
 			glEnableVertexAttribArray(i);
 			glVertexAttribPointer(i, attrs[i][0], GL_FLOAT, false, stride, (long) attrs[i][1] * Float.BYTES);
 		}
-		ebo = glGenBuffers();
+		ebo = GlStats.buf(glGenBuffers());
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
 		IntBuffer ib = MemoryUtil.memAllocInt(indices.length).put(indices).flip();
 		glBufferData(GL_ELEMENT_ARRAY_BUFFER, ib, GL_STATIC_DRAW);
@@ -50,8 +50,8 @@ public final class SkinnedMesh implements AutoCloseable {
 
 	@Override
 	public void close() {
-		glDeleteBuffers(vbo);
-		glDeleteBuffers(ebo);
-		glDeleteVertexArrays(vao);
+		GlStats.delBuf(vbo);
+		GlStats.delBuf(ebo);
+		GlStats.delVao(vao);
 	}
 }

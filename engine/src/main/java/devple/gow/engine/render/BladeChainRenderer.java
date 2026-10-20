@@ -32,9 +32,9 @@ public final class BladeChainRenderer implements AutoCloseable {
 			glow[g] = tex(wpn, mats[g][1]);
 			trail[g] = tex(wpn, mats[g][2]);
 		}
-		vao = glGenVertexArrays();
+		vao = GlStats.vao(glGenVertexArrays());
 		glBindVertexArray(vao);
-		vbo = glGenBuffers();
+		vbo = GlStats.buf(glGenBuffers());
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
 		glBufferData(GL_ARRAY_BUFFER, (long) MAX_VERTS * STRIDE * Float.BYTES, GL_STREAM_DRAW);
 		int s = STRIDE * Float.BYTES;
@@ -180,8 +180,8 @@ public final class BladeChainRenderer implements AutoCloseable {
 
 	@Override
 	public void close() {
-		glDeleteBuffers(vbo);
-		glDeleteVertexArrays(vao);
+		GlStats.delBuf(vbo);
+		GlStats.delVao(vao);
 		MemoryUtil.memFree(buf);
 		shader.close();
 	}

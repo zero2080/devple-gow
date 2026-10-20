@@ -37,6 +37,7 @@ public final class OpenAlBackend implements AudioBackend {
 		int id;
 		int source;
 		PcmStream stream;
+		AdpcmClip clip;
 		int[] streamBufs;
 		short[] scratch;
 		boolean introPending;
@@ -88,8 +89,17 @@ public final class OpenAlBackend implements AudioBackend {
 		});
 	}
 
+	/** 살아 있는 AL 버퍼 수 (측정용, 48 문서). */
+	private static int liveBuffers;
+
+	@Override
+	public String stats() {
+		return "slots" + slots.size() + "/buf" + liveBuffers + "/clips" + clipBuffers.size();
+	}
+
 	private static int upload(short[] pcm, int ch, int rate) {
 		int b = alGenBuffers();
+		liveBuffers++;
 		ShortBuffer sb = MemoryUtil.memAllocShort(pcm.length).put(pcm).flip();
 		alBufferData(b, ch == 1 ? AL_FORMAT_MONO16 : AL_FORMAT_STEREO16, sb, rate);
 		MemoryUtil.memFree(sb);
@@ -118,10 +128,12 @@ public final class OpenAlBackend implements AudioBackend {
 		if (s.streamBufs != null) {
 			for (int b : s.streamBufs) {
 				alDeleteBuffers(b);
+				liveBuffers--;
 			}
 			s.stream.close();
 		}
 		alSourcei(s.source, AL_LOOPING, AL_FALSE);
+		s.clip = null;
 		free.add(s.source);
 	}
 
@@ -148,6 +160,7 @@ public final class OpenAlBackend implements AudioBackend {
 	@Override
 	public int play(AdpcmClip clip, Voice v) {
 		Slot s = alloc();
+		s.clip = clip;
 		int[] b = buffers(clip);
 		apply(s.source, v);
 		if (b[0] != 0) {
@@ -173,6 +186,7 @@ public final class OpenAlBackend implements AudioBackend {
 		int queued = 0;
 		for (int i = 0; i < STREAM_BUFS; i++) {
 			s.streamBufs[i] = alGenBuffers();
+			liveBuffers++;
 			if (fill(s, s.streamBufs[i])) {
 				alSourceQueueBuffers(s.source, s.streamBufs[i]);
 				queued++;
@@ -195,6 +209,31 @@ public final class OpenAlBackend implements AudioBackend {
 		alBufferData(buf, s.stream.channels() == 1 ? AL_FORMAT_MONO16 : AL_FORMAT_STEREO16, sb, s.stream.sampleRate());
 		MemoryUtil.memFree(sb);
 		return true;
+	}
+
+	/**
+	 * 클립 버퍼 지우기 — 예전에는 클립 캐시 (IdentityHashMap) 가 레벨을 넘어 계속 자라 AL 버퍼와 PCM 이 남았다 (48 문서 §4).
+	 */
+	@Override
+	public void release(AdpcmClip clip) {
+		int[] b = clipBuffers.remove(clip);
+		if (b == null) {
+			return;
+		}
+		Iterator<Slot> it = slots.values().iterator();
+		while (it.hasNext()) {
+			Slot s = it.next();
+			if (s.clip == clip) {
+				it.remove();
+				release(s);
+			}
+		}
+		if (b[0] != 0) {
+			alDeleteBuffers(b[0]);
+			liveBuffers--;
+		}
+		alDeleteBuffers(b[1]);
+		liveBuffers--;
 	}
 
 	@Override

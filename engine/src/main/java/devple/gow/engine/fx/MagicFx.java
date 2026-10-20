@@ -361,6 +361,21 @@ public final class MagicFx implements AutoCloseable {
 	}
 
 	/**
+	 * 사라진 적 (시체 정리) 의 연결 끊기 — 살아 있는 PlayFX 목록·석화 이미터를 정리한다. 예전에는 적마다 키가 남아 Combatant
+	 * (애니·전투 데이터) 가 레벨 끝까지 남았고, 석화 중 사라진 적의 돌 이미터는 계속 돌았다 (48 문서 §4).
+	 */
+	public void unbind(Combatant c, Hittable h) {
+		List<EffectSystem.Effect> l = playFxLive.remove(c);
+		if (l != null) {
+			l.forEach(EffectSystem.Effect::stop);
+		}
+		ParticleSystem.Emitter e = h != null ? stones.remove(h) : null;
+		if (e != null) {
+			ps.emitters().remove(e);
+		}
+	}
+
+	/**
 	 * PlayFX 템플릿 (sub_0019BBE0 / SCR_PlayEffect 0x19A720): Effect Name, Joint Name, 플래그 u16 +0x40
 	 * (0x1 Particle Effect, 0x2 Looped, 0x8 Attached, 0x20/0x40 Left/Right Weapon, 0x80 Remove, 0x400 Blood Drop),
 	 * Scale X/Y/Z (+0x18), Offset X/Y/Z (+0x24), Rot X/Y/Z (+0x30) [확실: 키·오프셋, 추정: 동작].

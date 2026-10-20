@@ -15,7 +15,7 @@ import static org.lwjgl.opengl.GL41C.*;
 public final class MovieRenderer implements AutoCloseable {
 
 	private final Shader shader = new Shader("movie.vert", "movie.frag");
-	private final int vao = glGenVertexArrays();
+	private final int vao = devple.gow.engine.render.GlStats.vao(glGenVertexArrays());
 	private final int[] tex = new int[3];
 	private ByteBuffer staging;
 	private int texW, texH;
@@ -23,7 +23,7 @@ public final class MovieRenderer implements AutoCloseable {
 
 	public MovieRenderer() {
 		for (int i = 0; i < 3; i++) {
-			tex[i] = glGenTextures();
+			tex[i] = devple.gow.engine.render.GlStats.tex(glGenTextures());
 		}
 	}
 
@@ -111,8 +111,8 @@ public final class MovieRenderer implements AutoCloseable {
 
 	@Override
 	public void close() {
-		glDeleteTextures(tex);
-		glDeleteVertexArrays(vao);
+		devple.gow.engine.render.GlStats.delTex(tex);
+		devple.gow.engine.render.GlStats.delVao(vao);
 		shader.close();
 		if (staging != null) {
 			MemoryUtil.memFree(staging);

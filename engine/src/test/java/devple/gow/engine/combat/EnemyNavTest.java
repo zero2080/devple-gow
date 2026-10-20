@@ -46,6 +46,12 @@ class EnemyNavTest {
 		}
 	};
 
+	/** 벽 높이는 정적 — 한 테스트가 낮춘 값이 다음 테스트로 새지 않게 (섞은 순서에서 Mob 테스트가 실패했다, 48 문서 §5). */
+	@org.junit.jupiter.api.BeforeEach
+	void resetWall() {
+		wallTop = 300f;
+	}
+
 	private static EnemyNav nav(int caps) {
 		wallTop = 300f;
 		EnemyNav n = new EnemyNav(caps, SKEL, 1000);

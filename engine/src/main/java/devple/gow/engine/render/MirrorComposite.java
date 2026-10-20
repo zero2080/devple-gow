@@ -17,7 +17,7 @@ public final class MirrorComposite implements AutoCloseable {
 	static final float UPSCALE_OFFSET = 3f / 16f;
 
 	private final Shader shader = new Shader("blit.vert", "blit.frag");
-	private final int vao = glGenVertexArrays();
+	private final int vao = GlStats.vao(glGenVertexArrays());
 	private int fbo, tex, w, h;
 
 	/** 화면 전체 단색 (스텐실 통과 화소만). 깊이 검사·쓰기 끔. */
@@ -91,12 +91,12 @@ public final class MirrorComposite implements AutoCloseable {
 			return;
 		}
 		if (fbo != 0) {
-			glDeleteFramebuffers(fbo);
-			glDeleteTextures(tex);
+			GlStats.delFbo(fbo);
+			GlStats.delTex(tex);
 		}
 		w = nw;
 		h = nh;
-		tex = glGenTextures();
+		tex = GlStats.tex(glGenTextures());
 		glBindTexture(GL_TEXTURE_2D, tex);
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, (java.nio.ByteBuffer) null);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -104,7 +104,7 @@ public final class MirrorComposite implements AutoCloseable {
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 		int prev = glGetInteger(GL_DRAW_FRAMEBUFFER_BINDING);
-		fbo = glGenFramebuffers();
+		fbo = GlStats.fbo(glGenFramebuffers());
 		glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
 		glBindFramebuffer(GL_FRAMEBUFFER, prev);
@@ -113,10 +113,10 @@ public final class MirrorComposite implements AutoCloseable {
 	@Override
 	public void close() {
 		shader.close();
-		glDeleteVertexArrays(vao);
+		GlStats.delVao(vao);
 		if (fbo != 0) {
-			glDeleteFramebuffers(fbo);
-			glDeleteTextures(tex);
+			GlStats.delFbo(fbo);
+			GlStats.delTex(tex);
 		}
 	}
 }

@@ -22,9 +22,9 @@ public final class Mesh implements AutoCloseable {
 
 	public Mesh(float[] vertices, int[] indices, int mode) {
 		this.mode = mode;
-		vao = glGenVertexArrays();
+		vao = GlStats.vao(glGenVertexArrays());
 		glBindVertexArray(vao);
-		vbo = glGenBuffers();
+		vbo = GlStats.buf(glGenBuffers());
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
 		FloatBuffer fb = MemoryUtil.memAllocFloat(vertices.length).put(vertices).flip();
 		glBufferData(GL_ARRAY_BUFFER, fb, GL_STATIC_DRAW);
@@ -35,7 +35,7 @@ public final class Mesh implements AutoCloseable {
 		attrib(2, 2, stride, 6);
 		attrib(3, 4, stride, 8);
 		if (indices != null) {
-			ebo = glGenBuffers();
+			ebo = GlStats.buf(glGenBuffers());
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
 			IntBuffer ib = MemoryUtil.memAllocInt(indices.length).put(indices).flip();
 			glBufferData(GL_ELEMENT_ARRAY_BUFFER, ib, GL_STATIC_DRAW);
@@ -64,10 +64,10 @@ public final class Mesh implements AutoCloseable {
 
 	@Override
 	public void close() {
-		glDeleteBuffers(vbo);
+		GlStats.delBuf(vbo);
 		if (ebo != 0) {
-			glDeleteBuffers(ebo);
+			GlStats.delBuf(ebo);
 		}
-		glDeleteVertexArrays(vao);
+		GlStats.delVao(vao);
 	}
 }

@@ -382,6 +382,12 @@ public final class GameScene implements Scene {
 		if (Float.isNaN(col.groundHeight(spawn.x, spawn.y + STEP, spawn.z, 64))) {
 			nav.settleArrival(spawn); // 움직이는 발판 위 도착점 (ATHN05D WarpFrom4A)
 		}
+		String ln = levelName;
+		devple.gow.engine.core.PerfMonitor.gauge("level", () -> ln);
+		devple.gow.engine.core.PerfMonitor.gauge("enemies", enemies::size);
+		var snd = session.sound; // 게이지가 씬을 붙잡지 않게
+		devple.gow.engine.core.PerfMonitor.gauge("voices", snd::active);
+		devple.gow.engine.core.PerfMonitor.gauge("al", () -> snd.backend().stats());
 		System.out.printf("레벨 %s (진입점 %s): 시작 (%.0f, %.0f, %.0f), 적 종류 %s%n", levelName, entry, spawn.x, spawn.y,
 				spawn.z, kinds.keySet());
 	}
@@ -963,6 +969,10 @@ public final class GameScene implements Scene {
 
 	private Engine pendingEngine;
 
+	/** -Dgow.chain=A,B,C: 각 레벨에서 gow.chain.secs 초(기본 20) 뒤 다음 레벨로 LoadWad (누수 측정, 48 문서) [엔진 전용]. */
+	private static final String[] CHAIN = System.getProperty("gow.chain") != null ? System.getProperty("gow.chain").toUpperCase().split(",") : null;
+	private static final float CHAIN_SECS = Float.parseFloat(System.getProperty("gow.chain.secs", "20"));
+
 	/**
 	 * 디버그/검증용 스크립트 입력: {@code -Dgow.script="L1:0.5:0.4,R1:0.7:0.05,SQUARE:2:0.05"} (버튼:시작초:누름초).
 	 * {@code -Dgow.giveAll} 이면 시작 시 마법 4종·아르테미스의 검·블레이드 Lv2·신들의 분노 게이지 100 지급.
@@ -975,12 +985,20 @@ public final class GameScene implements Scene {
 			return null;
 		}
 		List<devple.gow.engine.input.ScriptedInput.Step> steps = new ArrayList<>();
+		List<devple.gow.engine.input.ScriptedInput.Stick> sticks = new ArrayList<>();
 		for (String part : sc.split(",")) {
 			String[] f = part.trim().split(":");
+			if (f[0].equalsIgnoreCase("LS") || f[0].equalsIgnoreCase("RS")) { // 스틱: LS:시작초:누름초:x:y (48 문서)
+				sticks.add(new devple.gow.engine.input.ScriptedInput.Stick(Float.parseFloat(f[1]), Float.parseFloat(f[2]),
+						f[0].equalsIgnoreCase("RS"), Float.parseFloat(f[3]), Float.parseFloat(f[4])));
+				continue;
+			}
 			steps.add(new devple.gow.engine.input.ScriptedInput.Step(Float.parseFloat(f[1]), Float.parseFloat(f[2]),
 					PadButton.valueOf(f[0].toUpperCase())));
 		}
-		return new devple.gow.engine.input.ScriptedInput(0, steps);
+		var in = new devple.gow.engine.input.ScriptedInput(0, steps).loop(Float.parseFloat(System.getProperty("gow.script.loop", "0")));
+		sticks.forEach(in::stick);
+		return in;
 	}
 
 	/**
@@ -1271,6 +1289,13 @@ public final class GameScene implements Scene {
 			return;
 		}
 		time += dt;
+		if (CHAIN != null && !leaving && time >= CHAIN_SECS) { // 레벨 연속 적재·해제 측정 (-Dgow.chain, 48 문서)
+			devple.gow.engine.core.PerfMonitor.requestReport();
+			String next = CHAIN[++session.chainIndex % CHAIN.length];
+			System.out.println("체인 " + session.chainIndex + " → " + next);
+			goToLevel(next, (String) null);
+			return;
+		}
 		if (System.getProperty("gow.debug") != null && ((int) (time * 60)) % 60 == 0) {
 			Vector3f hp = hero.ctl.position;
 			System.out.printf("[디버그] t=%.0f 영웅 (%.0f, %.0f, %.0f) 지면=%s 바닥높이=%.1f 소리=%d 음악=%s 백엔드=%s%n", time, hp.x, hp.y,
@@ -1505,6 +1530,8 @@ public final class GameScene implements Scene {
 		enemies.removeIf(en -> {
 			if (en.fighter().dead() && en.fighter().deadTime() > 4f) {
 				en.model().close();
+				magicFx.unbind(en.fighter().combat(), en.fighter());
+				enemyFall.remove(en.fighter());
 				return true;
 			}
 			return false;
@@ -1808,7 +1835,11 @@ public final class GameScene implements Scene {
 		if (n < 0) {
 			return;
 		}
-		var f = filters.computeIfAbsent(n, k -> java.util.Optional.ofNullable(devple.gow.engine.fx.CameraFilter.load(orbTweaks, k)));
+		var f = filters.get(n); // (computeIfAbsent 람다는 매 프레임 할당)
+		if (f == null) {
+			f = java.util.Optional.ofNullable(devple.gow.engine.fx.CameraFilter.load(orbTweaks, n));
+			filters.put(n, f);
+		}
 		if (f.isEmpty() || !f.get().visible()) {
 			return;
 		}
@@ -1862,9 +1893,23 @@ public final class GameScene implements Scene {
 		session.sound.unload(level.data().wad.name());
 		kinds.values().stream().filter(k -> k != null).forEach(k -> session.sound.unload(k.assets().wad().name()));
 		soundOnly.forEach(session.sound::unload);
+		session.sound.trimFileCache();
 		enemies.forEach(en -> en.model().close());
 		enemyShader.close();
 		magicFx.close();
+		// 적·보스 종류의 WAD 자산 (텍스처·모델) — 이전에는 닫지 않아 레벨 전환마다 GL 텍스처가 남았다 (48 문서 §4). 같은 자산을 나눠 쓰는
+		// 종류 (보스 템플릿 여럿 = 레벨 WAD 하나) 는 한 번만
+		java.util.Set<WadAssets> kindAssets = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+		kinds.values().stream().filter(k -> k != null).forEach(k -> kindAssets.add(k.assets()));
+		if (boss != null) {
+			boss.kinds().values().stream().filter(k -> k != null).forEach(k -> kindAssets.add(k.assets()));
+		}
+		kindAssets.forEach(WadAssets::close);
+		// 대상 슬롯 (AiTargets.SLOTS, 정적 WeakHashMap): 값 Slot 이 담당 AiBrain → 적 → 영웅 Hittable (= 키) 을 강하게 잡아 키가 풀리지 않았다 →
+		// 떠난 GameScene 전체 (레벨·WAD·모델) 가 남았다 (48 문서 §4). 슬롯은 이 레벨의 대상 것뿐이므로 비운다
+		devple.gow.engine.combat.AiTargets.clear();
+		devple.gow.engine.core.PerfMonitor.removeGauge("enemies");
+		devple.gow.engine.core.PerfMonitor.removeGauge("level");
 		if (filterRenderer != null) {
 			filterRenderer.close();
 		}

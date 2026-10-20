@@ -673,7 +673,7 @@ public final class LevelScene implements Scene {
 		devple.gow.engine.render.Shader basic = e.renderer().basic();
 		Matrix4f vp = new Matrix4f(cam.viewProj(e.window().aspect()));
 		if (mirrorQuery == 0) {
-			mirrorQuery = glGenQueries();
+			mirrorQuery = devple.gow.engine.render.GlStats.query(glGenQueries());
 			if (Boolean.getBoolean("gow.debug")) {
 				System.out.println("스텐실 비트: " + glGetFramebufferAttachmentParameteri(GL_DRAW_FRAMEBUFFER, GL_STENCIL,
 						GL_FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE));
@@ -1096,6 +1096,25 @@ public final class LevelScene implements Scene {
 		collisionLines.close();
 		volumeLines.close();
 		instances.forEach(i -> i.model().close());
+		// 레벨마다 새로 만드는 GL 객체도 함께 (48 문서 §4: 전환마다 셰이더 프로그램·쿼리·자세 GO 메시가 남았다)
+		posedModels.values().forEach(m -> {
+			if (m != null) {
+				m.close();
+			}
+		});
+		posedModels.clear();
+		if (skinned != null) {
+			skinned.close();
+			skinned = null;
+		}
+		if (composite != null) {
+			composite.close();
+			composite = null;
+		}
+		if (mirrorQuery != 0) {
+			devple.gow.engine.render.GlStats.delQuery(mirrorQuery);
+			mirrorQuery = 0;
+		}
 		assets.close();
 	}
 }

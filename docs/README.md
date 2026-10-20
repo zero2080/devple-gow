@@ -51,6 +51,7 @@ PS2 「갓 오브 워」 한글판 디스크(SCKA_300.02)를 분석하고 macOS 
 | 45 | [구현: 카메라 필터 (시선 고도각 세로 그라데이션 덮개, CAM 0xB0 수중 필터, 명중 플래시) · 블레이드 god 판 (goMAIgodblade)](45-impl-camera-filter-god-blades.md) | 1차 (테스트 6) |
 | 46 | [구현: 렌즈 플레어 (SCR_LensFlare 단일 가산 스프라이트, 가림 비율)](46-impl-lens-flare.md) | 1차 (테스트 3) |
 | 47 | [구현: 동적 라이트 (LGT, 0x1521B0 슬롯 2 + 주변광, VU 조명 커널, 블레이드 라이트) · 줄 스키닝 렌더](47-impl-lighting.md) | 1차 (테스트 10) |
+| 48 | [검증: 장시간 실행 안정성·성능 (PerfMonitor·GL 객체 수·레벨 체인, 레벨 전환 누수, 프레임 할당 핫스팟, 테스트 순서 의존)](48-perf-stability.md) | 1차 (8 레벨 × 180 초, 체인 24 레벨) |
 | 90 | [현황 / 로드맵](90-status-roadmap.md) | 수시 갱신 |
 
 ## 게임 실행

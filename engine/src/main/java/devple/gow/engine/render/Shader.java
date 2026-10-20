@@ -22,7 +22,7 @@ public final class Shader implements AutoCloseable {
 	public Shader(String vertRes, String fragRes) {
 		int vs = compile(GL_VERTEX_SHADER, load(vertRes));
 		int fs = compile(GL_FRAGMENT_SHADER, load(fragRes));
-		program = glCreateProgram();
+		program = GlStats.program(glCreateProgram());
 		glAttachShader(program, vs);
 		glAttachShader(program, fs);
 		glLinkProgram(program);
@@ -63,7 +63,13 @@ public final class Shader implements AutoCloseable {
 	}
 
 	private int loc(String name) {
-		return uniforms.computeIfAbsent(name, n -> glGetUniformLocation(program, n));
+		// computeIfAbsent 의 람다가 this 를 잡아 호출마다 할당 → 유니폼 설정마다 객체 (48 문서 §3)
+		Integer l = uniforms.get(name);
+		if (l == null) {
+			l = glGetUniformLocation(program, name);
+			uniforms.put(name, l);
+		}
+		return l;
 	}
 
 	public void set(String name, Matrix4f m) {
@@ -98,6 +104,6 @@ public final class Shader implements AutoCloseable {
 
 	@Override
 	public void close() {
-		glDeleteProgram(program);
+		GlStats.delProgram(program);
 	}
 }

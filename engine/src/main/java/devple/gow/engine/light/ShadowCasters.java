@@ -88,6 +88,7 @@ public final class ShadowCasters {
 	private final List<Caster> casters = new ArrayList<>();
 	private final List<Chain> chains = new ArrayList<>();
 	private final Set<String> hiddenKeys = new HashSet<>();
+	private final Matrix4f jointTmp = new Matrix4f();
 	private boolean collecting;
 	/** 마지막 build 결과 (디버그·테스트). */
 	public int lastCasters, lastTriangles;
@@ -178,7 +179,7 @@ public final class ShadowCasters {
 					if (p.joint() >= c.joints.length || c.hidden != null && p.joint() < c.hidden.length && c.hidden[p.joint()]) {
 						continue;
 					}
-					m.set(c.world).mul(new Matrix4f().set(c.joints[p.joint()]));
+					m.set(c.world).mul(jointTmp.set(c.joints[p.joint()]));
 					tris += ShadowVolume.build(p, m, c.light, c.eff, c.plane, factor, out);
 				}
 			}

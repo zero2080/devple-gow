@@ -29,7 +29,7 @@ public final class Window implements AutoCloseable {
 			throw new IllegalStateException("창 생성 실패");
 		}
 		glfwMakeContextCurrent(handle);
-		glfwSwapInterval(1);
+		glfwSwapInterval(System.getProperty("gow.novsync") != null ? 0 : 1); // -Dgow.novsync: 측정용 (48 문서)
 		GL.createCapabilities();
 		glfwSetFramebufferSizeCallback(handle, (w, fw, fh) -> {
 			fbWidth = fw;
