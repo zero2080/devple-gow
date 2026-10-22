@@ -223,6 +223,7 @@ public final class HeroTestScene implements Scene {
 			heroData.reindexAnimations();
 			System.out.printf("적: %s AI1 %03d HP %.0f 전투 파일 %s%n", enemyWad, kind.ai1(), enemy.maxHp(), kind.combatFiles());
 			enemy.pos.set(0, 0, -120);
+			enemy.setNavWorld(devple.gow.engine.combat.EnemyNav.flat(0)); // 바닥 평면 — 들린 적의 공중 상태 (0x1EA200, 37 문서 §11.7)
 			enemy.setFoe(heroHittable);
 			enemy.setIncomingScale(() -> rules.incomingScale(1, 0, bladeLevel, godMode.active()));
 			orbTweaks = new Tweaks();

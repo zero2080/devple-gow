@@ -644,8 +644,8 @@ PAND05B `pBoxPand05B-Marker511` → `semoMovieHaveBox-…-semo08marker511` (Filt
   수평 선분, 정적 시트 (두 슬롯) 의 **벽 면만** [근사: 원작은 두 내비 위치 그대로·바닥 면도 — 엔진은 바닥 붙이기가 계단을 맡으므로 바닥 면을 보면 계단에서 막힌다].
   법선은 시작점 쪽으로 (양면 질의). 수평 64 넘는 변위 (스폰·순간 이동·동기 배치) 는 건너뜀 [엔진].
 - 영웅 `GameScene.physics`: 밀어내기 → 몸 구 (`pushWalls`) → `blockMove(prevPosition, p, FOOT 6.4, moveExclude(heroBodyExclude()))` 막히면 몸 구 다시, 최대 3 회 + 마지막 한 번.
-- 적 `EnemyNav.update`: 지상·공중·자유 이동 단계 뒤 `guardMove` — 시작 = 지난 이동 단계가 끝난 발 위치 (`navPos`, 원작 +0x110; 루트 모션은 그 뒤에 더해짐), lift = `bodyBase()`,
-  마스크 = `moveExclude(bodyExclude(free, moveFlags))`. 벽·줄 모드는 건너뜀 (그 위치가 그대로 `navPos`).
+- 적 `EnemyNav.update`: 지상·공중·자유 이동 단계 뒤 `guardMove` — 시작 = 지난 이동 단계가 끝난 발 위치 (`last`, 원작 +0x110; 루트 모션은 그 뒤에 더해짐), lift = `bodyBase()`,
+  마스크 = `moveExclude(bodyExclude(free, moveFlags))`. 벽·줄 모드는 건너뜀 (그 위치가 그대로 `last`).
 - 시험 `nav/DeckEdgeTest` (ATHN01A 원본): 몸 구만이면 막 밖 1404 로 빠지는 재현 + 선분이 막 앞 (1416.05) 에서 멈추고 몸 구가 1428 로 되밀기, 원작 마스크 값,
   해골이 난간 쪽으로 3 초 걸어도 / 영웅 몸에 난간으로 밀려도 x &gt; 1416. 게임 실행 (`-PgowScript=LS:1:25:-1:-1`, 40 초 구석 전투) 전환·낙하 없음.
 - 남은 것: 고물 난간은 5.6 높이라 원작 규칙 그대로면 적 선분 (6.4) 이 넘는다 (시험에선 선실 벽·난간 몸 구에 막혀 배 안에 남음). 배 밖 바닥 없는 곳의 적은 여전히 높이 유지 [엔진]

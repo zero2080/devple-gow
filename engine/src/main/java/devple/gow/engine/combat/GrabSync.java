@@ -128,6 +128,7 @@ public final class GrabSync {
 			justLinked = true;
 			if (heroLead) {
 				target.combat().forceMove(heroCombat.move().id()); // 적 SYNC 분기: 같은 ID 로 따라온다
+				followed = 1;
 			}
 			followHero = heroCombat.moveSerial();
 			followEnemy = target.combat().moveSerial();
@@ -148,6 +149,7 @@ public final class GrabSync {
 			timedEvent = null;
 			pull.unlink();
 			pulling = 0;
+			followed = 0;
 			hero.rootHold = false;
 			hero.resetRoot();
 			return false;
@@ -191,6 +193,12 @@ public final class GrabSync {
 		} else {
 			heroAnim.update(dt);
 		}
+		if (followed == 1) {
+			matchTime(heroAnim, partner.animator());
+		} else if (followed == 2) {
+			matchTime(partner.animator(), heroAnim);
+		}
+		followed = 0;
 		align();
 		return true;
 	}
@@ -234,6 +242,8 @@ public final class GrabSync {
 	private int qteKey = Integer.MIN_VALUE, followHero = -1, followEnemy = -1;
 	private boolean justLinked;
 	private int leadSerial = -1;
+	/** 이번 틱 같은 ID 따라가기: 1 = 적이 영웅을, 2 = 영웅이 적을 ({@link #matchTime}). */
+	private int followed;
 
 	/**
 	 * 같은 ID 기술 따라가기 (원작 SYNC(18) 분기 — 동기 상대가 새 기술을 시작하면 같은 ID 로, 37 문서 §11.5): 적이 새 기술 (실패 분기·Pass/Fail Move)
@@ -245,11 +255,23 @@ public final class GrabSync {
 		int em = ec.active() ? ec.move().id() : -1, hm = heroCombat.active() ? heroCombat.move().id() : -1;
 		if (enemyNew && em >= 0 && em != hm && (ec.move().flags() & SYNC_FLAGS) != 0 && heroCombat.data().move(em) != null) {
 			heroCombat.forceMove(em);
+			followed = 2;
 		} else if (heroNew && hm >= 0 && em != hm && (heroCombat.move().flags() & SYNC_FLAGS) != 0 && ec.data().move(hm) != null) {
 			ec.forceMove(hm);
+			followed = 1;
 		}
 		followEnemy = ec.moveSerial();
 		followHero = heroCombat.moveSerial();
+	}
+
+	/**
+	 * 따라간 쪽 애니 시간 = 이끈 쪽 (원작: SYNC 분기로 같은 프레임에 같은 ID 를 0 부터 — 엔진은 이끈 쪽이 이번 틱에 이미 진행해 따라간 쪽이
+	 * 1–2 틱 늦던 것, 해골 220 → 223 / 221). 두 쪽 기술 속도가 같아 (220 1.5, 221·223 1.0) 이후 같은 시간으로 간다.
+	 */
+	private static void matchTime(Animator from, Animator to) {
+		if (from.current() != null && to.current() != null) {
+			to.seek(Math.min(from.time(), to.current().duration));
+		}
 	}
 
 	/** 결합 시작 때 영웅 높이 (루트 모션 수직 하한). */
