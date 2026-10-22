@@ -770,5 +770,5 @@ ATHN07B (화면 전체), ATHN06B (방 안이 흐린 벽), PAND03I (주황 판) �
 ## 시연 녹화 (-Dgow.record, -Dgow.bot) [엔진 전용]
 
 - `-Dgow.record=DIR` 로직 틱 `gow.record.every`(기본 2 = 30fps) 번마다 `DIR/f000000.jpg` 저장, `gow.record.secs` 초 뒤 종료. 녹화 중에는 lockstep (프레임당 틱 하나) 이라 렌더 속도와 무관하게 영상 시간이 게임 시간과 같다.
-- `-Dgow.bot` 자동 전투 (`BotInput`): 가장 가까운 적에게 걸어가 □□□△, 네 번째 묶음마다 ○ 잡기 뒤 □□□.
+- `-Dgow.bot` 자동 전투 (`BotInput`): 가장 가까운 적에게 걸어가 □□□△, 네 번째 묶음마다 ○ 잡기 뒤 □□□. 적이 없으면 원을 그리며 걷는다 (해치 위에 멈춰 있으면 ATHN01A 컷신이 보류됨, 28 §7).
 - 예: `JAVA_OPTS="-Dgow.bot=1 -Dgow.record=work/rec -Dgow.record.secs=180" engine --game --skip-movies` → JPEG 열을 AVFoundation (Swift AVAssetWriter) 등으로 MP4 로 묶는다 (ffmpeg 불필요). 소리는 녹음하지 않는다.

@@ -85,6 +85,10 @@ BallHull 수정: 평면 수를 헤더 0x38 이 아니라 hull 별 평면 수의 
 - 안내는 이 두 ShowMessage (Internal 0xA → HUD 메시지 상자) 뿐이고 **진행은 처치 수만** 본다 — 버튼 입력·잡기/띄우기 성공 이벤트를 기다리지 않는다
   (레벨의 EventSensor 는 1023/1029/1039/1048/1049/501 뿐, 영웅 기술 이벤트 1035/1047 없음). `LaunchMsgGroup-VisMsglaunch` 는 Action 없는 빈 Vis (Delay 11).
 - Respawn 조건은 제거 순간 (메시지 6) 에 보므로 카운터 증가 (센서 Action, 같은 틱 지연 큐) 보다 먼저 — 발사 단계 6 번째 처치까지 다시 나오고 그 뒤로는 끝.
+- 해치 보류: 5 번째 처치 때 영웅이 해치 위 (`HatchZoneGroup-pCube3974` Entry/ExitSensor → LevelData14) 면 동영상 조건이 거짓이라 보류되고,
+  해치에서 내려오는 순간 ExitSensor (대상 VisMpeg·VisFadeOut) 가 같은 조건을 다시 보고 재생한다 (`deckMovieWaitsUntilHeroLeavesHatch`).
+  해치 위에 계속 서 있으면 적이 다 끝나도 진행이 없다 — 원작 스크립트 그대로 (시연 봇이 여기서 멈췄던 원인, 43 시연 녹화).
+- 오브: 해골 처치 = `SKS Death` (R_SKS OrbEmitter 500) 빨강 1×3. HUD 숫자는 300 단위 배수라 300 개 전에는 0 이고 원형 게이지만 찬다 (11 문서).
   1.5 초마다 모두 처치하는 헤드리스 재현: 도발 4 + 올라오기 ≈ 14 + 해치 3 + AI8 1, 마지막 생성 ≈ 25 초. 게임 실행 (적 4 초 뒤 자동 처치, `-Dgow` 임시 추적) 도 같은 순서·수로 끝났다.
 - 엔진 런타임 (`ScriptWorld.spawn`/`destroy`/`trigger`) 은 위 원작과 같다 — **카운터가 멈추는 경우는 적이 죽지 않을 때뿐**. 원인으로 고친 것: 배 밖으로 밀려나거나 떨어진 적이
   바닥이 없으면 높이를 유지해 떠 있었다 (죽지 않음 → 그 Respawn·단계 카운터 정지, 38 §19 남은 것) → `EnemyNav` 가 바닥 없을 때도 중력 낙하,

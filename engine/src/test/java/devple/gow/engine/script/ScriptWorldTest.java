@@ -268,6 +268,60 @@ class ScriptWorldTest {
 		assertTrue(w.actors().stream().noneMatch(a -> a.spawner != null && !a.destroyed), "남은 적");
 	}
 
+	/**
+	 * 발사 단계 5 번째 처치 때 영웅이 해치 위 (HatchZone 볼륨, LevelData14) 면 동영상은 보류되고, 해치에서 내려오는 순간
+	 * ExitSensor (대상 VisMpeg·VisFadeOut) 가 같은 조건을 다시 보고 재생한다 — 그 사이 적이 끝나도 막히지 않는다.
+	 */
+	@Test
+	void deckMovieWaitsUntilHeroLeavesHatch() throws Exception {
+		Rec r = new Rec();
+		List<String> movies = new ArrayList<>();
+		ScriptHost host = new ScriptHost();
+		ScriptWorld w = new ScriptWorld(level("ATHN01A.WAD"), host, new ScriptListener() {
+			@Override
+			public void spawnEnemy(SpawnRequest q) {
+				r.spawnEnemy(q);
+			}
+
+			@Override
+			public void movie(String name, int op, int arg) {
+				if (op == 0) {
+					movies.add(name);
+				}
+			}
+		});
+		ScriptEntity entry = w.entities().stream().filter(e -> e.name().equals("HatchZoneGroup-pCube3974-EntrySensor1")).findFirst().orElseThrow();
+		LevelData.PlacedVolume v = entry.volume;
+		float[] c = new float[3];
+		Mat4.transformPoint(v.world(), v.hull().sphere[0], v.hull().sphere[1], v.hull().sphere[2], c);
+		assertTrue(v.contains(c[0], c[1], c[2]), "해치 볼륨 중심");
+		w.start();
+		float[] s = w.startEntity().position();
+		assertFalse(v.contains(s[0], s[1], s[2]), "시작점은 해치 밖");
+		float[] at = s;
+		for (int i = 0; i < 60 * 120; i++) {
+			if (i == 60) {
+				at = c; // 해치 위로
+			}
+			w.tick(1 / 60f, at[0], at[1], at[2]);
+			if (i % 90 == 0) {
+				for (ScriptListener.SpawnRequest q : new ArrayList<>(r.spawns)) {
+					if (!q.actor().destroyed()) {
+						w.destroy(q.actor());
+					}
+				}
+			}
+		}
+		assertEquals(true, host.levelData().get(14), "해치 위");
+		assertTrue(((Number) host.levelData().get(12)).intValue() >= 5, "발사 단계 처치 다 셈: " + host.levelData());
+		assertTrue(movies.isEmpty(), "해치 위에서는 동영상 보류");
+		for (int i = 0; i < 60; i++) {
+			w.tick(1 / 60f, s[0], s[1], s[2]); // 해치에서 내려옴
+		}
+		assertEquals(false, host.levelData().get(14));
+		assertEquals(List.of("a01mp05"), movies, "내려오면 재생");
+	}
+
 	/** 처치가 없으면 (적이 죽지 않으면) Respawn 도 단계 카운터도 움직이지 않는다 — 살아 있는 수는 스폰 엔티티 수를 넘지 않는다. */
 	@Test
 	void deckRespawnOnlyOnDeath() throws Exception {

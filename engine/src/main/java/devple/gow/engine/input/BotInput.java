@@ -7,7 +7,7 @@ import java.util.Set;
 
 /**
  * -Dgow.bot: 시연 녹화용 자동 플레이 (원작에 없음). 가장 가까운 적에게 걸어가 □□□△ 연타, 네 번째 묶음마다 ○ 잡기 뒤 □.
- * 적이 없으면 제자리. 틱마다 {@link #steer} 후 영웅 입력으로 넘긴다.
+ * 적이 없으면 천천히 원을 그리며 걷는다 (해치 위 등 볼륨 안에 서 있으면 진행이 보류되는 스크립트가 있다 — ATHN01A HatchZone). 틱마다 {@link #steer} 후 영웅 입력으로 넘긴다.
  */
 public final class BotInput extends Input {
 
@@ -20,7 +20,7 @@ public final class BotInput extends Input {
 	private final Set<PadButton> down = EnumSet.noneOf(PadButton.class);
 	private final Set<PadButton> prev = EnumSet.noneOf(PadButton.class);
 	private float lx, ly;
-	private float clock;
+	private float clock, wander;
 	private int combos;
 
 	public BotInput(long window) {
@@ -33,8 +33,11 @@ public final class BotInput extends Input {
 		prev.addAll(down);
 		down.clear();
 		lx = ly = 0;
+		wander += dt;
 		if (target == null) {
 			clock = 0;
+			lx = (float) Math.sin(wander * 0.4f);
+			ly = (float) Math.cos(wander * 0.4f);
 			return;
 		}
 		float dx = target.x - hero.x, dz = target.z - hero.z;
