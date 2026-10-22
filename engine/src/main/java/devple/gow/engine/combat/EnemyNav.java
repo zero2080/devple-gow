@@ -134,6 +134,23 @@ public final class EnemyNav {
 		}
 	}
 
+	/** 높이 y 의 무한 평면 바닥만 있는 세계 (시험 장면·헤드리스 시험: 벽·줄 없음). */
+	public static World flat(float y) {
+		return new World() {
+			public float ground(float x, float qy, float z, float drop) {
+				return qy >= y && qy - drop <= y ? y : Float.NaN;
+			}
+
+			public WallHit wall(Vector3f o, Vector3f dir, float dist) {
+				return null;
+			}
+
+			public Rope rope(Vector3f p, float r) {
+				return null;
+			}
+		};
+	}
+
 	/** 게임 충돌 세계 (정적 충돌 + 발판 + 줄) 어댑터. 벽 = 영웅 충돌 면, Climbable = 표면 비트 3 (38 문서 §1). */
 	public static World of(NavWorld nw) {
 		return new World() {
@@ -447,7 +464,13 @@ public final class EnemyNav {
 			case ROPE -> rope(pos, goal, goalClinging, busy, dt);
 			default -> ground(pos, busy ? new Vector3f() : stick, dt);
 		}
+		last.set(pos);
+		hasLast = true;
 	}
+
+	/** 지난 내비 갱신 끝 위치 — 자유 이동 바닥 질의 선분 길이 (이번 변위 = 루트 모션 + 동기 끌기, 0x1EA200 의 새 위치 − +0x110). */
+	private final Vector3f last = new Vector3f();
+	private boolean hasLast;
 
 	// ------------------------------------------------------------------ 지상 / 공중
 
@@ -473,11 +496,28 @@ public final class EnemyNav {
 			pos.x = c.x;
 			pos.z = c.z;
 		}
-		float g = world.ground(pos.x, pos.y + STEP, pos.z, 4000);
+		// 바닥 질의 0x1E3298 (38 문서 §15.5 와 같은 선분: 발 + 6.4 + max(d − 6.4, 0) → 발 − max(d, 3.2), d = 이번 변위) 뒤 상태 (0x1EA2E4–0x1EA3B4,
+		// 지상·공중일 때만 — 0x1ECE08 a3): 맞았고 바닥 아래면 올려 붙이기만, 바닥 위면 지상 (+0x174 = 1), 안 맞으면 낙하 (+0x174 = 8 → 분기 마스크 0x4)
+		// [확실: 코드]. 날기 (+0x2DC & 8) 는 0x40 = 엔진 GROUND + CAP_FLY 그대로. 끌려 들린 적 (해골 221 MAISKB02) 은 공중 → 지상 전용 분기
+		// ([0.40–1]! AUTO → 105 HITLAND, 분기 플래그 0x2) 가 착지 때까지 막힌다 (37 문서 §11.7)
+		float d = hasLast ? pos.distance(last) : 0;
+		float up = FLOOR_FOOT + Math.max(d - FLOOR_FOOT, 0), down = Math.max(d, FLOOR_MIN);
+		float g = world.ground(pos.x, pos.y + up, pos.z, up + down);
 		if (!Float.isNaN(g) && pos.y < g) {
-			pos.y = g; // 바닥 아래로는 못 감
+			pos.y = g; // 바닥 아래로는 못 감 (상태 그대로)
+		} else if ((caps & AiTemplate.CAP_FLY) == 0) {
+			if (!Float.isNaN(g)) {
+				mode = Mode.GROUND;
+				noCatch = false;
+			} else if (mode == Mode.GROUND) {
+				mode = Mode.AIR;
+				noCatch = true; // 0x8 (놓음) — 공중 잡기 없음
+			}
 		}
 	}
+
+	/** 바닥 질의 선분 (0x1E3298): 내비 위치 = 발 + 6.4, 최소 길이 3.2. */
+	static final float FLOOR_FOOT = 6.4f, FLOOR_MIN = 3.2f;
 
 	/** 자유 이동 중 밀어내기 (stateMask 비트 2, 0x1ECDEC). */
 	public boolean pushInFree;
