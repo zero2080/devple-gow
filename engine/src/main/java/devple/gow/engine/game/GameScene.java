@@ -50,6 +50,8 @@ public final class GameScene implements Scene {
 	public static final float UNITS_PER_METER = 16f;
 	private static final float GRAVITY = devple.gow.engine.nav.HeroNavigator.GRAVITY;
 	private static final float STEP = 14f;
+	/** 적이 바닥 없는 곳으로 이만큼 떨어지면 사망 (영웅의 바닥 없는 낙하 사망과 같은 3000) [근사]. */
+	static final float VOID_FALL = 3000f;
 
 	/**
 	 * 다른 레벨에서 넘어올 때의 도착 정보 (36 문서 §3). kind: SEAMLESS/WALK = 위치·방향 유지(pos, yaw),
@@ -1848,6 +1850,9 @@ public final class GameScene implements Scene {
 				} else {
 					enemyFall.put(f, vy);
 				}
+			}
+			if (!f.dead() && f.nav().fallDepth(f.pos) > VOID_FALL) {
+				f.hp = 0; // 바닥 없는 곳 (배 밖 바다) 으로 떨어짐 → 사망 = 스폰 엔티티 Respawn·DestructionSensor 가 센다 (영웅 규칙과 같음) [근사]
 			}
 			if (en.actor() != null) {
 				en.actor().moveTo(f.pos.x, f.pos.y, f.pos.z);
