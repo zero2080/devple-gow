@@ -219,6 +219,67 @@ public final class NavWorld {
 		return m;
 	}
 
+	/**
+	 * 이동 선분 검사의 면 제외 마스크 (0x1EA5F0 0x1EAB78 · 0x1EA200 0x1EA3D8, 0x3309F4 = <b>0x2030002</b> | (+0x258 &amp; 0x4300000) | 호출 마스크) [확실: 디스어셈블].
+	 * 0x2030002 = Water · AIBlock · ClimbGuide · NoDiving — 몸 질의 (0x10042) 와 달리 <b>Death 는 막고</b> ClimbGuide 는 늘 지나감.
+	 * 나머지 (NoPlayer/NoAICollision, 호출 마스크의 CombatGuide · NoCSMCollision) 는 몸 질의 마스크 body ({@link #bodyExclude}) 에서 그대로.
+	 */
+	public static long moveExclude(long body) {
+		return body & (SurfaceAttr.NO_PLAYER_COLLISION.bit() | SurfaceAttr.NO_AI_COLLISION.bit() | SurfaceAttr.COMBAT_GUIDE.bit()
+				| SurfaceAttr.NO_CSM_COLLISION.bit()) | SurfaceAttr.WATER.bit() | SurfaceAttr.AI_BLOCK.bit() | SurfaceAttr.CLIMB_GUIDE.bit()
+				| SurfaceAttr.NO_DIVING.bit();
+	}
+
+	/** 이동 선분 검사를 건너뛰는 수평 이동 (순간 이동·스폰·동기 배치 — 원작은 이 경로를 거치지 않는다) [엔진]. */
+	public static final float MOVE_TELEPORT = 64f;
+
+	/**
+	 * 이동 선분 마지막 검사 (원작 0x1EA5F0 끝 0x1EAB78 – 0x1EAC20, 자유 이동 0x1EA200 의 0x1EA3D8 – 0x1EA478) [확실: 디스어셈블]:
+	 * 몸 밀어내기 (0x1E2DD8) · 몸 질의 (0x1E2100) · 바닥 (0x1E3298) 뒤에 <b>이전 내비 위치 (+0x110) → 새 위치</b> 선분 (0x11E190) 을 던져
+	 * 막히면 새 위치 = 충돌점 + 면 법선 × 0.05 (0x3D4CCCCD) 로 두고 밀기·몸 질의부터 다시 (최대 3 회). 몸 질의는 몸 가운데에서 바깥으로 쏘는
+	 * 선분이라 가운데가 얇은 면 (GeneralGuide 막이, 갑판 난간) 을 한 틱에 넘어가면 반대쪽으로 밀어내는데, 이 선분이 그것을 막는다.
+	 * <p>
+	 * 엔진: from / to = 발 위치, 선분 높이 = max(두 발) + lift (내비 위치 = 발 + 바닥 +0x130.y), 수평으로 [근사: 원작은 두 내비 위치 그대로 —
+	 * 계단 오르내림의 바닥 면은 엔진 바닥 붙이기가 맡으므로 바닥 면 (|n.y| ≥ {@link LevelCollision#FLOOR_NY}) 은 보지 않는다]. 법선은 시작점 쪽으로.
+	 * to 의 x·z 만 고친다.
+	 *
+	 * @return 막혀서 to 를 고쳤으면 true
+	 */
+	public boolean blockMove(Vector3f from, Vector3f to, float lift, long exclude) {
+		float dx = to.x - from.x, dz = to.z - from.z;
+		float len2 = dx * dx + dz * dz;
+		if (len2 < 1e-8f || len2 > MOVE_TELEPORT * MOVE_TELEPORT) {
+			return false;
+		}
+		float y = Math.max(from.y, to.y) + lift;
+		Vector3f o = new Vector3f(from.x, y, from.z), d = new Vector3f(dx, 0, dz);
+		float len = (float) Math.sqrt(len2);
+		LevelCollision.Hit best = null;
+		for (LevelCollision c : statics) {
+			LevelCollision.Hit h = c.raycast(o, d, len, t -> !t.floor() && (t.attrs() & exclude) == 0);
+			if (h != null && (best == null || h.distance() < best.distance())) {
+				best = h;
+			}
+		}
+		if (best == null) {
+			return false;
+		}
+		Vector3f n = new Vector3f(best.tri().n().x, 0, best.tri().n().z);
+		if (n.lengthSquared() < 1e-8f) {
+			n.set(-dx, 0, -dz);
+		}
+		n.normalize();
+		if (n.x * dx + n.z * dz > 0) {
+			n.negate(); // 시작점 쪽 (양면 질의)
+		}
+		to.x = best.point().x + n.x * MOVE_SKIN;
+		to.z = best.point().z + n.z * MOVE_SKIN;
+		return true;
+	}
+
+	/** 막힌 이동의 새 위치 = 충돌점 + 법선 × 0.05 (0x1EABF4 / 0x1EA438). */
+	public static final float MOVE_SKIN = 0.05f;
+
 	/** 영웅이 기술 없이 서 있거나 떨어질 때의 몸 제외 마스크 (Water · Death · AIBlock · NoPlayerCollision · ClimbGuide · CombatGuide). */
 	public static final long HERO_BODY_EXCLUDE = bodyExclude(true, false, false, false, 0, 0);
 

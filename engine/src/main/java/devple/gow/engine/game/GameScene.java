@@ -2048,8 +2048,31 @@ public final class GameScene implements Scene {
 		if (heroBody.pushesSelf()) {
 			devple.gow.engine.combat.BodyPush.push(heroBody, p, bodies, null);
 		}
-		Vector3f c = new Vector3f(p.x, p.y + 20, p.z);
 		long ex = heroBodyExclude(); // 몸 질의 0x1E2100 면 거름 (38 §18.6)
+		pushWalls(p, ex);
+		// 이동 선분 마지막 검사 (0x1EAB78, 38 §19): 틱 시작 위치 → 새 위치가 막이·난간에 막히면 그 앞 + 0.05 에 두고 몸 질의부터 다시 (최대 3 회).
+		// 밀어내기 (적 몸·피격) 가 몸 가운데를 얇은 GeneralGuide 막 너머로 넘겨도 반대쪽으로 빠지지 않는다 (ATHN01A 갑판 구석 낙하)
+		if (nav != null) {
+			long mx = devple.gow.engine.nav.NavWorld.moveExclude(ex);
+			for (int i = 0; i < 3 && nav.navWorld.blockMove(hero.ctl.prevPosition, p, devple.gow.engine.nav.HeroNavigator.FOOT, mx); i++) {
+				pushWalls(p, ex);
+			}
+			nav.navWorld.blockMove(hero.ctl.prevPosition, p, devple.gow.engine.nav.HeroNavigator.FOOT, mx);
+		}
+		// 다른 슬롯 레벨 바닥만 밟고 있으면 그 레벨로 (원작은 두 레벨이 같이 상주, 예 SEWR01 → SEWR02)
+		if (otherCol != null && !otherName.equals(hostLevel) && c0.grounded && Float.isNaN(col.groundHeight(p.x, p.y + STEP, p.z, 64))
+				&& !Float.isNaN(otherCol.groundHeight(p.x, p.y + STEP, p.z, 64))) {
+			if ((otherFloorTime += dt) > 0.25f) { // 이음매에서 오가며 바뀌지 않도록 잠깐 머문 뒤
+				goToLevel(otherName, new Arrival(LevelLink.Kind.WALK, levelName, new float[]{p.x, p.y, p.z}, hero.ctl.yaw));
+			}
+		} else {
+			otherFloorTime = 0;
+		}
+	}
+
+	/** 영웅 몸 구 벽 밀어내기 (두 슬롯 정적 시트 + 문·창살·회전방 CDV): 발 위치 p 의 x·z 를 고친다. */
+	private void pushWalls(Vector3f p, long ex) {
+		Vector3f c = new Vector3f(p.x, p.y + 20, p.z);
 		boolean pushed = col.collideSphere(c, 12, ex);
 		if (otherCol != null) {
 			pushed |= otherCol.collideSphere(c, 12, ex);
@@ -2060,15 +2083,6 @@ public final class GameScene implements Scene {
 		if (pushed) {
 			p.x = c.x;
 			p.z = c.z;
-		}
-		// 다른 슬롯 레벨 바닥만 밟고 있으면 그 레벨로 (원작은 두 레벨이 같이 상주, 예 SEWR01 → SEWR02)
-		if (otherCol != null && !otherName.equals(hostLevel) && c0.grounded && Float.isNaN(col.groundHeight(p.x, p.y + STEP, p.z, 64))
-				&& !Float.isNaN(otherCol.groundHeight(p.x, p.y + STEP, p.z, 64))) {
-			if ((otherFloorTime += dt) > 0.25f) { // 이음매에서 오가며 바뀌지 않도록 잠깐 머문 뒤
-				goToLevel(otherName, new Arrival(LevelLink.Kind.WALK, levelName, new float[]{p.x, p.y, p.z}, hero.ctl.yaw));
-			}
-		} else {
-			otherFloorTime = 0;
 		}
 	}
 

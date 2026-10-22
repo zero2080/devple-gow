@@ -284,6 +284,8 @@ A170–173 (자신 HP 0..5) WALLHITRIGHT/LEFT → AUTO [0–0.6] WALLCLIMBATR/L 
   기술 flags &amp; 0x60 이면 NoCSMCollision 도 지나감.
 - 엔진: `EnemyNav.bodyExclude(free, moveFlags)` → `World.collide(c, r, exclude)` (`EnemyNav.of` = `NavWorld.collideSphere(c, r, exclude)`), `EnemyFighter.rootMotion` 이 기술 flags 를 `nav.moveFlags` 로.
   적 벽 이동에는 엔진 몸 질의가 없다 (원작 0x1E25E0 의 ClimbGuide 막이) [근사].
+- 이동 선분 마지막 검사 (0x1EAB78 / 0x1EA3D8, 38 §19): 지난 내비 위치 → 새 위치 선분 (발 + 바닥 높이, 마스크 0x2030002 | NoAICollision | 호출) 이 막히면 충돌점 + 0.05.
+  적은 GeneralGuide 막 (NoAICollision) 은 지나가지만 갑판 난간 (Ground 벽) 에 막혀 밀리거나 넉백돼도 배 밖으로 나가지 않는다 (`EnemyNav.guardMove`).
 
 ## 사슬 블레이드와 적 몸 (45 §3.8) [확실: 마스크 / 추정: 엔트리 범주]
 - 블레이드 벽 질의 0x1FB2CC 의 종류 0xFF9CE00F 에 적 범주 1|2 (+0xF4, 0x1D0890) 가 든다 → 손 밖 블레이드의 골반 → 블레이드 점 선분이 적 몸 구를 지나면

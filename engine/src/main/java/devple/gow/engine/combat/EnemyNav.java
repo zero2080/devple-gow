@@ -119,6 +119,11 @@ public final class EnemyNav {
 			return collide(c, r);
 		}
 
+		/** 이동 선분 마지막 검사 ({@link NavWorld#blockMove}, 0x1EAB78 / 0x1EA3D8) — to 의 x·z 를 고치고 막혔으면 true. 기본 = 없음. */
+		default boolean blockMove(Vector3f from, Vector3f to, float lift, long exclude) {
+			return false;
+		}
+
 		/** 줄 오브젝트의 질점 시뮬레이션 (영웅과 같은 것, {@link NavWorld#sim}) — 없으면 곧은 선분. */
 		default RopeSim sim(NavRope r) {
 			return null;
@@ -178,6 +183,10 @@ public final class EnemyNav {
 
 			public boolean collide(Vector3f c, float r, long exclude) {
 				return nw.collideSphere(c, r, exclude);
+			}
+
+			public boolean blockMove(Vector3f from, Vector3f to, float lift, long exclude) {
+				return nw.blockMove(from, to, lift, exclude);
 			}
 
 			public RopeSim sim(NavRope r) {
@@ -442,11 +451,42 @@ public final class EnemyNav {
 		faceYaw = Float.NaN;
 		moveX = moveY = 0;
 		released = false;
+		Vector3f from = Float.isNaN(navPos.x) ? new Vector3f(pos) : new Vector3f(navPos);
 		switch (mode) {
 			case WALL -> wall(pos, goal, goalClinging, busy, dt);
 			case ROPE -> rope(pos, goal, goalClinging, busy, dt);
-			default -> ground(pos, busy ? new Vector3f() : stick, dt);
+			default -> {
+				ground(pos, busy ? new Vector3f() : stick, dt);
+				guardMove(from, pos);
+			}
 		}
+		navPos.set(pos);
+	}
+
+	/** 지난 이동 단계가 끝난 발 위치 (원작 내비 +0x110 — 다음 이동 선분의 시작, 루트 모션은 그 뒤에 더해진다). 처음 = NaN. */
+	private final Vector3f navPos = new Vector3f(Float.NaN);
+
+	/**
+	 * 이동 선분 마지막 검사 (0x1EA5F0 끝 0x1EAB78 / 자유 이동 0x1EA200 의 0x1EA3D8, 38 §19) [확실: 디스어셈블]: 지난 위치 → 새 위치가
+	 * 면에 막히면 그 앞 + 0.05 에 두고 몸 질의를 다시 (최대 3 회). 선분 높이 = 발 + 바닥 (+0x130.y). 적 마스크는 NoAICollision 을 지나가므로
+	 * GeneralGuide 막이 (NoAICollision) 가 아니라 갑판 난간 (Ground 벽, ATHN01A 높이 14.6) 이 적을 배 안에 둔다 — 밀려도 난간을 넘지 않는다.
+	 */
+	private void guardMove(Vector3f from, Vector3f pos) {
+		if (world == null || mode == Mode.WALL || mode == Mode.ROPE) {
+			return; // 이번 틱에 벽·줄을 잡았으면 그 위치가 그대로
+		}
+		long ex = bodyExclude(free, moveFlags);
+		long mx = NavWorld.moveExclude(ex);
+		float lift = bodyBase();
+		float r = bodyRadius();
+		for (int i = 0; i < 3 && world.blockMove(from, pos, lift, mx); i++) {
+			Vector3f c = new Vector3f(pos.x, pos.y + STEP + r, pos.z);
+			if (world.collide(c, r, ex)) {
+				pos.x = c.x;
+				pos.z = c.z;
+			}
+		}
+		world.blockMove(from, pos, lift, mx);
 	}
 
 	// ------------------------------------------------------------------ 지상 / 공중
