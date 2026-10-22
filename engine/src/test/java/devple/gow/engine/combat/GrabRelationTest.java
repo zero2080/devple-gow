@@ -309,4 +309,65 @@ class GrabRelationTest {
 		ctl.undoRoot();
 		assertEquals(0, ctl.position.distance(h0), 1e-3f, "영웅 루트 모션 되돌림");
 	}
+
+	/**
+	 * 해골병 (ATHN01A 배 위 레기오네어, R_SKS) ○ 잡기 → □ (37 문서 §11.7): 영웅 220 MAISKB00 [0.4–1] □ → 221 MAISKB02, 영웅 기술 플래그 0x20 → 적도 221
+	 * (SYNC 분기). 두 쪽 같은 애니 시간 (속도 1.0 — 영웅 클립 2.33 초, 적 2.0 초), 영웅 이벤트 22 [0–0.76] 이 적을 끌어 들어 올린다.
+	 * 적 221 의 [0.40–1]! AUTO → 105 HITLAND 는 지상 전용 (분기 플래그 0x2) — 들린 적은 자유 이동 바닥 질의 (0x1EA200) 가 낙하 상태로 바꿔
+	 * 착지할 때까지 막힌다. 예전엔 적이 늘 지상이라 적 진행률 0.4 (영웅 0.34) 에서 HITLAND 로 빠져 영웅만 허공을 꿰뚫었다.
+	 */
+	@Test
+	void skeletonGrabSquareStaysPaired() throws Exception {
+		GrabRelation.Trial t = trials("R_SKS.WAD").get();
+		EnemyFighter en = t.enemy();
+		en.setNavWorld(EnemyNav.flat(0));
+		en.pos.set(0, 0, 0);
+		en.yaw = 0;
+		t.ctl().position.set(0, 0, -30);
+		t.ctl().yaw = 0;
+		final float dt = 1 / 60f;
+		ScriptedInput in = new ScriptedInput(0, List.of(new ScriptedInput.Step(0.05f, 0.05f, devple.gow.engine.input.PadButton.CIRCLE),
+				new ScriptedInput.Step(0.6f, 0.05f, devple.gow.engine.input.PadButton.SQUARE)));
+		GrabSync sync = new GrabSync(t.ctl(), t.hero());
+		var anim = t.ctl().animator();
+		boolean grabbed = false, air = false;
+		int paired = 0;
+		float heroAtEnd = -1;
+		EnemyNav.Mode prevMode = null;
+		for (int i = 0; i < 240 && heroAtEnd < 0; i++) {
+			in.advance(dt);
+			if (!sync.active()) {
+				t.hero().update(in, dt);
+				if (t.hero().active()) {
+					t.ctl().updateCombat(t.hero(), in, 0, dt, en.pos);
+				} else {
+					t.ctl().update(in, 0, dt);
+				}
+			}
+			en.update(dt);
+			sync.update(in, en, t.enemyTweaks(), dt);
+			Combatant h = t.hero(), e = en.combat();
+			int hm = h.active() ? h.move().id() : -1, em = e.active() ? e.move().id() : -1;
+			grabbed |= hm == 220 && em == 220;
+			if (hm == 221 && em == 221) {
+				paired++;
+				assertEquals("maiskb02", h.clipName().toLowerCase());
+				assertEquals("maiskb02", e.clipName().toLowerCase());
+				assertEquals(anim.time(), en.animator().time(), 1e-4f, "같은 애니 시간 (틱 " + i + ")");
+				if (h.progress() < 0.75f) {
+					assertTrue(sync.active() && sync.pulling() == 2, "영웅 이벤트 22 [0–0.76] 가 적을 끈다 (틱 " + i + ")");
+				}
+				air |= en.nav().mode() == EnemyNav.Mode.AIR;
+			} else if (hm == 221 && paired > 0) {
+				assertEquals(105, em, "적 다음 기술 = HITLAND");
+				assertEquals(EnemyNav.Mode.GROUND, prevMode, "HITLAND 는 착지 뒤 (지상 전용 분기)");
+				heroAtEnd = h.progress();
+			}
+			prevMode = en.nav().mode();
+		}
+		assertTrue(grabbed, "○ → 220 MAISKB00 결합");
+		assertTrue(paired > 60, "221 쌍 틱 수: " + paired);
+		assertTrue(air, "들린 적은 낙하 상태 (0x1EA200 바닥 질의 실패 → +0x174 = 8)");
+		assertTrue(heroAtEnd > 0.6f, "적은 영웅 221 의 후반까지 같은 애니 (예전 0.34 에서 HITLAND): " + heroAtEnd);
+	}
 }
