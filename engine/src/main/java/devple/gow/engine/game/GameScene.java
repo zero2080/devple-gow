@@ -1296,6 +1296,8 @@ public final class GameScene implements Scene {
 	 * {@code -Dgow.giveAll} 이면 시작 시 마법 4종·아르테미스의 검·블레이드 Lv2·신들의 분노 게이지 100 지급.
 	 */
 	private final devple.gow.engine.input.ScriptedInput debugInput = parseDebugScript();
+	/** -Dgow.bot: 시연 녹화용 자동 전투 (BotInput) [엔진 전용]. */
+	private final devple.gow.engine.input.BotInput bot = System.getProperty("gow.bot") != null ? new devple.gow.engine.input.BotInput(0) : null;
 
 	private static devple.gow.engine.input.ScriptedInput parseDebugScript() {
 		String sc = System.getProperty("gow.script");
@@ -1693,6 +1695,11 @@ public final class GameScene implements Scene {
 			debugInput.advance(dt);
 			in = debugInput;
 		}
+		EnemyFighter target = nearestEnemy();
+		if (bot != null) {
+			bot.steer(hero.ctl.position, target != null ? target.pos : null, camYaw, dt);
+			in = bot;
+		}
 		if (time < autoRun) {
 			in = new Input(e.window().handle()) {
 				@Override
@@ -1701,7 +1708,6 @@ public final class GameScene implements Scene {
 				}
 			};
 		}
-		EnemyFighter target = nearestEnemy();
 		bodyTick++;
 		if (!grab.active()) {
 			hero.combat.setTarget(target);

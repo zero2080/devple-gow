@@ -35,7 +35,13 @@ public final class Engine implements AutoCloseable {
 	}
 
 	/** -Dgow.lockstep: 프레임마다 로직 틱 하나 (검증용, 원작에 없음). */
-	public static final boolean LOCKSTEP = Boolean.getBoolean("gow.lockstep");
+	public static final boolean LOCKSTEP = Boolean.getBoolean("gow.lockstep") || System.getProperty("gow.record") != null;
+
+	/** -Dgow.record=디렉터리: 로직 틱 gow.record.every(기본 2) 번마다 JPEG 한 장 (영상 만들기용, 원작에 없음). gow.record.secs 초 뒤 종료. */
+	private static final Path RECORD = System.getProperty("gow.record") != null ? Path.of(System.getProperty("gow.record")) : null;
+	private static final int RECORD_EVERY = Integer.getInteger("gow.record.every", 2);
+	private static final long RECORD_END = (long) (Float.parseFloat(System.getProperty("gow.record.secs", "0")) * 60);
+	private int recorded;
 
 	public void run(Scene first) {
 		scenes.push(this, first);
@@ -62,6 +68,9 @@ public final class Engine implements AutoCloseable {
 			renderer.beginFrame();
 			scenes.render(this, (float) (acc / TICK));
 			renderer.endFrame(scenes.fade());
+			if (RECORD != null && ticks % RECORD_EVERY == 0) {
+				record();
+			}
 			if (++frames == captureFrame || (captureTick > 0 && ticks >= captureTick && captureFile != null)) {
 				captureTick = -1;
 				capture();
@@ -86,6 +95,18 @@ public final class Engine implements AutoCloseable {
 	public void captureAfter(long n, Path file) {
 		captureFrame = n;
 		captureFile = file;
+	}
+
+	private void record() {
+		try {
+			java.nio.file.Files.createDirectories(RECORD);
+			Screenshot.save(window.width(), window.height(), RECORD.resolve(String.format("f%06d.jpg", recorded++)), "jpg");
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
+		if (RECORD_END > 0 && ticks >= RECORD_END) {
+			window.requestClose();
+		}
 	}
 
 	private void capture() {

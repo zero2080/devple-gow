@@ -766,3 +766,9 @@ ATHN07B (화면 전체), ATHN06B (방 안이 흐린 벽), PAND03I (주황 판) �
 남은 카메라 [근사] 는 해독 비용이 크다: 리셋 첫 머리 데드존 (§10, 30 §8.2), `seedApproach` (하네스 전용), 원작 Follow 0x337B68, Hermite 속도항.
 
 **5. BMI 발판 잡아 던지기 460 동기** → 37 문서 §11.6 (BMI 205 / 영웅 002 의 460 쌍, BMI 이벤트 19 창 [0–0.4] 끌기). 엔진 테스트 418, 순회 보고서 같음.
+
+## 시연 녹화 (-Dgow.record, -Dgow.bot) [엔진 전용]
+
+- `-Dgow.record=DIR` 로직 틱 `gow.record.every`(기본 2 = 30fps) 번마다 `DIR/f000000.jpg` 저장, `gow.record.secs` 초 뒤 종료. 녹화 중에는 lockstep (프레임당 틱 하나) 이라 렌더 속도와 무관하게 영상 시간이 게임 시간과 같다.
+- `-Dgow.bot` 자동 전투 (`BotInput`): 가장 가까운 적에게 걸어가 □□□△, 네 번째 묶음마다 ○ 잡기 뒤 □□□.
+- 예: `JAVA_OPTS="-Dgow.bot=1 -Dgow.record=work/rec -Dgow.record.secs=180" engine --game --skip-movies` → JPEG 열을 AVFoundation (Swift AVAssetWriter) 등으로 MP4 로 묶는다 (ffmpeg 불필요). 소리는 녹음하지 않는다.
