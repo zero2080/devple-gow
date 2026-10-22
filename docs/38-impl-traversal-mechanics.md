@@ -618,3 +618,35 @@ PAND05B `pBoxPand05B-Marker511` → `semoMovieHaveBox-…-semo08marker511` (Filt
     기술 flags 는 `EnemyFighter.rootMotion` 이 `nav.moveFlags` 로 넘김. 적 벽 이동은 엔진에 몸 질의가 없어 ClimbGuide 를 보지 않는다 [근사].
   - Water·Death 면은 이제 몸을 막지 않는다 — 엔진은 물·사망을 바닥 질의로 알아내므로 그대로 동작 (Water·Death 벽면: PAND04E Death 272, PAND03E 6, ARENA* 8 …).
 - 순회 보고서: 변경 전후 같음 (`cmp`).
+
+## 19. 이동 선분 마지막 검사 — ATHN01A 갑판 구석 낙하 · 적이 배 밖으로 밀려남 [확실: 디스어셈블 / 근사: 선분 높이·바닥 면]
+버그 (사용자 보고, ATHN01A 첫 전투): ① 시작 카메라 화면 왼쪽 (−x) 구석에서 크라토스가 갑판 밖으로 떨어져 리스폰, ② 적이 가끔 배 밖으로 밀려나 돌아오지 못하고 멀어짐.
+
+**ATHN01A 갑판 가장자리** (시트 RIB_sheet): 둘레에 `visuals01A_lambert345` 막 (GeneralGuide · NoAICollision · NoAIUse, 높이 0–176) — 왼쪽 x 1416 (z 1576–1779), 고물 z 1576,
+오른쪽 x 1648, 이물 쪽 사선 (1416, 1779) → (1435, 1832) → (1455, 1888) → (1517, 1996) 과 그 반대편. 같은 자리에 `visuals01A_groundWood` 난간 벽 (Ground, 높이 14.6 — 고물 z 1580 은 5.6).
+막은 영웅만 (§18.4), 난간은 영웅·적 모두 막는다. 바다 = `ENV_DeathZone1..5` (y ≈ −290 판). 막 밖 아래에는 ATHN01B (다른 슬롯) 바닥·선창 천장 (y −64) 이 있다.
+
+**원인 ①** (GameScene 로그 재현: 구석 (1428, 0, 1592) 에서 해골 넷에 몰림): 한 틱에 생물 밀어내기 (`BodyPush`, 0x1E2DD8) 가 영웅을 x ≈ 1410 까지 밀면
+몸 구 (발 + 20, 반지름 12) 의 가운데가 얇은 막 (x 1416) 을 넘어 `collideSphere` 가 **바깥쪽** (1404) 으로 밀어낸다 → 다른 슬롯 바닥만 밟음 → ATHN01B 로 걷기 전환 / 바다 낙하.
+**원인 ②**: 적 몸 구는 발 + 14 위 (`EnemyNav.STEP`) 라 난간 (14.6) 을 거의 보지 않고, 막은 NoAICollision 이라 지나감 → 밀리거나 걸으면 난간을 넘어 배 밖으로
+(바닥이 없으면 높이 유지 [엔진] 라 떠서 계속 멀어짐; 시험: 난간 쪽으로 3 초 걸으면 x 1061 까지).
+
+**원작** (0x1EA5F0 끝 0x1EAB78 – 0x1EAC20, 자유 이동 0x1EA200 의 0x1EA3D8 – 0x1EA478, 영웅·적 공용):
+- 몸 밀어내기 0x1E2DD8 → 몸 질의 0x1E2100 (몸 가운데에서 바깥으로 쏘는 선분 — 가운데가 면을 넘으면 못 봄) → 상태별 이동·바닥 0x1E3298 뒤,
+  **이전 내비 위치 (+0x110) → 새 위치** 선분을 0x11E190 (모드 2, 콜백 0x1E1E80 = 오브젝트 flags 0x40 이면 0xB) 으로 던진다.
+- 면 제외 0x3309F4 = **0x2030002** (Water · AIBlock · ClimbGuide · NoDiving) | (+0x258 &amp; 0x4300000) (영웅 NoPlayerCollision / AI NoAICollision) | 호출 마스크
+  (0x1EA5F0 의 s2: ClimbGuide · CombatGuide · NoCSMCollision, §18.6). 몸 질의 (0x10042) 와 달리 **Death 는 막는다**, GeneralGuide 는 늘 막는다.
+- 맞으면 새 위치 = 충돌점 (0x2C8F10) + 면 법선 (0x2C8F20) × **0.05** (0x3D4CCCCD) 로 두고 밀어내기·몸 질의부터 다시, 최대 3 회 (s3 &lt; 3).
+- → 밀어내기·피격 변위가 몸 가운데를 막·난간 너머로 넘겨도 선분이 막는다. 적은 막을 지나가지만 난간 (Ground 벽) 에 막힌다 (내비 위치 = 발 + 바닥 0.4 m = 6.4 &lt; 14.6).
+
+**엔진**:
+- `NavWorld.moveExclude(body)` (몸 질의 마스크에서 위 마스크), `NavWorld.blockMove(from, to, lift, exclude)` — 발 위치 from → to, 선분 높이 = max(두 발 y) + lift (내비 위치 = 발 + 바닥),
+  수평 선분, 정적 시트 (두 슬롯) 의 **벽 면만** [근사: 원작은 두 내비 위치 그대로·바닥 면도 — 엔진은 바닥 붙이기가 계단을 맡으므로 바닥 면을 보면 계단에서 막힌다].
+  법선은 시작점 쪽으로 (양면 질의). 수평 64 넘는 변위 (스폰·순간 이동·동기 배치) 는 건너뜀 [엔진].
+- 영웅 `GameScene.physics`: 밀어내기 → 몸 구 (`pushWalls`) → `blockMove(prevPosition, p, FOOT 6.4, moveExclude(heroBodyExclude()))` 막히면 몸 구 다시, 최대 3 회 + 마지막 한 번.
+- 적 `EnemyNav.update`: 지상·공중·자유 이동 단계 뒤 `guardMove` — 시작 = 지난 이동 단계가 끝난 발 위치 (`last`, 원작 +0x110; 루트 모션은 그 뒤에 더해짐), lift = `bodyBase()`,
+  마스크 = `moveExclude(bodyExclude(free, moveFlags))`. 벽·줄 모드는 건너뜀 (그 위치가 그대로 `last`).
+- 시험 `nav/DeckEdgeTest` (ATHN01A 원본): 몸 구만이면 막 밖 1404 로 빠지는 재현 + 선분이 막 앞 (1416.05) 에서 멈추고 몸 구가 1428 로 되밀기, 원작 마스크 값,
+  해골이 난간 쪽으로 3 초 걸어도 / 영웅 몸에 난간으로 밀려도 x &gt; 1416. 게임 실행 (`-PgowScript=LS:1:25:-1:-1`, 40 초 구석 전투) 전환·낙하 없음.
+- 남은 것: 고물 난간은 5.6 높이라 원작 규칙 그대로면 적 선분 (6.4) 이 넘는다 (시험에선 선실 벽·난간 몸 구에 막혀 배 안에 남음). 배 밖 바닥 없는 곳의 적은 여전히 높이 유지 [엔진]
+  (원작은 중력으로 떨어져 데스존 — 미구현).
