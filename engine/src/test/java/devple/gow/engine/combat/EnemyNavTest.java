@@ -86,6 +86,40 @@ class EnemyNavTest {
 		assertEquals(0x2, n.combatMask());
 	}
 
+	/** 바닥 끝 (x &gt; 100 은 아래에 아무것도 없음 = 배 밖 바다) 을 걸어 나가면 높이를 유지하지 않고 떨어진다 → fallDepth 로 처치 (스폰 Respawn·센서가 셈). */
+	@Test
+	void walksOffEdgeIntoVoidAndFalls() {
+		EnemyNav n = new EnemyNav(0, SKEL, 1000);
+		n.setWorld(new EnemyNav.World() {
+			public float ground(float x, float y, float z, float drop) {
+				return x > 100 ? Float.NaN : WORLD.ground(x, y, z, drop);
+			}
+
+			public EnemyNav.WallHit wall(Vector3f o, Vector3f dir, float dist) {
+				return null;
+			}
+
+			public EnemyNav.Rope rope(Vector3f p, float r) {
+				return null;
+			}
+		});
+		Vector3f p = new Vector3f(90, 0, 500);
+		for (int i = 0; i < 30; i++) {
+			n.update(p, new Vector3f(1, 0, 0), null, false, DT);
+		}
+		assertTrue(p.x > 100);
+		assertEquals(EnemyNav.Mode.AIR, n.mode());
+		assertTrue(p.y < 0, "떨어짐 " + p.y);
+		for (int i = 0; i < 600; i++) {
+			n.update(p, new Vector3f(), null, false, DT);
+		}
+		assertTrue(n.fallDepth(p) > 3000, "낙하 깊이 " + n.fallDepth(p));
+		Vector3f q = new Vector3f(0, 0, 500);
+		EnemyNav m = nav(0);
+		m.update(q, new Vector3f(), null, false, DT);
+		assertEquals(0f, m.fallDepth(q), "바닥 위 = 0");
+	}
+
 	@Test
 	void noCapsFallsToGround() {
 		EnemyNav n = nav(0);

@@ -205,6 +205,82 @@ class ScriptWorldTest {
 				r.log.toString());
 	}
 
+	/**
+	 * ATHN01A 갑판 (튜토리얼 파도): ClimbSkellys 4 개는 MaximumCount 없이 Respawn 이지만 조건이 LevelData12 (발사 뒤 처치 수) ≤ 13 (5) —
+	 * 처치마다 단계 카운터가 오르므로 생성 총수는 유한하고, 처치 2 → 메시지 269, 5 → 244 (잡기), 발사 뒤 5 → 동영상 a01mp05 →
+	 * 501 → 해치 해골 3 + AI8 1 (각 MaximumCount 1) 뒤로는 더 나오지 않는다 (원작 0x1AC580 / 0x1AC630 메시지 6).
+	 */
+	@Test
+	void deckWavesEndAfterTutorialKills() throws Exception {
+		Rec r = new Rec();
+		List<String> movies = new ArrayList<>();
+		ScriptHost host = new ScriptHost();
+		ScriptWorld w = new ScriptWorld(level("ATHN01A.WAD"), host, new ScriptListener() {
+			@Override
+			public void message(int msgId, float seconds) {
+				r.message(msgId, seconds);
+			}
+
+			@Override
+			public void spawnEnemy(SpawnRequest q) {
+				r.spawnEnemy(q);
+			}
+
+			@Override
+			public void movie(String name, int op, int arg) {
+				if (op == 0) {
+					movies.add(name);
+				}
+			}
+		});
+		w.start();
+		float[] s = w.startEntity().position();
+		float lastSpawn = 0;
+		int seen = 0;
+		boolean movieDone = false;
+		for (int i = 0; i < 60 * 240; i++) {
+			w.tick(1 / 60f, s[0], s[1], s[2]);
+			if (i % 90 == 0) { // 플레이어가 1.5 초마다 살아 있는 적을 전부 처치
+				for (ScriptListener.SpawnRequest q : new ArrayList<>(r.spawns)) {
+					if (!q.actor().destroyed()) {
+						w.destroy(q.actor());
+					}
+				}
+			}
+			if (!movieDone && movies.contains("a01mp05")) {
+				movieDone = true;
+				w.postEvent(501, "a01mp05", 0, 0, w.player()); // 동영상 끝 → MpegController-EvtMpegDone
+			}
+			if (r.spawns.size() != seen) {
+				seen = r.spawns.size();
+				lastSpawn = w.time();
+			}
+		}
+		long climbs = r.spawns.stream().filter(q -> q.source().name().startsWith("ClimbSkellys-SkellyLevel1AI") && !q.source().name().endsWith("AI8")).count();
+		long hatch = r.spawns.stream().filter(q -> q.source().name().startsWith("HatchSkellys")).count();
+		assertTrue(movieDone, "발사 뒤 5 처치 → 동영상: " + host.levelData());
+		assertEquals(true, host.levelData().get(3), "501 → LevelData3");
+		assertEquals(3, hatch);
+		assertTrue(climbs >= 12 && climbs <= 24, "올라오는 해골 " + climbs);
+		assertTrue(lastSpawn < 60, "마지막 생성 " + lastSpawn + " 초 (끝없이 나옴)");
+		int i269 = r.log.indexOf("msg 269 5.0"), i244 = r.log.indexOf("msg 244 5.0");
+		assertTrue(i269 >= 0 && i244 > i269, r.log.toString());
+		assertTrue(w.actors().stream().noneMatch(a -> a.spawner != null && !a.destroyed), "남은 적");
+	}
+
+	/** 처치가 없으면 (적이 죽지 않으면) Respawn 도 단계 카운터도 움직이지 않는다 — 살아 있는 수는 스폰 엔티티 수를 넘지 않는다. */
+	@Test
+	void deckRespawnOnlyOnDeath() throws Exception {
+		Rec r = new Rec();
+		ScriptWorld w = new ScriptWorld(level("ATHN01A.WAD"), new ScriptHost(), r);
+		w.start();
+		float[] s = w.startEntity().position();
+		for (int i = 0; i < 60 * 120; i++) {
+			w.tick(1 / 60f, s[0], s[1], s[2]);
+		}
+		assertEquals(4, r.spawns.size(), "도발 해골 4 (MaximumCount 1) 만: " + r.log);
+	}
+
 	/** 모든 레벨: 생성 + 시작 + 몇 틱 (예외 없음). */
 	@Test
 	void allLevelsInitialize() throws Exception {

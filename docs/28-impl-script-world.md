@@ -46,6 +46,8 @@ w.find("Start"); w.entity(id); w.slot(entity, "Delay");
 - ATHN05A: 영웅 DeathZone → 영웅에게 1019(Arg1 504) + deathZone
 - ATHN01A: 그룹 8 적 2마리 제거 → DesSkel → `GrabMsgGroup-VisMsg` → `ShowMessage(269, 5.0)` ("[SquareButton] 보통 공격 …")
 - ATHN01A: 시작 위치 체류 → PlayerStartZone → LoadWad("Athn01B") + TauntEnemy 스폰(그룹 8, Delay 후)
+- ATHN01A: 1.5 초마다 살아 있는 적 전부 처치 → 269 → 244 → 동영상 a01mp05 → 501 → 해치 해골 3, 그 뒤 생성 없음 (`deckWavesEndAfterTutorialKills`, §7)
+- ATHN01A: 처치가 없으면 도발 해골 4 외에 생성 없음 — Respawn 은 죽음(메시지 6)으로만 (`deckRespawnOnlyOnDeath`)
 - 전 레벨(R_ 제외) ScriptWorld 생성 + 시작 + 30틱 예외 없음
 - 전 레벨 전 핸들러: 인자 수 표로 스택 균형 (return 뒤 빈 스택, underflow 없음)
 
@@ -60,6 +62,33 @@ BallHull 수정: 평면 수를 헤더 0x38 이 아니라 hull 별 평면 수의 
 - 원작 접촉 판정은 오브젝트 충돌 형상 기준 — 여기서는 점(위치) 판정
 - Vis/Animator/Creator 효과를 실제 오브젝트에 적용 (GameScene 통합), 적 템플릿 대응
 - EventSensor 버튼 안내(PromptOnEnter), 세이브(메시지 7/8 발동 시각 저장)
+
+## 7. ATHN01A 갑판 파도와 튜토리얼 안내 (사용자 보고 "적이 끊임없이 나옴") [확실: 데이터·디스어셈블]
+**스폰 엔티티 원작** (vtable 0x2BA4F4..): 초기화 0x1A3840 (슬롯 0..9 = +0xB0..+0xF8, 8 바이트씩, 만든 수 +0x100·죽은 수 +0x104 = 0),
+조건 0x1AC580 = 기본 Condition (0x1AA1C0, +0x6C) 이 참이고 **MaximumCount (+0xB0) 가 0 이거나 만든 수 &lt; 그 값**이면 참 → 만든 수 +1
+("MaximumCount %d exceeded (%d)"), 메시지 0x1AC630: 1 = 시작 (SpawnAtStart +0xC0), **6 = 만든 오브젝트 제거 → 죽은 수 +1, 보낸 쪽이 있고 Respawn (+0xC8)
+이면 0x29D93C = 1 로 0x1A9750 (지연 ≥ 0.25, 0x1A97A8)**, 7/8 = 저장/복원 (만든 수·죽은 수·마지막 발동). 효과 0x1AC850 = TemplateId (+0xD0) &gt; 0 이면 생성.
+슬롯 1 (`unk1`, 기본 −1) 은 0x1A3840 이 읽어 둘 뿐 vtable 함수 어디서도 쓰지 않는다 (ClimbSkellys 만 4) — "살아 있는 최대 수" 가 아니다.
+→ **Respawn 스폰은 "죽을 때마다 하나 다시" (살아 있는 수 = 스폰 엔티티 수) 이고, 끝은 MaximumCount 가 아니라 Condition 스크립트가 낸다.**
+
+**ATHN01A 데이터** (`script:entities --code`): `TauntEnemy1..4` (MaximumCount 1, 도발 SpawnAction 0..2, 그룹 8/2/3/4, PlayerStartZone 진입 후 6–8 초) 와
+`ClimbSkellys-SkellyLevel1AI4..7` (MaximumCount 없음, **Respawn**, SpawnAction 523 = 난간 넘어 올라오기, 그룹 5, Condition `LevelData[4..7] == true && LevelData12 <= LevelData13`).
+도발 해골이 죽으면 자기 짝 ClimbSkellys 를 켜고 (LevelData4..7 = true + 그 스폰 발동), 그 뒤로는 올라오는 해골이 죽을 때마다 같은 자리에서 다시 올라온다.
+단계 = LevelData1 Init 값 (PreGrab 9 = 2, PostGrab 11 = 5, PostLaunch 13 = 5), 처치는 DestructionSensor (모드 3, Filter 5 / 도발 그룹) 의 Action 이 센다:
+
+| 단계 (LevelData2, 0) | 처치를 세는 센서 → 카운터 | 넘어가는 조건 → 안내 |
+|---|---|---|
+| 1 (거짓, 거짓) | DesSkel·DesPreGrab → 8 | 8 ≥ 9 (2) → `GrabMsgGroup-VisMsg`: PreloadMovie a01mp05, **ShowMessage(269, 5)** "[□] 보통 공격 [△] 강한 공격", LevelData2 = 참 |
+| 2 (참, 거짓) | DesPostGrab → 10 | 10 ≥ 11 (5) → `LaunchMsgGroup-VisMsg`: **ShowMessage(244, 5)** "적을 잡으려면 [○]", LevelData0 = 참 |
+| 3 (참, 참) | DesPostLaunch → 12 | 12 ≥ 13 (5) 이고 해치 위 아님 (14) → `MpegController` Idle + **PlayMovie a01mp05**; 501 → LevelData3, 해치 해골 3·AI8 (MaximumCount 1) |
+
+- 안내는 이 두 ShowMessage (Internal 0xA → HUD 메시지 상자) 뿐이고 **진행은 처치 수만** 본다 — 버튼 입력·잡기/띄우기 성공 이벤트를 기다리지 않는다
+  (레벨의 EventSensor 는 1023/1029/1039/1048/1049/501 뿐, 영웅 기술 이벤트 1035/1047 없음). `LaunchMsgGroup-VisMsglaunch` 는 Action 없는 빈 Vis (Delay 11).
+- Respawn 조건은 제거 순간 (메시지 6) 에 보므로 카운터 증가 (센서 Action, 같은 틱 지연 큐) 보다 먼저 — 발사 단계 6 번째 처치까지 다시 나오고 그 뒤로는 끝.
+  1.5 초마다 모두 처치하는 헤드리스 재현: 도발 4 + 올라오기 ≈ 14 + 해치 3 + AI8 1, 마지막 생성 ≈ 25 초. 게임 실행 (적 4 초 뒤 자동 처치, `-Dgow` 임시 추적) 도 같은 순서·수로 끝났다.
+- 엔진 런타임 (`ScriptWorld.spawn`/`destroy`/`trigger`) 은 위 원작과 같다 — **카운터가 멈추는 경우는 적이 죽지 않을 때뿐**. 원인으로 고친 것: 배 밖으로 밀려나거나 떨어진 적이
+  바닥이 없으면 높이를 유지해 떠 있었다 (죽지 않음 → 그 Respawn·단계 카운터 정지, 38 §19 남은 것) → `EnemyNav` 가 바닥 없을 때도 중력 낙하,
+  바다 판 (`ENV_DeathZone1..5`, y ≈ −290, 1029) 에 들어가면 원작처럼 데스존 사망, 바닥 없이 3000 넘게 떨어지면 `GameScene` 이 사망 처리 [근사] → 메시지 6 이 센다.
 
 ## Vis 의 Visible (표시/숨김)
 Vis 엔티티 슬롯 0 `Visible`: 1 = 보임, 2 = 숨김, 0 = 그대로 (`Attr11_0/1` 은 충돌·카메라 볼륨). 이전에는 카메라 볼륨만 반영하고 표시 상태는 무시해

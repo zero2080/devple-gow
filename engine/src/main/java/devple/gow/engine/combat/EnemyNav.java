@@ -234,6 +234,8 @@ public final class EnemyNav {
 	private float speed;
 	private final Vector3f heading = new Vector3f(0, 0, -1);
 	private float vy;
+	/** 이번 낙하의 가장 높은 점 (지상에 서면 −∞). {@link #fallDepth(Vector3f)} — 바닥 없는 곳 (배 밖 바다) 으로 떨어진 적 처치용. */
+	private float fallTop = Float.NEGATIVE_INFINITY;
 	private final Vector3f wallN = new Vector3f();
 	private Rope rope;
 	private float ropeT;
@@ -339,6 +341,14 @@ public final class EnemyNav {
 
 	public Mode mode() {
 		return mode;
+	}
+
+	/** 공중이고 발밑 (아래 4000) 에 바닥이 없을 때 이번 낙하로 떨어진 깊이, 아니면 0. */
+	public float fallDepth(Vector3f pos) {
+		if (mode != Mode.AIR || world == null || fallTop == Float.NEGATIVE_INFINITY || !Float.isNaN(world.ground(pos.x, pos.y + STEP, pos.z, 4000))) {
+			return 0;
+		}
+		return fallTop - pos.y;
 	}
 
 	public int caps() {
@@ -475,6 +485,7 @@ public final class EnemyNav {
 			default -> {
 				ground(pos, busy ? new Vector3f() : stick, dt);
 				guardMove(from, pos);
+				landAfterGuard(pos);
 			}
 		}
 		last.set(pos);
@@ -502,6 +513,24 @@ public final class EnemyNav {
 			}
 		}
 		world.blockMove(from, pos, lift, mx);
+	}
+
+	/**
+	 * 바닥 질의는 이동 선분 검사 전 위치 (난간 밖) 에서 했으므로 바닥이 없다고 떨어지기 시작했을 수 있다 — 막혀 되돌아온 위치에 바닥이
+	 * 계단 높이 안이면 그대로 선다 (원작은 0x1EAB78 뒤 몸 질의를 다시 하고 다음 틱 바닥 0x1E3298 이 그 위치에서 붙인다) [근사].
+	 */
+	private void landAfterGuard(Vector3f pos) {
+		if (world == null || mode != Mode.AIR || vy > 0) {
+			return;
+		}
+		float g = world.ground(pos.x, pos.y + STEP, pos.z, 4000);
+		if (!Float.isNaN(g) && pos.y - g <= STEP && pos.y - g >= -STEP) {
+			pos.y = g;
+			vy = 0;
+			mode = Mode.GROUND;
+			noCatch = false;
+			fallTop = Float.NEGATIVE_INFINITY;
+		}
 	}
 
 	/**
@@ -613,15 +642,18 @@ public final class EnemyNav {
 			vy = 0;
 			mode = Mode.GROUND;
 			noCatch = false;
+			fallTop = Float.NEGATIVE_INFINITY;
 			return;
 		}
-		if (mode == Mode.GROUND && !Float.isNaN(g)) {
-			mode = Mode.AIR; // 턱에서 떨어짐
+		if (mode == Mode.GROUND) {
+			mode = Mode.AIR; // 턱에서 떨어짐 — 아래에 바닥이 없어도 (배 밖 바다) 원작처럼 중력으로 떨어진다
+			fallTop = pos.y;
 		}
 		if (mode == Mode.AIR) {
-			if ((!noCatch && tryCatch(pos)) || Float.isNaN(g)) {
-				return; // 아래에 바닥이 없으면 GameScene 과 같이 높이 유지
+			if (!noCatch && tryCatch(pos)) {
+				return;
 			}
+			fallTop = Math.max(fallTop, pos.y);
 			vy -= GRAVITY * dt;
 			pos.y += vy * dt;
 			if (!Float.isNaN(g) && pos.y <= g) {
@@ -629,6 +661,7 @@ public final class EnemyNav {
 				vy = 0;
 				mode = Mode.GROUND;
 				noCatch = false;
+				fallTop = Float.NEGATIVE_INFINITY;
 			}
 		}
 	}
