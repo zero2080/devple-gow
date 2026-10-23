@@ -88,7 +88,7 @@ public final class GameScene implements Scene {
 	private HeroRig hero;
 	private UiLayer hud;
 	private ScriptWorld world;
-	private final HudBinding hudBinding = new HudBinding();
+	private HudBinding hudBinding = new HudBinding();
 	private final Camera cam = new Camera();
 	private devple.gow.engine.level.CameraRig cameraRig;
 
@@ -1125,6 +1125,7 @@ public final class GameScene implements Scene {
 					// ATHN01F 진입·Warp 페이드
 					Object a = args.get(0);
 					scriptIdle = a instanceof Number n ? n.floatValue() != 0 : !(a instanceof Boolean b) || b;
+					devple.gow.engine.combat.AiTargets.globalHold = scriptIdle; // 0x1BF080 → 전역 정지 0x29DB58
 				}
 				if (func == 0x9 && !args.isEmpty()) {
 					Object a = args.get(0);
@@ -1695,7 +1696,7 @@ public final class GameScene implements Scene {
 	private static final int SCR_NO_SHADOW = 0xBFC016FE, SCR_EXPLODE_DEATH = 0xBA76AD70;
 
 	/** 스크립트 Idle(true) (Internal 0xC) 동안 조작 잠금. */
-	private boolean scriptIdle;
+	private boolean scriptIdle, hudHidden;
 	private static final Input IDLE_INPUT = new devple.gow.engine.input.ScriptedInput(0, List.of());
 
 	/** 재질 피해 타이머 (원작 +0x2B0): 영웅 하나, 적은 개체마다. */
@@ -1955,7 +1956,20 @@ public final class GameScene implements Scene {
 					session.sound.currentMusic(), session.sound.backend().getClass().getSimpleName());
 			System.out.printf("[디버그] 카메라 눈 %s 대상 %s%n", cam.eye, cam.target);
 		}
-		if (!powerUp) {
+		if (scriptIdle) {
+			// 전역 정지 (Idle) 동안 HUD 리셋 (Progress_UpdateHud 0x1D71A0 → 0x1BA150(hud, 1)): 미터를 내리고 갱신하지 않는다 —
+			// ATHN01A 시작 연출 13 초 동안 HUD 없음, 조작이 풀리면 다시 올라온다
+			if (!hudHidden) {
+				hudHidden = true;
+				hud.variables().event("PS2_MeterBar_Event", 0);
+				hud.variables().event("PS2_HitCounter_Event", 0);
+			}
+		} else if (!powerUp) {
+			if (hudHidden) {
+				hudHidden = false;
+				hudBinding = new HudBinding(); // 처음처럼 MeterBar 1 + 값 다시
+				hudBinding.castable = hero.magic::has;
+			}
 			hudBinding.update(hero.player, hud.variables());
 			hitCounterHud();
 		}
@@ -2700,6 +2714,7 @@ public final class GameScene implements Scene {
 
 	@Override
 	public void exit(Engine e) {
+		devple.gow.engine.combat.AiTargets.globalHold = false; // 전역 정지는 레벨마다
 		long exitT0 = System.nanoTime();
 		if (lights != null && devple.gow.engine.light.LightServer.current() == lights) {
 			devple.gow.engine.light.LightServer.setCurrent(null);

@@ -18,6 +18,9 @@ import java.util.WeakHashMap;
  */
 public final class AiTargets {
 
+	/** 전역 정지 0x29DB58 (getter 0x1BF108, 스크립트 Idle(true) → 0x1BF080): 켜져 있으면 모든 적이 토큰을 내려놓고 비용 있는 공격을 하지 않는다 (0x1CDEC8, 0x1CCB60). */
+	public static volatile boolean globalHold;
+
 	/** 대상 하나의 슬롯. */
 	public static final class Slot {
 		public final AiData.Soldier sold;

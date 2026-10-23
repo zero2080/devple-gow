@@ -338,9 +338,9 @@ public final class AiBrain {
 		}
 	}
 
-	/** 대상 무적 (이벤트 9 창, 0x2441E0(+0x1AC, 2)) — 전역 정지 0x29DB58 은 엔진에 없음 [근사]. */
+	/** 대상 무적 (이벤트 9 창, 0x2441E0(+0x1AC, 2)) 또는 전역 정지 0x29DB58 (스크립트 Idle). */
 	private boolean targetLocked() {
-		return targetCombat != null && targetCombat.invulnerable();
+		return AiTargets.globalHold || targetCombat != null && targetCombat.invulnerable();
 	}
 
 	private static int guardOf(Combatant c) {

@@ -102,3 +102,4 @@ Vis 엔티티 슬롯 0 `Visible`: 1 = 보임, 2 = 숨김, 0 = 그대로 (`Attr11
 
 - 시작 연출 (PlayerStartZone): Internal 0xC Idle(true) 동안 조작 잠금 (`GameScene.scriptIdle`) — 13 초 IdleCam → Idle2Cam → VisIdleOff (Idle false). 전에는 무시해 시작 카메라 동안 움직일 수 있었다.
 - HatchSkellys (ClimbAI5–7, SpawnAction 없음) 은 동영상 a01mp05 끝 (501) 에 해치 옆에 선다 — 동영상이 난간을 넘어 뛰어내리는 장면을 덮는다 (`--skip-movies` 면 갑자기 나타남). 스폰 기술 500–504·523 의 SCRIPT SCR_NoShadow (0xBFC016FE) 동안 그림자 없음.
+- Internal 0xC Idle(bool) = 0x1B0930 → 0x1BF080(0, flag): 전역 정지 0x29DB58 (getter 0x1BF108). 켜져 있으면 HUD 리셋 (Progress_UpdateHud 0x1D71A0 → 0x1BA150 — 미터·히트 카운터 내림), 적 토큰 반납·비용 있는 공격 없음 (0x1CDEC8 / 0x1CCB60), 조작 잠금. 실제 PS2 플레이 영상 대조: ATHN01A 시작 연출 13 초 동안 HUD 없음, 조작이 풀리면 HUD 가 올라온다 (`GameScene.scriptIdle`, `AiTargets.globalHold`).
