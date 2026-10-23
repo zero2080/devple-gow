@@ -207,7 +207,8 @@ public final class HeroTestScene implements Scene {
 
 			public Result receive(CombatFile.Attack a, Combatant attacker, float dmg, Vector3f knock) {
 				Result r = combat.takeHit(a, attacker, dmg);
-				System.out.printf("  크레토스 피격 %.1f → %s (HP %.0f)%n", dmg, r, player.hp);
+				System.out.printf("  크레토스 피격 %.1f → %s (HP %.0f) 위치 (%.1f, %.1f) 밀어내기 %.0f 단위/초%n", dmg, r, player.hp,
+						ctl.position.x, ctl.position.z, combat.impulse().length());
 				return r;
 			}
 		};
@@ -434,6 +435,9 @@ public final class HeroTestScene implements Scene {
 			}, camYaw, dt);
 		} else {
 			ctl.update(in, camYaw, dt);
+		}
+		if (!locked && combat.hitPause() <= 0) {
+			ctl.position.add(combat.stepImpulse(dt, ctl.grounded)); // 방어·피격 밀어내기 (HeroRig 와 같음, 0x2039E0)
 		}
 		if (enemy != null) {
 			enemy.update(dt);

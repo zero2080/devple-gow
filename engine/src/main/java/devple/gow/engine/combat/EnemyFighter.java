@@ -165,6 +165,7 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 		this.rnd = new Random(seed);
 		this.scale = tmpl.scaleCenter / 100f + tmpl.scaleRange / 100f * (0.5f - rnd.nextFloat());
 		this.combat = new Combatant(new CombatData(wad, combatFiles, set), anim, this);
+		impulsePhysics(tw, combatFiles, ai != null ? ai.physics(tmpl.soldier) : null);
 		this.nav = new EnemyNav(tmpl.moveCaps, ai != null ? ov.apply("motion", ai.motion(tmpl.soldier)) : null, tmpl.pauseMoveMs);
 		AiData.Body soldBody = ai != null ? ov.apply("body", ai.body(tmpl.soldier)) : null;
 		nav.setBody(soldBody, scale);
@@ -322,6 +323,7 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 			}
 			anim.update(dt);
 			rootMotion();
+			impulseMotion(dt);
 			return;
 		}
 		if (holdAi) {
@@ -382,6 +384,22 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 			anim.update(dt);
 		}
 		rootMotion();
+		impulseMotion(dt);
+	}
+
+	/**
+	 * 밀어내기 속도 (owner +0xF0, 방어·피격 0x2039E0 — {@link Combatant#push}) 를 이번 이동에 더한다: 루트 모션처럼 위치에 더해 다음 틱
+	 * 내비게이션 (벽·바닥) 이 처리하고, 지상이면 Sold 마찰로 준다 (0x1E8F80). 제자리 히드라 (선창 bhh) 는 밀리지 않는다 — 예전 근사 넉백은
+	 * □ 콤보마다 뿌리를 뒤로 밀어 150 초 싸움에 84 물러났다 (37 문서 §4.3). 예전 엔진: 적중 때 충격 ÷ 400 을 한 번에 (방어는 없음).
+	 */
+	private void impulseMotion(float dt) {
+		if (stationary || nav.mode() == EnemyNav.Mode.WALL || nav.mode() == EnemyNav.Mode.ROPE) {
+			combat.clearImpulse();
+			return;
+		}
+		Vector3f d = combat.stepImpulse(dt, nav.grounded());
+		pos.x += d.x;
+		pos.z += d.z;
 	}
 
 	/**
@@ -610,6 +628,36 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 	}
 
 	/** 지상 이동 클립 후보 수집: 이름이 앞으로 걷기/달리기인 루프 클립과 그 블렌드 축 값 (TWK _Cycle, 없으면 ANM +0x14). */
+	/**
+	 * 밀어내기 물리 ({@link Combatant#setImpulsePhysics}): Sold 질량·마찰·밀리지 않음 비트 + 이 적 CombatFileSet (File 0 이 같은 세트) 의
+	 * 충격 배율 #35f40b1b / #7a4a8930 / #df4375e3 (+0x3C/+0x40/+0x44, 0x202868) [확실]. 세트를 못 찾으면 1.
+	 */
+	private void impulsePhysics(Tweaks tw, List<String> combatFiles, AiData.Physics ph) {
+		float sx = 1, sy = 1, sz = 1;
+		int f0 = -1;
+		if (combatFiles != null && !combatFiles.isEmpty()) {
+			try {
+				f0 = Integer.parseInt(combatFiles.get(0).substring(combatFiles.get(0).lastIndexOf('_') + 1));
+			} catch (NumberFormatException e) {
+				f0 = -1;
+			}
+		}
+		for (String n : f0 >= 0 ? tw.nodes("/TweakTemplates/CombatFileSet/") : List.<String>of()) {
+			if (tw.i16(n, "File 0", -2) == f0) {
+				sx = hashF(tw, n, 0x35F40B1B, 1f);
+				sy = hashF(tw, n, 0x7A4A8930, 1f);
+				sz = hashF(tw, n, 0xDF4375E3, 1f);
+				break;
+			}
+		}
+		combat.setImpulsePhysics(ph != null ? ph.mass() : 100f, ph != null ? ph.friction() : 3f, sx, sy, sz, ph != null && ph.immovable());
+	}
+
+	private static float hashF(Tweaks tw, String node, int hash, float def) {
+		java.util.OptionalInt r = tw.rawHash(node, hash);
+		return r.isPresent() ? Float.intBitsToFloat(r.getAsInt()) : def;
+	}
+
 	private void collectLocoClips(AnimationSet set) {
 		java.util.Set<String> names = java.util.Set.of("front", "forward", "walk", "walkfront", "walkforward", "runfront", "runforward", "run");
 		for (AnimationSet.Group g : set.groups) {
@@ -856,16 +904,13 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 		}
 		brain.onHit();
 		boolean unblockable = attacker != null && attacker.move() != null && (attacker.move().flags() & 0x2) != 0;
-		if (!combat.guarding() && !unblockable && brain.tree != null) {
+		// 0x2040F4–0x204124: 방어 자세가 아니고, NO_BLOCK 창 (이벤트 12, +0x1AC & 0x40) 이 아니고, 방어 불가 공격이 아니면 AI 에 묻는다.
+		// 기술 중이어도 묻는다 (가벼운 피격 반응·사티로스 연속기에는 NO_BLOCK 이 없다 — 연속기 도중에 막힌다) [확실: 0x1CBFF8 에 기술 검사 없음]
+		if (!combat.guarding() && !combat.noBlock() && !unblockable && brain.tree != null) {
 			brain.tryBlock(attacker != null && attacker.move() != null ? attacker.move().id() : -1, fromFoe);
 		}
-		Result r = combat.takeHit(attack, attacker, damage);
-		if (r == Result.HIT && nav.grounded() && !stationary) {
-			// 제자리 히드라 (선창 bhh: 뿌리가 바닥 구멍 속 noHero 바닥) 는 밀리지 않는다 — 예전엔 □ 콤보마다 뿌리가 뒤로 밀려
-			// 150 초 싸움에 z 91 → 7 (84) 물러나 기절한 머리가 바닥 끝에서 멀어졌다 (37 문서 §4.3) [근사: 원작 넉백 경로 미확인]
-			pos.add(knock.x / 400f, 0, knock.z / 400f);
-		}
-		return r;
+		// 넉백·방어 밀어내기 = Combatant.takeHit 이 속도로 (0x2039E0), 이동은 update 의 impulseMotion
+		return combat.takeHit(attack, attacker, damage);
 	}
 
 	// ---- CombatOwner ----

@@ -186,7 +186,8 @@ Combat_RequestAction(e.기술);  ai.대기ms = e.pause × RecoveryMult    // 0x1
 ```
 
 ## 7. 방어 [확실 — 0x204124, 0x203248, 0x1CBFF8]
-조건: 피격자가 이미 방어 자세(+0x13 == 1)가 아니고, NO_BLOCK(0x1AC & 0x40)이 아니고, 공격 기술 flags & 2(방어 불가)가 아님.
+조건: 피격자가 이미 방어 자세(+0x13 == 1)가 아니고, NO_BLOCK(0x1AC & 0x40, 이벤트 12 창)이 아니고, 공격 기술 flags & 2(방어 불가)가 아님.
+**자기 기술 중인지는 보지 않는다** (0x1CBFF8 전체에 검사 없음) — 가벼운 피격 반응 (HITFRONT 등) 과 사티로스 공격에는 NO_BLOCK 이 없어 그 도중에도 막는다 (10 문서 §7.5).
 ```
 // 영웅 공격일 때만: BlockMod[i] (Move i, Min, Min Block, Limit), i = 0..9
 n = 영웅기록.count(공격 기술)          // 기술 시작마다 +1, 타이머 40000 갱신, 6칸 (0x1DC780)

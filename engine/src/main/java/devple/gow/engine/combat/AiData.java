@@ -105,6 +105,18 @@ public final class AiData {
 		}
 	}
 
+	/**
+	 * 밀어내기 Sold 필드 ({@link Combatant#setImpulsePhysics}) [확실].
+	 *
+	 * @param mass      +0x84 질량 (영웅 vslot 0xB4 = 0x2437F8): 크라토스·해골·미노타우로스 100, 사이클롭스·하피·히드라 1000, 200·251 10000
+	 * @param friction  +0x88 지상 마찰 계수 (0x1E8F80 → 0x1E0910: 감속 = 계수 × 9.82 × 16): 76 개 3, 3 개 5, 1 개 10
+	 * @param immovable +0x1C 비트 3 (0x2438E8 이 속도를 쓰지 않음): 해골 궁수 031/033/035, 님프 100, 히드라 250/252/253, 660
+	 */
+	public record Physics(float mass, float friction, boolean immovable) {
+		/** 크라토스 Sold_000. */
+		public static final Physics HERO = new Physics(100f, 3f, false);
+	}
+
 	/** BlockMod 항목 하나 (0x19BEF0): 영웅 기술, 최소 횟수, 최소 방어 %, 한계 횟수. */
 	public record BlockEntry(int move, int min, float minBlock, int limit) {
 	}
@@ -114,6 +126,7 @@ public final class AiData {
 	private final Map<Integer, Stone> stones = new HashMap<>();
 	private final Map<Integer, Motion> motions = new HashMap<>();
 	private final Map<Integer, Body> bodies = new HashMap<>();
+	private final Map<Integer, Physics> physics = new HashMap<>();
 	private final Map<Integer, Ride> rides = new HashMap<>();
 
 	public static AiData load(WadFile... wads) {
@@ -150,6 +163,7 @@ public final class AiData {
 					}
 					ByteBuffer sb = soldStruct(t.data(), 0x240);
 					if (sb != null) {
+						physics.put(sid, new Physics(sb.getFloat(0x84), sb.getFloat(0x88), (sb.getInt(0x1C) & 8) != 0));
 						bodies.put(sid, new Body(sb.getFloat(0x234), sb.getFloat(0x238), sb.getFloat(0x23C), sb.getInt(0x1C), cstr(sb, 0xA4)));
 						rides.put(sid, new Ride(sb.getFloat(0xC4), sb.getFloat(0x160), sb.getFloat(0x164), sb.getFloat(0x138),
 								sb.getFloat(0x140), sb.getFloat(0x144)));
@@ -184,6 +198,11 @@ public final class AiData {
 	}
 
 	/** 몸 상자 필드 (없으면 null). */
+	/** 밀어내기 Sold 필드 (없으면 null). */
+	public Physics physics(int id) {
+		return physics.get(id);
+	}
+
 	public Body body(int id) {
 		return bodies.get(id);
 	}

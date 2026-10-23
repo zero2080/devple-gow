@@ -79,6 +79,11 @@ public final class Combatant {
 	}
 	private boolean hitThisFrame;
 	private boolean hitThisMove;
+	/**
+	 * 이벤트 조건 (+0x10) 의 근거 — 원작은 공격자 combatant 의 마지막 적중 / 처치 / 막힘 프레임 (+0xA4 / +0xA0 / +0xA8, 0x209CA0) 이
+	 * "지금 프레임 − 1" 인지 본다 (0x206030 점프표 0x2B9190). 엔진은 접촉 때 켜고 다음 이벤트 처리 ({@link #runEvents}) 가 끈다.
+	 */
+	private boolean pendHit, pendKill, pendHitPlayer, pendBlocked;
 	private float hitPause;
 	private Hittable target;
 	/** 대상 외에 같은 공격 판정을 받는 개체 (ATHN08B 가족 660: 분신 공격에 휘말림 — CombatFile 661 의 피격 분기 tgt=666). */
@@ -447,6 +452,9 @@ public final class Combatant {
 		}
 		if (hitPause > 0) {
 			hitPause -= dt;
+			if (move != null && (pendHit || pendKill || pendHitPlayer || pendBlocked)) {
+				runEvents(progress()); // 원작 0x206030 은 히트스톱 (개체 시간 0.01) 중에도 매 프레임 — 적중 다음 프레임의 조건 이벤트
+			}
 			return;
 		}
 		float t = progress();
@@ -890,6 +898,22 @@ public final class Combatant {
 				// 넘어지기만 해도 사망시켰다 (머리 뜯기 260 의 것은 cond 0, 자동 플레이 43 문서)
 				continue;
 			}
+			// 조건 1–5 (0x206030 점프표 0x2B9190) [확실]: 1 적중 프레임마다 / 2 적중 1 회 / 3 처치 / 4 플레이어에게 적중 / 5 막힘 —
+			// 이 전투원의 마지막 적중 (+0xA4)·처치 (+0xA0)·막힘 (+0xA8) 프레임이 직전 프레임일 때만. 예전 엔진은 SOUND·HIT_PAUSE·GOD_METER 등을
+			// 조건 없이 창 안에서 냈다: DASHMULTISTAB 의 막힘 전용 HIT_PAUSE 0.04 가 적중용 0.06 을 덮고, 막힘 흔들림·진동이 휘두를 때마다 났다
+			boolean ok = switch (e.cond()) {
+				case 1, 2 -> pendHit;
+				case 3 -> pendKill;
+				case 4 -> pendHitPlayer;
+				case 5 -> pendBlocked;
+				default -> true;
+			};
+			if (!ok) {
+				continue;
+			}
+			if ((e.type() == 5 || e.type() == 7) && (e.cond() == 1 || e.cond() == 2)) {
+				continue; // 적중 조건 흔들림·전역 시간은 접촉 순간에 이미 (contact)
+			}
 			// 11 CAMERA_FRAME 은 once 비트를 다시 지워 창 안에서 매 프레임 (0x2069F8)
 			boolean once = e.type() != 11 && (e.cond() == 0 || e.cond() == 2 || e.cond() == 6);
 			if (once && !firedEvents.add(e.bit())) {
@@ -902,22 +926,119 @@ public final class Combatant {
 			switch (e.type()) {
 				case 20 -> stanceTag = e.index(); // SET_1B0: 공격 자세 태그 → 피격자 반응 분기 선택
 				case 3, 40 -> soundSink.accept(e.hash(), owner.position()); // SOUND
-				case 21 -> {
-					if ((e.cond() != 1 && e.cond() != 2) || hitThisFrame) {
-						(godMeterOwner != null ? godMeterOwner : this).addGodMeter(e.b()); // GOD_METER_ADD
-					}
-				}
+				case 21 -> (godMeterOwner != null ? godMeterOwner : this).addGodMeter(e.b()); // GOD_METER_ADD (조건은 위에서)
 				case 24 -> hitPauseEvent = e; // HIT_PAUSE: 적중 때 공격자·피격자 양쪽 (contact)
 				case 11 -> frameSink.accept(e.b()); // CAMERA_FRAME (0x2069F8 → 0x337C24 → 카메라 관리자 +0x7A4)
-				case 5, 7 -> {
-					if (e.cond() != 1 && e.cond() != 2) {
-						presentation(e); // 조건 없는 것은 창에서, 적중 조건 (1·2) 은 contact 에서
-					}
-				}
+				case 5, 7 -> presentation(e); // 조건 없는 것·막힘/처치 조건은 여기, 적중 조건 (1·2) 은 contact 에서
 				default -> {
 				}
 			}
 		}
+		pendHit = pendKill = pendHitPlayer = pendBlocked = false;
+	}
+
+	/**
+	 * NO_BLOCK (이벤트 12, 0x1AC |= 0x40) 창 안인가 — 원작은 매 프레임 0x206030 이 비트를 지우고 (0x2061AC: &amp; 0x5400) 창 안 이벤트가 다시 켠다.
+	 * OnContact (0x2040FC) 와 0x203248 은 이 비트가 있으면 AI 자동 방어 (0x1CBFF8) 를 묻지 않는다 [확실].
+	 * 데이터: 미노타우로스·켄타우로스·다이버 공격 기술과 무거운 피격 (HITSPIN/BOUNCE/LAUNCH/LAND/AIR) 은 전 구간 NO_BLOCK,
+	 * 가벼운 피격 (HITFRONT/BACK/LEFT/RIGHT, 일부 HITSTAGGER) 과 사티로스 공격 기술은 없음 → 맞는 도중·자기 연속기 도중에도 막는다.
+	 */
+	public boolean noBlock() {
+		return move != null && eventActive(12);
+	}
+
+	// ---------------- 밀어내기 (충격 속도) ----------------
+
+	/** 원작 owner +0xF0 (밀어내기 속도, 월드 단위/초) — 0x2039E0 이 덮어쓰고 이동 단계가 위치에 더한다. y 는 쓰지 않음 [근사]. */
+	private final Vector3f impulse = new Vector3f();
+	/** Sold +0x84 질량 (크라토스·해골·미노타우로스 100, 사이클롭스·하피 1000) / +0x88 지상 마찰 계수 (거의 3) / CombatFileSet 충격 배율. */
+	private float impMass = 100f, impFriction = 3f, impSx = 1f, impSy = 1f, impSz = 1f;
+	/** Sold +0x1C 비트 3 (0x2438E8: 0x243700 → +0x1C &amp; 8) — 밀리지 않음 (해골 궁수 031/033/035, 히드라 250/252/253 …). */
+	private boolean immovable;
+
+	/**
+	 * 밀어내기 물리 값. 기본 = 크라토스 (Sold_000 질량 100·마찰 3, CombatFileSet 000 배율 1/1/1) [확실: 데이터].
+	 *
+	 * @param sx CombatFileSet #35f40b1b (+0x3C, 옆) / {@code sy} #7a4a8930 (+0x40, 위) / {@code sz} #df4375e3 (+0x44, 앞) — 0x202868 [확실]
+	 */
+	public void setImpulsePhysics(float mass, float friction, float sx, float sy, float sz, boolean immovable) {
+		this.impMass = mass > 0 ? mass : 100f;
+		this.impFriction = friction;
+		this.impSx = sx;
+		this.impSy = sy;
+		this.impSz = sz;
+		this.immovable = immovable;
+	}
+
+	/** 지금 밀어내기 속도 (읽기 전용으로 쓸 것). */
+	public Vector3f impulse() {
+		return impulse;
+	}
+
+	/**
+	 * 0x2039E0 (← OnContact 방어 0x204164, 피격 반응 0x204458) [확실]: 0x203890 이 공격자 → 피격자 수평 방향 z' 와 위 (0, 1, 0), 옆 x' = 위 × z' 로
+	 * v = z'·vec.z·sz + 위·vec.y·sy + x'·vec.x·sx 를 만들고, ÷ 질량 (vslot 0xB4 = Sold +0x84) × 16 을 속도 +0xF0 에 <b>덮어쓴다</b> (0x2438E8,
+	 * Sold 비트 3 이면 무시). 재생 속도 상태 (+0x2C/+0x30/+0x34, 이벤트 14) 도 1 로 되돌린다.
+	 * 공격 플래그 0x4 (+0x1A) 면 방향 = 공격자 정면 (−행렬 2행 [추정: 정면]) − 0.3·정규화(피격자 − 공격자) (0x204044).
+	 *
+	 * @param base 0 지상 피격 / 3 공중 피격 / 6 방어 (Attack +0x00 / +0x06 / +0x0C)
+	 */
+	void push(Combatant attacker, Attack a, int base) {
+		if (attacker == null || attacker.owner == null || a.impulse() == null || a.impulse().length < base + 3) {
+			return;
+		}
+		Vector3f me = owner.position(), at = attacker.owner.position();
+		float dx = me.x - at.x, dz = me.z - at.z, len = (float) Math.hypot(dx, dz);
+		float ay = attacker.owner.yaw();
+		float fx = (float) -Math.sin(ay), fz = (float) -Math.cos(ay);
+		if (len < 1e-4f) {
+			dx = fx;
+			dz = fz;
+		} else {
+			dx /= len;
+			dz /= len;
+		}
+		if ((a.flags() & 0x4) != 0) {
+			dx = fx - 0.3f * dx;
+			dz = fz - 0.3f * dz;
+		}
+		float n = (float) Math.hypot(dx, dz);
+		if (n < 1e-4f) {
+			return;
+		}
+		dx /= n;
+		dz /= n;
+		float[] v = a.impulse();
+		float side = v[base] * impSx, fwd = v[base + 2] * impSz;
+		// x' = 위 × z' = (z'.z, 0, −z'.x)
+		float k = 16f / impMass;
+		if (immovable) {
+			return;
+		}
+		impulse.set((dx * fwd + dz * side) * k, 0, (dz * fwd - dx * side) * k);
+	}
+
+	/**
+	 * 한 프레임 밀어내기 이동량 (월드). 지상이면 0x1E8F80 → 0x1E0910 감속: |v| &gt; 1.6 이면 v ×= clamp(1 − 마찰·9.82·16·dt / |v|, 0, 1),
+	 * 아니면 0 (쿨롱 마찰 — 크라토스 470 단위/초²: 방어 (0,0,1000) → 160 단위/초, 0.34 초에 27 단위). 공중 (+0x174 &amp; 0x4C) 은 줄지 않는다 [확실].
+	 * [추정: 시간 배율 vslot 0xC8 / +0x16C = 1]
+	 */
+	public Vector3f stepImpulse(float dt, boolean grounded) {
+		Vector3f d = new Vector3f(impulse.x * dt, 0, impulse.z * dt);
+		if (grounded) {
+			float s = (float) Math.hypot(impulse.x, impulse.z);
+			if (s > 1.6f) {
+				impulse.mul(Math.max(0f, Math.min(1f, 1f - impFriction * 9.82f * 16f * dt / s)));
+			} else {
+				impulse.zero();
+			}
+		}
+		return d;
+	}
+
+	/** 밀어내기 속도를 버린다 (매달림·줄·동기 등 이동 단계가 다른 상태). */
+	public void clearImpulse() {
+		impulse.zero();
 	}
 
 	/**
@@ -1019,7 +1140,9 @@ public final class Combatant {
 			if (hitLog.add(((long) System.identityHashCode(b) << 16) | a.index())) {
 				float dmg = a.damage() * damageScale.get();
 				Vector3f knock = new Vector3f(a.impulse()[0], a.impulse()[1], -a.impulse()[2]).rotateY(owner.yaw());
+				boolean alive = b.hp() > 0;
 				Hittable.Result r = b.receive(a, this, dmg, knock);
+				noteContact(b, r, alive);
 				log.accept(String.format("  휘말림 공격#%d → 피해 %.1f (%s)", a.index(), dmg, r));
 			}
 		}
@@ -1101,7 +1224,9 @@ public final class Combatant {
 					} else {
 						float dmg = a.damage() * damageScale.get();
 						Vector3f knock = new Vector3f(a.impulse()[0], a.impulse()[1], -a.impulse()[2]).rotateY(owner.yaw());
+						boolean alive = v.hp() > 0;
 						Hittable.Result r = v.receive(a, this, dmg, knock);
+						noteContact(v, r, alive);
 						log.accept(String.format("  사슬 휘말림 공격#%d → 피해 %.1f (%s)", a.index(), dmg, r));
 					}
 				}
@@ -1110,16 +1235,29 @@ public final class Combatant {
 		return n;
 	}
 
+	/** 접촉 결과를 이벤트 조건 근거로 (적중 +0xA4 / 처치 +0xA0 — 0x2032C0, 막힘 +0xA8 — 0x209CA0, 마지막 적중 상대 = 플레이어 → 조건 4). */
+	private void noteContact(Hittable victim, Hittable.Result r, boolean wasAlive) {
+		if (r == Hittable.Result.HIT) {
+			pendHit = true;
+			pendHitPlayer |= victim.classId() == 0;
+			pendKill |= wasAlive && victim.hp() <= 0;
+		} else if (r == Hittable.Result.BLOCKED) {
+			pendBlocked = true;
+		}
+	}
+
 	/** OnContact (10 문서 §15.4) 공격자 쪽. */
 	private void contact(Attack a) {
 		float dmg = a.damage() * damageScale.get();
 		// 충격 벡터 (x 좌우, y 상하, z 전후 — 추정) 를 공격자 방향으로 회전
 		Vector3f knock = new Vector3f(a.impulse()[0], a.impulse()[1], -a.impulse()[2]).rotateY(owner.yaw());
 		Hittable victim = target;
+		boolean alive = victim.hp() > 0;
 		Hittable.Result r = target.receive(a, this, dmg, knock);
 		for (ContactListener l : contactListeners) {
 			l.contact(a, victim, r);
 		}
+		noteContact(victim, r, alive);
 		if (r == Hittable.Result.HIT) {
 			hitThisFrame = hitThisMove = true;
 			if (dmg > 0) {
@@ -1153,9 +1291,15 @@ public final class Combatant {
 			return Hittable.Result.IGNORED;
 		}
 		int aflags = attacker.move != null ? attacker.move.flags() : 0;
-		if (guarding() && (aflags & 2) == 0) {
-			fire(CombatInput.EV_BLOCKED, a.blockReaction(), attacker);
-			return Hittable.Result.BLOCKED;
+		if (guarding()) {
+			// 0x204158: 방어 자세 (기술 +0x13 == 1) 면 방향과 관계없이 (뒤에서 맞아도 — 각도 검사 없음 [확실]) 방어 밀어내기 (+0x0C) 부터.
+			// 방어 불가 공격 (기술 flags & 2: 사이클롭스 전 공격, 세이렌 비명, 히드라 물기, 영웅 GRAB·COMBO5A·신 모드 7xx) 이면 이어서 피해·반응
+			push(attacker, a, 6);
+			if ((aflags & 2) == 0) {
+				// 막힘: 피해 없음 (깎이는 피해 없음), 히트스톱 없음 — 피격자 이벤트 16 (인자 = 공격 +0x1B, 1 = BLOCKBREAK), 공격자 22 (0x2042E4)
+				fire(CombatInput.EV_BLOCKED, a.blockReaction(), attacker);
+				return Hittable.Result.BLOCKED;
+			}
 		}
 		accumDamage += dmg;
 		boolean react = (aflags & 6) != 0 || move == null || (move.poise() != -1 && accumDamage > move.poise());
@@ -1164,6 +1308,13 @@ public final class Combatant {
 		if (react || kill || circle) {
 			fire(kill ? CombatInput.EV_DEATH : circle ? CombatInput.EV_CIRCLE : CombatInput.EV_HIT,
 					kill ? a.death() : a.reaction(), attacker);
+			// 0x2044FC: 반응이 난 피격만 넉백 — 지상 (+0x174 & 3) 은 +0x00, 공중 (& 0x4C) 은 +0x06, 벽·줄은 없음
+			int st = owner.stateMask();
+			if ((st & 0x2) != 0) {
+				push(attacker, a, 0);
+			} else if ((st & 0x4) != 0) {
+				push(attacker, a, 3);
+			}
 		}
 		return Hittable.Result.HIT;
 	}

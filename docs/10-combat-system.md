@@ -166,12 +166,12 @@ WAD 태그 0x72(`Tag_TweakRef` 0x17EC48): `u32 1`, `cstr "/TweakTemplates/Combat
 |---|---|---|
 | 0x00 | half[3] | 지상 피격 충격 벡터 (x, y, z) — 피격자 지상일 때 `sub_002039e0` |
 | 0x06 | half[3] | 공중 피격 충격 벡터 |
-| 0x0C | half[3] | 방어 시 밀어내기 벡터 (보통 (0,0,1000)) |
+| 0x0C | half[3] | 방어 시 밀어내기 벡터 (보통 (0,0,1000)) — 방어 자세면 방어 불가 공격이어도 적용 (§7.2) [확실: 0x204164] |
 | 0x12/0x14 | u16 | 판정 시작/끝 진행률 |
 | 0x16 | s16 | MFX 템플릿(재질별 타격 이펙트·사운드, flags&2) 예 520 |
 | 0x18 | s8 | 판정 부위 인덱스(무기/히트박스 번호와 일치해야 함) |
 | 0x19 | s8 | **기본 피해** |
-| 0x1A | u8 | 0x1 락온 타깃만 맞음, 0x2 MFX, 0x4 공격자 방향 보정, 0x8 특수 |
+| 0x1A | u8 | 0x1 락온 타깃만 맞음, 0x2 MFX, 0x4 밀어내기 방향 = 공격자 정면 − 0.3·(피격자 쪽) (0x204044, §7.1), 0x8 같은 편도 맞음 (0x203798) |
 | 0x1B | s8 | 막혔을 때 반응 종류(이벤트 16 인자, 1 = 가드 브레이크 → BLOCKBREAK) |
 | 0x1C | s8 | 피격 반응 종류(이벤트 13/21 인자) |
 | 0x1D | s8 | 사망 종류(이벤트 14 인자) |
@@ -188,7 +188,7 @@ WAD 태그 0x72(`Tag_TweakRef` 0x17EC48): `u32 1`, `cstr "/TweakTemplates/Combat
 | 0x0C | s16 | 템플릿 인덱스 (CameraShake/ForceFeedback/PlayFX 등) |
 | 0x0E | s8 | 발동 확률 % |
 | 0x0F | s8 | 종류 (아래) |
-| 0x10 | s8 | 조건: 0 항상(1회) 1 내 공격 적중 프레임마다 2 적중(1회) 3 처치 4 플레이어에게 적중 5 막힘 6 사망 (자기 HP ≤ 0 일 때만 — 메두사 여왕 피격 동작 hitLand·hitBounce·hitLaunch 의 SCR_ExplodeDeath 가 6, 사망·머리 뜯기 동작의 것은 0 [데이터]) |
+| 0x10 | s8 | 조건 (§7.4, 직전 프레임의 접촉 기록으로): 0 항상(1회) 1 내 공격 적중 프레임마다 2 적중(1회) 3 처치 4 플레이어에게 적중 5 막힘 6 사망 (자기 HP ≤ 0 일 때만 — 메두사 여왕 피격 동작 hitLand·hitBounce·hitLaunch 의 SCR_ExplodeDeath 가 6, 사망·머리 뜯기 동작의 것은 0 [데이터]) |
 | 0x11 | s8 | 필요 무기 레벨 |
 | 0x12 | u8 | 0x1 무기 레벨별 템플릿, 0x2 거리 조건 |
 
@@ -199,7 +199,7 @@ WAD 태그 0x72(`Tag_TweakRef` 0x17EC48): `u32 1`, `cstr "/TweakTemplates/Combat
 | 3 / 40 | SOUND | 사운드 재생 (hash) | 확실 |
 | 5 / 6 | CAMERA_SHAKE / FORCE_FEEDBACK | 플레이어만, idx = 템플릿 | 확실 |
 | 9 | **INVULNERABLE** | combatant.0x1AC \|= 2 → 구간 동안 피격 무시 | 확실 |
-| 12 | NO_BLOCK | 0x1AC \|= 0x40 (자동 방어 불가) | 추정 |
+| 12 | NO_BLOCK | 0x1AC \|= 0x40 — 창 안에서만 (매 프레임 비트 초기화 0x2061AC). OnContact 0x2040FC·0x203248·투사체 0x190ED4 가 AI 자동 방어를 묻지 않음 (§7.5) | 확실 |
 | 14 | ANIM_SPEED | 재생 속도 목표 b, 지속 a초 (0x2059C0 에서 0.1 비율로 보간) | 확실 |
 | 17 / 18 | TRAIL_LEFT / RIGHT | 블레이드 트레일 | 확실(CombatFileSet "Trail Left/Right" 와 같은 비트) |
 | 20 | SET_1B0 | **공격 자세 태그** = idx (피격자의 반응 분기 +0x18 이 이것을 봄) | 확실 |
@@ -239,6 +239,7 @@ WAD 태그 0x72(`Tag_TweakRef` 0x17EC48): `u32 1`, `cstr "/TweakTemplates/Combat
 
 ### 3.2 CombatFileSet 템플릿 (0x202868) [확실]
 `/TweakTemplates/CombatFileSet/NNN/`: `File 0..7`(short, -1 = 없음), `Invulnerable`(0x595AD8AD), `Trail Left/Right`, `Reticle Scale`, `Target Weight`, `Circle Scale` 등.
+충격 배율 (밀어내기·넉백 0x203890, §7.2): #35f40b1b → +0x3C (옆 x), #7a4a8930 → +0x40 (위 y), #df4375e3 → +0x44 (앞 z). +0x34 기본 상태 비트: #4e16ee9c 0x1, Invulnerable 0x2, Trail Left 0x8, Trail Right 0x10, #ee25120b 0x2000 [확실: 0x202940–0x202A1C].
 영웅 = Set 000 "Hero": File 0–6 = CombatFile 000–006.
 
 | 파일 | ID | 내용 |
@@ -352,7 +353,7 @@ if owner.HP <= 0 and 큐 비었음: 이벤트 14(사망) 분기 → 큐
 1. 공격자 현재 기술의 공격 구간 중 (부위 일치, 진행률 ∈ [start,end], 같은 상대에게 아직 안 맞음) 인 것을 찾음(0x209AB0). flags&1 이면 락온 타깃만.
 2. 피격자 0x1AC&2(**무적**) 이거나 전역 정지(0x1BF108)면 무시.
 3. **방어 판정**: 피격자 현재 기술 guard == 1 (또는 AI 자동 방어 `sub_00203248`/BlockMod) 이고 공격자 기술 flags&2(방어 불가)가 아니면 **막힘**:
-   - 피격자 밀어내기 = 공격.+0x0C 벡터, 피격자 이벤트 16(react = 공격.+0x1B), 공격자 이벤트 22. **피해 없음**.
+   - 피격자 밀어내기 = 공격.+0x0C 벡터, 피격자 이벤트 16(react = 공격.+0x1B), 공격자 이벤트 22. **피해 없음**. 각도 검사 없음 (뒤에서도 막음), 방어 불가여도 밀어내기는 먼저 — 자세한 것은 §7.
 4. 막히지 않음(또는 가드 브레이크): `Combat_ApplyHit` 0x2032C0 → 피해·반응, 공격자 이벤트 17.
 
 ### 5.1a 부위(Attack.part)와 히트박스 [확실 — 0x13C400, 0x13AAA8, 0x139008, 0x203150, 0x1BED34]
@@ -446,18 +447,81 @@ m = Difficulty.AIDamageMult × Costume.AIDamageMult × (GodMode ? WeaponLevel[lv
 
 ---
 
-## 7. 방어 · 패리 · 가드 브레이크 [확실: 데이터 + 0x203AF0]
+## 7. 방어 체계 (방어 · 패리 · 가드 브레이크 · 밀어내기 · 적 방어)
+
+엔진 구현·검증은 26 문서 §10, 적 쪽 AI 는 17 문서 §7. 태그: [확실] = 디스어셈블·데이터로 확인, [추정] = 근거 있는 해석, [근사] = 엔진이 단순화.
+
+### 7.1 접촉 한 번의 방어 판정 — `Combat_OnContact` 0x203AF0 [확실]
+```
+공격 판정 찾기 0x209AB0 (부위·진행률·같은 상대 1 회) → 없으면 끝
+피격자 무적 (0x2441E0 비트 2) 또는 전역 정지 (0x1BF108) → 끝
+d = 피격자 위치 − 공격자 위치                                   // 0x20402C (vsub)
+if (공격 +0x1A & 4) d = 공격자 정면 (−행렬 2행) − 0.3·정규화(d)  // 0x204044 [확실: 식 / 추정: −2행 = 정면]
+접촉 재질 +0x3376F0 비트 1 없으면 끝 (기록만)                    // 0x2040A8
+기록 (상대, 공격) 0x209C50
+guard = 피격자 현재 기술 +0x13 == 1                              // 0x2040DC
+if (!guard && !(피격자 +0x1AC & 0x40 NO_BLOCK) && !(공격자 기술 flags & 2))
+    if (0x203248(피격자, 공격자, 공격자 기술 ID)) guard = (새 기술 +0x13 == 1)   // AI 자동 방어 → 즉시 실행 0x205190
+if (guard) {
+    0x2039E0(피격자, d, 공격 +0x0C)          // 방어 밀어내기 — 방어 불가여도 먼저
+    if (공격자 기술 flags & 2) → ApplyHit 0x2032C0 (피해·반응·넉백, 공격자 이벤트 17)   // 방어 불가
+    else {
+        피격자 이벤트 16 (인자 = 공격 +0x1B, 공격자 자세 태그·종류·HP)    // 0x20426C
+        공격자 +0x9E 막힘 수 ++, +0xA8 = 이번 프레임 (0x209CA0)
+        공격자 이벤트 22 (상대 = 피격자)                                    // 0x2042E4
+        피해 없음, 히트스톱 없음 (0x203688 은 ApplyHit 안), 반환 0
+    }
+} else ApplyHit → 반응 이벤트 (13/14/21) + 넉백 0x204458, 공격자 이벤트 17
+```
+- **방향 검사 없음**: 각도·정면 판정이 없다. 방어 자세면 뒤·옆에서 온 공격도 막는다 (360°) [확실: 0x203AF0 전체에 방향 비교 없음].
+- **깎이는 피해 (chip) 없음**: 막힌 공격은 피해 0 [확실].
+- **방어 불가** = 공격자 **기술** flags & 2 (공격 판정이 아니라 기술 단위). 데이터 (전 WAD 조사): 사이클롭스 공격 전부 (ATTACKSWIPE·SLAM·FOOTSMASH·CY2SWIPE·SHOULDERRAM·TRIPLESMASH …), 세이렌 SIRSCREAM, 해골 WALLLEAP·ROPELEAP, 히드라 보스 물기·내려치기 (BHABOSS*), 켄타우로스 궁수 LEAPATTACK; 영웅 GRAB 200·COMBO5A 22 (○, 0x106)·공중 잡기·처형 MAISKB*·**신 모드 700–716 전부**. → 영웅의 ○ 는 적 방어를 뚫는다 [확실: 데이터].
+- **막혔을 때 반응** (+0x1B): 1 = 영웅 BLOCKBREAK 35 / 2 = 벽·줄 잡기 (영웅 WALLGRAB*·ROPEHOHGRAB). 1 을 가진 방어 가능한 적 공격은 해골 GRABHERO00·GRABMISS 뿐 (나머지 1 은 어차피 방어 불가 기술) → 영웅 가드 브레이크는 해골 잡기에 막을 때 [확실: 데이터].
+
+### 7.2 밀어내기 · 넉백 — 0x2039E0 / 0x203890 / 0x2438E8 / 0x1E8F80 [확실]
+- 0x203890: z' = 수평 정규화(d), 위 = (0,1,0), x' = 위 × z'. v = z'·vec.z·Sz + 위·vec.y·Sy + x'·vec.x·Sx. S = CombatFileSet 충격 배율 (+0x3C 옆 #35f40b1b, +0x40 위 #7a4a8930, +0x44 앞 #df4375e3, 0x202868 — 영웅·미노타우로스·사티로스 1/1/1, 보스 등 26 세트 0).
+- 0x2039E0: v ÷ 질량 (vslot 0xB4 = 0x2437F8 → Sold +0x84) × 16 → owner vslot 0x4C (0x2438E8) 가 **속도 +0xF0 에 덮어쓴다** (Sold +0x1C 비트 3 이면 무시). 재생 속도 상태 (+0x2C/+0x30 = 1, +0x34 = 0, 이벤트 14) 도 초기화.
+- 지상 이동 0x1EAEC8: +0xE0 = 스틱 속도 + +0xF0 (이번 이동에 더함), +0xF0.y = 0. 공중 0x1EB3D8 도 같고 줄이지 않는다.
+- 지상 감속 0x1E8F80 → 0x1E0910: |v| > 1.6 이면 v ×= clamp(1 − μ·9.82·16·k / |v|, 0, 1), 아니면 0. μ = Sold +0x88 (76 개 3, 3 개 5, 1 개 10), k = dt × (0.75 + 0.25·vslot 0xC8) × +0x16C [추정: 시간 배율 = 1] — **쿨롱 마찰**.
+- Sold 질량: 크라토스·해골·미노타우로스·사티로스 100, 사이클롭스·하피·히드라 머리 1000, 200·251 10000. 밀리지 않음 (비트 3): 해골 궁수 031/033/035, 님프 100, 히드라 250/252/253, 660.
+- 예: 영웅이 막은 공격 +0x0C = (0, 0, 1000) (미노타우로스·해골 거의 전부) → 160 단위/초, 471 단위/초² 로 0.34 초 동안 **27 단위** 뒤로 미끄러진다. (0,0,1500) 이면 61 단위.
+- 피격 넉백 (0x204458): 반응 이벤트를 낸 피격만 (ApplyHit 반환 & 2). 지상 (+0x174 & 3) +0x00, 공중 (& 0x4C) +0x06, 벽·줄은 없음.
+- 투사체 (0x1909C8): 투사체 플래그 +0x54 비트 6 = 방어 불가, 아니면 방어 자세 또는 AI 자동 방어 (0x203248, 두 번째 BlockMod 표) → 0x1907D0 (밀어내기 투사체 +0x24, 이벤트 16 0x204550). [엔진: 적 투사체 미구현]
+
+### 7.3 영웅 방어 그래프 [확실: 데이터 R_PERMK]
 | 상황 | 결과 |
 |---|---|
-| L1 홀드 시작 | PARRY01(48, guard=1) — 이 애니 동안 막으면 **PARRY02(59, 반격)** |
-| PARRY01 끝까지 홀드 | BLOCK(33, guard=1, poise -1) — 막으면 BLOCKREACTION(34) |
-| 공격.blockReaction == 1 | BLOCKBREAK(35) (방어 깨짐) |
-| 공격자 기술 flags&2 | 방어 불가: guard 여도 피해·반응 적용 |
-| L1 뗌 | IDLECOMBAT |
-| 방어 중 오른쪽 스틱 | 회피(즉시) |
+| L1 (대기·대부분 기술의 캔슬 창, `L1/hold`) | PARRY01 48 (guard 1, poise 0). 공격 중에도 창 (보통 0.6–1.0, 일부 0.0–1.0) 에서 바로 |
+| PARRY01 중 막음 (이벤트 16) | **PARRY02 59 = 패리 반격**: guard 1·슈퍼아머, 공격 판정 part 9 피해 0 (자세 태그 7 → 적 HITSTAGGER 107 등), GLOBAL_TIME 0.3 초 × 0.05 (느려짐), SND_CHAINSNAP_WCLANK_A; 0.2–0.8 에 □ BRUTAL1·△ COMBO7A·R1 DASHMULTISTAB·○ GRAB 즉시 (lv≥2) |
+| 패리 창 | PARRY01 애니 전체 (분기 [0, 1]). 별도 타이머·프레임 창 없음 — "L1 을 누른 직후 짧은 자세" 가 곧 창 |
+| PARRY01 끝까지 홀드 | BLOCK 33 (guard 1, poise −1) — 막으면 BLOCKREACTION 34 (guard 1, CAMERA_SHAKE 1·FORCE_FEEDBACK 0·SND_BLADEBLOCK·#bbbfa8cc, 발 먼지 ATTACH) |
+| 막힘 반응 1 | BLOCKBREAK 35 (guard 0, flags 0x190, 자세 태그 25, CAMERA_SHAKE 2·FF 2·SND_HERO_GETHITVOC_A) |
+| 방어 불가 기술 | guard 여도 피해·반응 (BLOCK 의 poise −1 도 flags & 6 이 무시) |
+| L1 뗌 | IDLECOMBAT 80 (BLOCK `L1/not-held` 즉시) |
+| 방어 중 오른쪽 스틱 / L1+□△×○ / 마법 | 회피 514–517 즉시 / BLOCK360·BLOCKFORWARDFLIP·BLOCKLAUNCHER·IMPALESLAMCHARGE (무기 레벨) / 마법 |
+| 공중 L1 | AIRBLOCK 77 (guard 1) |
+| 아르테미스의 검 | BERBLOCKPARRY 580 → BERBLOCKIDLE 581, 막음 BERBLOCKHIT01 582–584 (모두 guard 1) |
 
-패리 판정 창 = PARRY01 애니 길이 전체(분기 [0,1]); 애니 길이는 ANM 데이터(05 단계) 필요.
-적 AI 의 방어는 AI1 "Block"(확률 %, 예 미노타우르스 40) + BlockMod 템플릿(`Move N` …) 으로 결정 [추정].
+막힘 연출은 별도 불꽃 코드가 없다: 0x203AF0 의 방어 분기는 MFX (0x2034CC, ApplyHit 안) 를 부르지 않는다. 소리·흔들림은 피격자 반응 기술 이벤트 (BLOCKREACTION) 와 공격자 기술의 **조건 5 (막힘)** 이벤트 (예 DASHMULTISTAB: HIT_PAUSE 0.04·CAMERA_SHAKE 0·FORCE_FEEDBACK 0, COMBO 계열 FORCE_FEEDBACK 0) 뿐 [확실].
+
+### 7.4 이벤트 조건 (+0x10) — 0x206030 점프표 0x2B9190 [확실]
+| 조건 | 코드 | 발동 |
+|---|---|---|
+| 0 | 0x206394 | 창 안 1 회 |
+| 1 | 0x2062AC | 마지막 적중 프레임 (+0xA4) + 1 == 지금 — 적중마다 |
+| 2 | 0x2062B4 | 같은 조건, 1 회 |
+| 3 | 0x2062D4 | 마지막 처치 프레임 (+0xA0) + 1 == 지금 |
+| 4 | 0x2062DC | 적중 다음 프레임이고 마지막 기록 상대 (+0xA4 + 8·n) == 플레이어 |
+| 5 | 0x206358 | 마지막 **막힘** 프레임 (+0xA8, 0x209CA0) + 1 == 지금 |
+| 6 | 0x206378 | 자기 HP ≤ 0, 1 회 |
+그 뒤 확률 (+0x0E, 0x13E6B0) 과 무기 레벨 (+0x11 ≤ 0x3044BD) 검사. 매 프레임 시작에 +0x1AC 를 (& 0x5400) | 세트 기본값으로 되돌리고 (0x2061AC), +0x44 히트스톱 이벤트와 +0x1B0 자세 태그를 지운다 → NO_BLOCK (12)·무적 (9) 은 **창 안에서만** 켜진다.
+
+### 7.5 적 방어 [확실: 0x203248, 0x1CBFF8, 데이터]
+- 0x203248: combatant +0x38 (AI 콜백) 이 있고 +0x1AC & 0x40 (NO_BLOCK) 이 아니면 vslot +0x0C = AI_OnIncomingAttack 0x1CBFF8 → 요청 성공이면 0x205190 으로 **같은 접촉 안에서** 방어 기술 실행.
+- 0x1CBFF8: (공격자 = 플레이어면) BlockMod 학습 → 그 다음 `rand × 100 ≤ Block` (AI1 +0x70, ctx +0x68) 이면 결정 트리 행동 노드 방어 목록 (0x229660) 에서 골라 Combat_RequestAction 0x209378. **자기 기술 중인지 보지 않는다** — 막지 못하는 때는 기술 데이터의 NO_BLOCK 창이 정한다.
+- NO_BLOCK 데이터: 미노타우로스·켄타우로스·다이버 공격 기술, 모든 적의 무거운 피격 (HITSPIN/BOUNCE/LAUNCH/LAND/AIR, 일부 HITSTAGGER·HITGETUP), 사망은 전 구간. **가벼운 피격 HITFRONT/BACK/LEFT/RIGHT 120–123·HITSTAGGER 101/108/112/115/117 와 사티로스 공격 (COMBO01–08, DASH …) 에는 없다** → 미노타우로스 (Block 40%)·사티로스 (15%)·켄타우로스 (15%)·고르곤 (20%) 은 □ 연속기 도중 매 타 확률로 막고, 미노타우로스 BLOCK 17 은 막은 뒤 0.2–1.0 에 BLOCKSHOVE 13 (밀쳐내기, 방어 불가 아님) 또는 BLOCK 재시작.
+- 적 방어를 뚫는 법: 방어 불가 기술 (○ GRAB/COMBO5A, 신 모드), NO_BLOCK 을 거는 무거운 피격으로 띄우기·넘어뜨리기 (BLOCKLAUNCHER 7, △ 계열) — 단 BlockMod 가 같은 기술 반복을 학습 (미노 BLOCKLAUNCHER 3 회 초과부터 50 %→ 9 회면 100 %).
+- 적 방어 기술 (guard 1): 미노타우로스 BLOCK 17/27/37/47/57, 해골 SKSBLOCKSWORD·SKBBLOCK·SKBBLOCKSHOVE·BLOCK 60–62, 사티로스 BLOCK01–04·EVADE*, 켄타우로스 CNMBLOCK*, 고르곤 MEWSLITHERBACK·EVADE*, 세이렌 SIREVADE*, 다이버 BLOCK·EVADE (회피도 guard 1 이라 "막음" 으로 처리).
 
 ---
 
@@ -675,11 +739,14 @@ final class Combatant {
 ```
 OnContact(att, vic, attack):
 	if (vic.flags1ac & 2) return;                                   // 무적
-	boolean guard = vic.move != null && vic.move.guard() == 1;
-	if (guard && (att.move.flags() & 2) == 0) {
-		knockback(vic, attack.impulse[6..8]);
-		fire(vic, 16, react=attack.blockReaction, ...);  att.lastBlockedFrame = frame; fire(att, 22, ...);
-		return;
+	boolean guard = vic.move != null && vic.move.guard() == 1;      // 방향 검사 없음 (§7.1)
+	if (!guard && !vic.noBlock && (att.move.flags() & 2) == 0 && vic.ai.onIncomingAttack(att)) guard = vic.move.guard() == 1;
+	if (guard) {
+		knockback(vic, d, attack.impulse[6..8]);                    // 방어 불가여도 먼저 (§7.2)
+		if ((att.move.flags() & 2) == 0) {
+			fire(vic, 16, react=attack.blockReaction, ...);  att.lastBlockedFrame = frame; fire(att, 22, ...);
+			return;                                                 // 피해·히트스톱 없음
+		}
 	}
 	float dmg = attack.damage() * damageScale(att);
 	vic.accumDamage += dmg;
@@ -690,10 +757,11 @@ OnContact(att, vic, attack):
 	att.hitCount++; att.lastHitFrame = frame; if (kill) att.killCount++;
 	hitPause(att, vic, att.hitPauseEvent);   // a 초
 	if (att.isPlayer && dmg > 0) hitCounter++;
-	if (react || kill || circle)
+	if (react || kill || circle) {
 		fire(vic, kill ? 14 : circle ? 21 : 13, react=kill ? attack.death : attack.reaction,
 			tag=att.stanceTag, cls=att.classId, hp=att.hp);
-	knockback(vic, vic.onGround ? attack.impulse[0..2] : attack.impulse[3..5]);
+		knockback(vic, d, vic.onGround ? attack.impulse[0..2] : attack.impulse[3..5]);   // 반응이 난 피격만 (0x204458)
+	}
 	fire(att, 17, ...);
 ```
 `fire(c, code, …)`: 현재 기술 분기 중 `input == code` & Match → 없으면 모든 파일 루트 액션 → 점수 최저(동률 난수) → 즉시 큐(execAt 0).

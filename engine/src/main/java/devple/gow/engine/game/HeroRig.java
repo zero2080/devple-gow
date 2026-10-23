@@ -289,6 +289,13 @@ public final class HeroRig implements AutoCloseable {
 				ctl.update(in, camYaw, dt);
 			}
 		}
+		if (navActive) {
+			combat.clearImpulse();
+		} else if (combat.hitPause() <= 0) {
+			// 밀어내기 속도 (owner +0xF0: 방어·피격 0x2039E0) — 지상 이동 0x1EAEC8 이 이번 이동에 더하고 0x1E8F80 이 마찰로 줄인다.
+			// prevPosition → position 사이라 장면 물리 (벽·바닥) 가 그대로 막는다
+			ctl.position.add(combat.stepImpulse(dt, ctl.grounded));
+		}
 		boolean godPress = (in.pressed(PadButton.L3) && in.held(PadButton.R3)) || (in.pressed(PadButton.R3) && in.held(PadButton.L3));
 		godMode.update(combat, godPress, bladeLevel(), player.hp, dt);
 		player.rage = combat.godMeter;

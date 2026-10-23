@@ -643,7 +643,10 @@ public final class AiBrain {
 	 * @param fromTarget   공격자가 이 적의 대상(영웅)인지 (BlockMod 는 영웅 공격에만)
 	 */
 	public boolean tryBlock(int attackerMove, boolean fromTarget) {
-		if (tree == null || target == null || self.combat().active()) {
+		// 원작 0x1CBFF8 은 자기 기술 중인지 보지 않는다 — 막지 못하는 구간은 기술 데이터의 NO_BLOCK (이벤트 12) 창이고 그 검사는 호출 쪽
+		// (OnContact 0x2040FC, EnemyFighter.receive). 예전 근사 ("기술 중이면 안 막음") 는 가벼운 피격 반응 중에 막지 않아
+		// 미노타우로스·사티로스가 연속기 도중 방어로 끊는 일이 없었다 [확실: 0x1CBFF8 / 데이터]
+		if (tree == null || target == null) {
 			return false;
 		}
 		if (fromTarget && attackerMove >= 0) {
