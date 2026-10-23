@@ -368,6 +368,7 @@ class GrabRelationTest {
 		assertTrue(grabbed, "○ → 220 MAISKB00 결합");
 		assertTrue(paired > 60, "221 쌍 틱 수: " + paired);
 		assertTrue(air, "들린 적은 낙하 상태 (0x1EA200 바닥 질의 실패 → +0x174 = 8)");
-		assertTrue(heroAtEnd > 0.6f, "적은 영웅 221 의 후반까지 같은 애니 (예전 0.34 에서 HITLAND): " + heroAtEnd);
+		assertTrue(heroAtEnd > 0.78f, "적은 영웅 221 의 후반까지 같은 애니 — 바닥 선분 끝 = 발 − 6.4 (0x1E3298) 라 날아가는 동안 지상이 아님 (예전 0.34 / 0.6): " + heroAtEnd);
+		assertTrue(en.pos.z > 150, "던진 해골은 영웅 정면 (+z) 멀리 착지: z " + en.pos.z);
 	}
 }

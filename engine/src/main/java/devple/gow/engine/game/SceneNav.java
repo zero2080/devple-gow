@@ -380,12 +380,31 @@ public final class SceneNav {
 	 * LIFT 는 진행 0..1 → 오브젝트 애니 길이 비율 [추정: 문 ANM 은 길이 0 인 경우가 많다].
 	 */
 	public static void poseItems(Interactables items, Platforms ps, ScriptWorld world) {
+		poseItems(items, ps, world, 0);
+	}
+
+	public static void poseItems(Interactables items, Platforms ps, ScriptWorld world, float dt) {
 		for (Interactables.Item it : items.items()) {
 			if (it.kind == Interactables.Kind.PUSH || it.kind == Interactables.Kind.CHEST || !it.taskStarted()) {
 				continue;
 			}
 			Platforms.Body b = ps.body(it.owner);
 			float t = it.task().time;
+			if (it.kind == Interactables.Kind.LIFT && it.openObjectAnim != null && b != null) {
+				// 0x213B28 / 0x214BC0: 연타 중 = TandF 애니 (길이 × 위치 — HydraHatchDoor trapDoorTandF 는 길이 0 → 뚜껑 정지),
+				// 완료 = trapOpen 을 속도 1 로 (영웅 trapDoorOpen 0.6 초와 함께)
+				boolean posed;
+				if (it.done) {
+					it.openTime += dt;
+					posed = ps.poseAt(it.owner, it.openObjectAnim, it.openTime);
+				} else {
+					posed = ps.poseAt(it.owner, it.liftObjectAnim, 0);
+				}
+				if (posed) {
+					world.poseOwner(b.owner, b.joints());
+				}
+				continue;
+			}
 			if (b != null && ps.poseAt(it.owner, it.objectAnim, it.kind == Interactables.Kind.LIFT && b.anim() != null ? t * b.anim().duration : t)) {
 				world.poseOwner(b.owner, b.joints());
 			}
@@ -396,7 +415,7 @@ public final class SceneNav {
 	public void update(float dt, Vector3f hero) {
 		navWorld.platforms().update(dt);
 		neighbourPlatforms.update(dt);
-		poseItems(items, navWorld.platforms(), world);
+		poseItems(items, navWorld.platforms(), world, dt);
 		for (Platforms.Body b : navWorld.platforms().bodies()) {
 			if (b.playing()) {
 				world.poseOwner(b.owner, b.joints());

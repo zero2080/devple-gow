@@ -37,6 +37,16 @@ public final class AutoPlay {
 
 	private final String level, next;
 	private final float[] goal;
+	/** gow.auto.face=x,y,z: 목표에서 바라볼 점 (손잡이 오브젝트 중심 등, 없으면 null). */
+	private final float[] face = parse(System.getProperty("gow.auto.face"));
+
+	private static float[] parse(String g) {
+		if (g == null) {
+			return null;
+		}
+		String[] q = g.split(",");
+		return new float[]{Float.parseFloat(q[0]), Float.parseFloat(q[1]), Float.parseFloat(q[2])};
+	}
 	private final float timeout = Float.parseFloat(System.getProperty("gow.auto.secs", "300"));
 	private final BotInput bot = new BotInput(0);
 	private final List<float[]> todo = new ArrayList<>(), all = new ArrayList<>();
@@ -169,6 +179,10 @@ public final class AutoPlay {
 				// R1 (상자·CSM 누르고 있기), R2 연타 (사용 버튼 — 들어 올리는 문·해치 TAndF: 잡고 연타해야 열림, ATHN01A HydraHatchDoor),
 				// × (점프 — 출구 센서가 발 높이보다 위에 있는 곳, ATHN01F WarpToAthn2A 영역 1 은 계단 위 바닥 +28 부터)
 				float rc = r1Clock % 3f;
+				if (face != null && rc >= 0.15f && rc < 0.25f) {
+					bot.walkTo(hero, face, camYaw); // 손잡이 쪽으로 돌아서기 (잡기 판정은 손잡이를 봐야, 0x1C3918)
+					return bot;
+				}
 				PadButton b = rc < 0.1f ? PadButton.R1 : rc >= 2.6f && rc < 2.7f ? PadButton.CROSS
 						: (int) (rc / 0.075f) % 2 == 0 ? PadButton.USE : null;
 				bot.press(b);

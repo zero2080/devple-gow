@@ -387,10 +387,12 @@ public final class HeroNavigator {
 				return true;
 			}
 			// 근접 사용 안내 (원작 슬롯 0, 매 프레임 0x1DC3F8 — 붙어 있지 않을 때, R2 로 잡힐 대상과 같은 질의)
-			Interactables.Item near = items.nearest(p, USE_RADIUS);
+			Object[] g = items.grabbable(p, fwd, USE_RADIUS); // 손잡이 관절 판정 (0x1C3918) — 손잡이 쪽을 보고 손잡이 앞에 있어야
+			Interactables.Item near = g != null ? (Interactables.Item) g[0] : null;
 			promptItem = near != null && !released.contains(near) && !near.hidden ? near : null;
 			if (in.pressed(PadButton.USE)) {
 				Interactables.Item it = near;
+				handle = g != null ? (float[]) g[1] : null;
 				// 놓은 뒤 되감기는 중인 오브젝트는 0 으로 돌아갈 때까지 잡히지 않는다 (원작: 잡기 클래스 비트 0x400000 / 0x30000 을 끄고 0 에서 다시 켬,
 				// CSM 0x2160B4 → 0x216254, 레버 0x21287C → 0x21290C) [확실]
 				if (it != null && !released.contains(it)) {
@@ -1852,6 +1854,22 @@ public final class HeroNavigator {
 	/** 단계 끝 판정 여유 (영웅 애니와 오브젝트 애니 길이가 같으므로 같은 틱에 끝나게). */
 	private static final float EPS = 1e-4f;
 
+	/** 잡은 손잡이 {x, y, z, 축 x, 축 z} (없으면 null — 중심 쪽을 봄 [근사]). */
+	private float[] handle;
+
+	/**
+	 * 붙은 자리 (0x1C4318–0x1C470C, 매 프레임): 영웅 = 손잡이 수평 위치 + 축·9.6 (몸 반폭), 정면 = −축 (바로, 블렌드 없음). 높이는 그대로
+	 * (TAndF 모드 0x10). 영웅 애니는 자기 좌표계 — trapDoorEnter/TandF 의 손 (앞 −12.5, 높이 7–8.5) 이 손잡이 (높이 9.42) 에 닿는다.
+	 */
+	private void alignToHandle(Vector3f p) {
+		if (handle == null || item == null || item.handles.isEmpty()) {
+			return;
+		}
+		p.x = handle[0] + handle[3] * Interactables.GRAB_FWD;
+		p.z = handle[2] + handle[4] * Interactables.GRAB_FWD;
+		body.setYaw(yawOf(new Vector3f(-handle[3], 0, -handle[4])));
+	}
+
 	private void startItem(Interactables.Item it) {
 		item = it;
 		released.remove(it);
@@ -1886,6 +1904,7 @@ public final class HeroNavigator {
 			default -> {
 				state = NavState.INTERACT;
 				body.setYaw(yawOf(to.normalize()));
+				alignToHandle(p);
 				if ((it.kind == Interactables.Kind.CSM || it.kind == Interactables.Kind.CHEST) && !it.lengthKnown && it.task().time == 0) {
 					// 상자 (Creator) 는 오브젝트 ANM 길이를 모른다 → 영웅 ANICSM1 길이 [추정: IO_CSM 은 모두 영웅 ANICSM1 = 오브젝트 애니 길이]
 					float l = body.clipLength(it.heroAnim);
@@ -1977,6 +1996,9 @@ public final class HeroNavigator {
 	private void interact(Input in, float camYaw, float dt) {
 		Interactables.Item it = item;
 		phaseTime += dt;
+		if (it.kind != Interactables.Kind.PUSH) {
+			alignToHandle(body.position()); // 원작은 매 프레임 손잡이 관절을 다시 읽어 붙인다 (0x1C4258)
+		}
 		boolean held = in.held(PadButton.USE);
 		TaskProgress t = it.task();
 		switch (it.kind) {

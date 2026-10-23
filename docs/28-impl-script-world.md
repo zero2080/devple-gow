@@ -99,3 +99,6 @@ Vis 엔티티 슬롯 0 `Visible`: 1 = 보임, 2 = 숨김, 0 = 그대로 (`Attr11
 스크립트가 숨긴 오브젝트가 계속 그려지고 R1 로 잡혔다. 이제 `GameScene` 이 대상 오브젝트(소유 GO 인스턴스)를 렌더에서 빼고/되살리고, 숨긴 상호작용
 오브젝트(`Interactables.Item.hidden`)는 잡을 수 없다 — 예 PAND00C 엘리베이터 레버는 시작 시 `LeverOffInit`(2) 로 숨고, PAND00D 고리 퍼즐(204/205) 뒤
 `LeverOn`(1) 으로 나타난다. 하네스는 두 레벨에 걸친 퍼즐을 재현하지 못해 숨김 상태 상호작용을 표시만 한다 (보고서 "숨김 상태 상호작용").
+
+- 시작 연출 (PlayerStartZone): Internal 0xC Idle(true) 동안 조작 잠금 (`GameScene.scriptIdle`) — 13 초 IdleCam → Idle2Cam → VisIdleOff (Idle false). 전에는 무시해 시작 카메라 동안 움직일 수 있었다.
+- HatchSkellys (ClimbAI5–7, SpawnAction 없음) 은 동영상 a01mp05 끝 (501) 에 해치 옆에 선다 — 동영상이 난간을 넘어 뛰어내리는 장면을 덮는다 (`--skip-movies` 면 갑자기 나타남). 스폰 기술 500–504·523 의 SCRIPT SCR_NoShadow (0xBFC016FE) 동안 그림자 없음.

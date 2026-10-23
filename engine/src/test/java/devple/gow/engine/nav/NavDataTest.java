@@ -765,6 +765,16 @@ class NavDataTest {
 		assertEquals(Interactables.Kind.LIFT, hatch.kind);
 		assertEquals(6, hatch.id);
 		assertTrue(hatch.showPrompt, "해치 Show R2");
+		// 손잡이 관절 handle1 (0x200A50) — 영웅은 손잡이 + 축·9.6 = (1618.78, *, 1670.13) 에서 −z 를 본다 (0x1C4318)
+		assertEquals(1, hatch.handles.size());
+		float[] h = hatch.handles.getFirst();
+		assertEquals(1618.78f, h[0], 0.05f);
+		assertEquals(9.42f, h[1], 0.05f);
+		assertEquals(1660.53f, h[2], 0.05f);
+		assertEquals(1f, h[4], 1e-3f, "축 +z");
+		Object[] g = Interactables.of(a, tw).grabbable(new org.joml.Vector3f(1618.78f, 0, 1670.13f), new org.joml.Vector3f(0, 0, -1), 32);
+		assertNotNull(g, "손잡이 앞에서 −z 를 보면 잡힘");
+		assertNull(Interactables.of(a, tw).grabbable(new org.joml.Vector3f(1618.78f, 0, 1670.13f), new org.joml.Vector3f(0, 0, 1), 32), "등지면 안 잡힘");
 		LevelData c = level("ATHN01C");
 		Tweaks tc = new Tweaks();
 		tc.load(c.wad);

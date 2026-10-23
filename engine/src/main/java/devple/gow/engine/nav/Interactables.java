@@ -63,6 +63,16 @@ public final class Interactables {
 		 * (슬롯 2, 0x1E17F0 → 0xB). 로더 PushPull 0x216738 (+0x108 &amp; 8) · TAndF 0x2138C0 (+0x158 &amp; 2) · CSM 0x215238 (+0xB8 &amp; 4).
 		 */
 		public boolean showPrompt;
+		/**
+		 * 손잡이 관절 handle1..8 (0x200A50 "handle%1d"): {x, y, z, 축 z 의 수평 x, z (정규화)}. 잡기 판정 (0x1C3918) 과 붙은 자리
+		 * (0x1C4318: 영웅 = 손잡이 + 축·9.6, −축을 봄) 의 기준. 비어 있으면 중심 반경 판정 [근사].
+		 */
+		public final java.util.List<float[]> handles = new java.util.ArrayList<>();
+		/** 손잡이 판정 값 (0x213A38): 높이차 (#25bb317e ×16), 수평 거리 (#2b2d2457 ×16), cos(Handle Angle), 뒤 거리 (#b2a8856f ×16). */
+		public float grabDy = 16, grabR = 32, grabCos = 0.3f, grabBack = 0;
+		/** LIFT 오브젝트 애니 (0x213B28): 연타 중 = #d7f2bea8 (trapDoorTandF, 길이 × 위치), 완료 = #c5b0169f (trapOpen, 속도 1). openTime = 완료 뒤 경과. */
+		public String liftObjectAnim, openObjectAnim;
+		public float openTime;
 		/** 오브젝트 애니 길이 (초): 과제 진행률의 분모 (원작 0x215928 f13). 애니를 못 찾으면 1 초 [근사]. */
 		public float length = 1f;
 		private TaskProgress task;
@@ -174,6 +184,7 @@ public final class Interactables {
 					anm = ref;
 				}
 			}
+			int before = out.items.size();
 			switch (b.type()) {
 				case "IO_CSM" -> {
 					String node = String.format("/TweakTemplates/CSM/%03d/", b.template());
@@ -230,6 +241,8 @@ public final class Interactables {
 					Item it = new Item(Kind.LIFT, p.instance().name(), pos, b.template(), b.id(), lift,
 							tw != null ? tw.sHash(node, TANDF_END_ANIM, null) : null, label, r);
 					it.startAnim = tw != null ? tw.sHash(node, TANDF_GRAB_ANIM, null) : null;
+					it.liftObjectAnim = tw != null ? tw.sHash(node, 0xd7f2bea8, null) : null;
+					it.openObjectAnim = tw != null ? tw.sHash(node, 0xc5b0169f, null) : null;
 					it.length = animLength(lv, anm, null, 0);
 					if (it.length < 0.05f) {
 						// 문 ANM 은 길이 0 (오브젝트 트랙만) → TAndF #fe467fe6 (1.5) 를 들어 올리는 시간으로 [추정]
@@ -251,8 +264,85 @@ public final class Interactables {
 					// Breakable: game/Breakables
 				}
 			}
+			if (out.items.size() > before) {
+				Item it = out.items.get(out.items.size() - 1);
+				String node = switch (b.type()) {
+					case "IO_CSM" -> String.format("/TweakTemplates/CSM/%03d/", b.template());
+					case "PushPull" -> String.format("/TweakTemplates/Push/%03d/", b.template());
+					default -> String.format("/TweakTemplates/TAndF/%03d/", b.template());
+				};
+				handles(it, p, tw, node);
+			}
 		}
 		return out;
+	}
+
+	private static final int H_GRAB_DY = 0x25bb317e, H_GRAB_R = 0x2b2d2457, H_GRAB_BACK = 0xb2a8856f;
+
+	/** 손잡이 관절과 판정 값 (0x200A50 / 0x213A38). 기본값 1 / 2 / 0.3 / 0 (0x200A50). */
+	private static void handles(Item it, LevelLayout.Placement p, Tweaks tw, String node) {
+		var joints = p.object().skeleton().joints;
+		float[][] jw = p.jointWorld();
+		for (int n = 1; n <= 8; n++) {
+			String want = "handle" + n;
+			for (int j = 0; j < joints.size() && j < jw.length; j++) {
+				if (joints.get(j).name().equalsIgnoreCase(want)) {
+					float[] m = jw[j];
+					float zx = m[8], zz = m[10], l = (float) Math.hypot(zx, zz);
+					if (l > 1e-4f) {
+						it.handles.add(new float[]{m[12], m[13], m[14], zx / l, zz / l});
+					}
+				}
+			}
+		}
+		if (tw != null && !it.handles.isEmpty()) {
+			it.grabDy = f(tw, node, H_GRAB_DY, 1f) * 16f;
+			it.grabR = f(tw, node, H_GRAB_R, 2f) * 16f;
+			float ang = tw.f(node, "Handle Angle", Float.NaN);
+			it.grabCos = Float.isNaN(ang) ? 0.3f : (float) Math.cos(Math.toRadians(ang));
+			it.grabBack = f(tw, node, H_GRAB_BACK, 0f) * 16f;
+		}
+	}
+
+	private static float f(Tweaks tw, String node, int hash, float def) {
+		var v = tw.rawHash(node, hash);
+		return v.isPresent() ? Float.intBitsToFloat(v.getAsInt()) : def;
+	}
+
+	/** 영웅 앞 점 높이·앞 (0x1C3918: 위치 + 위·17.6 + 정면·9.6). */
+	public static final float GRAB_UP = 17.6f, GRAB_FWD = 9.6f;
+
+	/**
+	 * R2 로 잡힐 것 (0x1C3F18 → 0x1C3918): 손잡이가 있으면 영웅 앞 점 P 가 손잡이 J 와 |Δy| &lt; grabDy, 수평 &lt; grabR, 정면·축 &lt; −cos,
+	 * (P − (J − back·축))·축 &gt; 0 — 손잡이 쪽을 보고 손잡이 앞에 있어야. 손잡이가 없으면 {@link #nearest(Vector3f, float)}.
+	 * @return {아이템, 손잡이} 또는 null
+	 */
+	public Object[] grabbable(Vector3f feet, Vector3f fwd, float reach) {
+		Object[] best = null;
+		float bd = Float.MAX_VALUE;
+		float px = feet.x + fwd.x * GRAB_FWD, py = feet.y + GRAB_UP, pz = feet.z + fwd.z * GRAB_FWD;
+		for (Item it : items) {
+			if (it.done && it.kind != Kind.PUSH || it.hidden) {
+				continue;
+			}
+			if (it.handles.isEmpty()) {
+				float d = (float) Math.hypot(it.pos.x - feet.x, it.pos.z - feet.z) - it.radius;
+				if (d <= reach && Math.abs(it.pos.y - feet.y) < 64 && d < bd) {
+					bd = d;
+					best = new Object[]{it, null};
+				}
+				continue;
+			}
+			for (float[] h : it.handles) {
+				float dx = px - h[0], dz = pz - h[2], d = (float) Math.hypot(dx, dz);
+				if (Math.abs(h[1] - py) < it.grabDy && d < it.grabR && fwd.x * h[3] + fwd.z * h[4] < -it.grabCos
+						&& (px - (h[0] - it.grabBack * h[3])) * h[3] + (pz - (h[2] - it.grabBack * h[4])) * h[4] > 0 && d < bd) {
+					bd = d;
+					best = new Object[]{it, h};
+				}
+			}
+		}
+		return best;
 	}
 
 	/**

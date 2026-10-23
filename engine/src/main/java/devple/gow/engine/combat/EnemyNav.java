@@ -564,13 +564,15 @@ public final class EnemyNav {
 			pos.x = c.x;
 			pos.z = c.z;
 		}
-		// 바닥 질의 0x1E3298 (38 문서 §15.5 와 같은 선분: 발 + 6.4 + max(d − 6.4, 0) → 발 − max(d, 3.2), d = 이번 변위) 뒤 상태 (0x1EA2E4–0x1EA3B4,
+		// 바닥 질의 0x1E3298 (시작 = 발 + 6.4 + max(d − 6.4, 0), 길이 = 6.4 + max(d, 3.2) (add.s 0x1E33E4 / 0x1E3468) → 끝 = 발 − 6.4 (d ≥ 6.4),
+		// d = 이번 변위 — 아래로 d 만큼 늘이지 않는다. 늘이던 때는 빨리 날아가는 적 (던진 해골 221, d 20–46/틱) 이 높이 20 에서 지상이 되어
+		// HITLAND 로 빠지고 영웅 옆에 떠 있었다 (사용자 보고)) 뒤 상태 (0x1EA2E4–0x1EA3B4,
 		// 지상·공중일 때만 — 0x1ECE08 a3): 맞았고 바닥 아래면 올려 붙이기만, 바닥 위면 지상 (+0x174 = 1), 안 맞으면 낙하 (+0x174 = 8 → 분기 마스크 0x4)
 		// [확실: 코드]. 날기 (+0x2DC & 8) 는 0x40 = 엔진 GROUND + CAP_FLY 그대로. 끌려 들린 적 (해골 221 MAISKB02) 은 공중 → 지상 전용 분기
 		// ([0.40–1]! AUTO → 105 HITLAND, 분기 플래그 0x2) 가 착지 때까지 막힌다 (37 문서 §11.7)
 		float d = hasLast ? pos.distance(last) : 0;
-		float up = FLOOR_FOOT + Math.max(d - FLOOR_FOOT, 0), down = Math.max(d, FLOOR_MIN);
-		float g = world.ground(pos.x, pos.y + up, pos.z, up + down);
+		float up = FLOOR_FOOT + Math.max(d - FLOOR_FOOT, 0), len = FLOOR_FOOT + Math.max(d, FLOOR_MIN);
+		float g = world.ground(pos.x, pos.y + up, pos.z, len);
 		if (!Float.isNaN(g) && pos.y < g) {
 			pos.y = g; // 바닥 아래로는 못 감 (상태 그대로)
 		} else if ((caps & AiTemplate.CAP_FLY) == 0) {

@@ -656,3 +656,10 @@ PAND05B `pBoxPand05B-Marker511` → `semoMovieHaveBox-…-semo08marker511` (Filt
 ("바닥 아래로만" 막음, 32 문서) 인데 `GameScene.physics` 는 바닥을 먼저 맞추고 밀어내기를 뒤에 했다. 위에 있는 적 몸 (띄워진·기어오르는 해골) 이 한 틱에 영웅을
 10–14 아래로 밀면 갑판 (0) 밑으로 빠지고, 다음 틱 바닥 질의가 그 높이에서 시작해 ATHN01B 선창 천장 (−64) 으로 떨어졌다.
 엔진: 바닥 질의 시작 높이 = max(지금 y, 틱 시작 y) + STEP, 접지 중이면 밀어내기·몸 구 뒤 같은 질의로 한 번 더 바닥 아래를 막는다 [근사: 원작 단계 순서 그대로는 아님].
+
+## 20. 손잡이 관절에 붙기 (TAndF·CSM·PushPull) [확실: 0x200A50, 0x1C3918, 0x1C4318 / 근사: 높이]
+- 잡을 곳 = 오브젝트 관절 `handle1..8` (0x200A50 "handle%1d"), 판정 값 (0x213A38): 높이차 #25bb317e ×16, 수평 #2b2d2457 ×16, cos(Handle Angle), 뒤 #b2a8856f ×16 (기본 1 / 2 / 0.3 / 0).
+- 잡기 질의 0x1C3918: 영웅 앞 점 P = 발 + 위 17.6 + 정면 9.6 이 손잡이 J 와 높이·수평 안, 정면·J.z < −cos (손잡이를 봄), (P − (J − 뒤·J.z))·J.z > 0 — `Interactables.grabbable`.
+- 붙은 동안 매 프레임 0x1C4318: 영웅 = J 수평 + J.z·9.6, 정면 = −J.z (블렌드 없음), 높이 그대로 (TAndF 모드 0x10) — `HeroNavigator.alignToHandle`. 영웅 애니는 자기 좌표계 (trapDoorEnter/TandF 손 = 앞 12.5·높이 7–8.5 ↔ 손잡이 높이 9.42).
+  ATHN01A 해치 handle1 (1618.78, 9.42, 1660.53) 축 +z → 영웅 (1618.78, *, 1670.13), −z 를 봄. 전에는 R2 누른 자리에서 중심 쪽만 봐 36 유닛·140° 어긋났다 (사용자 보고).
+- 뚜껑 (0x213B28): 연타 중 = #d7f2bea8 (trapDoorTandF, 길이 × 위치 — 길이 0 이라 정지), 완료 = #c5b0169f (trapOpen) 속도 1 (영웅 trapDoorOpen 0.6 초와 함께) — `SceneNav.poseItems`.

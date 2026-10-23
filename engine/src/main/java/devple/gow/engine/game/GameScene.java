@@ -1103,6 +1103,12 @@ public final class GameScene implements Scene {
 				if (func == 0xB && !args.isEmpty()) { // 질문 (원작 0x21D9C8 → GameMgr +0x152C) → HUD 메뉴 템플릿 → 1021 (선택 번호, 메시지 번호)
 					openQuestion((int) num(args.get(0)));
 				}
+				if (func == 0xC && !args.isEmpty()) {
+					// Internal 0xC Idle(bool): 참이면 조작 잠금 (영웅은 대기) — ATHN01A PlayerStartZone 시작 연출 13 초 (IdleCam → Idle2Cam → VisIdleOff),
+					// ATHN01F 진입·Warp 페이드
+					Object a = args.get(0);
+					scriptIdle = a instanceof Number n ? n.floatValue() != 0 : !(a instanceof Boolean b) || b;
+				}
 				if (func == 0x9 && !args.isEmpty()) {
 					Object a = args.get(0);
 					cameraRig.setVolumeQuery(a instanceof Number n ? n.floatValue() != 0 : !(a instanceof Boolean b) || b); // Internal 0x9 CMV 질의 on/off
@@ -1431,6 +1437,12 @@ public final class GameScene implements Scene {
 			f.combat().addEventListener(ev -> {
 				if (ev.type() == 10) {
 					ef.selfHp(ev.b()); // SELF_HP
+				} else if (ev.type() == 48) {
+					// CONCUSSION (0x20704C → 0x204690, 0x2 비트라 무적 검사 없음): 자기 피해 idx — 해골 머리치기 222 @0.05 idx 400 → 즉사 → 227 MAISKB06 마무리
+					ef.selfHp(ev.index());
+				} else if (ev.type() == 8 && ev.hash() == SCR_EXPLODE_DEATH && ef.hp > 0) {
+					// SCR_ExplodeDeath: 사망 (△ 찢기 224 @0.80, 마무리 227 @0.80; 피격 착지의 것은 조건 6 = 이미 죽었을 때만) [근사: 터지는 연출 없음]
+					ef.selfHp(ef.hp);
 				} else if (ev.type() == 2) {
 					// ORB_EMIT (0x206030 → OrbEmitter_Emit 0x2258D8, idx = 적 WAD 의 OrbEmitter 템플릿) — 해골 머리치기 222 → 503 "SKS Decap", MAISKB06 504
 					emitOrbs(orbTweaks.findNode(String.format("/TweakTemplates/OrbEmitter/%03d/", ev.index())), ef.pos);
@@ -1662,6 +1674,12 @@ public final class GameScene implements Scene {
 			reticle = null;
 		}
 	}
+
+	private static final int SCR_NO_SHADOW = 0xBFC016FE, SCR_EXPLODE_DEATH = 0xBA76AD70;
+
+	/** 스크립트 Idle(true) (Internal 0xC) 동안 조작 잠금. */
+	private boolean scriptIdle;
+	private static final Input IDLE_INPUT = new devple.gow.engine.input.ScriptedInput(0, List.of());
 
 	private int minigameIconIndex() {
 		if (!grab.active()) {
@@ -1895,6 +1913,9 @@ public final class GameScene implements Scene {
 			if (auto.done()) {
 				e.window().requestClose();
 			}
+		}
+		if (scriptIdle) {
+			in = IDLE_INPUT; // 스크립트 Idle(true): 입력 없음
 		}
 		if (time < autoRun) {
 			in = new Input(e.window().handle()) {
@@ -2385,8 +2406,16 @@ public final class GameScene implements Scene {
 				continue; // 부서진 석상 (원작은 *stonedbrk 파편 모델) [근사: 숨김]
 			}
 			en.model().setVariant(en.fighter().modelVariant); // BMI 단계별 갑옷 (37 문서 §10)
+			// SCR_NoShadow (0xBFC016FE, Hash127Upper): 스폰 기술 500–504·523 SKSshipDismount 동안 그림자 없음 — 난간 밖·바닥 밑에서 오를 때
+			boolean noShadow = shadows != null && shadows.collecting() && en.fighter().combat().activeScript(SCR_NO_SHADOW) != null;
+			if (noShadow) {
+				shadows.pause();
+			}
 			en.model().draw(cam, e.window().aspect(), en.fighter().world(m, alpha), en.fighter().animator().pose(),
 					e.renderer().white());
+			if (noShadow) {
+				shadows.resume();
+			}
 		}
 		hero.draw(cam, e.window().aspect(), alpha, e.renderer().white());
 		devple.gow.engine.fx.FxEnvironment.disableFog(hero.shader());
