@@ -29,6 +29,9 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 
 	private final Combatant combat;
 	private final Animator anim;
+	/** AI1 템플릿 번호. */
+	private final int ai1;
+	/** 전투 분기의 종류 (자신 0x14 / 상대 0x16) = AI1 템플릿 +0x9C ({@link AiTemplate#classId}) — AI1 번호와 다를 수 있다 (R_MI2 51 → 50). */
 	private final int classId;
 	private final AiTemplate tmpl;
 	private final AiBrain brain;
@@ -113,7 +116,7 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 	public EnemyFighter(WadFile wad, Tweaks tw, Skeleton sk, AnimationSet set, int ai1, List<String> combatFiles,
 						int[] attackMoves, int blockMove, String idleClip, String walkClip, float walkSpeed, String animNode,
 						AiData ai) {
-		this.classId = ai1;
+		this.ai1 = ai1;
 		this.tw = tw;
 		// 모드 수치 덮어쓰기 (ai.properties, 49 문서 §13) — AI1·Sold 값이 정해지는 유일한 자리. 표가 없으면 원래 값
 		this.modKeys = AiOverrides.keys(ai1, tw.s(String.format("/TweakTemplates/AI1/%03d/", ai1), "Instance Name", null), wad != null ? wad.name() : null);
@@ -122,6 +125,7 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 			System.out.println("[mods] ai " + ai1 + ": " + ov);
 		}
 		this.tmpl = new AiTemplate(tw, ai1, ov);
+		this.classId = tmpl.classId;
 		this.maxHp = Math.max(tmpl.hitPoints, tmpl.maxHitPoints) & 0xFFFF;
 		this.hp = tmpl.hitPoints & 0xFFFF;
 		this.aiDamageMult = tmpl.damageMult;
@@ -225,7 +229,7 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 	}
 
 	public int ai1() {
-		return classId;
+		return ai1;
 	}
 
 	public float maxHp() {

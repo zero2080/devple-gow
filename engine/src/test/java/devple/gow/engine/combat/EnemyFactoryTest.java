@@ -60,4 +60,20 @@ class EnemyFactoryTest {
 		assertEquals(301, k.ai1());
 		assertTrue(EnemyFactory.resourceWads(lvl).contains("R_SKS"));
 	}
+
+	/**
+	 * 전투 분기의 종류 = AI1 템플릿 +0x9C (해시 0x247B, 0x244AF8) — 변종은 기본 종류: R_MI2 51 → 50 (영웅 GRAB HIT_CONFIRM tgt=50 → 400 MAIMIN01),
+	 * R_SKA 31 → 20, R_SKB 24 → 25. 전에는 AI1 번호를 써서 R_MI2 를 잡으면 영웅은 그대로, 적만 MAIMIN01→02 (속도 0, 무적) 에 멈췄다 (ATHN03A 자동 플레이).
+	 */
+	@Test
+	void combatClassIsTemplateClassField() throws Exception {
+		assertEquals(50, load("R_MIN.WAD").spawn().classId());
+		EnemyFactory.Kind m2 = load("R_MI2.WAD");
+		EnemyFighter f = m2.spawn();
+		assertEquals(51, f.ai1());
+		assertEquals(50, f.classId());
+		assertEquals(20, load("R_SKA.WAD").spawn().classId());
+		assertEquals(25, load("R_SKB.WAD").spawn().classId());
+		assertEquals(20, load("R_SKS.WAD").spawn().classId());
+	}
 }

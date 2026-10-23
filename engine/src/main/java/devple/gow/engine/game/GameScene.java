@@ -503,6 +503,9 @@ public final class GameScene implements Scene {
 		}
 		long ph = System.nanoTime();
 		grab = new devple.gow.engine.combat.GrabSync(hero.ctl, hero.combat);
+		if (System.getProperty("gow.debug.combat") != null) { // 전투 기록 (기술·적중) — 자동 플레이 QA
+			hero.combat.onLog(x -> System.out.printf("[영웅 %.2f] %s%n", time, x));
+		}
 		grab.setPullers(() -> enemies.stream().map(Enemy::fighter).toList()); // 결합 없는 끌기 = 공격 대상이 영웅인 적 (0x2097A8)
 		if (System.getProperty("gow.giveAll") != null) {
 			for (int id = 3; id <= 7; id++) {
@@ -1542,6 +1545,10 @@ public final class GameScene implements Scene {
 		AnimatedModel em = kind.buildModel(enemyShader);
 		em.shadowMode = devple.gow.engine.light.ShadowVolume.MODE_SLAB; // AI 생물 (0x1C13E0 → 0x1EBD78 → 0x1BF680, +0x174 bit 31 없음), 47 문서 §7
 		em.shadowKey = r.actor() != null ? r.actor().name : null;
+		if (System.getProperty("gow.debug.combat") != null) {
+			int ai = kind.ai1();
+			f.combat().onLog(x -> System.out.printf("[적 %d %.2f] %s%n", ai, time, x));
+		}
 		enemies.add(new Enemy(f, em, r.actor(), kind));
 		if (boss != null) {
 			boss.onSpawn(f, r.actor(), r.templateId(), arena());
@@ -2054,7 +2061,10 @@ public final class GameScene implements Scene {
 			for (Enemy en : enemies) { // 적 위치·내비 상태 (그물·벽 위 적 확인)
 				if (!en.fighter().dead()) {
 					Vector3f ep = en.fighter().position();
-					System.out.printf("[디버그]   적 %d (%.0f, %.0f, %.0f) %s%n", en.kind().ai1(), ep.x, ep.y, ep.z, en.fighter().nav().mode());
+					var ec = en.fighter().combat();
+					System.out.printf("[디버그]   적 %d (%.0f, %.0f, %.0f) %s HP %.1f 기술 %s %s 무적=%s 잡기=%s%n", en.kind().ai1(), ep.x, ep.y, ep.z,
+							en.fighter().nav().mode(), en.fighter().hp(), ec.move() == null ? "-" : ec.move().id(), ec.clipName(),
+							en.fighter().invulnerable(), en.fighter().grabbable());
 				}
 			}
 		}

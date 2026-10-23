@@ -187,4 +187,16 @@ class GrabTest {
 		assertTrue(r.heroMoves().contains(400), "영웅 MAIMIN01: " + r.heroMoves());
 		assertFalse(r.bystanderMoves().contains(400) || r.bystanderMoves().contains(401), "옆 적은 처형에 들어가지 않음: " + r.bystanderMoves());
 	}
+
+	/**
+	 * 갑옷 미노타우로스 R_MI2 (AI1 51, 종류 50): 영웅 GRAB 의 HIT_CONFIRM tgt=50 이 템플릿 종류 (+0x9C) 로 맞아 영웅도 MAIMIN01 → 연타 → 402.
+	 * 전에는 종류 = AI1 번호 51 이라 영웅 분기가 없고 적만 MAIMIN01→02 에 들어가 무적으로 멈췄다 (ATHN03A, 43 문서).
+	 */
+	@Test
+	void armoredMinotaurExecution() throws Exception {
+		Result r = run(true, "R_MI2.WAD", 20);
+		assertTrue(r.heroMoves().contains(400), "영웅 MAIMIN01: " + r.heroMoves());
+		assertEquals(RepeatPressQte.State.PASSED, r.qte());
+		assertTrue(r.enemyMoves().contains(402), "성공 → MAIMIN03(402): " + r.enemyMoves());
+	}
 }

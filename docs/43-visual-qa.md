@@ -800,6 +800,13 @@ BMI PAND03G (보스 등장 조건 미충족), 분신 크라토스 ATHN08B (가�
 이 검증으로 찾아 고친 엔진 버그:
 - **갑판 아래로 떨어짐** (ATHN01A): 위에 있는 적 몸이 영웅을 한 틱에 10–14 아래로 밀면 다음 틱 바닥 질의가 갑판 밑에서 시작해 ATHN01B 로 떨어졌다 → 38 §19 후속.
 - **미노타우로스가 무적으로 멈춤** (ATHN03A·03C·SEWR 등): 적 피격 반응의 잡기 조건을 건너뛰어, 잡기 (GRAB 태그 200) 에 맞은 HP 가득한 미노타우로스가 혼자 MAIMIN01 → MAIMIN02 (재생 속도 0) 에 들어가 결합 없이 영원히 무적 → 원작 0x208800 대로 적은 자기 잡기 가능 여부 (10 §2.4, 26 §11).
+- **갑옷 미노타우로스가 처형에 혼자 멈춤** (ATHN03A 철로 구역 R_MI2, 쉬움): ○ 잡기에 적만 400 MAIMIN01 → 401 MAIMIN02 (재생 속도 0, 무적) 에 들어가고 영웅은 그대로 — HP 8 로 90 초 동안
+  죽지 않아 봇이 포기했다. 전투 분기의 종류 (자신 0x14 / 상대 0x16) 를 AI1 번호 (51) 로 비교해 영웅 GRAB 의 HIT_CONFIRM tgt=50 → 400 이 안 맞았다. 원작 종류는 AI 객체 가상 슬롯 3
+  (0x244AF8 → AI1 템플릿 +0x9C = 해시 0x247B) 이고 R_MI2 51 은 50 [확실: 0x208A24·0x2041CC, 템플릿 데이터] → `AiTemplate.classId`. 디스크 AI1 92 개 중 31 개가 번호와 다르다
+  (R_MI2/4/5/F → 50, R_SKA·SK2–5 → 20/22/26, R_SKB 24 → 25, R_HA2/HAF → 70, 시민 301·313 → 280, 아기 히드라 258 → 253, 분신 667–669 → 666 …, 10 §2.3). 수정 뒤 같은 실행에서
+  R_MI2 5 마리가 400 → 401 → 402 MAIMIN03 으로 처형되고 (240 초) 오브가 마리당 40 오른다 (`GrabTest.armoredMinotaurExecution`, `EnemyFactoryTest.combatClassIsTemplateClassField`).
+  같은 자리 (-1168, 1023, -272) 생성기가 죽을 때마다 두 마리씩 다시 낸다 — 미노타우로스 발판 퍼즐 (`gominopressureplate`·`goinstantminodeath`) 용으로 보이나 원작 대조 안 함 [미확인].
+  `-Dgow.debug` 적 줄에 HP·기술·무적·잡기 가능, `-Dgow.debug.combat` 은 영웅·적 기술/적중 기록.
 - **검증기 Warp 출구가 되돌아가는 Warp** (ATRET01A 등 6 곳): 36 §2 `warpFor`.
 - **메두사 여왕이 넘어지기만 해도 격파** (ATHN02D, 데모 없이 실제 전투): 피격 착지 hitLand 의 SCR_ExplodeDeath (이벤트 조건 6 = 사망) 를 조건 없이 발동해 HP 9808 에서 사망 → 조건 6 은 HP ≤ 0 일 때만 (10 §3, `MedusaQueenFightTest.landingDoesNotExplodeWhileAlive`).
 - 아레스 데모 연출이 영웅 높이를 도착 Start (−417) 그대로 두어 투기장 밖 허공으로 떨어짐 → 높이도 아레스 쪽.

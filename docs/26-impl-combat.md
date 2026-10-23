@@ -134,7 +134,7 @@ MAIMIN02 의 SCRIPT 이벤트 → RepeatPress 템플릿: 5초, ○ 한 번 +0.2,
 | 외부 애니 | 적 WAD 의 `ANM_MAIMIN`(0x10003) 을 영웅 세트에 연결 (`HeroRig.attachExternalAnims`) |
 | `RepeatPressQte` | 템플릿 키 일부는 해시만 존재 → 값 패턴으로 의미 추정(시간 5.0 / 시작 0.5 / Pass 402) |
 
-`GrabTest`: 연타 → PASSED → 402, 무입력 → FAILED → 403, 휘말린 HP 가득한 미노타우로스는 3 blockShove (`grabSparesBystander` — 전에는 적 쪽 조건을 건너뛰어 혼자 MAIMIN01 → MAIMIN02 (재생 속도 0) 에 들어가 결합 상대 없이 무적으로 멈췄다, ATHN03C 자동 플레이 43 문서). 처형 성공 후 적 사망은 근사(기술 종료 시 HP 0).
+`GrabTest`: 연타 → PASSED → 402, 무입력 → FAILED → 403, 휘말린 HP 가득한 미노타우로스는 3 blockShove (`grabSparesBystander` — 전에는 적 쪽 조건을 건너뛰어 혼자 MAIMIN01 → MAIMIN02 (재생 속도 0) 에 들어가 결합 상대 없이 무적으로 멈췄다, ATHN03C 자동 플레이 43 문서). 처형 성공 후 적 사망은 근사(기술 종료 시 HP 0). `armoredMinotaurExecution`: R_MI2 (AI1 51) 도 종류 50 (`AiTemplate.classId`, 템플릿 +0x9C, 10 §2.3) 이라 영웅 HIT_CONFIRM tgt=50 → 400 (전에는 AI1 번호로 비교해 적만 멈춤, 43 문서).
 TimedPress / 스틱 회전, RepeatPress 필드 재해석(시작 0.5 → 누름 간격 제한)은 [35 문서](35-impl-magic-minigames.md) §5. 남은 것: 미니게임 버튼 아이콘 HUD 표시.
 
 ## 12. 붙잡은 동안 던질 대상 · 강공격 연출 (사용자 보고 2·3·6, 추가 2)

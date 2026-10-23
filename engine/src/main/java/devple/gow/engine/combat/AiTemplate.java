@@ -75,6 +75,13 @@ public final class AiTemplate {
 	public final int meterSlot;
 	/** Circle Health Threshold (65535 = 없음). */
 	public final int circleHp;
+	/**
+	 * +0x9C (해시 0x0000247B, s16) 종류 번호: AI 객체 가상 슬롯 3 (0x244AF8 = {@code AI+0x24 → +0x9C}) 이 돌려주는 값으로, 전투 분기의 자신 종류 (0x14) 와
+	 * 상대 종류 (0x16) 를 이것과 비교한다 (0x208A24, Combat_OnContact 0x2041CC…). 변종 템플릿은 기본 종류를 가리킨다 — R_MI2 51 / R_MI4 53 /
+	 * R_MI5 54 / R_MIF 55 → 50, R_SKA 31·32 → 20, R_SKB 24 → 25, 시민 aoxy1 313·aoxf1 301 → 280, 아기 히드라 258 → 253 … (디스크 AI1 92 개 중 31 개가
+	 * 번호와 다름) [확실]. 없으면 (R_AH* 254–256) 템플릿 번호 [추정].
+	 */
+	public final int classId;
 
 	public AiTemplate(Tweaks tw, int id) {
 		this(tw, id, AiOverrides.NONE);
@@ -121,6 +128,7 @@ public final class AiTemplate {
 		scaleRange = o.f("tmpl.scaleRange", f(tw, 0xCCF3A893, 0f));
 		meterSlot = o.i("tmpl.meterSlot", i32(tw, 0xF3A51122, 0) & 0xFF);
 		circleHp = o.i("tmpl.circleHp", tw.i(node, "Circle Health Threshold", 65535) & 0xFFFF);
+		classId = o.i("tmpl.classId", s16(tw, 0x0000247B, id));
 	}
 
 	public boolean usesToken() {
