@@ -83,6 +83,18 @@ ANM 타입 10 원소 크기 1 (05 문서 §2.8) 의 12B 엔트리 `{u16 관절, 
 - 스크린샷 `fx2_pots.png` (`--game ARENA06 --entry gopotlgdirtyabrk20`, □ 3회): 깨진 항아리 밑동과 흩어진 조각.
 - 하네스(36 문서 §7): 걷기 뒤 Breakable 을 모두 파괴(플레이어 대신) → ARENA06 도 강제 없이 ARENA09 로.
 
+### 2.1 부서지기 전에는 막는다 (ATHN01B 선창) [확실: 데이터 / 추정: 원작 충돌 경로]
+사용자 보고 (PS2 영상 대조): 선창 복도를 막은 나무 잔해를 원작은 블레이드로 부숴야 (붉은 오브) 지나가는데, 엔진은 그냥 통과했다.
+- 원인: `Platforms.staticOwner` 가 **비헤이비어가 붙은 GO 를 모두** 정지 충돌에서 뺐다 (상자·밀기·크랭크는 각자 시스템이 맡는다는 규칙) — Breakable 은 충돌을 맡는 시스템이 없어 몸이 통째로 빠졌다.
+  원작은 GO 를 만들 때 CDV 리소스마다 충돌 인스턴스를 올리고 (38 §4, 0x138E70 → 0x138FD0), Breakable 비헤이비어 코드 (0x1DDDF0 / 0x1DDF70 / 0x1DE278) 는 그것을 건드리지 않는다.
+  파괴 애니가 끝나면 0x1DE370 이 GO 플래그 |= 3 (숨김·비활성) [추정: 이때 충돌도 빠짐].
+- ATHN01B 데이터: `gofallenposts` (Brkb 912 HydraBreakBig HP 25 → OrbEmitter 902 "large obj break", CDV_fallenPosts 평면 hull 6 장 관절 2, 경계 구 95) 가 복도 (x ≈ 1621) 를 z ≈ 1400 에서 막는다.
+  `gobreakablebunk01–08` (Brkb 910 HP 1, hull 6 장 관절 2, 반지름 29–33) 은 침상, `gobarrel*` 은 공 CDV (평면 hull 없음 → 정지 몸 아님).
+- 엔진: Breakable GO 도 정지 몸 (`staticOwner` 가 Breakable 은 남김), 부서지면 `GameScene.onBreak` → `Platforms.setSolid(owner, false)` [근사: 원작은 애니 끝 (0x1DE370) 에서 빠짐 — 엔진은 부서진 순간].
+  꺼진 상태는 `Platforms.states()` 로 이음에 넘어간다. 판정 구: 평면 hull CDV 는 반지름 = 경계 구 (`BallHull.sphere`), 중심 = hull 관절 월드의 hull 중심 (경계 중심과 침상은 15 어긋남) [근사: 원작은 hull].
+- 확인: `-Dgow.script=LS:0.5:2:0:1,SQUARE…` — 영웅이 z 1468 에서 멈춤 → □ 연타 약 2.5 초 (HP 25) 뒤 "파괴: gofallenposts 오브 10" (기둥 파편·먼지·붉은 오브) → z 1180 까지 통과.
+  시험 `ChestPropsTest.athn01bBlockersSolidUntilBroken` (복도 훑기: 부서지기 전 z &gt; 1420 에서 밀림, 끈 뒤 끝까지 안 밀림).
+
 ## 3. IO_TandF 들어 올리는 문·함정문 (`Interactables.Kind.LIFT`)
 - GO 비헤이비어 `IO_TandF` 37 개 (ATHN01C goliftdoor1/2 "HydraLiftDoor", ATHN05BB 압력 문 4, DEST02, PAND00C/00D/01B/02D/03A–C …).
   템플릿 `/TweakTemplates/TAndF/<n>/` (25 개): `Acc` 1, `Dec` 20, `TF Time` 0.25, #fe467fe6 1.5, 영웅 애니 liftdoor1(잡기)/liftdoor2(들기)/liftdoor3,

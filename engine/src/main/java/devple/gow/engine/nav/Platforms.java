@@ -285,13 +285,15 @@ public final class Platforms {
 	}
 
 	/**
-	 * 스크립트가 움직이지 않는 CDV 오브젝트 (정지 충돌): 평면 hull 이 있는 CDV 를 갖고, 다른 시스템이 맡는 비헤이비어 GO (깨지는 물건·상자·밀기·크랭크 등,
-	 * {@code LevelData.behaviors}) 가 아닌 것.
+	 * 스크립트가 움직이지 않는 CDV 오브젝트 (정지 충돌): 평면 hull 이 있는 CDV 를 갖고, 다른 시스템이 맡는 비헤이비어 GO (상자·밀기·크랭크 등,
+	 * {@code LevelData.behaviors}) 가 아닌 것. 깨지는 물건 (Breakable) 은 포함 — 원작은 GO 를 만들 때 CDV 마다 충돌 인스턴스를 올리고,
+	 * Breakable 비헤이비어는 그것을 건드리지 않는다 → 부서지기 전에는 몸을 막는다 (ATHN01B 선창 침상 gobreakablebunk01–08·쓰러진 기둥 gofallenposts,
+	 * 41 §2.1). 부서지면 {@link #setSolid} 로 끈다.
 	 */
 	static boolean staticOwner(LevelData lv, LevelLayout.Placement p) {
 		String name = p.instance().name();
-		for (String b : lv.behaviors.keySet()) {
-			if (b.equalsIgnoreCase(name)) {
+		for (var e : lv.behaviors.entrySet()) {
+			if (e.getKey().equalsIgnoreCase(name) && !"Breakable".equals(e.getValue().type())) {
 				return false;
 			}
 		}
@@ -604,7 +606,19 @@ public final class Platforms {
 		return best;
 	}
 
-	/** 소유 GO 의 충돌 켜고 끄기 (스크립트 Vis Attr11_0). */
+	/**
+	 * 레벨 배치가 아닌 GO 의 정지 충돌 (Creator 가 만든 R_PERMK 상자 gochest, 38 §21): 인스턴스 행렬 inst 에 CDV hull.
+	 * 같은 이름이 있으면 바꾼다.
+	 */
+	public Body add(String owner, Skeleton sk, float[] inst, BallHull cdv) {
+		bodies.removeIf(b -> b.owner.equalsIgnoreCase(owner));
+		Body b = new Body(owner, sk, inst, null, cdv);
+		b.scripted = false;
+		bodies.add(b);
+		return b;
+	}
+
+	/** 소유 GO 의 충돌 켜고 끄기 (스크립트 Vis Attr11_0, 부서진 Breakable). */
 	public void setSolid(String owner, boolean on) {
 		Body b = body(owner);
 		if (b != null) {

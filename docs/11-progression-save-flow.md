@@ -188,6 +188,10 @@ R_PERMK 기본 템플릿과 레벨 공통 인스턴스(`work/exe/twk/*` 집계):
 `Weapon/Health/Magic only`, `Cheating Death` 32, 적 처치용(`normalKill`, `SKS Decap`, `hydra dad …`, `NPC Health Drop`) 등.
 [확실: 값 / 추정: 개수가 Min~Max 균등 난수, Prob 로 슬롯 방출 여부 판정]
 
+상자 (Creator "chest", 38 §21) 가 쓰는 방출기는 CSM 템플릿의 종류별 OrbEmitter 칸 (+0x90 #b9a0d2ad / +0x94 #4d7975bf / +0x98 #4d7975c0) 에서 고른다 —
+템플릿 "Chest Type" 이 2..5 면 (보이는 종류 − 2) mod 3 번째, 아니면 첫째 (0x2161A8) [확실]. 예 ATHN01B CSM 042 HydraHealth (종류 2) → 014 "HealthChest",
+ATHN02A 002 magicChest (종류 3) → 둘째 칸. 부서지는 물체는 Brkb +0x28 (41 §1.1).
+
 ### 3.3 아이템 ID (`AddItem(player, id, count, flashSprite)` 0x1D8CF0, `SCR_AddItem`/`SCR_DeductItem`) [확실]
 보유 비트 `itemFlags |= 1 << (id−1)`. 개수/최대 표 0x2B81C0 / 0x2B81F0, 처리 점프 테이블 0x2B8190.
 

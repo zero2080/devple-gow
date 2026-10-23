@@ -112,6 +112,11 @@ public final class EffectSystem implements AutoCloseable {
 		public java.util.function.ToDoubleFunction<EffectLibrary.EmitterDef> emitterRate;
 		/** 시간 정지 (act 0 초 포즈 유지 — BMI 갑옷 조각이 깨지기 전, 원작 0x1C1B10 이 애니를 0 초에 둔다). */
 		public boolean hold;
+		/**
+		 * 코드가 정한 관절 숨김 (참 = 그 관절 숨김, 파트는 쓰는 관절이 모두 숨김이면 안 그림) — act 의 u8 가시성과 합친다. 원작 GO 관절 가시성 표 (+0x104 → +0x54, 0x215AF0:
+		 * 상자 종류별 magic/health/power/plain 관절).
+		 */
+		public boolean[] jointMask;
 		private final List<ParticleSystem.Emitter> emitters = new ArrayList<>();
 		private final Matrix4f world = new Matrix4f();
 		private final Matrix4f tmp = new Matrix4f();
@@ -134,6 +139,14 @@ public final class EffectSystem implements AutoCloseable {
 				actTime = 0;
 			}
 			return true;
+		}
+
+		/** 지금 act 의 경과 시간을 맞춘다 ({@link #hold} 와 함께: 진행률로 자세를 정하는 오브젝트 — 상자 chestGrab = 과제 시간). */
+		public void setActTime(float t) {
+			actTime = t;
+			if (act == def.anim()) {
+				time = t;
+			}
 		}
 
 		public String actName() {
@@ -290,6 +303,17 @@ public final class EffectSystem implements AutoCloseable {
 			Pose pose = act != null && act.hasSkeletalData()
 					? act.sample(def.skeleton(), at, act.looping()) : Pose.idle(def.skeleton());
 			m.hiddenJoints = jointVisibility && act != null ? act.hiddenJoints(def.skeleton(), at) : null;
+			if (jointMask != null) {
+				if (m.hiddenJoints == null) {
+					m.hiddenJoints = jointMask;
+				} else {
+					boolean[] h = m.hiddenJoints.clone();
+					for (int i = 0; i < h.length && i < jointMask.length; i++) {
+						h[i] |= jointMask[i];
+					}
+					m.hiddenJoints = h;
+				}
+			}
 			if (debrisPose != null) {
 				m.draw(cam, aspect, world, debrisPose, white, at, alpha);
 			} else {

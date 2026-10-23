@@ -94,6 +94,11 @@ public final class Breakables {
 						for (float[] ball : h.balls) {
 							r = Math.max(r, (float) Math.hypot(Math.hypot(ball[0], ball[2]), 0) + ball[3]);
 						}
+						if (h.balls.isEmpty() && !h.hulls.isEmpty()) {
+							// 평면 hull CDV (ATHN01B 침상·쓰러진 기둥): 경계 구 반지름, 중심 = hull 관절 월드의 hull 중심 [근사: 판정 = 구, 원작은 hull]
+							r = h.sphere[3];
+							hullCenter(data, g, h, center);
+						}
 						if (r > 1) {
 							radius = r * Math.max(0.01f, g.scale());
 						}
@@ -114,6 +119,23 @@ public final class Breakables {
 			}
 			it.matrix = g.matrix();
 			items.add(it);
+		}
+	}
+
+	/** hull 0 중심을 그 관절의 배치 월드 행렬로 (경계 중심은 몸 hull 과 15 가량 어긋난다: ATHN01B 침상). */
+	private static void hullCenter(LevelData data, GoInstance g, BallHull h, Vector3f out) {
+		for (var p : data.layout.placements()) {
+			if (p.instance().name().equalsIgnoreCase(g.name())) {
+				float[][] jw = p.jointWorld();
+				if (jw.length == 0) {
+					return;
+				}
+				float[] c = h.hulls.getFirst().center();
+				float[] o = new float[3];
+				devple.gow.tools.anim.Mat4.transformPoint(jw[Math.min(Math.max(h.hullJoint[0], 0), jw.length - 1)], c[0], c[1], c[2], o);
+				out.set(o[0], o[1], o[2]);
+				return;
+			}
 		}
 	}
 

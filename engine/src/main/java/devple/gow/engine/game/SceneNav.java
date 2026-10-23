@@ -131,7 +131,7 @@ public final class SceneNav {
 			public void interactDone(Interactables.Item it) {
 				System.out.println("상황 동작 완료: " + it);
 				if (it.kind == Interactables.Kind.CHEST) {
-					host.orbs(chestEmitter(it.label), it.pos);
+					host.orbs(chestEmitter(it, tweaks), it.pos);
 				}
 			}
 
@@ -153,6 +153,21 @@ public final class SceneNav {
 			}
 		}
 		return out;
+	}
+
+	/**
+	 * 상자 → 오브 이미터 (TWK OrbEmitter Instance Name): CSM 종류별 OrbEmitter 템플릿 (+0x90.., {@link Interactables.Item#chestOrb()}, 0x2161A8)
+	 * 의 이름. 템플릿이 없으면 CSM 이름으로 고른다 [근사].
+	 */
+	static String chestEmitter(Interactables.Item it, Tweaks tw) {
+		int orb = it.chestOrb();
+		if (orb >= 0 && tw != null) {
+			String n = tw.s(String.format(java.util.Locale.ROOT, "/TweakTemplates/OrbEmitter/%03d/", orb), "Instance Name", null);
+			if (n != null) {
+				return n;
+			}
+		}
+		return chestEmitter(it.label);
 	}
 
 	/** 상자 종류 → 오브 이미터 (TWK OrbEmitter Instance Name) [근사: CSM 템플릿 이름으로 고름]. */
@@ -339,15 +354,23 @@ public final class SceneNav {
 		start[0] = st instanceof Number n ? n.floatValue() : 0f;
 	}
 
-	/** Creator "chest" → R1 상자. */
-	public void create(ScriptEntity source) {
+	/**
+	 * Creator "chest" → R2 상자 (38 §21). 원작 Creator 생성 0x1ACCA8: 슬롯 0 Name0 에서 "go" 를 떼고 (0x1A4960) 그 이름의 오브젝트 리소스
+	 * (0x1AD280 → 0x17A7B8, 형 3) 를 소유 GO 행렬 (0x1A9CD0) 에 새 GO 로 만든다 (0x1A5130, 슬롯 3..6 = unk3..unk6 을 넘김: unk5 = CSM 템플릿,
+	 * unk6 = 과제 id). "chest" = R_PERMK 오브젝트 chest (MDL_chest·ANM_chest·CDV_chest, GO gochest = IO_CSM) — 소유 GO (gochest2) 는 메시 없는 자리표.
+	 * 모델·충돌·손잡이는 {@link ChestProps}.
+	 *
+	 * @return 상자 (Creator 가 상자가 아니면 null)
+	 */
+	public Interactables.Item create(ScriptEntity source) {
 		Object name = world.slot(source, "Name0");
 		if ("chest".equals(name) && source.owner != null) {
 			float[] gp = source.owner.instance().pos();
 			int tpl = num(world.slot(source, "unk5"));
 			int task = num(world.slot(source, "unk6"));
-			items.addChest(source.owner.instance().name(), new Vector3f(gp[0], gp[1], gp[2]), tpl, task, tweaks);
+			return items.addChest(source.owner.instance().name(), new Vector3f(gp[0], gp[1], gp[2]), tpl, task, tweaks);
 		}
+		return null;
 	}
 
 	private static int num(Object o) {

@@ -66,8 +66,10 @@ public final class Animation {
 	/** 타입 10 f32 채널 트랙 (슬롯 순서). 로케이터 관절 위치로 쓰일 수 있는 것은 bake 때 고른다 ({@link #locatorTrack}). */
 	public final List<AnimTrack> channelTracks = new ArrayList<>();
 	/**
-	 * 타입 10 f32 채널을 상태 디스크립터별로 묶은 것. 이펙트 GO 에서는 디스크립터 순서 = FXC 노드 헤더 +0x0A 링크 번호이고
+	 * 타입 10 f32 채널을 상태 디스크립터별로 묶은 것 — <b>인덱스 = 디스크립터 번호</b> (모든 형의 디스크립터가 자리를 차지하고, 타입 10/unk10 4 가
+	 * 아니거나 트랙이 없으면 빈 목록). 이펙트 GO 에서는 디스크립터 번호 = FXC 노드 헤더 +0x0A 링크 번호이고
 	 * 스트림 k = 그 FXC 의 P 블록 k 번째 float (3 퍼짐, 4 속력, 8 초당 생성 수) 를 덮어쓴다 (40 문서 §3).
+	 * 예 R_PERMK 상자 chestGrab: 디스크립터 3/6/9/12 = 링크 3/6/9/12 (MSemit1/HSemit1/PSemit1/WSemit1, 종류별 첫 이미터) [확실: 데이터 일치].
 	 */
 	public final List<List<AnimTrack>> channelGroups = new ArrayList<>();
 	/**
@@ -101,6 +103,7 @@ public final class Animation {
 			StateDescr sd = new StateDescr(typeIds[k], Short.toUnsignedInt(b.getShort(so)), Short.toUnsignedInt(b.getShort(so + 2)),
 					b.getInt(so + 4), b.getInt(so + 8), b.getFloat(so + 12), b.getInt(so + 16));
 			descrs.add(sd);
+			channelGroups.add(List.of()); // 디스크립터 번호 = 링크 번호 — 빈·다른 형 디스크립터도 자리를 차지한다
 			if (sd.trackCount == 0) {
 				continue;
 			}
@@ -121,7 +124,7 @@ public final class Animation {
 					if (sd.unk10 == 4) {
 						List<AnimTrack> g = AnimTrack.parse(b, at + sd.offset, sd.trackCount, true);
 						channelTracks.addAll(g);
-						channelGroups.add(g);
+						channelGroups.set(k, g);
 					} else if (sd.unk10 == 1) {
 						byteTracks.addAll(parseBytes(b, at + sd.offset, sd.trackCount, sd.frameTime));
 					}

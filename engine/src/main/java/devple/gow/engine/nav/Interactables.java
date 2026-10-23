@@ -34,6 +34,9 @@ public final class Interactables {
 	 * 상자류(chest/HydraHealth/Pinata/Shard) = 1, 문·책·뿔피리·선장 = 0. 값은 하위 바이트만 유효 (상위 바이트 쓰레기).
 	 */
 	public static final int CSM_HOLD_FLAG = 0xfb908478;
+	/** CSM "Chest Type" (+0x9E), 종류 순환 주기 (+0xA4), 종류별 OrbEmitter (+0x90/+0x94/+0x98) — 생성자 0x215010 [확실: 해시·오프셋]. */
+	public static final int CHEST_TYPE = 0x0c67f4f9, CHEST_CYCLE = 0x70f23994;
+	static final int[] CHEST_ORBS = {0xb9a0d2ad, 0x4d7975bf, 0x4d7975c0};
 	/** TAndF 영웅 애니 (ANITandF1 잡기 liftdoor1 / ANITandF2 들기 liftdoor2 / ANITandF3 끝) 키 해시 (0x2136D4/0x2136F0/0x21370C). */
 	public static final int TANDF_GRAB_ANIM = 0xff5f5921, TANDF_LIFT_ANIM = 0xdc77f412, TANDF_END_ANIM = 0x4e2b8035;
 	/** Push/TAndF 템플릿 속도 키: 최대 (+0x38 / +0x20), 최대 되감기 (+0x3C / +0x24), Push 되감기 가속 (+0x34). Acc/Dec 는 이름 키. */
@@ -68,6 +71,20 @@ public final class Interactables {
 		 * (0x1C4318: 영웅 = 손잡이 + 축·9.6, −축을 봄) 의 기준. 비어 있으면 중심 반경 판정 [근사].
 		 */
 		public final java.util.List<float[]> handles = new java.util.ArrayList<>();
+		/**
+		 * 상자 (CHEST): CSM "Chest Type" (#0c67f4f9, 템플릿 +0x9E s16 — 1 plain, 2 health, 3 magic, 4 power, 5 = 2→3→4 순환) 와
+		 * 지금 보이는 종류 (+0x1E4, 0x215BB0 순환: 주기 #70f23994 +0xA4 초), 종류별 OrbEmitter 템플릿 (+0x90 #b9a0d2ad / +0x94 #4d7975bf / +0x98 #4d7975c0,
+		 * 0x2161A8: 종류 2..5 면 (보이는 종류 − 2) mod 3 번째, 아니면 첫째) [확실: 코드].
+		 */
+		public int chestType, chestShown;
+		public float chestCycle;
+		public final int[] chestOrbs = {-1, -1, -1};
+
+		/** 완료 때 방출할 OrbEmitter 템플릿 번호 (없으면 −1). */
+		public int chestOrb() {
+			int idx = chestType >= 2 && chestType <= 5 ? Math.floorMod(chestShown - 2, 3) : 0;
+			return chestOrbs[idx];
+		}
 		/** 손잡이 판정 값 (0x213A38): 높이차 (#25bb317e ×16), 수평 거리 (#2b2d2457 ×16), cos(Handle Angle), 뒤 거리 (#b2a8856f ×16). */
 		public float grabDy = 16, grabR = 32, grabCos = 0.3f, grabBack = 0;
 		/** LIFT 오브젝트 애니 (0x213B28): 연타 중 = #d7f2bea8 (trapDoorTandF, 길이 × 위치), 완료 = #c5b0169f (trapOpen, 속도 1). openTime = 완료 뒤 경과. */
@@ -281,8 +298,12 @@ public final class Interactables {
 
 	/** 손잡이 관절과 판정 값 (0x200A50 / 0x213A38). 기본값 1 / 2 / 0.3 / 0 (0x200A50). */
 	private static void handles(Item it, LevelLayout.Placement p, Tweaks tw, String node) {
-		var joints = p.object().skeleton().joints;
-		float[][] jw = p.jointWorld();
+		handles(it, p.object().skeleton(), p.jointWorld(), tw, node);
+	}
+
+	/** {@link #handles(Item, LevelLayout.Placement, Tweaks, String)} 를 배치 밖 GO 에 (Creator 상자: R_PERMK chest 의 handle1, 38 §21). */
+	public static void handles(Item it, devple.gow.tools.anim.Skeleton sk, float[][] jw, Tweaks tw, String node) {
+		var joints = sk.joints;
 		for (int n = 1; n <= 8; n++) {
 			String want = "handle" + n;
 			for (int j = 0; j < joints.size() && j < jw.length; j++) {
@@ -387,6 +408,14 @@ public final class Interactables {
 		// 상자 템플릿 (CSM 000 "chest open" 처럼 비트 키가 없으면) = 누르고 있기 [추정: 다른 상자 템플릿 002–065 는 모두 1]
 		it.hold = tw == null || (tw.rawHash(node, CSM_HOLD_FLAG).orElse(1) & 1) != 0;
 		it.showPrompt = showR2(tw, node);
+		if (tw != null) {
+			it.chestType = (short) tw.rawHash(node, CHEST_TYPE).orElse(0); // s16 (상위 2바이트 = 덤프 잡음, 41 §1.1 과 같은 형)
+			for (int i = 0; i < CHEST_ORBS.length; i++) {
+				it.chestOrbs[i] = tw.rawHash(node, CHEST_ORBS[i]).orElse(-1);
+			}
+			it.chestCycle = f(tw, node, CHEST_CYCLE, 0f);
+		}
+		it.chestShown = it.chestType;
 		return add(it);
 	}
 

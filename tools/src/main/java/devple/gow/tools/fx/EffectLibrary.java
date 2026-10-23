@@ -125,7 +125,7 @@ public final class EffectLibrary {
 			if (a != null && a.looping() && a.duration > 0) {
 				t %= a.duration;
 			}
-			if (a != null && e.channel() >= 0 && e.channel() < a.channelGroups.size()) {
+			if (a != null && e.channel() >= 0 && e.channel() < a.channelGroups.size() && !a.channelGroups.get(e.channel()).isEmpty()) {
 				return Math.max(0, a.channel(e.channel(), 8, t, 0));
 			}
 			if (once && e.channel() >= 0 && t > BURST) {

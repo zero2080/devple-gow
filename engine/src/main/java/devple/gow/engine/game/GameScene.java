@@ -177,6 +177,8 @@ public final class GameScene implements Scene {
 	private float loadYaw;
 	/** 레벨에 생성된 세이브 포인트 위치 (스크립트 Creator "savepoint"). */
 	private final List<Vector3f> savePoints = new ArrayList<>();
+	/** Creator 가 만든 R2 상자의 모델·충돌 (38 §21). */
+	private final ChestProps chests = new ChestProps();
 
 	public GameScene(GameSession session, SaveGame save) {
 		this(session, save.level, null, 0);
@@ -1261,6 +1263,12 @@ public final class GameScene implements Scene {
 					float[] gp = source.owner.instance().pos();
 					savePoints.add(new Vector3f(gp[0], gp[1], gp[2]));
 					System.out.printf("세이브 포인트 생성 (%.0f, %.0f, %.0f)%n", gp[0], gp[1], gp[2]);
+				} else if (nav != null) {
+					// "chest" → R2 상자 (원작 Creator 0x1ACCA8: R_PERMK 오브젝트 chest 를 소유 GO 행렬에 새 GO 로, 38 §21)
+					devple.gow.engine.nav.Interactables.Item chest = nav.create(source);
+					if (chest != null && magicFx != null) {
+						chests.spawn(chest, source.owner.instance().matrix(), magicFx.effects(), nav.navWorld.platforms(), orbTweaks);
+					}
 				}
 			}
 		};
@@ -2107,6 +2115,7 @@ public final class GameScene implements Scene {
 		}
 		Vector3f p = hero.ctl.position;
 		nav.update(dt, p);
+		chests.update(dt);
 		poseRopes();
 		for (var b : nav.platformBodies()) {
 			if (b.anim() != null && b.scripted) { // 정지 CDV 오브젝트의 반복 act 는 렌더가 따로 돌린다 (반복 재생 배치)
@@ -2359,6 +2368,9 @@ public final class GameScene implements Scene {
 	/** 부서지는 물체 (41 문서): 정적 메시 숨김 → 물체 GO 파괴 애니·먼지·소리, Brkb OrbEmitter 오브. */
 	private void onBreak(String owner) {
 		level.hideInstance(owner);
+		if (nav != null) {
+			nav.navWorld.platforms().setSolid(owner, false); // 부서진 뒤에는 지나갈 수 있다 (41 §2.1)
+		}
 		Breakables.Item it = breakables.item(owner);
 		if (it == null) {
 			return;

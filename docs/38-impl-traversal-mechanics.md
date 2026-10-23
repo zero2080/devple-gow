@@ -288,7 +288,7 @@ PAND05B `pBoxPand05B-Marker511` → `semoMovieHaveBox-…-semo08marker511` (Filt
 - 속도 (CSM 0x215DF0): 영웅이 붙어 있으면(+0x190 ≥ 0) **1.0**, 떨어졌고 t > 0 이면 **−4.0**, t = 0 에서 정지. t ≥ len 이고 속도 > 0 이면 완료 → 0x215928(1.01, 1, 1) = 100. PushPull 0x2127B0 도 같은 속도 상수(1.0 / −4.0, +0x268).
 - 길이 = 오브젝트 애니: CSM TWK `#fea292e6` act (쌍발차기 문 "Default" 0.9 초), 없으면 가장 긴 act (레버 3.667, 링 크랭크 12, PAND04C 크랭크 24). 길이 0 (DEST03 뿔피리 "main") = 붙자마자 완료.
 - 게임: `HeroNavigator` 붙음 유지 = §3.4 (~~마지막 R1 뒤 0.6 초 [근사]~~). 놓은 뒤에도 오브젝트는 −4 로 되감기며 1023 을 보낸다. `SceneNav` 가 인자 3 개로 보냄.
-- 상자(Creator "chest") 의 오브젝트 애니는 아직 없음 → 길이 = 영웅 chestGrab (1.967 초) [추정]. PushPull 레버는 끝에서 속도 0 (1023 인자 2 = 0), CSM 만 0x215928(1.01, 1, 1).
+- ~~상자(Creator "chest") 의 오브젝트 애니는 아직 없음 → 길이 = 영웅 chestGrab (1.967 초) [추정]~~ → §21: 상자 몸 = R_PERMK 오브젝트 chest, 길이 = 그 ANM chestGrab 1.967 초 [확실]. PushPull 레버는 끝에서 속도 0 (1023 인자 2 = 0), CSM 만 0x215928(1.01, 1, 1).
 
 ### 10.2 SpawnEnemy MaximumCount [확실: 0x1AC580]
 - SpawnEnemy 슬롯 0 = **MaximumCount** (`"MaximumCount %d exceeded (%d)"`): 0 이 아니면 만든 수(+0x100) 가 이 값에 닿은 뒤 발동은 생성하지 않는다. 메시지 6(제거) 은 사망 수(+0x104)++ 후 Respawn(슬롯 3) 이면 자기 Trigger (조건 슬롯 평가 포함, 0x29D93C = 최소 지연) [확실: 0x1AC630].
@@ -663,3 +663,36 @@ PAND05B `pBoxPand05B-Marker511` → `semoMovieHaveBox-…-semo08marker511` (Filt
 - 붙은 동안 매 프레임 0x1C4318: 영웅 = J 수평 + J.z·9.6, 정면 = −J.z (블렌드 없음), 높이 그대로 (TAndF 모드 0x10) — `HeroNavigator.alignToHandle`. 영웅 애니는 자기 좌표계 (trapDoorEnter/TandF 손 = 앞 12.5·높이 7–8.5 ↔ 손잡이 높이 9.42).
   ATHN01A 해치 handle1 (1618.78, 9.42, 1660.53) 축 +z → 영웅 (1618.78, *, 1670.13), −z 를 봄. 전에는 R2 누른 자리에서 중심 쪽만 봐 36 유닛·140° 어긋났다 (사용자 보고).
 - 뚜껑 (0x213B28): 연타 중 = #d7f2bea8 (trapDoorTandF, 길이 × 위치 — 길이 0 이라 정지), 완료 = #c5b0169f (trapOpen) 속도 1 (영웅 trapDoorOpen 0.6 초와 함께) — `SceneNav.poseItems`.
+
+## 21. Creator 상자의 몸 — 모델·충돌·종류·열림 (`game/ChestProps`) [확실: 디스어셈블·데이터 / 추정: 표시]
+사용자 보고 (PS2 영상 대조): ATHN01B 선창에 내려오면 시작 근처에 녹색 체력 상자가 있어야 하는데 없었다 (메시지 441 "궤짝을 열려면 R2 를 누르고 있으십시오" 만 뜸).
+원인 둘: `SceneNav.create` 가 불리지 않았고 (스크립트 Creator → R2 아이템이 안 생김), 불려도 소유 GO `gochest2` (오브젝트 `chest2`) 는 **ESC_Chest2 만 있는 메시 없는 자리표**라 그릴 것이 없었다.
+- **Creator 생성 0x1ACCA8** (엔티티 클래스 Creator, vtable 0x2BA4FC): 슬롯 0 Name0 문자열에서 "go" 접두를 떼고 (0x1A4960, 문자열 0x29D8A8) 0x1AD280 → 0x17A7B8 로
+  **그 이름의 리소스 (형 3 = 오브젝트)** 를 찾는다. 소유 GO 행렬 (0x1A9CD0) 과 슬롯 3..6 (unk3..unk6 — unk5 = CSM 템플릿, unk6 = 과제 id) 을 넘겨 0x1A5130 이 새 GO 를 만든다
+  (세이브 포인트 Name0 "savepoint" 도 같은 경로). "chest" = **R_PERMK 오브젝트 `chest`** (MDL_chest·ANM_chest·CDV_chest + FXC 12 개, GO 템플릿 `gochest` = IO_CSM) [확실].
+- ANM_chest act: `chestParts` (0.033 초, 대기), `chestGrab` (1.967 초 — 영웅 chestGrab 과 같은 길이 = CSM ANICSM1 #fea292e6), `chestOpen` (0.633 초, #fea292e7). 관절:
+  chestParts, chestLid, magic2/health2/power2 (뚜껑 아래), handle1, magic, health, power, plain.
+- **종류 = CSM "Chest Type"** (#0c67f4f9, 생성자 0x215010 이 enum 으로 +0x9E s16 에, TWK 값의 하위 16 비트): 1 plain, 2 health, 3 magic, 4 power, 5 = 순환.
+  ATHN01B/01D CSM 042 HydraHealth = 2, 041 HydraWeapon = 4, 040 HydraMagic = 3, 060–062 Pinata = 1, 002 magicChest 3, 004 healthChest 2, 008 RaidenChest1 5 [확실: 데이터].
+  - 0x215AF0 (호출 0x215D80·0x215F90): 표 0x29F340 {magic 3, magic2 3, health 2, health2 2, power 4, power2 4, plain 1} 의 각 관절을 Hash127Upper 로 찾아 GO 관절 표 (+0x104 → +0x54) 에
+    **(표 종류 == 보이는 종류)** 를 쓴다 → 그 종류의 장식·빛 기둥만 보인다 [확실].
+  - 0x215BB0: 템플릿 종류 5 면 붙잡히지 않은 동안 (+0x190 &lt; 0) 타이머 +0x1EC −= 1/60, 0 아래면 = +0xA4 (#70f23994) 로 되돌리고 보이는 종류 (+0x1E4) = (지금 − 1) mod 3 + 2 (2→3→4→2) [확실].
+  - 완료 오브 0x2161A8: 템플릿 종류가 2..5 면 i = (보이는 종류 − 2) mod 3, 아니면 0 → OrbEmitter = 템플릿 +0x90 + 4i (#b9a0d2ad / #4d7975bf / #4d7975c0) — HydraHealth = 014 "HealthChest" [확실].
+    (그 앞 0x1D9278 / 0x1D92F0(#cb865a1c) 비교로 다른 템플릿 7 을 고르는 경로는 미해석.)
+- 이미터: FXC 노드 헤더 +0x08 = 붙은 관절 (MSemit* 6 magic, HSemit* 7 health, PSemit* 8 power, WSemit* 9 plain), +0x0A = 링크 = **상태 디스크립터 번호** (40 §3 정정):
+  chestGrab 은 디스크립터 3/6/9/12 (종류마다 첫 이미터, 덜컹일 때 반짝임), chestOpen 은 4·5/7·8/10·11 (둘째·셋째, 열릴 때 분출) 에 곡선이 있다 [확실: 데이터].
+  숨은 관절에 붙은 이미터는 끈다 [추정: 원작 관절 가시성이 부착물에 미치는 경로 미확인].
+
+**엔진** (`game/ChestProps`, `GameScene.listener().create`):
+- Creator Name0 "chest" → `SceneNav.create` 가 R2 아이템 (`Interactables.addChest`: 종류·오브 템플릿·순환 주기) 을 돌려주고, `ChestProps.spawn` 이 이펙트 라이브러리의 `chest` (R_PERMK, MagicFx 가 이미 등록) 를
+  소유 GO 행렬에 수명 무한으로 재생 — `Effect.jointMask` (종류 마스크), `emitterOff` (숨은 관절 이미터), `hold`.
+- 충돌: CDV_chest (평면 hull 6 장, 반지름 20) 를 `Platforms.add` 로 정지 몸에 [추정: 원작 GO 생성이 CDV 마다 충돌 인스턴스를 올린다]. 손잡이 = 관절 handle1 (`Interactables.handles(it, sk, jw, …)`, §20),
+  길이 = 상자 chestGrab (`lengthKnown`).
+- act: 대기 chestParts 0 초 정지 → 과제 시간 > 0 이면 chestGrab 을 그 시간에 (놓으면 −4 되감기 그대로) → 완료 chestOpen 을 속도 1 로 재생, 끝 자세 유지 (뚜껑 열림). 완료 오브 = 종류별 OrbEmitter 이름 (`SceneNav.chestEmitter(it, tw)`).
+- 확인: ATHN01B 시작 — 상자 gochest2 CSM 042 종류 2, 손잡이 (1566, −125, 1627) 축 +z. 녹색 기둥 상자가 보이고, R2 누르고 있기 (`-Dgow.script=LS:0.5:0.25:0:-1,LS:0.9:0.25:-1:0,LS:1.3:0.08:0:1,R2:1.6:3.4`)
+  → chestGrab 덜컹 → chestOpen 녹색 분출·뚜껑 열림, "상황 동작 완료: CHEST gochest2" + HealthChest 오브. ATHN01D 도 gochest2/3 (042, 종류 2)·gochest4 (041 HydraWeapon, 종류 4) 생성.
+- 시험 `game/ChestPropsTest`: 순환 2→3→4, ATHN01B HydraHealth 종류 2·오브 014 "HealthChest"·손잡이 1·길이 1.967·CDV 충돌·health/health2 만 보임·chestParts → chestOpen,
+  chestGrab/chestOpen 이미터 곡선이 디스크립터 번호대로 (HSemit1 / HSemit2·3), ATHN01B 쓰러진 기둥이 부서지기 전엔 복도를 막고 뒤엔 통과 (41 §2.1).
+- 남은 것: 같은 Creator 경로의 다른 이름 — ATHN01B `hydraHL-aoBHB1a01Hl23/24`·`aoHAR1a01Hl26/27` (소유 gohydrahl, Name1 = 인스턴스 이름, Animator 10 이 재생) 같은 "ao*" 애니 오브젝트와
+  R_SAVEPT 세이브 포인트 모델은 아직 만들지 않는다 (세이브 포인트는 위치만). 열린 상자 상태는 이음으로 돌아올 때 넘기지 않는다.
+
