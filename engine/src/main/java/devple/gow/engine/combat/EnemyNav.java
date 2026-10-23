@@ -587,7 +587,7 @@ public final class EnemyNav {
 	}
 
 	/** 바닥 질의 선분 (0x1E3298): 내비 위치 = 발 + 6.4, 최소 길이 3.2. */
-	static final float FLOOR_FOOT = 6.4f, FLOOR_MIN = 3.2f;
+	public static final float FLOOR_FOOT = 6.4f, FLOOR_MIN = 3.2f;
 
 	/** 자유 이동 중 밀어내기 (stateMask 비트 2, 0x1ECDEC). */
 	public boolean pushInFree;

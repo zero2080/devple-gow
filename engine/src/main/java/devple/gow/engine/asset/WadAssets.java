@@ -172,6 +172,15 @@ public final class WadAssets implements AutoCloseable {
 	 * 첫 레이어 블렌드 분류 (MAT 생성 0x1537C8 의 정렬 플래그 규칙, 16 문서 §3.3):
 	 * 0x48 → ADD, 0x42 → SUB, p28 ≠ 1 · p38 ≠ 1 · TXR flags bit18 → ALPHA, 텍스처 없는 0x44 → OPAQUE, 그 외 → CUTOUT.
 	 */
+	/**
+	 * 그림자 볼륨 전용 머티리얼 (MAT_stencil: 첫 레이어 flags2 bit 28 → 머티리얼 bit 60): 원작은 그림자 특수 패스에서 프레임 초록 채널에만 더한다
+	 * (FBMSK 0xFFFF00FF, 0x160518 — 47 §7.4) — 색으로는 그리지 않는다 [확실]. 예 ATHN02A 배 MDL_shipGroup 의 MAT_stencil 판 (레이어 색 2.0):
+	 * 스키닝 경로가 흰 판으로 그렸다 (배가 부두로 들어오는 동안 갑판 위).
+	 */
+	public static boolean stencilOnly(MaterialResource mat) {
+		return mat != null && !mat.layers().isEmpty() && (mat.layers().getFirst().flags2() & 0x10000000) != 0;
+	}
+
 	/** 그림자 합성 뒤에 그리는 머티리얼인가 (첫 레이어, 0x155B50 — {@link devple.gow.engine.render.DrawStage#lateMaterial}, 47 §7.4.2). */
 	public static boolean lateStage(MaterialResource mat) {
 		if (mat == null || mat.layers().isEmpty()) {
@@ -432,6 +441,9 @@ public final class WadAssets implements AutoCloseable {
 			float[] v = p.vertices().get(si);
 			int[] idx = p.indices().get(si);
 			MaterialResource mat = materials.get(s.material);
+			if (stencilOnly(mat)) {
+				continue;
+			}
 			Texture tex = null;
 			RenderModel.Blend blend = RenderModel.Blend.OPAQUE;
 			float[] tint = {1, 1, 1, 1};

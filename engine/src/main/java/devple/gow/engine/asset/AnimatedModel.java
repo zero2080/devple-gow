@@ -168,6 +168,9 @@ public final class AnimatedModel implements AutoCloseable {
 				System.arraycopy(p.tris.get(i), 0, idx, i * 3, 3);
 			}
 			MaterialResource mat = assets.material(p.material);
+			if (WadAssets.stencilOnly(mat)) {
+				continue; // 그림자 볼륨 전용 (색으로 그리지 않음)
+			}
 			boolean late = WadAssets.lateStage(mat);
 			Texture tex = null;
 			RenderModel.Blend blend = RenderModel.Blend.OPAQUE;

@@ -161,6 +161,40 @@ ATHN01E 히드라 (이벤트 1035 = 기술 시작, Filter 250 = 히드라):
   `ares3_a.png` (3단계: 크레토스 왼쪽, 아레스 오른쪽, 전경 기둥).
 
 
+### 6.6 고정 스크립트 카메라가 엉뚱한 곳을 보던 것 (QA vs PS2: AthenaCam · twinscam1/TwinCamLeft · camVase)
+세 카메라 모두 `0x434FE`/`0x414FE` (0x100 없음, 0x40000) — 위치·회전 = GO 행렬 그대로, 주시점 = 행렬 × 0xC0 (0x1F3768 → 0x1F11A0) [확실: 코드].
+CAM 로컬 (회전 행 × 관절 스케일 역수, 위치 = 관절 로컬) × 관절 월드도 원작 0x1303D0 (노드 +0x60 관절, +0x8C 관절 월드 표) 과 같고, 툴 경계 중심 (GO 0x40) 이
+엔진 눈과 일치한다 (AthenaCam 눈 (652, −567, 3494) ≈ 경계 (653, −565, 3492)) [확실: 데이터]. **카메라 쪽은 고칠 것이 없었다** — 화면에 들어올 것이 제자리에 없었다.
+
+- **ATHN02A AthenaCam — 배가 부두에 들어오지 않았다** [확실: 데이터 / 추정: 원작 소비 경로]. 석상 (SpawnEnemy shipGroup-topDeck-AthenaMime, AI1 307)·Goto
+  지점 MimeSpot·R2 볼륨 ENV_shipGroup 은 정박한 배 goshipgroup 관절 1 기준이라 z ≈ 3903–3936, 카메라 (z 3494, −Z = 부두 쪽) 는 440 뒤의 돌다리를 봤다.
+  - `ANM_shiptrans` (10.4 초, Warp 도착 Start `ShipTrans-Anim-WarpFrom1F` 의 Animator "!0") 의 **타입 10 f32 채널 스트림 6 = 관절 1 "Anim" 의 Z**:
+    절대 0 → 가산 −1.6/프레임 × 298 → 절대 −480 (05 §2.8). 예전엔 "관절 이동 없음" 으로 읽었다 (43 §13.10).
+  - **GO 부모 링크** `GoInstance` 0x58 = (부모 관절 ≪ 16) | 부모 GO id — goshipgroup = 0x100A9 → goshiptrans (id 169) 관절 1 (12 §, 전 레벨 68 건이 모두
+    "올라탄 것 → 탈것": 엘리베이터 위 레버, PAND04G 크레인 위 줄 …) [확실: 데이터].
+  - 끝 자세 (−480) 에서 석상 3423 · MimeSpot 3456 · 아테나 반짝임 goathenasparkle 3431 (원래 그 자리에 배치) · LadderCam/DocCam20 레일 (≈ 3550–3750) 이 맞고,
+    AthenaCam 이 석상을 앞에 낮게, 크레토스를 오른쪽에, 뒤로 계단·난간을 잡는다 (PS2 영상 ~2124–2130 초와 같음). 입항 중 크레토스는 Idle(true) 로 묶여
+    갑판에 실려 가고 0.5 초에 PortCam, 10 초 뒤 CDsOn 이 Idle 을 풀고 질의를 켠다 (스크립트 그대로).
+  - 엔진: `Animation.transportTrack` (관절 이름 "Anim", inverse bind 없음, 타입 5 없음 → 바인드 로컬 + 채널; PAND03A AnimHead 관절 1 Y 0 → 160 도 같은 꼴)
+    [추정: 이름 규칙 — 타입 10 채널 vtable 0x2C05E0 은 값만 들고 있는 수동 채널, 읽는 쪽 미해석]. `Platforms.Body` 부모 링크: follow = 부모 관절 처음 월드⁻¹ ·
+    지금 → 자식 관절 월드에 곱함 (렌더 자세 `poseInstance`, CDV, 영웅·적 실려 감, Marker, 엔티티 월드 `ScriptWorld.followOwner`, ENV/CMV 볼륨
+    `SceneNav.followVolumes`) [근사: 둘 다 몸 (CDV·Animator·R1 대상) 인 짝만 — 렌더만 있는 반짝임 GO 는 아직 따라가지 않음].
+  - 적도 디딘 발판에 실려 간다 (원작 생물 +0x24C 발판 객체, 32 문서) — 갑판 위 석상. 배 모델의 MAT_stencil 판 (flags2 bit 28, 그림자 볼륨 전용 — 원작은 초록
+    채널에만, 47 §7.4) 을 스키닝 경로가 흰 판으로 그리던 것도 뺐다 (`WadAssets.stencilOnly`, 정적 경로도) [확실].
+- **ATHN01F twinscam1 / TwinCamLeft — 쌍둥이가 매트리스 위로 떠 있었다** [확실: 데이터·코드]. 쌍둥이 (Twins-AOXPTtwins, y 96) 스켈레톤은 루트가 바닥이고
+  골반이 +22 (앉은 자세). 내비 세계가 없는 적 (트리 없는 소품·보스) 의 바닥 붙이기가 발 + STEP 14 에서 질의해 매트리스 윗면 107 로 올렸다 → 이불이 공중에
+  뜨고 두 카메라 (눈 높이 117/126, 30–40 앞) 화면 위로 벗어나 머리판·바닥만 보였다. 질의 시작을 바닥 질의 0x1E3298 의 발 + 6.4 로 (`GameScene.updateEnemies`)
+  → 바닥 88, 골반 110 (매트리스 위). R2 → 클로즈업에 둘이 들어온다. ○ 미니게임 동기 (846–850) 그대로.
+- **camVase** [추정: 데이터대로]: `ANM_twinscamgrp` 2 초 = 바인드 (요 20.8°, 침대 기둥 항아리 HealthPotion1 쪽) → X −29.5°·Y 0 (발치 바닥, 떨어진 항아리들),
+  0x1000 재시작. 엔진은 이것을 그대로 튼다 — 처음 2 초는 기둥 항아리, 뒤는 바닥. 성공 camVaseSuccess 는 그 끝 방향에서 항아리 가까이로 시작.
+  원작이 끝까지 항아리를 보이는지는 영상 구간만으로는 미확인.
+- **ATHN02A 도착 화면의 AniRvlCam** [확실: 로그]: 실제 Warp 도착 (`--arrive ATHN01F`) 은 리셋 → Start CameraName DocCam20 → 0.5 초 PortCam (항구) 으로
+  처음부터 아테나 쪽이다. 그물 화면은 갑판 위 자리로 이음 재현 (`--arrive ATHN01F@x,y,z`, 하네스) 해서 ATHN01F 가 켜진 이웃 슬롯으로 돌아 heroEntry
+  (질의 끔 + AniRvlCam) 가 발동한 것 — ATHN01F → 02A 는 Warp 로만 이어지므로 원작에 없는 경로.
+- 검증 (커밋 안 함, `/private/tmp/claude-501/-Users-obeomsu-IdeaProjects-devple-gow/6f65672f-1b0f-4007-9bee-60aa049603b5/scratchpad/cam/`): `athn02a_final.png` (입항 → AthenaCam 석상 → 질의 복귀), `t1s.png` (twinscam1 쌍둥이), `v1t.png` (TwinCamLeft), `v1s.png` (camVase).
+  `WarpArrivalTest.athn02aShipDocksWithShipTransAnimJoint`. ATHN01E 처음 70 초 카메라 전환 40 개는 HEAD 와 같음.
+  봇 검증 속성: `-Dgow.auto.novol` (볼륨 방문 없이 목표로), `-Dgow.auto.wait=초` (시작 연출 동안 입력 없음).
+
 ## 7. 레벨 시작·도착 카메라 (43 문서 §7)
 
 ### 7.1 원작 순서 [확실: 코드]

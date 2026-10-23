@@ -450,8 +450,12 @@ public final class SceneNav {
 		neighbourPlatforms.update(dt);
 		poseItems(items, navWorld.platforms(), world, dt);
 		for (Platforms.Body b : navWorld.platforms().bodies()) {
-			if (b.playing()) {
+			if (b.playing() || b.followMoved()) { // 부모 링크로 따라 움직인 몸 (ATHN02A 정박한 배) 의 Marker 도
 				world.poseOwner(b.owner, b.joints());
+			}
+			if (b.followMoved()) {
+				world.followOwner(b.owner, b.joints());
+				followVolumes(b);
 			}
 		}
 		if (neighbour != null) {
@@ -462,6 +466,30 @@ public final class SceneNav {
 				neighbour = null;
 				world.linkEvents(null);
 			}
+		}
+	}
+
+	/** 볼륨 (ENV/CMV, 소유 GO 관절 0) 의 처음 월드 행렬 — 부모 링크로 옮길 때 기준. */
+	private final java.util.Map<LevelData.PlacedVolume, float[]> volumeRest = new java.util.IdentityHashMap<>();
+
+	/**
+	 * 부모 링크로 옮겨진 몸의 볼륨 (스크립트 진입 센서·CMV) 도 같은 이동 (처음 월드 · follow) — ATHN02A 정박한 배의 아테나 석상 R2 볼륨
+	 * ENV_shipGroup (AthenaMime-volume-useWorld) [추정: 원작은 볼륨이 GO 관절 행렬을 그대로 쓴다].
+	 */
+	private void followVolumes(Platforms.Body b) {
+		// 같은 소유 GO 의 볼륨은 행렬 배열을 공유할 수 있다 (LevelData: 관절 0 월드 하나) — 처음 값을 모두 먼저 기억한 뒤 덮어쓴다
+		List<LevelData.PlacedVolume> own = new java.util.ArrayList<>();
+		for (LevelData.PlacedVolume v : level.volumes) {
+			if (v.owner().equalsIgnoreCase(b.owner)) {
+				own.add(v);
+				volumeRest.computeIfAbsent(v, k -> k.world().clone());
+			}
+		}
+		for (LevelData.PlacedVolume v : own) {
+			float[] rest = volumeRest.get(v);
+			float[] w = b.follow() != null ? devple.gow.tools.anim.Mat4.mul(rest, b.follow()) : rest;
+			System.arraycopy(w, 0, v.world(), 0, 16);
+			System.arraycopy(devple.gow.tools.anim.Mat4.invertAffine(w), 0, v.inverse(), 0, 16);
 		}
 	}
 

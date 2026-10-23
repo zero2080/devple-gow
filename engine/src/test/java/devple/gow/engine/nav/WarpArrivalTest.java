@@ -173,4 +173,29 @@ class WarpArrivalTest {
 		assertEquals(p[1], f.y(), 2, "갑판 = 도착점 높이");
 		assertEquals(-800, w.statics().getFirst().floorAt(p[0], p[1], p[2], 400).y(), 1, "정적 시트만이면 수로 바닥");
 	}
+
+	/**
+	 * 30 §6.4: 배가 부두로 들어온다 — ANM_shiptrans 의 타입 10 채널 (관절 1 "Anim" Z, 0 → −480, 10.4 초) 과 GO 부모 링크 (goshipgroup 0x58 =
+	 * goshiptrans 관절 1). 끝 자세에서 갑판·아테나 석상 Goto 지점·R2 볼륨이 −480 자리 = 고정 카메라 AthenaCam (z 3494) 앞.
+	 */
+	@Test
+	void athn02aShipDocksWithShipTransAnimJoint() throws Exception {
+		LevelData d = level("ATHN02A");
+		ScriptWorld sw = new ScriptWorld(d, new ScriptHost(), null);
+		Platforms ps = Platforms.of(d, devple.gow.engine.game.SceneNav.animatorOwners(sw), java.util.Set.of());
+		Platforms.Body ship = ps.body("goshipgroup");
+		float z0 = ship.joints()[0][14];
+		assertTrue(ps.play("goshiptrans", "!0", 8, 1, 0));
+		for (int i = 0; i < 11 * 60; i++) {
+			ps.update(1 / 60f);
+		}
+		assertTrue(ship.follows());
+		assertEquals(z0 - 480, ship.joints()[0][14], 0.5f, "goshipgroup 이 goshiptrans 관절 1 을 따라 −480");
+		assertEquals(4259.07f - 480, ps.body("goshiptrans").joints()[1][14], 0.5f, "Anim 관절 Z = 바인드 + 채널 −480");
+		sw.followOwner("goshipgroup", ship.joints());
+		float[] spot = sw.find("shipGroup-topDeck-MimeSpot").position();
+		assertEquals(3936 - 480, spot[2], 1, "Goto 지점도 배를 따라감");
+		float[] cam = d.camera("AthenaCam").eye();
+		assertTrue(spot[2] - cam[2] < 0 && spot[2] - cam[2] > -60, "AthenaCam (z 3494) 이 석상·Goto 지점 바로 뒤 — 정박 전에는 440 앞이었다");
+	}
 }

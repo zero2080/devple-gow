@@ -47,6 +47,18 @@ public final class Platforms {
 		boolean loop, pingPong;
 		float[][] joints;
 		float[][] prev;
+		/**
+		 * GO 부모 링크 ({@code GoInstance.parentLink}, 0x58): 부모 몸·관절과 그 관절의 처음 월드 역행렬. 부모 관절이 움직인 만큼
+		 * (follow = 처음⁻¹ · 지금) 이 몸의 관절 월드에 곱한다 — 정박한 배 goshipgroup 이 goshiptrans "Anim" 관절을 따라 부두로 (ATHN02A).
+		 */
+		Body parent;
+		int parentJoint;
+		float[] parentRestInv;
+		/** 부모 관절 이동 (null = 처음 자리 그대로), 애니 없는 몸의 처음 관절 월드. */
+		float[] follow;
+		float[][] baseJoints;
+		/** 이번 틱 부모를 따라 움직였는가. */
+		boolean followMoved;
 		/** 스크립트 Animator·R1 오브젝트 (false = 정지 CDV 오브젝트: 도착 자세 맞추기 대상 아님). */
 		public boolean scripted = true;
 		/** 충돌 켜짐 — 스크립트 Vis Attr11_0 (1 켬 / 2 끔: "collisionOFF", "DoorCollOff") [추정: 슬롯 이름은 미확정, 데이터 용례로]. */
@@ -80,11 +92,62 @@ public final class Platforms {
 				return;
 			}
 			float[][] lw = anim.sample(skeleton, time, false).world(skeleton);
+			float[] m = follow != null ? Mat4.mul(inst, follow) : inst;
 			float[][] w = new float[lw.length][];
 			for (int i = 0; i < lw.length; i++) {
-				w[i] = Mat4.mul(lw[i], inst);
+				w[i] = Mat4.mul(lw[i], m);
 			}
 			joints = w;
+		}
+
+		/** 부모 링크가 있고 부모 관절이 처음 자리에서 움직였는가 (렌더·Marker·볼륨도 이 몸의 자세를 따라야 함). */
+		public boolean follows() {
+			return follow != null;
+		}
+
+		/** 부모 관절 이동 행렬 (처음 관절 월드⁻¹ · 지금), 없으면 null. */
+		public float[] follow() {
+			return follow;
+		}
+
+		/** 이번 틱 부모를 따라 움직였는가. */
+		public boolean followMoved() {
+			return followMoved;
+		}
+
+		/** 부모 관절 이동을 다시 구해 관절 월드에 반영 (부모가 이번 틱 자세를 정한 뒤). */
+		void updateFollow() {
+			followMoved = false;
+			if (parent == null) {
+				return;
+			}
+			float[] pj = parent.joints[Math.min(parentJoint, parent.joints.length - 1)];
+			float[] f = Mat4.mul(parentRestInv, pj);
+			if (follow == null && nearIdentity(f) || follow != null && java.util.Arrays.equals(follow, f)) {
+				return;
+			}
+			follow = nearIdentity(f) ? null : f;
+			float[][] old = joints;
+			if (anim != null) {
+				pose();
+			} else {
+				float[][] w = new float[baseJoints.length][];
+				for (int i = 0; i < w.length; i++) {
+					w[i] = follow != null ? Mat4.mul(baseJoints[i], follow) : baseJoints[i];
+				}
+				joints = w;
+			}
+			prev = old;
+			followMoved = true;
+		}
+
+		private static boolean nearIdentity(float[] m) {
+			for (int i = 0; i < 16; i++) {
+				if (Math.abs(m[i] - (i % 5 == 0 ? 1 : 0)) > 1e-4f) {
+					return false;
+				}
+			}
+			return true;
 		}
 
 		public boolean playing() {
@@ -277,7 +340,25 @@ public final class Platforms {
 					body.playing = true;
 				}
 			}
+			body.baseJoints = body.joints;
 			ps.bodies.add(body);
+		}
+		// GO 부모 링크 (0x58): 자식 몸이 부모 몸의 관절을 따른다 (둘 다 몸일 때)
+		for (LevelLayout.Placement p : lv.layout.placements()) {
+			int pid = p.instance().parentId();
+			Body child = pid < 0 ? null : ps.body(p.instance().name());
+			if (child == null) {
+				continue;
+			}
+			for (LevelLayout.Placement q : lv.layout.placements()) {
+				Body par = q.instance().id() == pid ? ps.body(q.instance().name()) : null;
+				if (par != null && par != child) {
+					child.parent = par;
+					child.parentJoint = Math.max(0, p.instance().parentJoint());
+					child.parentRestInv = Mat4.invertAffine(par.joints[Math.min(child.parentJoint, par.joints.length - 1)]);
+					break;
+				}
+			}
 		}
 		return ps;
 	}
@@ -476,6 +557,9 @@ public final class Platforms {
 			} else {
 				b.prev = b.joints;
 			}
+		}
+		for (Body b : bodies) {
+			b.updateFollow(); // 부모가 이번 틱 자세를 정한 뒤 (목록 순서 — 부모가 먼저 오는 한 겹 링크만 같은 틱에 맞음)
 		}
 	}
 

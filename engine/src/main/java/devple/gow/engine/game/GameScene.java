@@ -2232,15 +2232,21 @@ public final class GameScene implements Scene {
 		}
 		Vector3f p = hero.ctl.position;
 		nav.update(dt, p);
+		for (Enemy en : enemies) { // 디딘 동적 발판에 실려 감 (원작 생물 +0x24C = 바닥 질의가 맞은 발판 객체, 32 문서, 30 §6.6) — ATHN02A 부두로 들어오는 배 위 아테나 석상
+			EnemyFighter ef = en.fighter();
+			if (!ef.dead() && ef.nav() != null && ef.nav().mode() == devple.gow.engine.combat.EnemyNav.Mode.GROUND) {
+				nav.carry(ef.pos, true);
+			}
+		}
 		chests.update(dt);
 		poseRopes();
 		for (var b : nav.platformBodies()) {
-			if (b.anim() != null && b.scripted) { // 정지 CDV 오브젝트의 반복 act 는 렌더가 따로 돌린다 (반복 재생 배치)
+			if (b.anim() != null && b.scripted || b.follows()) { // 정지 CDV 오브젝트의 반복 act 는 렌더가 따로 돌린다 (반복 재생 배치). 부모 링크로 옮겨진 몸은 그 자세로
 				level.poseInstance(b.owner, b.joints(), b.hidden()); // 움직인 발판·문·회전방은 애니 자세로 (관절 숨김 포함: DMC 결계)
 			}
 		}
 		for (var b : nav.neighbourPlatforms().bodies()) { // 다른 슬롯 레벨 문·발판 (43 §13.8)
-			if (b.anim() != null && b.scripted) {
+			if (b.anim() != null && b.scripted || b.follows()) {
 				otherPosed.put(b.owner, new Object[]{b.joints(), b.hidden()});
 			}
 		}
@@ -2366,7 +2372,9 @@ public final class GameScene implements Scene {
 			boolean wasDead = f.dead();
 			f.update(dt);
 			// 바닥: 계단 높이 안이면 붙이고, 더 아래면 중력으로 떨어진다 (높은 스폰 지점 — ATHN08B 분신 파도 등) [근사: 원작 적 낙하 물리]
-			float g = f.nav().world() != null ? Float.NaN : ground(f.pos.x, f.pos.y + STEP, f.pos.z, 4000); // EnemyNav 가 직접 처리
+			// 질의 시작 = 발 + 6.4 (바닥 질의 0x1E3298 선분 시작) — 발보다 6.4 넘게 높은 면으로 올라 붙지 않는다. 예전 STEP 14 는 ATHN01F 쌍둥이
+			// (y 96, 루트 = 바닥 기준, 골반 +22) 를 매트리스 윗면 107 로 올려 이불이 공중에 뜨고 twinscam1 / TwinCamLeft 화면 위로 벗어났다 (30 §6.6)
+			float g = f.nav().world() != null ? Float.NaN : ground(f.pos.x, f.pos.y + devple.gow.engine.combat.EnemyNav.FLOOR_FOOT, f.pos.z, 4000); // EnemyNav 가 직접 처리
 			float vy = enemyFall.getOrDefault(f, 0f);
 			if (!Float.isNaN(g) && f.pos.y - g <= STEP && vy >= 0) {
 				f.pos.y = g;

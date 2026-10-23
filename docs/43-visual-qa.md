@@ -708,7 +708,7 @@ ATHN07B (화면 전체), ATHN06B (방 안이 흐린 벽), PAND03I (주황 판) �
 - 벽 (구 밀어내기): hull 의 모든 평면이 제외 마스크면 밀지 않는다. 단 GeneralGuide 만은 남긴다 [확실: 38 §18.4 — 몸 질의 0x1E2100 의 마스크는 0x10042 | 호출 (0x20000 · 0x8000000 · 0x20000000)
   로 GeneralGuide 를 빼지 않는다. ATHN01B goplayerblock "guideMat", ATHN01E 꼬리 막이 = 보이지 않는 막이 벽]. 충돌 끔 (Vis Attr11_0 = 2) 인 GO 는 바닥도 아니다.
 - **ATHN02A ← ATHN01F**: Warp_Jump 0x1B2E08 은 Start 월드 행렬 (0x1A9CD0 = 엔티티 × goshiptrans 관절 1) 로 SetMatrix 만 한다 — 배에 부모로 붙이지 않는다.
-  goshiptrans 애니 (10.4 초) 는 관절 이동이 없고 CDV 는 생성 때 끔 (CDsOff) → 10 초 뒤 CDsOn. 도착점 바로 아래 (−623.8, 도착점 −624.1) 는
+  goshiptrans 애니 (10.4 초) 는 ~~관절 이동이 없고~~ → 타입 10 채널로 관절 1 "Anim" 을 Z −480 옮긴다 (배 입항, goshipgroup 은 GO 부모 링크로 따라감 — 30 §6.6) CDV 는 생성 때 끔 (CDsOff) → 10 초 뒤 CDsOn. 도착점 바로 아래 (−623.8, 도착점 −624.1) 는
   **정박한 배 goshipgroup** (Animator 없는 CDV GO, 사다리·아테나 석상 Mime) 의 갑판이다. 엔진은 Animator·R1 오브젝트의 CDV 만 충돌에 넣어 −800 수로 바닥으로 떨어졌다.
   원작은 GO 를 만들 때 CDV 리소스마다 BallHull 인스턴스를 만들어 충돌 세계 0x29C978 에 올린다 (리소스 vtable 0x2BF75C → 0x11D498 → 0x138E70 → 0x138FD0) [추정: 경로].
   → `Platforms.of` 가 **비헤이비어 없는 CDV GO 151 개** (전 레벨, `static_cdv_bodies.txt`: 정박한 배, 보이지 않는 벽·되돌아감 막이, HDES01C 죽음 굴림대 …) 도 정지 몸체로 넣는다

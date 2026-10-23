@@ -222,6 +222,41 @@ public final class Animation {
 	}
 
 	/**
+	 * 운반 관절: 이름이 정확히 {@code "Anim"} 이고 메시가 붙지 않은 (inverse bind 없음) 관절 — 그 타입 10 f32 x/y/z 채널은 관절 이동 (바인드 로컬 + 값) 이다
+	 * [추정: 데이터 2 건 — ATHN02A {@code ANM_shiptrans} 관절 1 Z 0 → −480 (10.4 초, 배가 부두로 들어옴: Warp 도착 Start
+	 * ShipTrans-Anim-WarpFrom1F 가 이 관절에 붙고, 정박한 배 goshipgroup 이 GO 부모 링크로 이 관절에 붙으며, 아테나 석상 카메라 AthenaCam·
+	 * 반짝임 goathenasparkle·DocCam/LadderCam 레일이 모두 −480 자리에 있다), PAND03A {@code ANM_animhead} 관절 1 Y 0 → 160].
+	 * 원작 소비자는 미해석 (타입 10 채널 vtable 0x2C05E0 은 수동 채널 — 읽는 쪽 미상).
+	 */
+	static boolean transportJoint(Skeleton.Joint jt) {
+		return "Anim".equals(jt.name()) && !jt.hasInverseBind();
+	}
+
+	/**
+	 * 타입 10 f32 트랙이 운반 관절 ({@link #transportJoint}) 의 x/y/z 이고 같은 act 의 타입 5 가 그 관절을 건드리지 않는가. 값은 바인드 로컬 위치에
+	 * <b>더한다</b> — 두 건 모두 첫 프레임 0 (PAND03A Anim 바인드 로컬 y −192 에서 0 → 160 이면 위로 160; 절대값으로 읽으면 첫 프레임부터 192 위로 뜬다).
+	 */
+	public boolean transportTrack(Skeleton sk, AnimTrack t) {
+		if (declaresTranslation) {
+			return false;
+		}
+		for (int s : t.streams()) {
+			int j = s / 4;
+			if (s % 4 > 2 || j >= sk.size() || !transportJoint(sk.joints.get(j))) {
+				return false;
+			}
+			for (AnimTrack p : posTracks) {
+				for (int ps : p.streams()) {
+					if (ps / 4 == j) {
+						return false;
+					}
+				}
+			}
+		}
+		return true;
+	}
+
+	/**
 	 * 타입 10 f32 트랙이 이 스켈레톤의 <b>무기 로케이터</b>({@code *WeapOH}) 위치인지: 모든 스트림이 성분 x/y/z 이고, 관절이
 	 * 루트의 자식, inverse bind 없음(메시가 붙지 않음), 쿼터니언, 같은 act 의 타입 5 이동이 건드리지 않는 관절.
 	 * 슬롯 의미는 오브젝트 클래스가 정하므로 이름으로 히어로 바인딩만 적용한다 — 이름 조건 없이 고르면 통나무 조각/zeroJoint 등
@@ -362,11 +397,15 @@ public final class Animation {
 		if (posTracks.isEmpty()) {
 			pt.addAll(objectTranslation());
 		}
+		List<AnimTrack> tt = new ArrayList<>();
 		for (AnimTrack t : channelTracks) {
 			if (locatorTrack(sk, t)) {
 				pt.add(t);
+			} else if (transportTrack(sk, t)) {
+				tt.add(t);
 			}
 		}
+		float[] tpos = new float[nj * 4];
 		float[][] outR = new float[frames][];
 		float[][] outP = new float[frames][];
 		for (int f = 0; f < frames; f++) {
@@ -374,6 +413,12 @@ public final class Animation {
 			apply(pt, pos, f, nj);
 			outR[f] = rot.clone();
 			outP[f] = pos.clone();
+			if (!tt.isEmpty()) {
+				apply(tt, tpos, f, nj); // 운반 관절: 바인드 로컬 위치 + 채널 값
+				for (int i = 0; i < tpos.length; i++) {
+					outP[f][i] += tpos[i];
+				}
+			}
 		}
 		return new Baked(frames, outR, outP);
 	}

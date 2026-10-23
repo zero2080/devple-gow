@@ -360,6 +360,23 @@ public final class ScriptWorld {
 		});
 	}
 
+	/**
+	 * 부모 링크로 옮겨진 소유 GO (Platforms 몸 follow): 엔티티 월드 행렬도 엔티티 로컬 × 지금 관절 (원작 0x1A9CD0 은 엔티티 × 소유 GO 관절을
+	 * 그때그때 곱한다) — Goto 지점 (ATHN02A shipGroup-topDeck-MimeSpot)·SpawnEnemy 자리가 정박한 배를 따른다. Marker 는 {@link #poseOwner}.
+	 */
+	public void followOwner(String owner, float[][] jointWorld) {
+		if (jointWorld.length == 0) {
+			return;
+		}
+		for (ScriptEntity e : entities) {
+			if (e.owner != null && owner.equalsIgnoreCase(e.owner.instance().name())) {
+				float[] w = Mat4.mul(e.data.matrix(), jointWorld[Math.min(e.data.unk40(), jointWorld.length - 1)]);
+				System.arraycopy(w, 0, e.world, 0, 16);
+			}
+		}
+		poseOwner(owner, jointWorld);
+	}
+
 	private void startMessage(ScriptEntity e) {
 		switch (e.type()) {
 			case 12 -> {

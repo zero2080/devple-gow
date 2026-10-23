@@ -226,6 +226,8 @@ act 안에서 명시적인 이벤트(사운드·히트 프레임) 테이블은 �
 - 두 관절은 `main`(0) 의 자식(부모 = 모델 원점), inverse bind 없음, 아이들 위치 0 → 값이 곧 **모델 공간 위치**. 회전은 타입 0 트랙(스트림 428–431, 436–439)에 있다.
 - 측정(`combo3A`): 평소엔 손목에서 1.5–1.6 (손에 쥔 상태), 프레임 6–14(0.2–0.47초) 왼쪽 OH 가 정면 −Z 로 최대 76 단위까지 날아갔다 돌아온다 = **블레이드 사슬 투척 궤적**. `standIdle` 에서는 y=32.6, 등 뒤(`leftBladeBack`/`rightBladeBack` 위치) = 등에 멘 상태.
 - 재생: `Animation.channelTracks` 로 파싱, `bake` 때 `locatorTrack()` 조건(성분 x/y/z, 부모 0, inverse bind 없음, 쿼터니언, 같은 act 타입 5 가 안 건드림, 이름 `*WeapOH`)을 만족하면 이동 테이블에 합친다. 이름 조건 없이 고르면 통나무 조각(`logShard*`), `zeroJoint`, `Axe2Out` 등 의미 미상 채널이 걸려서(anim:batch 통계) 히어로 바인딩만 적용한다. 전체 batch: 적용 4518 act × 2관절, 실패/NaN 0.
+- **운반 관절 "Anim"** [추정: 데이터 2 건]: ATHN02A `ANM_shiptrans` 스트림 6 (관절 1 "Anim" Z) 0 → −480 (10.4 초, 배 입항), PAND03A `ANM_animhead` 스트림 5 (관절 1 Y) 0 → 160.
+  둘 다 메시 없는 관절 · 타입 5 없음 · 첫 값 0 → 엔진은 바인드 로컬 위치에 **더한다** (`Animation.transportTrack`, 30 §6.6). 원작 소비자 (타입 10 채널 vtable 0x2C05E0 = 값만 드는 수동 채널) 는 미해석.
 - 다른 오브젝트의 원소 크기 4 슬롯은 대부분 스트림 8(= "관절 2 x" 위치가 아니라 스칼라 채널 번호로 보임), 값 250–1055 (`airImpale` 슬롯 3–5, 통·모래주머니·횃불) — 미해석.
 
 **원소 크기 1** = 12B 엔트리 `{u16 id(관절 번호), u8 flags, u8 offHi, u16 count, u16 start, u16 hold, u16 offLo}` + `u8 값[count]` (`Animation.ByteTrack`, `byteChannel(joint, t)`).

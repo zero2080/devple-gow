@@ -31,6 +31,9 @@ import java.util.Set;
 public final class AutoPlay {
 
 	public static final boolean ON = System.getProperty("gow.auto") != null;
+	/** gow.auto.novol: 볼륨 방문 없이 곧장 목표로. gow.auto.wait=초: 처음 그 시간 동안 입력 없음 (시작 연출 검증용). */
+	static final boolean NO_VOLUMES = System.getProperty("gow.auto.novol") != null;
+	static final float WAIT = Float.parseFloat(System.getProperty("gow.auto.wait", "0"));
 	static final float FIGHT = 500f, WALK_LIMIT = 3f, DWELL = 1f, GOAL_WAIT = 90f, ARRIVE = 40f;
 	/** 목표에서 기다리는 주기: 앞 6 초는 목표 위 (R1), 뒤 4 초는 마지막 방문 점으로 물러난다 — 목표 위에 서 있으면 보류되는 스크립트 (ATHN01A 해치). */
 	static final float GOAL_CYCLE = 10f, GOAL_STAY = 6f;
@@ -87,7 +90,7 @@ public final class AutoPlay {
 		}
 		for (LevelData.PlacedVolume v : vols) {
 			float[] p = TraversalVerifier.interior(v, col);
-			if (p != null && p[3] == 0) {
+			if (p != null && p[3] == 0 && !NO_VOLUMES) {
 				todo.add(p);
 				all.add(p);
 			}
@@ -99,6 +102,9 @@ public final class AutoPlay {
 	/** 틱마다: 입력을 정하고, 순간이동이 필요하면 hero 위치를 바꾼다. */
 	public BotInput steer(Vector3f hero, Vector3f enemy, boolean bossActive, float camYaw, float dt) {
 		time += dt;
+		if (time < WAIT) { // 시작 연출 동안 손대지 않음 (ATHN02A 배 입항 10.4 초)
+			return bot.press(null);
+		}
 		if (!Float.isNaN(lastY) && hero.y < lastY - 8) { // 한 틱 급강하 (바닥을 뚫거나 가장자리에서 떨어짐) — 위치 기록
 			log(String.format(Locale.ROOT, "t=%.2f 급강하 %.1f → %s", time, lastY, fmt(new float[]{hero.x, hero.y, hero.z})));
 		}
