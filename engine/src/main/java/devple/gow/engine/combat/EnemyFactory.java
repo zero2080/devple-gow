@@ -180,6 +180,16 @@ public final class EnemyFactory {
 		String idle = clip(set, "standidle", "idle");
 		String walk = clip(set, "walkfront", "walkforward", "runfront", "walk");
 		String animNode = tw.findNode("/Animation/go" + best.name + "/");
+		Animation idleA = set.find(idle);
+		if ((idleA == null || !idleA.hasSkeletalData()) && animNode != null) {
+			// 이름 규칙으로 못 찾음 (첫 클립 "main" = 골격 데이터 없음 → 바인드 자세): Navigation ANIStand (원작 이동 상태 0 의 애니,
+			// 38 문서 §표 순서) — 선창 히드라 bhh "BHAEnc1Idle" (ANM 은 BHAenc1Idle, 대소문자 무시) [확실: TWK / 추정: 대소문자]
+			String stand = tw.s(animNode + "Navigation/", "ANIStand", null);
+			Animation sa = stand != null ? findIgnoreCase(set, stand) : null;
+			if (sa != null && sa.hasSkeletalData()) {
+				idle = sa.name;
+			}
+		}
 		// 결정 트리·병사 구조체 (17 문서). 영웅 Sold(000)는 공격 토큰 용량 (R_PERMK)
 		AiData ai = AiData.load(wad, permk);
 		AiTargets.setHeroSoldier(ai.soldier(0));
@@ -232,6 +242,17 @@ public final class EnemyFactory {
 			}
 		}
 		return best;
+	}
+
+	private static Animation findIgnoreCase(AnimationSet set, String name) {
+		for (AnimationSet.Group g : set.groups) {
+			for (Animation a : g.acts) {
+				if (a.name.equalsIgnoreCase(name) && a.hasSkeletalData()) {
+					return a;
+				}
+			}
+		}
+		return null;
 	}
 
 	private static String clip(AnimationSet set, String... prefs) {

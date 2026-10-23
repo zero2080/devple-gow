@@ -250,4 +250,58 @@ class RootMotionTest {
 		assertTrue(pulls > 40, "침대가 영웅을 끈다: " + pulls);
 		assertTrue(err < 2, "0x204BF0 목표에 수렴: " + err);
 	}
+
+	/**
+	 * ATHN01B 선창 히드라 (AI1 251 "hydra enc1" → bhh, 37 문서 §4.3): BHAenc1* 의 골반 X 축 180° (매달린 자세) 를 모델 Z 축 180° 로 바로 세워
+	 * 머리가 뿌리보다 위·앞 (영웅 쪽) 에 오고, 대기 = Navigation ANIStand "BHAEnc1Idle" (예전 "main" 바인드 자세 = 위로 선 기둥),
+	 * 걷기 클립이 없어 제자리 (예전 Sold 속도로 영웅 쪽 미끄러짐), 영웅 □ 콤보가 머리에 맞는다.
+	 */
+	@Test
+	void holdHydraStandsUprightAnchoredAndIsHittable() throws Exception {
+		Rig r = rig("ATHN01B.WAD", 251, "hydra enc1");
+		EnemyFighter en = r.en();
+		assertEquals("bhh", r.kind().skeleton().name);
+		assertEquals("BHAenc1Idle", r.kind().idle(), "대기 = Navigation ANIStand");
+		assertTrue(en.stationary, "걷기 클립 없음 → 제자리");
+		// 원작 배치 비율: 뿌리 = 물속 noHero 바닥 (−268), 영웅 바닥 (−153) = 뿌리 + 115 (BHAenc1Grab 영웅 zeroJoint), 바닥 끝 = 앞 230–280
+		en.pos.set(0, -115, 0);
+		en.yaw = (float) Math.PI;
+		r.ctl().position.set(0, 0, 270);
+		r.ctl().yaw = 0;
+		Skeleton sk = en.animator().skeleton();
+		int tip = sk.indexOf("BHA01JOCTIP21");
+		ScriptedInput idle = new ScriptedInput(0, List.of());
+		float minY = Float.MAX_VALUE, maxY = -Float.MAX_VALUE, minZ = Float.MAX_VALUE, maxZ = -Float.MAX_VALUE;
+		for (int i = 0; i < 600; i++) {
+			tick(r, idle);
+			if (i % 10 == 0 && en.combat().active()) {
+				Matrix4f m = en.world(new Matrix4f(), 1f).mul(new Matrix4f().set(en.animator().pose().world(sk)[tip]));
+				Vector3f p = m.getTranslation(new Vector3f());
+				minY = Math.min(minY, p.y);
+				maxY = Math.max(maxY, p.y);
+				minZ = Math.min(minZ, p.z);
+				maxZ = Math.max(maxZ, p.z);
+			}
+		}
+		assertTrue(minY > -40 && maxY < 80, "턱 끝이 영웅 높이 (바닥 0 기준): " + minY + ".." + maxY);
+		assertTrue(minZ > 150 && maxZ < 360, "턱 끝이 앞 (영웅 쪽 +Z): " + minZ + ".." + maxZ);
+		assertEquals(0, Math.hypot(en.pos.x, en.pos.z), 1e-3, "뿌리 고정");
+		assertTrue(r.enemyMoves().stream().anyMatch(m -> m == 15 || m == 16), "DTre_251 물기 15/16: " + r.enemyMoves());
+		// 영웅 □ 연타 → 머리 적중 (영웅 CDV + 블레이드 — 뿌리가 270 떨어져 정면 구 근사로는 안 닿는다)
+		Path rom = Path.of(System.getProperty("gow.rom", "../gow-rom"));
+		WadFile heroWad = WadFile.load(Content.file(rom, "R_HERO0.WAD"));
+		Skeleton hsk = r.ctl().animator().skeleton();
+		r.hero().setHitVolumes(HitVolumes.forHero(heroWad, hsk, WadFile.load(Content.file(rom, "R_WPN0_2.WAD"))));
+		float hp0 = en.hp;
+		List<ScriptedInput.Step> steps = new ArrayList<>();
+		for (int k = 0; k < 40; k++) {
+			steps.add(new ScriptedInput.Step(0.1f + k * 0.25f, 0.05f, PadButton.SQUARE));
+		}
+		ScriptedInput sq = new ScriptedInput(0, steps);
+		for (int i = 0; i < 600 && en.hp >= hp0; i++) {
+			r.ctl().position.set(0, 0, 250);
+			tick(r, sq);
+		}
+		assertTrue(en.hp < hp0, "□ 콤보가 히드라에 맞는다: " + en.hp + " / " + hp0 + " 영웅 " + r.heroMoves());
+	}
 }

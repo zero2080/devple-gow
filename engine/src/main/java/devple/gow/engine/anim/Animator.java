@@ -131,9 +131,9 @@ public final class Animator {
 		if (memo != null && memoCur == current && memoPrev == previous && memoTime == time && memoPrevTime == prevTime && memoFade == fade) {
 			return memo;
 		}
-		Pose cur = current.sample(skeleton, time, current.looping());
+		Pose cur = fixRoll(current, current.sample(skeleton, time, current.looping()));
 		Pose out = fade >= 1f || previous == null ? cur
-				: PoseBlend.lerp(skeleton, previous.sample(skeleton, prevTime, previous.looping()), cur, fade);
+				: PoseBlend.lerp(skeleton, fixRoll(previous, previous.sample(skeleton, prevTime, previous.looping())), cur, fade);
 		memo = out;
 		memoCur = current;
 		memoPrev = previous;
@@ -141,6 +141,35 @@ public final class Animator {
 		memoPrevTime = prevTime;
 		memoFade = fade;
 		return out;
+	}
+
+	/** {@link #setRollFix} 관절 (-1 = 없음) 과 대상 클립 판정. */
+	private int rollJoint = -1;
+	private java.util.function.Predicate<Animation> rollClips;
+
+	/**
+	 * 클립별 관절 회전 보정: 판정이 참인 클립에서 joint 의 로컬 회전 앞에 모델 Z 축 180° 회전을 곱한다 (부모 = 단위인 뿌리 관절 전용 —
+	 * 하위 관절 전체가 (x, y, z) → (−x, −y, z) 로 돈다). ATHN01B 선창 히드라 bhh 의 BHAenc1* 애니 (골반이 X 축 180° = 거꾸로 매달린 자세)
+	 * 를 영웅 동기 애니 BHAenc1Grab 의 배치 (영웅 = 히드라 뿌리 + 115 위 바닥, 앞 −Z 273) 에 맞춘다 (37 문서 §4.3) [추정: 원작 경로 미확인].
+	 */
+	public void setRollFix(int joint, java.util.function.Predicate<Animation> clips) {
+		rollJoint = joint;
+		rollClips = clips;
+		memo = null;
+	}
+
+	private Pose fixRoll(Animation a, Pose p) {
+		if (rollJoint < 0 || rollClips == null || !rollClips.test(a)) {
+			return p;
+		}
+		// q' = qz(π) ⊗ q, qz = (0, 0, 1, 0): (x, y, z, w) → (−y, x, w, −z) — 시험 RootMotion/HoldHydra 가 (−x, −y, z) 를 확인
+		float[] q = p.rot[rollJoint];
+		float x = q[0], y = q[1], z = q[2], w = q[3];
+		q[0] = -y;
+		q[1] = x;
+		q[2] = w;
+		q[3] = -z;
+		return p;
 	}
 
 	private Pose memo;

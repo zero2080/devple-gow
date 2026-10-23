@@ -19,7 +19,7 @@ import java.util.Map;
  *                    1039 피해 후 (인자0 = 피해, 인자1 = 남은 HP)   0x203848 / 0x204830              [확실]
  *  스크립트 → 오브젝트 1019 EvtForce: 적이면 인자1 기술 요청 (히드라 53/54 SLAM, 123 STUN)          [추정: 적 쪽 처리]
  *                    1054 플레이어 +0x88 = 인자1 (보스 구역, 결정 트리 조건 26)  0x25B5D0            [확실]
- *                    1055 / 1056 보스 체력 표시 켬/끔 (bossEnt-HealthMeterOn)                       [추정]
+ *                    1055 / 1056 체력 미터 켬/끔 (+0x48 비트 4, 슬롯 = AI1 +0x9B + 1)  0x25B720      [확실]
  * </pre>
  */
 public final class CombatScriptBridge {
@@ -32,7 +32,7 @@ public final class CombatScriptBridge {
 	private final Map<EnemyFighter, Float> lastHp = new HashMap<>();
 	private final Map<EnemyFighter, ScriptActor> actorOf = new HashMap<>();
 	private int playerVar88, playerVar64;
-	/** 체력 미터를 켠 적 → 미터 슬롯 1..3 (레벨 FLP 의 EnemyMeter_*1..3, 1055 순서대로 배정). */
+	/** 체력 미터를 켠 적 → 미터 슬롯 1..3 (레벨 FLP 의 EnemyMeter_*1..3 = AI1 +0x9B + 1, 1055 또는 생성 때 0x84 &amp; 0x40). */
 	private final java.util.Map<ScriptActor, Integer> meters = new java.util.LinkedHashMap<>();
 	/** 1019 EvtForce 를 기술 요청으로 받는 적 (보스만 — 일반 적의 PatrolChange 0 은 순찰 변경이라 제외). */
 	private final java.util.Set<EnemyFighter> forceable = new java.util.HashSet<>();
@@ -52,6 +52,9 @@ public final class CombatScriptBridge {
 		actorOf.put(f, actor);
 		lastHp.put(f, f.hp);
 		f.combat().onMove((code, id) -> post(code, id, 0, actor));
+		if ((f.template().flags & devple.gow.engine.combat.AiTemplate.FLAG_METER) != 0) {
+			meters.putIfAbsent(actor, f.template().meterSlot + 1); // 생성 때 미터 켬 (0x1CEF10, 37 문서 §4.3)
+		}
 	}
 
 	/** 이 적은 1019 인자1 을 기술 ID 로 받는다 (스크립트 구동 보스). */
@@ -102,8 +105,23 @@ public final class CombatScriptBridge {
 			return false;
 		}
 		EnemyFighter f = byActor.get(a);
-		if (f == null || (e.event() == EVENT_FORCE && !forceable.contains(f))) {
+		if (f == null) {
 			return false;
+		}
+		if (e.event() == EVENT_FORCE && !forceable.contains(f)) {
+			// 일반 Enemy1 도 원작 0x25B8F8 → 0x1D3530 (인자2 ≠ 0 이면 0x209918 로 지금 기술을 끊고 0x209378 기술 요청, ai +0x40 = 기술).
+			// 선창 히드라 hydraEnt3b-stunTransmit 100 / regen 107 / getup 108 [확실]. 순찰 변경 PatrolChange 0 은 기술 0 이 없는 적이 대부분이라
+			// 엔진은 0 을 받지 않고, 전투 파일에 있는 기술만 [근사: 원작은 거르지 않음]
+			Combatant c = f.combat();
+			if (e.arg1() == 0 || f.dead()) {
+				return false;
+			}
+			boolean ok = e.arg2() != 0 ? c.forceMove(e.arg1()) : c.request(e.arg1());
+			log.add("1019 → " + a.group + " 기술 " + e.arg1() + (ok ? "" : " (없음)"));
+			if (DEBUG) {
+				System.out.println("[스크립트 이벤트] 1019 → " + a.group + " 기술 " + e.arg1() + (ok ? "" : " (없음)"));
+			}
+			return ok;
 		}
 		switch (e.event()) {
 			case EVENT_FORCE -> {
@@ -128,14 +146,8 @@ public final class CombatScriptBridge {
 				return true;
 			}
 			case METER_ON -> {
-				if (!meters.containsKey(a)) {
-					for (int slot = 1; slot <= 3; slot++) {
-						if (!meters.containsValue(slot)) {
-							meters.put(a, slot);
-							break;
-						}
-					}
-				}
+				// 원작 0x25B720: +0x48 |= 4 → 슬롯 = AI1 +0x9B + 1 (0x1D0FD4) [확실]. 예전엔 1055 순서대로 1, 2, 3
+				meters.putIfAbsent(a, f.template().meterSlot + 1);
 				return true;
 			}
 			case METER_OFF -> {

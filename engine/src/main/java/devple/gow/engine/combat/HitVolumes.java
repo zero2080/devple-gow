@@ -103,7 +103,12 @@ public final class HitVolumes {
 	 * @param world 관절 월드 행렬 (모델 공간, 행벡터)
 	 */
 	public void update(float[][] world, Vector3f pos, float yaw) {
-		Matrix4f obj = new Matrix4f().translation(pos).rotateY(yaw);
+		update(world, pos, yaw, 1f);
+	}
+
+	/** @param scale 개체 배율 (적 ScaleCenter — 렌더 {@code EnemyFighter.world} 와 같은 행렬) */
+	public void update(float[][] world, Vector3f pos, float yaw, float scale) {
+		Matrix4f obj = new Matrix4f().translation(pos).rotateY(yaw).scale(scale);
 		float[] tmp = new float[3];
 		Vector3f v = new Vector3f();
 		float[][] t = prev;
@@ -121,7 +126,7 @@ public final class HitVolumes {
 			cur[i][0] = v.x;
 			cur[i][1] = v.y;
 			cur[i][2] = v.z;
-			cur[i][3] = s.radius * sc;
+			cur[i][3] = s.radius * sc * scale;
 		}
 		if (!primed) {
 			for (int i = 0; i < cur.length; i++) {

@@ -130,8 +130,15 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 		this.idleClip = idleClip;
 		this.walkClip = walkClip;
 		this.anim = new Animator(sk, set, tw, animNode);
+		int pel = sk.indexOf(HYDRA_ROOT);
+		if (pel >= 0 && sk.joints.get(pel).quaternion() && sk.joints.get(pel).parent() == 0) {
+			java.util.Map<devple.gow.tools.anim.Animation, Boolean> hang = new java.util.HashMap<>();
+			anim.setRollFix(pel, a -> hang.computeIfAbsent(a, x -> hangsUpsideDown(sk, x, pel)));
+		}
 		this.navNode = animNode + "Navigation/";
 		// 이동 속도: 루프 이동 클립의 zeroJoint Z × 15fps (25 문서, 크라토스와 같은 규칙). 없으면 주어진 값
+		devple.gow.tools.anim.Animation wc = walkClip != null ? anim.find(walkClip) : null;
+		this.stationary = sk.indexOf(HYDRA_ROOT) >= 0 && (wc == null || !wc.hasSkeletalData());
 		float ws = clipSpeed(anim, walkClip);
 		this.walkSpeed = ws > 1f ? ws : walkSpeed;
 		String rc = null;
@@ -170,6 +177,22 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 		var us = tw.raw("/GlobGame/", "Unfreeze Speed");
 		this.unfreezeRate = (us.isPresent() ? us.getAsInt() & 0xFFFF : 50) * 60f;
 		this.controller = devple.gow.engine.mod.Plugins.controllerFor(this, modKeys); // 플러그인 AI 대체 (49 문서 §13), 없으면 null
+	}
+
+	/** 히드라 리그 (bha/bhb/bhh) 의 뿌리 관절. */
+	static final String HYDRA_ROOT = "BHA01JOCPEL1";
+
+	/**
+	 * 클립 첫 프레임의 히드라 골반이 X 축 180° (정규화 |x| &gt; 0.95) = 목이 아래로 매달린 자세. ATHN01B bhh 의 BHAenc1* 21 개만 해당
+	 * (같은 리그의 BHAbabyEmerge·bha·bhb 클립은 거의 단위) — 37 문서 §4.3 [추정].
+	 */
+	static boolean hangsUpsideDown(Skeleton sk, devple.gow.tools.anim.Animation a, int joint) {
+		if (a == null || !a.hasSkeletalData()) {
+			return false;
+		}
+		float[] q = a.sample(sk, 0, false).rot[joint];
+		float n = (float) Math.sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
+		return n > 0 && Math.abs(q[0] / n) > 0.95f;
 	}
 
 	/** 난이도 0..3 (Easy..Impossible): "AI Recovery Time Mult" 를 공격 후 대기에 적용. */
@@ -288,7 +311,10 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 					: clinging && tg != null && brain.state() == AiBrain.State.COMBAT ? tg.position() : null;
 			boolean goalIsTarget = goal != null && tg != null && goal.distanceSquared(tg.position()) < 1f;
 			Boolean goalClinging = clinging && tg != null ? goalIsTarget && tg.locomotionState() == nav.conditionState() : null;
-			nav.update(pos, brain.move, goal, goalClinging, busy, dt);
+			if (stationary) {
+				goal = null; // 이동 애니 없음 → 제자리 (선창 히드라 bhh, 37 문서 §4.3)
+			}
+			nav.update(pos, stationary ? ZERO : brain.move, goal, goalClinging, busy, dt);
 			if (!Float.isNaN(nav.faceYaw())) {
 				yaw = nav.faceYaw();
 			} else if (!busy && !Float.isNaN(brain.face)) {
@@ -344,6 +370,12 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 
 	/** 루트 모션 (원작 0x1F7110 → 0x1EBD78, 영웅과 같은 규칙) — 동기 상대가 끄는 중이면 없음. */
 	private final devple.gow.engine.anim.RootMotion root = new devple.gow.engine.anim.RootMotion();
+	/**
+	 * 걷기 클립이 없는 히드라 리그 (bhh/bhb: Navigation ANIWalk "bwalk" 가 ANM 에 없고 이름 규칙으로도 못 찾아 "main"): AI 스틱·목표를
+	 * 버리고 제자리에서 돌기만 한다. 원작 지상 이동 0x1EAEC8 은 속도 기반이라 이 규칙의 원작 경로는 못 찾았다 — 동기 애니 BHAenc1Grab 의
+	 * 영웅 배치가 스폰 자리 기준으로 바닥 끝에 맞는 것이 근거 [추정]. 하피·궁수 등 다른 걷기 없는 적은 그대로 (날기·제자리 사격).
+	 */
+	public final boolean stationary;
 	/** AI 결정·이동을 멈춘다 (시험·장면 배치용, 원작에 없음). 전투 기술·애니·루트 모션은 그대로. */
 	public boolean holdAi;
 	/** 동기 상대가 이 적을 끄는 중 (0x204BF0 의 끌리는 쪽: D = 단위, 0x1EC058). 동기 코드가 매 틱 정한다. */
@@ -627,6 +659,11 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 	public Matrix4f world(Matrix4f out, float alpha) {
 		Vector3f p = new Vector3f(prevPos).lerp(pos, alpha);
 		return out.translation(p).rotateY(yaw).scale(scale); // 모델 -Z 정면 (34 문서 §4), ScaleCenter
+	}
+
+	@Override
+	public float modelScale() {
+		return scale;
 	}
 
 	// ---- Hittable ----

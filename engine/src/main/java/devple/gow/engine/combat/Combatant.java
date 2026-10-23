@@ -430,7 +430,7 @@ public final class Combatant {
 			updateWiggle(in, dt);
 		}
 		if (volumes != null && anim.current() != null) {
-			volumes.update(anim.pose().world(anim.skeleton()), owner.position(), owner.yaw());
+			volumes.update(anim.pose().world(anim.skeleton()), owner.position(), owner.yaw(), owner.modelScale());
 		}
 		if (hitPause > 0) {
 			hitPause -= dt;

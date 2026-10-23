@@ -14,6 +14,11 @@ public final class AiTemplate {
 
 	/** +0x84 플래그 비트 (해시 cb247958): 공격 토큰 사용. 0x1CEF04 에서 시작 시 "토큰 없음" 비트를 세운다. */
 	public static final int FLAG_USE_TOKEN = 0x100;
+	/**
+	 * 0x84 &amp; 0x40 (fc037268): 생성 때 체력 미터 켬 — 생물 초기화 0x1CEF10 이 owner +0x48 |= 4 (스크립트 1055 0x25B720 와 같은 비트),
+	 * 매 프레임 0x1D0F54 가 HUD EnemyMeter_{+0x9B + 1} 를 갱신 [확실]. 251 선창 히드라·252 아기 히드라·600/601 아레스·660 분신·200 BMI.
+	 */
+	public static final int FLAG_METER = 0x40;
 	/** 0x84 &amp; 0x800 (ff0daf8f): 인지 시 시선 가림 검사 생략 (0x1D2564). */
 	public static final int FLAG_IGNORE_LOS = 0x800;
 
@@ -66,6 +71,8 @@ public final class AiTemplate {
 	public final float scaleCenter, scaleRange;
 	/** +0x8A (a2c359e9) ms: 벽에서 더 갈 수 없을 때 점프 버튼을 누르기까지의 시간 (0x1CF894 → sub_001CF1C8) [확실: 값 1000 / 추정: 조건]. */
 	public final int pauseMoveMs;
+	/** +0x9B (f3a51122) 체력 미터 번호 0..2 → HUD EnemyMeter_*{n+1} (0x1D0FD4 / 0x25B760 / 소멸 0x1CB7F4) [확실]. */
+	public final int meterSlot;
 	/** Circle Health Threshold (65535 = 없음). */
 	public final int circleHp;
 
@@ -112,6 +119,7 @@ public final class AiTemplate {
 		leashRange = o.f("tmpl.leashRange", f(tw, 0x4949C244, 80f));
 		scaleCenter = o.f("tmpl.scaleCenter", f(tw, 0x884F26FF, 100f));
 		scaleRange = o.f("tmpl.scaleRange", f(tw, 0xCCF3A893, 0f));
+		meterSlot = o.i("tmpl.meterSlot", i32(tw, 0xF3A51122, 0) & 0xFF);
 		circleHp = o.i("tmpl.circleHp", tw.i(node, "Circle Health Threshold", 65535) & 0xFFFF);
 	}
 

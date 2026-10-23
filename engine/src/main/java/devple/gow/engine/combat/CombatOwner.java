@@ -59,4 +59,12 @@ public interface CombatOwner {
 	default boolean killedBy(float damage) {
 		return hp() > 0 && hp() <= damage;
 	}
+
+	/**
+	 * 개체 배율 (owner +0x168: 적 AI1 ScaleCenter/Range, 영웅 1). 원작 관절 월드 행렬에 들어 있어 CDV 구 중심·반지름도 함께 줄어든다
+	 * (0x13A998: 관절 행렬 × 로컬 중심, 반지름 × 관절 배율) — 선창 히드라 0.3 (37 문서 §4.3).
+	 */
+	default float modelScale() {
+		return 1f;
+	}
 }

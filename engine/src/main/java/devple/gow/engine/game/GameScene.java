@@ -731,6 +731,9 @@ public final class GameScene implements Scene {
 				try {
 					UiLayer u = new UiLayer(new WadAssets(Stages.wad(session.rom, levelName)), true, t.name(), session.messages, vars);
 					u.acceptInput = false;
+					// HUD 변수 "WadName" (원작 0x1B8668 → 0x1B8704: 불러온 레벨 이름) — FLP_Athn01B/01C 의 SimKeyEvent 가 PS2_WadName 이
+					// "Athn01B" 일 때만 미터 1 (HydraMeter1), 아니면 미터 2 를 갱신한다 (37 문서 §4.3). 이름 대소문자 = FLP 이름 그대로 [추정]
+					vars.set("PS2_WadName", t.name().substring(4));
 					System.out.println("레벨 HUD: " + t.name());
 					return u;
 				} catch (RuntimeException | IOException ex) {
@@ -2059,7 +2062,7 @@ public final class GameScene implements Scene {
 				hero.ctl.yaw = yaw;
 			}
 			// HP 32767 = 부술 수 없는 소품 (ATHN01F 침대 쌍둥이 aoxpt 305) — 싸울 대상이 아니다
-			in = auto.steer(hero.ctl.position, target != null && target.maxHp() < 32767 ? target.pos : null, boss != null, camYaw, dt);
+			in = auto.steer(hero.ctl.position, target != null && target.maxHp() < 32767 ? aimPoint(target) : null, boss != null, camYaw, dt);
 			if (auto.done()) {
 				e.window().requestClose();
 			}
@@ -2189,6 +2192,29 @@ public final class GameScene implements Scene {
 				level.poseInstance(v.owner(), devple.gow.engine.nav.RopeSkin.pose(v.base(), v.chain(), v.sim().nodePositions(), v.fixed()));
 			}
 		}
+	}
+
+	/**
+	 * 자동 플레이가 다가갈 점: 보통 적 위치, 제자리 적 (선창 히드라 — 뿌리가 물속 바닥) 은 영웅에 가장 가까운 CDV 구 (머리) [엔진 전용].
+	 */
+	private Vector3f aimPoint(EnemyFighter f) {
+		if (!f.stationary) {
+			return f.pos;
+		}
+		java.util.List<float[]> sp = f.pushSpheres();
+		if (sp == null || sp.isEmpty()) {
+			return f.pos;
+		}
+		float[] best = null;
+		float bd = Float.MAX_VALUE;
+		for (float[] s : sp) {
+			float d = new Vector3f(s[0], s[1], s[2]).distanceSquared(hero.ctl.position);
+			if (d < bd) {
+				bd = d;
+				best = s;
+			}
+		}
+		return new Vector3f(best[0], best[1], best[2]);
 	}
 
 	private EnemyFighter nearestEnemy() {

@@ -164,6 +164,42 @@
   `hy_new_700/725/775/800/850.png` (806/807: 단상 위 크레토스 + 머리에 박힌 사슬), `hy_r_1400.png` (802 사슬), `hy_k_2900.png` (810 머리 위 크레토스), `hy_k_3600.png`.
 - 시험: `HydraFightTest.damageScriptSlamGrabAndFinisher` — 잡기 0.6 초 뒤 영웅 y = 보스 y + 682 (±3).
 
+### 4.3 선창 히드라 (ATHN01B, AI1 251 "hydra enc1" → `bhh`)
+```
+hydraEnt3b-EntrySensor1 (LD12 거짓) → SpawnEnemy 251, SpawnAction 10 BHAENC1BURST (월드 (1525, −259, 91), 요 π = 바닥 끝 +Z 쪽)
+DTre_251: 0..30 (×16 = 480) 물기 15/16(→17 BITE2X), 50..175 도발 18/19 — 뿌리는 물에 잠긴 noHero 바닥 (bossEnt01B_noHeroMat, y −268, z 0..210)
+피격 1039 → healthSensor (LD6 = HP) / lowHealthSensor HP ≤ 200 → stunTransmit 1019 100 (BHAENC1STUN → 101 루프, ○ 아이콘 + 메시지 522)
+  → StunBegin(1035 100) LD7 → 2 초 뒤 1019 107 (STUNLOOP), 8 초 뒤 1019 108 (GETUP) / 101·107 중 영웅 GRAB(태그 200) → 830 BHAENC1GRAB
+  (TimedPress f980ef69 네 창, 실패 831–836 → miniFailSensor) / EV_DEATH → 150 BHAENC1GRAB @0.83 → playerBlock-DetectDeath (LD11)
+```
+- **1019 EvtForce = 모든 Enemy1** [확실]: 0x25B6E8 의 0x3FB 가지 (0x25B8F8) → 0x1D3530(ai, 인자1, 인자2): 인자2 ≠ 0 이면 0x209918 로 기술을 끊고
+  0x209378 기술 요청, ai +0x40 = 기술, +0x72 |= 0x400. 예전 엔진은 보스만 받아 선창 히드라가 기절하지 않았다. 엔진 `CombatScriptBridge`:
+  보스가 아닌 적은 인자1 ≠ 0 이고 전투 파일에 있는 기술만 (순찰 변경 PatrolChange 0 은 거름) [근사].
+- **체력 미터** [확실]: 생물 초기화 0x1CEF10 — AI1 +0x84 & 0x40 (fc037268) 이면 owner +0x48 |= 4 (1055 0x25B720 과 같은 비트, 1056 이 지움).
+  매 프레임 0x1D0F54: 비트 4 & 영웅 HP > 0 & HUD +0x15AC = 0 이면 슬롯 n = **AI1 +0x9B (f3a51122) + 1** 의 HUD +0x1584[n] / Event{n} / Value{n} = HP/최대 × 100 + 0.99999.
+  소멸 0x1CB6A0 이 끈다. 0x40 템플릿: 251·252 (히드라), 600/601 (아레스), 660 (분신), 200 (BMI). 엔진: 생성 때 미터 켬 + 1055 슬롯도 +0x9B + 1
+  (예전: 1055 순서 1, 2, 3 → ATHN01E 아기 히드라 258/253 은 이제 2/3, `BossMeterTest`).
+  FLP_Athn01B/01C SimKeyEvent 는 **PS2_WadName = "Athn01B"** 일 때만 미터 1 을, 아니면 미터 2 를 갱신한다 — HUD 변수 "WadName" (0x1B8668 → 0x1B8704,
+  불러온 레벨 이름) 을 엔진이 안 채워 미터가 안 떴다. `GameScene.loadLevelHud` 가 FLP 이름 뒤 (Athn01B) 로 채운다 [추정: 대소문자].
+- **대기 클립**: 이름 규칙 (standidle/idle) 이 실패해 첫 클립 "main" (골격 없음 = 바인드 자세, 목이 위로 곧게 선 기둥) 이었다 →
+  `EnemyFactory` 가 Navigation ANIStand ("BHAEnc1Idle" → ANM BHAenc1Idle, 대소문자 무시) 로 [확실: TWK].
+- **매달린 애니 → 바로 세움** [추정: 원작 경로 미확인]: BHAenc1* 21 개는 골반 BHA01JOCPEL1 회전이 (x −1, w 0.005) = X 축 180° — 목이 뿌리 아래로
+  매달린다 (같은 ANM 의 BHAbabyEmerge·bha·bhb 는 거의 단위). 뿌리가 물속 바닥 −268 이라 머리가 바닥 아래 −350 에서 놀아 보이지 않았다.
+  영웅 동기 애니 BHAenc1Grab 의 zeroJoint = synch + (−9, 115, −273) → 영웅 = 뿌리 + 115 = **−153 (선창 바닥)**, 앞 −Z 273 = 바닥 끝 (z ≈ 320–370)
+  (히드라 보스도 같은 규칙으로 489 + 682 = 돛대 단상 1168). 머리가 그 자리에 와야 하므로 매달린 클립의 골반에 **모델 Z 축 180°** 를 앞에 곱한다
+  (`Animator.setRollFix`, `EnemyFighter.hangsUpsideDown`: 히드라 리그 + 첫 프레임 |x| > 0.95). 결과: 대기 턱 끝 y ≈ −143, z ≈ 360, 물기 −125..−154 /
+  z 315–414 — 바닥 끝의 크레토스 높이. X 축 180° 를 되돌리면 (머리가 뒤 +Z) 영웅 손과 600 넘게 떨어져 기각, 거울 (y 만) 은 Z 180° 와 비슷하나 회전이 아님.
+- **제자리** [추정]: 걷기 클립이 없다 (Navigation ANIWalk "bwalk" 가 ANM 에 없음 → "main"). 예전엔 모드 1 이 거리 > 64 면 Sold 251 속도 (5 × 16) 로
+  영웅 쪽 이동 → 공격 사이마다 뿌리가 z 91 → 295 로 밀렸다. 엔진: 히드라 리그 + 걷기 클립 골격 없음 → `EnemyFighter.stationary` (스틱·목표 버림, 회전만).
+  원작 지상 이동 0x1EAEC8 은 속도 기반이라 원작 근거는 위 동기 배치뿐 (뿌리가 스폰 자리여야 영웅이 바닥 끝).
+- **CDV 구에 개체 배율** [확실: 0x13A998 관절 행렬 × 로컬 중심, 반지름 × 관절 배율 — 원작 관절 행렬엔 +0x168 배율이 들어 있다]: 엔진 `HitVolumes.update` 가
+  배율을 빼먹어 0.3 배 히드라의 구가 3.3 배 먼 곳 (천장 위) 에 있었다 → `CombatOwner.modelScale` (적 = ScaleCenter). 대부분 적은 ≈ 1 이라 영향 적음.
+- 자동 플레이: 제자리 적은 영웅에 가장 가까운 CDV 구 (머리) 로 다가간다 (`GameScene.aimPoint`, 엔진 전용) — 예전엔 뿌리까지 355 에서 포기.
+- 시험: `RootMotionTest.holdHydraStandsUprightAnchoredAndIsHittable` (대기 클립·제자리·턱 끝 높이/앞·물기 15/16·□ 콤보 적중), `BossMeterTest` (슬롯 2, 3).
+- 녹화 (커밋 안 함): 스크래치 `agentH/hyd/r0_sheet*.png` (이전: 기둥, 머리 안 보임), `r1_sheetA.png` (세움·물기), `r2_sheet.png` (미터),
+  `r3_sheet.png` (적중 Hits, 미터 감소, HP ≤ 200 → 1019 100 기절 → ○ 아이콘). 남은 것: ○ 잡기 미니게임 830 (봇이 ○ 를 안 누름) 은 미검증,
+  Burst 첫 프레임에 머리가 천장 위로 (목이 곧게 선 채 시작) 잠깐 나온다 — 원작 화면 대조 필요.
+
 ## 5. 메두사 여왕 (ATHN02D) — 완료 (석화는 근사)
 ```
 MAmagicIcon-EntVol01 → MEWINTRO 컷신 + SpawnEnemy 62 (그룹 26) → mewintroDone → Goto magicPlace
