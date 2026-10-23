@@ -1197,6 +1197,13 @@ public final class GameScene implements Scene {
 
 			@Override
 			public void objectEvent(ObjectEvent e) {
+				// 1019 EvtForce → 영웅: 인자1 = 기술 ID (ATHN01A PlayerStartZone-EvtForce 512 → M512 maiGameIntro → M80 IDLECOMBAT)
+				if (e.event() == ScriptWorld.EVENT_FORCE && e.actor() != null && e.actor() == world.player() && hero != null) {
+					if (!hero.combat.request(e.arg1())) {
+						hero.combat.forceMove(e.arg1());
+					}
+					return;
+				}
 				if (boss != null) {
 					boss.objectEvent(e);
 				} else if (bridge != null) {
