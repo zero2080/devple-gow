@@ -274,3 +274,8 @@ ATHN01A 볼륨 관절 카메라는 이 둘뿐이다 (다른 레벨 관절 카메
   한 패스 동안의 −0.005 깊이 바이어스 (0x15312C) 뿐 — 카메라가 바꾸지 않는다 [확실]. 엔진 `cam.near` 2 → **10** (`FxEnvironment.viewNear`).
 - 카메라 눈 위치가 SheetHdr 가시 칸을 골라 컨텍스트 (`CXT_bv…`) 단위로 레벨 오브젝트를 켜고 끈다 (43 §11). PAND01BB ← PAND00D 의 ConHallCam5 는 원작도 같은 카메라이고,
   덮던 탑 외피 (`gosandarena`, CXT_bvoutside) 는 그 눈 위치 칸에서 꺼진다.
+
+## 대상 프레이밍 줌 (전투 이벤트 11 CAMERA_FRAME) [확실: 0x2069F8, 0x2070E8, 0x1EF948, 0x1EF078]
+- 이벤트 11 (예전 라벨 GLOBAL_7C24) = 창 안 매 프레임 (once 비트를 지움) b → 0x337C24 → 프레임 끝에 같은 프레임 이벤트 23 CAMERA 가 없으면 관리자 +0x7A4 (목표 가중치). 영웅·적 구분 없음. a·idx 안 씀. 해골 잡기 MAISKB00 0.75, 던지기 0, 마무리 0.7.
+- 카메라 매 프레임: cur += (tgt − cur)·0.1, tgt = 0 (끊기면 같은 속도로 줄어듦). cur &gt; 0.01 이고 지금 CAM 플래그 0x2000 이면 0x1EF078: d = |눈 − T| (T = 카메라 대상 = 영웅 + 24), 가로 FOV += (2·atan(R/d) − FOV)·cur (R = 관리자 +0x7A8 1.5 × 16 = 24), 시선을 T 쪽으로 slerp(cur), 눈은 그대로.
+- 엔진: `Combatant.onCameraFrame` → `CameraRig.frameTarget` / `frame` (실제 PS2 플레이 영상의 잡기 클로즈업과 대조).

@@ -530,6 +530,7 @@ public final class CameraRig {
 
 	/** 고정 틱 갱신. hero = 발 위치, heroYaw = 진행 방향(라디안), airborne = 공중. */
 	public void update(float dt, Vector3f hero, float heroYaw, boolean airborne) {
+		frameUpdate(dt);
 		prev.set(cur);
 		heroFeet.set(hero);
 		Vector3f t = target(hero, airborne);
@@ -587,6 +588,50 @@ public final class CameraRig {
 		p.eye(c.eye);
 		p.forward(c.target).mul(Math.max(1, p.dist)).add(c.eye); // 시선 = 카메라 정면 (대상은 화면 sa/sb 자리)
 		c.fovDeg = p.fovDeg;
+		frame(c, p, zoomPrev + (zoomCur - zoomPrev) * alpha);
+	}
+
+	// ---- 대상 프레이밍 줌 (전투 이벤트 11 CAMERA_FRAME, 0x1EF948 → 0x1EF078) ----
+
+	/** 카메라 정의 플래그 0x2000: 프레이밍 줌을 받는 카메라 (ATHN01A/01B/02A 대부분, LiftCam 0x41xxx 는 아님). */
+	static final int F_FRAME_TARGET = 0x2000;
+	/** 관리자 +0x7A8 기본 1.5 ×16 (0x1EDC88). */
+	static final float FRAME_RADIUS = 1.5f * 16f;
+	private float zoomTgt, zoomCur, zoomPrev;
+
+	/** 이번 틱 목표 가중치 (관리자 +0x7A4 — 이벤트가 매 프레임 넣고 카메라가 읽은 뒤 0 으로, 0x1EF9A4). */
+	public void frameTarget(float b) {
+		zoomTgt = b;
+	}
+
+	private void frameUpdate(float dt) {
+		zoomPrev = zoomCur;
+		zoomCur += (zoomTgt - zoomCur) * (1 - (float) Math.pow(0.9, dt * 60)); // 프레임당 ×0.1 (0x3DCCCCCD)
+		zoomTgt = 0;
+	}
+
+	/**
+	 * 0x1EF078: 대상 T (카메라 대상 = 영웅 + 24) 를 반경 R 이 화면을 채우게 — 가로 FOV += (2·atan(R/|눈−T|) − FOV)·w, 시선은 T 쪽으로
+	 * slerp(w). 눈은 그대로. 가중치 &gt; 0.01 이고 지금 카메라가 0x2000 일 때만 (기본 추적 카메라는 받는다 [추정]).
+	 */
+	private void frame(Camera c, Pose p, float w) {
+		if (w <= 0.01f) {
+			return;
+		}
+		Shot s = shots.isEmpty() ? null : shots.getLast();
+		if (s != null && s.cam != null && (s.cam.def().p().flags() & F_FRAME_TARGET) == 0) {
+			return;
+		}
+		float d = Math.max(1f, c.eye.distance(p.target));
+		double h = 2 * Math.atan(Math.tan(Math.toRadians(p.fovDeg) / 2) / 0.75); // 세로(4:3) → 원작 가로
+		h += (2 * Math.atan(FRAME_RADIUS / d) - h) * w;
+		c.fovDeg = verticalFov((float) h);
+		Vector3f f0 = new Vector3f(c.target).sub(c.eye).normalize();
+		Vector3f f1 = new Vector3f(p.target).sub(c.eye).normalize();
+		org.joml.Quaternionf q = new org.joml.Quaternionf().rotationTo(f0, f1);
+		new org.joml.Quaternionf().slerp(q, w, q);
+		Vector3f f = q.transform(f0).normalize();
+		c.target.set(c.eye).add(f.mul(Math.max(1, p.dist)));
 	}
 
 	private Vector3f target(Vector3f hero, boolean airborne) {

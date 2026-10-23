@@ -62,6 +62,13 @@ public final class Combatant {
 		shakeSink = s != null ? s : i -> { };
 	}
 
+	private java.util.function.Consumer<Float> frameSink = b -> { };
+
+	/** 이벤트 11 CAMERA_FRAME (영웅·적 구분 없음): 창 안 매 프레임 목표 가중치 b — 잡기 MAISKB00 0.75, 마무리 0.7. */
+	public void onCameraFrame(java.util.function.Consumer<Float> s) {
+		frameSink = s != null ? s : b -> { };
+	}
+
 	public void onGlobalTime(java.util.function.BiConsumer<Float, Float> s) {
 		timeSink = s != null ? s : (a, b) -> { };
 	}
@@ -843,7 +850,8 @@ public final class Combatant {
 				// 넘어지기만 해도 사망시켰다 (머리 뜯기 260 의 것은 cond 0, 자동 플레이 43 문서)
 				continue;
 			}
-			boolean once = e.cond() == 0 || e.cond() == 2 || e.cond() == 6;
+			// 11 CAMERA_FRAME 은 once 비트를 다시 지워 창 안에서 매 프레임 (0x2069F8)
+			boolean once = e.type() != 11 && (e.cond() == 0 || e.cond() == 2 || e.cond() == 6);
 			if (once && !firedEvents.add(e.bit())) {
 				continue;
 			}
@@ -860,6 +868,7 @@ public final class Combatant {
 					}
 				}
 				case 24 -> hitPauseEvent = e; // HIT_PAUSE: 적중 때 공격자·피격자 양쪽 (contact)
+				case 11 -> frameSink.accept(e.b()); // CAMERA_FRAME (0x2069F8 → 0x337C24 → 카메라 관리자 +0x7A4)
 				case 5, 7 -> {
 					if (e.cond() != 1 && e.cond() != 2) {
 						presentation(e); // 조건 없는 것은 창에서, 적중 조건 (1·2) 은 contact 에서

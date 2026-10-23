@@ -327,7 +327,7 @@ public final class CombatFile {
 			case 8 -> "SCRIPT";
 			case 9 -> "INVULNERABLE";
 			case 10 -> "SELF_HP";
-			case 11 -> "GLOBAL_7C24";
+			case 11 -> "CAMERA_FRAME"; // 0x2069F8 → 0x337C24 → 카메라 관리자 +0x7A4 (대상 프레이밍 줌)
 			case 12 -> "NO_BLOCK";
 			case 13 -> "ATTACH";
 			case 14 -> "ANIM_SPEED";

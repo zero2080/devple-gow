@@ -1921,6 +1921,11 @@ public final class GameScene implements Scene {
 	/** 전투원의 흔들림·전역 시간 이벤트를 장면에 연결 (0x206030: 영웅이든 적이든). */
 	private void bindPresentation(devple.gow.engine.combat.Combatant c) {
 		c.onCameraShake(i -> shake.start(orbTweaks, i));
+		c.onCameraFrame(b -> {
+			if (cameraRig != null) {
+				cameraRig.frameTarget(b); // 잡기 처형 클로즈업 (이벤트 11)
+			}
+		});
 		c.onGlobalTime((a, b) -> {
 			warpTimer = a;
 			warpScale = b;
