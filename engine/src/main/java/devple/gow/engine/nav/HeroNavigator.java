@@ -575,6 +575,14 @@ public final class HeroNavigator {
 		return world.segment(a, b, NavWorld.LEDGE_PROBE_EXCLUDE);
 	}
 
+	/**
+	 * 턱 윗면 수직 선분 (0x1E3A80 의 손 높이 ± d): 한쪽 면 ({@link NavWorld#frontSegment}, 원작 시트 면 검사 0x16BDE0) — 위에서 내려오는 선분은
+	 * 아래를 보는 천장 면을 지나간다. 양면이던 때는 2단 점프한 손이 ATHN01A 갑판 밑면 (−64, 법선 −1) 을 턱으로 잡았다 (38 §22) [확실].
+	 */
+	private LevelCollision.Hit ledgeTop(Vector3f a, Vector3f b) {
+		return world.frontSegment(a, b, NavWorld.LEDGE_PROBE_EXCLUDE);
+	}
+
 	/** 벽 선분 질의 결과: 붙을 발 위치, 수평 법선 (영웅 쪽), 첫 적중 면 (+0x238 표면 → 사다리/벽). */
 	record WallProbe(Vector3f feet, Vector3f n, LevelCollision.Tri tri) {
 	}
@@ -696,8 +704,8 @@ public final class HeroNavigator {
 		LevelCollision.Tri topTri = null;
 		for (int i = 0; i < 2; i++) {
 			Vector3f s = new Vector3f(c).fma(i == 0 ? -BODY_W / 4 : BODY_W / 4, right).add(0, REACH + d, 0);
-			LevelCollision.Hit h = lseg(s, new Vector3f(s).sub(0, 2 * d, 0));
-			if (h == null || Math.abs(h.tri().n().y) <= LEDGE_NY || h.tri().has(SurfaceAttr.SLIDE)
+			LevelCollision.Hit h = ledgeTop(s, new Vector3f(s).sub(0, 2 * d, 0));
+			if (h == null || h.tri().n().y <= LEDGE_NY || h.tri().has(SurfaceAttr.SLIDE)
 					|| h.tri().has(SurfaceAttr.NO_WALL_HANG)) {
 				return null;
 			}
@@ -804,8 +812,8 @@ public final class HeroNavigator {
 		for (int i = 0; i < 2; i++) {
 			Vector3f s = new Vector3f(c).fma(i == 0 ? -BODY_W / 4 : BODY_W / 4, right).add(0, REACH + d, 0);
 			Vector3f e = new Vector3f(s).sub(0, 2 * d, 0);
-			LevelCollision.Hit h = lseg(s, e);
-			if (h != null && Math.abs(h.tri().n().y) > LEDGE_NY && !h.tri().has(SurfaceAttr.SLIDE) && !h.tri().has(SurfaceAttr.NO_WALL_HANG)) {
+			LevelCollision.Hit h = ledgeTop(s, e);
+			if (h != null && h.tri().n().y > LEDGE_NY && !h.tri().has(SurfaceAttr.SLIDE) && !h.tri().has(SurfaceAttr.NO_WALL_HANG)) {
 				hits++;
 				hit = h.point();
 				bottom = e;

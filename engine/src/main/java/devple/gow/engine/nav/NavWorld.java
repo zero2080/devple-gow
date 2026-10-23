@@ -171,6 +171,37 @@ public final class NavWorld {
 		return nearer(platforms.segment(from, to, exclude), neighbour.segment(from, to, exclude));
 	}
 
+	/** 한쪽 면 선분 질의 (정적 시트, 시작점이 면 앞인 면만 — 원작 0x16BDE0) [확실]: 처음 만나는 면, 없으면 null. */
+	public LevelCollision.Hit frontSegment(Vector3f from, Vector3f to, long exclude) {
+		Vector3f d = new Vector3f(to).sub(from);
+		float len = d.length();
+		if (len < 1e-5f) {
+			return null;
+		}
+		LevelCollision.Hit best = null;
+		for (LevelCollision c : statics) {
+			LevelCollision.Hit h = c.raycast(from, d, len, t -> (t.attrs() & exclude) == 0 && t.n().dot(d) < 0);
+			if (h != null && (best == null || h.distance() < best.distance())) {
+				best = h;
+			}
+		}
+		return best;
+	}
+
+	/**
+	 * 정적 시트의 한쪽 면 선분 접촉: 원작 시트 면 검사 0x16BDE0 처럼 시작점이 면 앞 (법선 쪽)·끝점이 뒤인 면만 [확실: 디스어셈블 — 시작 거리 &lt; 0 이거나
+	 * 끝 거리 &gt; 0 이면 안 맞음]. 엔진 {@link #staticContact} 는 양면 (다른 질의들의 근사) — 천장 질의만 이것을 쓴다.
+	 */
+	public Contact frontContact(Vector3f from, Vector3f to, long exclude) {
+		LevelCollision.Hit best = frontSegment(from, to, exclude);
+		if (best == null) {
+			return null;
+		}
+		float len = from.distance(to);
+		int fx = best.tri().info() != null ? best.tri().info().sheetFx() : 0;
+		return new Contact(len > 0 ? best.distance() / len : 0, best.point(), new Vector3f(best.tri().n()), fx, null);
+	}
+
 	/** 정적 시트 + CDV GO 몸체 중 가장 가까운 선분 접촉 (원작 0x11E190 모드 2). */
 	public Contact contact(Vector3f from, Vector3f to, long exclude) {
 		return nearer(staticContact(from, to, exclude), bodyContact(from, to, exclude));
@@ -275,6 +306,60 @@ public final class NavWorld {
 		to.x = best.point().x + n.x * MOVE_SKIN;
 		to.z = best.point().z + n.z * MOVE_SKIN;
 		return true;
+	}
+
+	/** 천장 질의 면 법선 문턱: 법선 · 위 &lt; −0.1 인 (아래를 보는) 면만 천장 (0x1E39A8 0xBDCCCCCD) [확실]. */
+	public static final float CEILING_NY = -0.1f;
+
+	/**
+	 * 천장 질의 (원작 0x1E36B0) [확실: 디스어셈블 — 선분·마스크·법선·높이 / 추정: 내비 위치 = 발 + base]:
+	 * 0x1EA5F0 (지상·공중) 은 수직 속도 (+0xE0.y) &gt; 0 이면 바닥 0x1E3298 대신 이것을 (0x1EA8A4 – 0x1EA8BC → 0x1EAB60), 자유 이동 0x1EA200 은
+	 * 바닥 뒤에 늘 (0x1EA3CC) 부른다. 영웅·적 공용.
+	 * <ul>
+	 *   <li>d = |새 내비 y − 옛 내비 y (+0x110)|, L = min(키 − base − 1, d + base) (+0x120.y = 키 35.2, +0x130.y = base 6.4).</li>
+	 *   <li>선분 시작 P0 = 발 + 키 − L (머리 − L), 끝 Q = 발 + 키 + d + base 의 몸 상자 윗면 다섯 점 (가운데, 오른쪽 ± 반폭 × 정면 ± 깊이/2)
+	 *       — 시작은 늘 가운데 (0x1E3958 0x11E190 모드 2, 가장 가까운 접촉 — 시트 면은 한쪽 면 {@link #frontContact}). 벽 (+0x174 &amp; 0x30) 이면 네 모서리만 (엔진 벽 상태는 내비게이터가 맡음).</li>
+	 *   <li>면 제외 = 호출 마스크 (몸 질의와 같은 s2) | 0x1010042 | (+0x258 &amp; 0x4300000) — 바닥 질의와 같다 (GeneralGuide 는 천장이 아님).</li>
+	 *   <li>처음 맞은 면의 법선 · 위 &lt; −0.1 이고 맞은 y − 키 &lt; 발 y 면 발 y = 맞은 y − 키 (머리를 천장에 맞춤) 으로 끝 (0x1E3A18).
+	 *       수직 속도는 건드리지 않는다 (0x1EA200 / 0x1EA5F0 모두 반환값을 버림) — 오르는 동안 천장에 붙어 있다가 중력으로 떨어진다.</li>
+	 * </ul>
+	 *
+	 * @param foot      이번 틱 이동 뒤 발 위치 (y 만 고침)
+	 * @param prevFootY 지난 틱 발 높이 (+0x110)
+	 * @param yaw       정면 요 (모델 −Z 기준)
+	 * @param height    키 (+0x120.y)
+	 * @param base      바닥 (+0x130.y, 내비 위치 = 발 + base)
+	 * @param halfW     반폭 (+0x120.x / 2)
+	 * @param halfD     반깊이 (+0x120.z / 2)
+	 * @param exclude   면 제외 마스크
+	 * @return 막혀서 foot.y 를 낮췄으면 true
+	 */
+	public boolean ceiling(Vector3f foot, float prevFootY, float yaw, float height, float base, float halfW, float halfD, long exclude) {
+		float d = Math.abs(foot.y - prevFootY);
+		float l = Math.min(height - base - 1, d + base);
+		Vector3f p0 = new Vector3f(foot.x, foot.y + height - l, foot.z);
+		float top = foot.y + height + d + base;
+		float fx = (float) -Math.sin(yaw), fz = (float) -Math.cos(yaw), rx = -fz, rz = fx;
+		Vector3f q = new Vector3f();
+		for (int i = 0; i < 5; i++) {
+			float s = i == 0 ? 0 : (i & 1) != 0 ? halfW : -halfW, t = i == 0 ? 0 : i < 3 ? -halfD : halfD;
+			q.set(foot.x + rx * s + fx * t, top, foot.z + rz * s + fz * t);
+			Contact c = nearer(frontContact(p0, q, exclude), bodyContact(p0, q, exclude));
+			if (c == null || c.normal().y >= CEILING_NY) {
+				continue;
+			}
+			float y = c.point().y - height;
+			if (y < foot.y) {
+				foot.y = y;
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** 영웅 천장 질의 면 제외 = 몸 질의 마스크 (호출 마스크 s2 + 0x10042 + NoPlayerCollision) + GeneralGuide (0x1E38CC 0x1010042) [확실]. */
+	public static long ceilingExclude(long body) {
+		return body | SurfaceAttr.GENERAL_GUIDE.bit();
 	}
 
 	/** 막힌 이동의 새 위치 = 충돌점 + 법선 × 0.05 (0x1EABF4 / 0x1EA438). */

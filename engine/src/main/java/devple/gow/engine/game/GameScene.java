@@ -2556,6 +2556,12 @@ public final class GameScene implements Scene {
 				m != null ? m.flags() : 0, m != null ? m.guard() : 0);
 	}
 
+	/** 자유 이동 전투 기술 중 (기술 stateMask &amp; 0x1C = 0 → 0x1EA200, 천장 질의를 늘 한다). */
+	private boolean heroFreeMove() {
+		var m = hero.combat.active() ? hero.combat.move() : null;
+		return m != null && (m.stateMask() & 0x1C) == 0;
+	}
+
 	/** 지면 추종 + 중력 + 벽 밀어내기. 내비게이터가 위치를 정하는 상태(매달림·줄·밀기 …)면 건너뛴다. */
 	private void physics(float dt) {
 		Vector3f p = hero.ctl.position;
@@ -2582,6 +2588,13 @@ public final class GameScene implements Scene {
 			c0.vy = Math.max(c0.vy - GRAVITY * dt, -devple.gow.engine.nav.HeroNavigator.FALL_MAX);
 			p.y += c0.vy * dt;
 			c0.grounded = false;
+			// 천장 질의 0x1E36B0 (38 §22): 오르는 동안 (0x1EA5F0 은 수직 속도 > 0 이면 바닥 대신, 자유 이동 0x1EA200 은 늘) 머리를 아래 보는 면
+			// 밑으로 맞춘다. 없던 때는 ATHN01B 선창에서 2단 점프하면 머리가 ATHN01A 선창 천장 (−64) 과 갑판 (0) 을 지나 갑판 위에 내렸다 (사용자 보고)
+			if (nav != null && (c0.vy > 0 || heroFreeMove())) {
+				nav.navWorld.ceiling(p, hero.ctl.prevPosition.y, hero.ctl.yaw, devple.gow.engine.nav.HeroNavigator.HANG,
+						devple.gow.engine.nav.HeroNavigator.FOOT, devple.gow.engine.nav.HeroNavigator.BODY, devple.gow.engine.nav.HeroNavigator.BODY,
+						devple.gow.engine.nav.NavWorld.ceilingExclude(heroBodyExclude()));
+			}
 			if (!Float.isNaN(g) && p.y < g) {
 				p.y = g;
 				c0.vy = 0;
