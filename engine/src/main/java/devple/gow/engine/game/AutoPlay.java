@@ -61,6 +61,8 @@ public final class AutoPlay {
 	private int teleports, visited, deaths, vetoes;
 	/** 영웅 붉은 오브 수 (GameScene 이 매 틱 넣음, 기록용). */
 	public int redOrbs;
+	/** 잡기를 기다리는 소품이 가까이 있음 (GameScene, ATHN01F 침대 쌍둥이): 목표에서 R2 대신 ○ (GRAB → MAIXPTBEDMOUNT). */
+	public boolean grabCue;
 	private final Set<String> vetoed = new LinkedHashSet<>();
 
 	public AutoPlay(String level) {
@@ -193,6 +195,7 @@ public final class AutoPlay {
 					return bot;
 				}
 				PadButton b = rc < 0.1f ? PadButton.R1 : rc >= 2.6f && rc < 2.7f ? PadButton.CROSS
+						: grabCue ? (rc % 1f < 0.1f ? PadButton.CIRCLE : null)
 						: (int) (rc / 0.075f) % 2 == 0 ? PadButton.USE : null;
 				bot.press(b);
 				return bot;

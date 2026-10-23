@@ -644,6 +644,36 @@ SCR: BMITurnOffVents(b) = 배출구 수 −b, 누적 0 (204/207/209/222/227 — 
 - 남은 것: 220 끝 → 223 사이 한 틱 결합 끊김 (적 220 은 AUTO 없이 끝나 한 틱 기술 없음 → 영웅 223 (0x20) 시작 때 다시 묶음, 0x2097A8) [근사: 원작 프레임 안 순서 미확인].
   0x1E3298 의 위 오프셋 6.4 (+0x130.y) 는 영웅 값 — 해골의 +0x130 미확인 [근사]. 끄는 속도가 빠르면 d 가 커져 공중 높이에서도 바닥이 닿을 수 있다 (원작 규칙 그대로).
 
+### 11.8 ATHN01F 선장실 침대 미니게임 (쌍둥이 AI1 305 aoxpt, 2026-10-23 QA vs PS2 영상 2060–2090 초)
+- **R2 와 ○ 는 다른 것** [확실: 데이터]. R2 아이콘은 침대 옆 `teaseTwins-volumeR/L` 의 버튼 안내 (r2icon, 42 문서 §1) — R2 (1024) → `talky`: LevelData:4/5,
+  메시지 317 "침대로 돌아와요, 크레토스." / 319 "크레토스, 조금만 더 머물러요.", CMV 끔 + `twinscam1`/`TwinCamLeft`, `forceMove` 1019 기술 0/1 (인자2 1 →
+  A0/A1 AOXPT1A02MI01/02 놀림) → 메시지 끝 1040 → `quitMime` 1019 −1 + CMV 켬. **미니게임은 ○** (영웅 002 M200 GRAB 의 `HIT_CONFIRM -> M846 tgt=305 tag=305`):
+  - 침대 위 원 볼륨 `twinsCircle-pCube2` 진입 → `Minigamecircle-miniGame1idle69` (1019 69, LevelData:8 거짓) 또는 `miniGame2idle875` (참) + 침대 위 붉은 원
+    (`Minigamecircle-VisON`). 나감 → 1019 70 (A70 `REQUEST0 -> -`, 기술 없음) + 원 끔 (LevelData:6 = 미니게임 중이면 안 나감).
+  - 쌍둥이 M69 AOXPT1A02MI06 (반복) 이 SET_1B0 **305** (자세 태그) → ○ GRAB 적중 → 영웅 846 MAIXPTBEDMOUNT, 쌍둥이 `EV_HIT_REACT tag=200` (GRAB 의 SET_1B0 200) → 846.
+    두 쪽 같은 ID 결합 (`GrabSync`), 쌍둥이 846 이벤트 22 [0–1] 로 영웅을 끈다 (§11.4).
+  - 쌍둥이 846–851: SCR_TimedPress 템플릿 300–305 창 [0.31–0.57] (프롬프트 하나씩, 35 문서 §5.2), 맞히면 `[0.00–0.60] AUTO → 다음 @0.28`, 놓치면
+    `[0.31–0.58]! REQUEST0 → 852` (실패) → AUTO 69. 851 다음 853 MAIXPTBEDMOUNTWIN: ORB_EMIT 850 ×5 [0.70–0.75] → AUTO 875 (둘째 판 대기, SET_1B0 306 → 880–887,
+    887 ORB_EMIT 851 ×1).
+  - 스크립트 (1035 기술 시작): 846 (¬LevelData:8) → LevelData:6, CMV 끔, `camVase`, Animator `gobedshake` bedShake00 (+ 소리 그룹 `gosndgrpbed*` "!0");
+    847–851 → bedShake01/00/02/01/03; 852 → bedshakeFail + miniGame1idle69 (CMV 켬), LevelData:6 거짓; 853 → `camVaseSuccess`, LevelData:6 거짓·**8 참**,
+    bedshakeWin (침대 기둥 위 항아리가 떨어짐), 4.2 초 뒤 CMV 켬, 7.5 초 bedShakeReset. 880–887 은 같은 흐름 (LevelData:8 조건).
+- **엔진에서 안 되던 것과 수정**:
+  1. 봇·디버그 스크립트의 R2 가 버튼 안내 1024 에 닿지 않았다 (`GameScene` 이 창 입력만 봄) → 지난 틱의 실제 입력 (`lastInput`) 도 본다 [엔진 전용].
+  2. 1019 인자1 0 을 모든 적에서 버렸다 → 전투 파일에 기술 0 이 있으면 받는다 (쌍둥이 놀림). 인자2 ≠ 0 인데 요청할 기술이 없으면 (70, −1) 지금 기술을 끊는다
+     (`Combatant.stop`: 0x1D3530 → 0x209918 [확실: 경로], 자세 태그도 지움 [추정]) — 예전엔 원 밖에서도 305 태그가 남았다.
+  3. TimedPress 실패 분기 (`Combatant.runWindowBranch`) 가 대기 분기를 안 지워 852 위에서 846 의 AUTO → 847 이 실행 — 실패해도 미니게임이 이어져 853 까지 갔다
+     → 실패 때 대기 분기를 버린다 [추정: 원작 실패 처리 = 기술 요청 경로 0x209378 의 큐 비움].
+  4. 처형 성공 → 사망 처리가 소품에도 적용돼 853 뒤 쌍둥이가 죽을 뻔했다 → HP 32767 은 제외.
+  5. Animator 대상 `gobedshake` 는 CDV 가 없어 발판 목록에서 빠져 애니가 재생되지 않았다 → 스크립트 Animator 대상이고 ANM 이 있으면 충돌 없는 몸으로 넣는다
+     (`Platforms.of`, 원작 0x1AB0B8 은 충돌과 무관 [확실: 코드]).
+  6. AUTO 봇: 잡기를 기다리는 소품 (HP 32767, 자세 태그 ≥ 0, 120 안) 이 있으면 목표에서 R2 대신 ○, 결합 중 미니게임은 `AutoPad` 가 프롬프트 버튼 [엔진 전용].
+- 결과: AUTO (`-Dgow.auto.goal=590,107,-580 -Dgow.auto.face=575,96,-576`) — 1019 69 → ○ → 846 → camVase → 847…851 (bedShake00–03) → 853 → camVaseSuccess
+  (항아리 떨어짐) → 875, 붉은 오브 0 → 330 (850 ×5) / 둘째 판 880 → 887 +5. 무입력은 846 → 852 → 69. R2 는 메시지 319 + TwinCamLeft + 놀림 1 → 1040 → −1.
+  시험 `combat.BedMinigameTest` (성공 순서·오브 850 ×5·생존·875 태그 306 / 실패 852 → 69 / `stop` 이 기술·태그를 지움).
+- 남은 것: `camVase`/`TwinCamLeft` 화면 구도 — 엔진 레일 카메라는 바닥과 오른쪽 끝 항아리를 비춘다 (원작 영상과 대조 못 함, 카메라 시스템 쪽) [근사].
+  Animator 속도 슬롯 (H6 = 2 / 0.5) 이 엔진에서 1.0 으로 읽힘 — 슬롯 번호 미확인.
+
 ## 보스 체력 미터 (HUD)
 - 미터는 FLP_HUDK 가 아니라 **레벨 WAD 의 FLP_&lt;레벨&gt;** (ATHN01B/C/E, ATHN08A/B/C, PAND03G) 에 있다. `GameScene` 이 이 FLP 를 HUD 와 변수를 공유하는
   오버레이(`levelHud`, 입력 없음)로 띄운다.

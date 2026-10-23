@@ -1753,6 +1753,13 @@ public final class GameScene implements Scene {
 
 	/** 스크립트 Idle(true) (Internal 0xC) 동안 조작 잠금. */
 	private boolean scriptIdle, hudHidden;
+	/**
+	 * 지난 틱 영웅이 받은 입력이 창 입력이 아닐 때 (디버그 스크립트·봇·AUTO) 그 입력 — R2 사용 버튼 (1024·세이브) 도 같은 입력으로 본다.
+	 * 예전에는 창 입력만 봐서 봇·스크립트 R2 가 버튼 안내 센서에 닿지 않았다 (ATHN01F 쌍둥이 teaseTwins-volumeR-talky) [엔진 전용].
+	 */
+	private Input lastInput;
+	/** AUTO 검증의 결합 미니게임 자동 입력 [엔진 전용]. */
+	private final devple.gow.engine.boss.AutoPad autoPad = new devple.gow.engine.boss.AutoPad();
 	private static final Input IDLE_INPUT = new devple.gow.engine.input.ScriptedInput(0, List.of());
 
 	/** 재질 피해 타이머 (원작 +0x2B0): 영웅 하나, 적은 개체마다. */
@@ -2079,14 +2086,15 @@ public final class GameScene implements Scene {
 			hud.variables().event("PS2_PauseMenu_Event", 1);
 			return;
 		}
-		if (e.input().pressed(PadButton.USE) && !hero.combat.active() && nearSavePoint()) {
+		boolean use = e.input().pressed(PadButton.USE) || lastInput != null && lastInput.pressed(PadButton.USE);
+		if (use && !hero.combat.active() && nearSavePoint()) {
 			askSave();
 			return;
 		}
 		if (questionId >= 0) {
 			return; // 질문 메뉴가 열려 있는 동안 게임은 멈춘다 (원작 HUD Pause_Check 5, 입력은 HUD FLP 가 받음)
 		}
-		if (e.input().pressed(PadButton.USE) && !hero.combat.active()) {
+		if (use && !hero.combat.active()) {
 			world.postEvent(SceneNav.EVENT_USE, 0, 0, 0, world.player()); // 버튼 안내 센서 (mode 2 = 볼륨 안일 때만 반응)
 		}
 		if (e.input().pressed(PadButton.SELECT)) {
@@ -2121,6 +2129,9 @@ public final class GameScene implements Scene {
 						.min(java.util.Comparator.comparingDouble(f -> f.pos.distanceSquared(hero.ctl.position))).orElse(null);
 			}
 			auto.unstick = at != null && boss != null && at != boss.boss();
+			// 잡기를 기다리는 소품 (HP 32767, 자세 태그 설정 중 — ATHN01F 쌍둥이 M69 SET_1B0 305: 영웅 GRAB → 846) 이 가까우면 목표에서 ○ [엔진 전용]
+			auto.grabCue = enemies.stream().map(Enemy::fighter).anyMatch(f -> !f.dead() && f.maxHp() >= 32767
+					&& f.combat().stanceTag() >= 0 && f.pos.distance(hero.ctl.position) < 120);
 			in = obj != null ? auto.reach(hero.ctl.position, obj, camYaw, dt)
 					: auto.steer(hero.ctl.position, at != null && at.maxHp() < 32767 ? aimPoint(at) : null, boss != null, camYaw, dt);
 			if (auto.done()) {
@@ -2130,6 +2141,7 @@ public final class GameScene implements Scene {
 		if (scriptIdle) {
 			in = IDLE_INPUT; // 스크립트 Idle(true): 입력 없음
 		}
+		lastInput = in == e.input() ? null : in;
 		if (time < autoRun) {
 			in = new Input(e.window().handle()) {
 				@Override
@@ -2155,9 +2167,16 @@ public final class GameScene implements Scene {
 		if (target != null && (boss == null || !boss.claimsGrab(target))) {
 			Enemy te = enemies.stream().filter(x -> x.fighter() == target).findFirst().orElse(null);
 			boolean was = grab.active();
-			grab.update(boss != null ? boss.minigameInput(in, grab.timed(), grab.qte()) : in, target,
-					te != null ? te.kind().tweaks() : null, dt);
-			if (was && !grab.active() && grab.executionSucceeded()) {
+			Input gi = in;
+			if (boss != null) {
+				gi = boss.minigameInput(in, grab.timed(), grab.qte());
+			} else if (auto != null && grab.active()) {
+				autoPad.drive(grab.timed(), grab.qte()); // AUTO 검증: 결합 미니게임 (ATHN01F 침대 846–851 TimedPress) 자동 입력 [엔진 전용]
+				gi = autoPad;
+			}
+			grab.update(gi, target, te != null ? te.kind().tweaks() : null, dt);
+			// HP 32767 소품 (ATHN01F 쌍둥이) 은 미니게임 성공 (853 MAIXPTBEDMOUNTWIN → 875) 뒤에도 그대로 — 처형이 아니다
+			if (was && !grab.active() && grab.executionSucceeded() && target.maxHp() < 32767) {
 				target.hp = 0; // 처형 성공 → 사망 처리 (원작은 처형 기술의 피해/스크립트) [근사]
 			}
 		}

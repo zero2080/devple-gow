@@ -250,7 +250,9 @@ public final class Platforms {
 					anm = r;
 				}
 			}
-			if (cdv == null && !posed.contains(name)) {
+			// 충돌 없는 Animator 대상 (ATHN01F 침대 미니게임 gobedshake: 선반 항아리 bedShake00–03/bedshakeWin/Fail/Reset) 도 자세만 갖는 몸으로 —
+			// 원작 Animator 0x1AB0B8 은 대상 GO 의 애니 컴포넌트를 틀 뿐 충돌과 무관 [확실: 코드]. 예전에는 CDV 가 없으면 빠져 애니가 재생되지 않았다
+			if (cdv == null && !posed.contains(name) && !(owners.contains(name) && anm != null)) {
 				continue;
 			}
 			AnimationSet set = null;

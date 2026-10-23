@@ -112,11 +112,17 @@ public final class CombatScriptBridge {
 			// 일반 Enemy1 도 원작 0x25B8F8 → 0x1D3530 (인자2 ≠ 0 이면 0x209918 로 지금 기술을 끊고 0x209378 기술 요청, ai +0x40 = 기술).
 			// 선창 히드라 hydraEnt3b-stunTransmit 100 / regen 107 / getup 108 [확실]. 순찰 변경 PatrolChange 0 은 기술 0 이 없는 적이 대부분이라
 			// 엔진은 0 을 받지 않고, 전투 파일에 있는 기술만 [근사: 원작은 거르지 않음]
+			// 기술 0 은 전투 파일에 기술 0 이 있는 적만 (ATHN01F 쌍둥이 aoxpt 305: A0 AOXPT1A02MI01 = teaseTwins-volumeR-forceMove 의 놀림 동작).
+			// 인자2 ≠ 0 인데 요청할 기술이 없으면 (A70 "REQUEST0 -> -", quitMime −1) 지금 기술만 끊는다 (0x209918) — 놀림·M69 대기 (자세 태그 305) 끝
 			Combatant c = f.combat();
-			if (e.arg1() == 0 || f.dead()) {
+			if (e.arg1() == 0 && c.data().move(0) == null || f.dead()) {
 				return false;
 			}
 			boolean ok = e.arg2() != 0 ? c.forceMove(e.arg1()) : c.request(e.arg1());
+			if (!ok && e.arg2() != 0 && c.active()) {
+				c.stop();
+				ok = true;
+			}
 			log.add("1019 → " + a.group + " 기술 " + e.arg1() + (ok ? "" : " (없음)"));
 			if (DEBUG) {
 				System.out.println("[스크립트 이벤트] 1019 → " + a.group + " 기술 " + e.arg1() + (ok ? "" : " (없음)"));

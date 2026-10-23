@@ -306,6 +306,9 @@ public final class Combatant {
 		}
 		for (Branch b : move.branches()) {
 			if (b.input() == 0 && b.winStart() <= e.start() + 1e-3f && b.winEnd() >= e.end() - 1e-3f && b.target() >= 0) {
+				// 대기 중인 분기 (이 기술의 AUTO) 를 버린다 — 안 버리면 ATHN01F 침대 846 의 AUTO → 847 @0.28 이 실패 852 위에서 실행돼
+				// 실패해도 미니게임이 이어졌다 (852 → 847 → … → 853 승리). 원작 실패 처리도 기술 요청 경로 (0x209378: 분기 큐 비움) [추정: 경로]
+				queued = null;
 				start(b, null);
 				return true;
 			}
@@ -339,6 +342,16 @@ public final class Combatant {
 		log.accept(String.format("기술 %d %s (직접)", m.id(), clip != null ? clip.name : "?"));
 		moveSink.accept(EVENT_MOVE_START, m.id());
 		return true;
+	}
+
+	/**
+	 * 지금 기술을 끊고 기술 없음으로 (원작 0x25B8F8 → 0x1D3530: 1019 인자2 ≠ 0 이면 0x209918 Combat_EndMove 뒤 인자1 요청 — 요청할 기술이 없으면
+	 * (ATHN01F 쌍둥이 A70 "REQUEST0 -> -", quitMime 1019 −1) 기술 없는 대기로 남는다 [확실: 경로 / 추정: 자세 태그 +0x1B0 도 지움]).
+	 */
+	public void stop() {
+		end();
+		queued = null;
+		stanceTag = -1;
 	}
 
 	/** 애니 대체 조회 (애니 해시 → 다른 세트의 Animation). GrabSync 가 영웅 세트를 연결한다. */
