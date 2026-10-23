@@ -73,7 +73,7 @@ snd.has(name); snd.find(name); snd.nameOf(hash);
 | 인스턴스 제한 | Sound.instanceLimit 초과 시 가장 오래된 것 kill | 989snd InstanceLimit |
 | RAND_PLAY 반복 회피 | (뱅크, 그레인 위치) 별 직전 선택을 관리자 공유 맵에 | 원작은 그레인 데이터 arg2 에 기록(전역 공유) |
 | DPMS kind 0/1/2/3 | 메모리 팩 / `NAME.VAG` 전체 디코딩 / `NAME.VPK` 스트림 / 4채널 스트림 | 14 §4 |
-| 4채널 VPK | 채널 (0,1)+(2,3) 믹스, `musicParam(a, b)` = 층 a 볼륨 b/127 | [추정] |
+| 4채널 VPK | 인터리브 0x1000 (2ch 와 같음, §11) 으로 읽고 채널 (0,1)+(2,3) 믹스, `musicParam(a, b)` = 층 a 볼륨 b/127 | 인터리브 [확실: 데이터] / 층 [추정] |
 | 음악 페이드 | 미구현 (즉시 전환) | |
 | ADSR | 완료 | §7 |
 | 리버브 | 완료 (모드 근사) | §8 |
@@ -92,6 +92,7 @@ snd.has(name); snd.find(name); snd.nameOf(hash);
 | `…loopingSoundStopsOnRequest` | SND_TRANSFORM_LP 2초 유지 → stop → 종료 |
 | `…vagPackDialogueViaPlugin` | SND_MINO_VODIE → DPMS kind 0 → `min` 팩 MINDIE_1 16kHz |
 | `…musicGroupStreamsVpk` | SND_M_ATH1C1_4 → ATH1C1_4.VPK 스트림 디코딩, stopMusic |
+| `VpkStreamTest` | 합성 4ch VPK: L = ch0+ch2, R = ch1+ch3 가 모든 샘플에서 일정 (0x800 이면 조각마다 바뀜), `audio:wav` 채널 순서; 실데이터 ATH1C1_4 이음매 비율 0x1000 < 1.1, 0x800 > 1.15 |
 | `…soundControllerGroupUsesEmitterSlots` | SNDGrpAmbDeckofShip Op1/Op2 → 다른 소리, Op0 → 전부 종료 |
 
 OpenAL 경로는 로컬에서 수동 확인 (재생 60 프레임, `alGetError` 0).
@@ -191,3 +192,27 @@ IRX 근거: 설정 `0x4F14`, 초기화 `0x22DC`, 대상별 깊이 `0x29D4`, 계�
   | 0x400 | SFX UW pitch 10 | 1 | 피치 오프셋 · f |
 - 피치 단위는 989snd 미세 피치(1/128 반음)로 보고 −1524 ≈ −11.9 반음 [추정]. `GameScene` 이 매 프레임 `cameraRig.underwater()` 를 넘긴다.
 - 검증 `UnderwaterTest`.
+
+## 11. ATHN01A 갑판 전투 음악 끊김 (QA vs PS2 플레이)
+
+증상: 첫 해골 전투(ATHN01A) 내내 배경음악이 계속 끊김. PS2 영상은 끊김 없이 이어진다.
+
+- **스크립트는 한 번만 시작한다 [확실]**: `PlayerStartZone-…-EntrySensor1` → `MusicGrpAthC1Start-SoundController1` (H8 지연 13초) →
+  H10 `MusicGroupStop(3)` + `MusicGroupStart("SND_M_ATH1C1_4", 0)`. `MusicGrpAthC1Start-EventSensor1` (1039 피해) 는 대상이 없어 아무 것도 켜지 않는다.
+  `-Dgow.debug.music` 로그 (150초 자동 전투, 난이도 1): `[music 13.02] start SND_M_ATH1C1_4` 한 번 뒤 정지·재시작·보이스 뺏김·스트림 언더런 0.
+- **원인 = 4ch VPK 인터리브 [확실: 데이터]**: SND_M_ATH1C1_4 = DPMS kind 3 `ATH1C1_4.VPK` (4ch, 32kHz, 헤더 0x0C = 8192).
+  예전 `VpkStream` 은 인터리브를 0x0C / 채널수 = 0x800 으로 읽었는데, 실제 배치는 2ch 와 같은 0x1000 이다 (블록 0x4000).
+  0x800 으로 읽으면 출력 채널마다 0x800B (3,584 샘플 = 0.112초) 조각이 실제 ch0 → ch2 앞 절반 … 으로 번갈아 섞이고 절반은 건너뛰어
+  0.11초마다 음악이 잘려 이어진다 (= 들리는 "끊김").
+  근거 (4ch 파일 4개 ATH1C1_4 / ATH2C1_4 / ATH2C8_4 / ATH4C2_4 모두 같음):
+  | 인터리브 | 조각 경계 샘플 차 / 프레임 경계 샘플 차 (ch0..3) | 채널 상관 |
+  |---|---|---|
+  | 0x800 (예전) | 1.26 1.23 1.32 1.31 | 0-1 0.02, 0-2 0.38 (짝이 어긋남) |
+  | **0x1000** | **1.01 0.95 1.03 1.00** | **0-1 0.38, 2-3 0.38, 층 사이 0.00** |
+  | 0x2000 | 1.14 1.32 1.08 1.31 | ≈ 0 |
+  2ch 음악 ATH1C2_2 도 0x1000 에서만 0.98/1.01.
+- 수정: `AudioDecoder.vpkInterleave(block, ch)` = ch ≤ 1 ? block : block / 2 (헤더 0x0C 는 스테레오 한 쌍 합계로 해석 [추정: 모든 VPK 가 8192 라 0x1000 고정과 구분 불가]).
+  `VpkStream` (게임 스트림) 과 `audio:wav` 둘 다 사용. 바로 읽으면 두 층은 서로 무상관 스테레오 스템 (각 L/R 상관 0.38, 2ch 음악 0.36 과 비슷) → (0,1)+(2,3) 합산은 그대로 [추정]
+  (합산 클리핑 0.19 % 샘플; 예전 잘못된 짝은 1.37 %).
+- 계측: `-Dgow.debug.music` — `[music t] start/stop/param`, 음악 인스턴스가 끝나거나 잃으면 한 줄, OpenAL `[audio] 보이스 뺏김` (48 소스 풀이 찼을 때 가장 오래된 보이스) / `[audio] 스트림 언더런`.
+- 남은 것: 음악 페이드 (MusicGroupStop/Start 의 초) 미구현, 보이스 뺏기가 음악 스트림도 고를 수 있음 (이번 전투에선 0 회).

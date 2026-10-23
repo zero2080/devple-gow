@@ -42,6 +42,7 @@ public final class OpenAlBackend implements AudioBackend {
 		short[] scratch;
 		boolean introPending;
 		boolean drained;
+		String label = "";
 	}
 
 	private final long device;
@@ -112,6 +113,9 @@ public final class OpenAlBackend implements AudioBackend {
 			Iterator<Slot> it = slots.values().iterator();
 			Slot old = it.next();
 			it.remove();
+			if (SoundManager.MUSIC_DEBUG) {
+				System.out.println("[audio] 보이스 뺏김: " + old.label + (old.stream != null ? " (스트림)" : ""));
+			}
 			release(old);
 		}
 		Slot s = new Slot();
@@ -135,6 +139,11 @@ public final class OpenAlBackend implements AudioBackend {
 		alSourcei(s.source, AL_LOOPING, AL_FALSE);
 		s.clip = null;
 		free.add(s.source);
+	}
+
+	private void apply(Slot s, Voice v) {
+		s.label = v.label;
+		apply(s.source, v);
 	}
 
 	private void apply(int src, Voice v) {
@@ -162,7 +171,7 @@ public final class OpenAlBackend implements AudioBackend {
 		Slot s = alloc();
 		s.clip = clip;
 		int[] b = buffers(clip);
-		apply(s.source, v);
+		apply(s, v);
 		if (b[0] != 0) {
 			alSourceQueueBuffers(s.source, new int[]{b[0], b[1]});
 			alSourcei(s.source, AL_LOOPING, AL_FALSE);
@@ -181,7 +190,7 @@ public final class OpenAlBackend implements AudioBackend {
 		s.stream = st;
 		s.scratch = new short[Math.max(st.channels(), st.sampleRate() / 4 * st.channels())];
 		s.streamBufs = new int[STREAM_BUFS];
-		apply(s.source, v);
+		apply(s, v);
 		alSourcei(s.source, AL_LOOPING, AL_FALSE);
 		int queued = 0;
 		for (int i = 0; i < STREAM_BUFS; i++) {
@@ -289,6 +298,9 @@ public final class OpenAlBackend implements AudioBackend {
 					}
 				}
 				if (alGetSourcei(s.source, AL_SOURCE_STATE) != AL_PLAYING && alGetSourcei(s.source, AL_BUFFERS_QUEUED) > 0) {
+					if (SoundManager.MUSIC_DEBUG) {
+						System.out.println("[audio] 스트림 언더런: " + s.label);
+					}
 					alSourcePlay(s.source); // 언더런 복구
 				}
 			}

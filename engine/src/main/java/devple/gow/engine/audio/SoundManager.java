@@ -385,8 +385,10 @@ public final class SoundManager implements AutoCloseable {
 	/** MusicGroupStart(name, fadeSec): 현재 음악을 멈추고 SND_M_* 소리를 음악 그룹으로 재생. */
 	public int music(String sndName, float fadeSec) {
 		if (sndName.equals(musicName) && playing(musicHandle)) {
+			mlog("start " + sndName + " (재생 중 → 유지)");
 			return musicHandle;
 		}
+		mlog("start " + sndName + " fade " + fadeSec);
 		stopMusic(fadeSec);
 		Ref r = byName.get(sndName);
 		if (r == null) {
@@ -405,6 +407,7 @@ public final class SoundManager implements AutoCloseable {
 
 	/** MusicGroupStop(fadeSec). 페이드는 미구현 (즉시 정지). */
 	public void stopMusic(float fadeSec) {
+		mlog("stop fade " + fadeSec + " (" + musicName + ")");
 		if (musicHandle != 0) {
 			kill(musicHandle);
 		}
@@ -420,6 +423,7 @@ public final class SoundManager implements AutoCloseable {
 	 * MusicGroupParam(a, b, sec) [의미 추정]: 4채널 음악의 층 볼륨으로 해석 — a = 층(0/1 외 값은 층 1), b = 0..127 볼륨.
 	 */
 	public void musicParam(int a, int b, float sec) {
+		mlog("param " + a + " " + b + " " + sec);
 		SoundInstance in = instances.get(musicHandle);
 		if (in != null) {
 			layer(in, a == 0 ? 0 : 1, Math.max(0, Math.min(127, b)) / 127f);
@@ -642,10 +646,22 @@ public final class SoundManager implements AutoCloseable {
 		backend.reverb(reverbDepth / 32767f);
 	}
 
+	/** -Dgow.debug.music: 음악 시작/정지/층·보이스 상실 로그 (시각 = 누적 update 초). */
+	static final boolean MUSIC_DEBUG = System.getProperty("gow.debug.music") != null;
+	private float clock;
+	private boolean musicWasPlaying;
+
+	void mlog(String msg) {
+		if (MUSIC_DEBUG) {
+			System.out.printf("[music %.2f] %s%n", clock, msg);
+		}
+	}
+
 	// ---- 프레임 ----
 
 	/** 매 프레임: 240Hz 그레인 틱 + 백엔드 보충 + 끝난 인스턴스 정리. */
 	public void update(float dt) {
+		clock += dt;
 		tickAcc += dt;
 		int n = 0;
 		while (tickAcc >= 1f / TICK_HZ && n++ < TICK_HZ) {
@@ -663,6 +679,13 @@ public final class SoundManager implements AutoCloseable {
 			if (!it.next().alive()) {
 				it.remove();
 			}
+		}
+		if (MUSIC_DEBUG) {
+			boolean now = playing(musicHandle);
+			if (musicWasPlaying && !now && musicHandle != 0) {
+				mlog("음악 인스턴스 끝남/잃음 (" + musicName + ") " + backend.stats());
+			}
+			musicWasPlaying = now;
 		}
 	}
 

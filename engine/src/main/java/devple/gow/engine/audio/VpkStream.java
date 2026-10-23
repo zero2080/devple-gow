@@ -1,5 +1,6 @@
 package devple.gow.engine.audio;
 
+import devple.gow.tools.audio.AudioDecoder;
 import devple.gow.tools.audio.PsAdpcm;
 
 import java.io.IOException;
@@ -11,7 +12,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 
 /**
- * VPK 스트리밍 디코더 (09 문서 §3): 블록(전 채널 합계 8192B) 단위로 파일에서 읽어 디코딩한다.
+ * VPK 스트리밍 디코더 (09 문서 §3): 채널마다 0x1000B ({@link AudioDecoder#vpkInterleave}) 씩 번갈아 놓인 블록 단위로 읽어 디코딩한다.
  * 출력은 항상 스테레오(1ch 는 모노). 4채널은 (0,1) / (2,3) 두 스테레오 층을 {@link #layerGain} 으로 섞는다
  * [추정: _4 음악 = 2 개 스템, MusicGroupParam 이 층 볼륨을 바꾸는 것으로 보임].
  */
@@ -49,7 +50,7 @@ public final class VpkStream implements PcmStream {
 			int block = h.getInt(0x0C);
 			rate = h.getInt(0x10);
 			ch = Math.max(1, h.getInt(0x14));
-			inter = block / ch;
+			inter = AudioDecoder.vpkInterleave(block, ch);
 			dataEnd = (int) Math.min(fc.size(), dataOff + (long) perCh * ch);
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
