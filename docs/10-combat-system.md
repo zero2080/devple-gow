@@ -403,7 +403,7 @@ lv = 0x3044BD (블레이드 레벨 0..5), WeaponLevel 표 = 0x3040C0 + 0x50*lv
 ```
 m = Difficulty.AIDamageMult × Costume.AIDamageMult × (GodMode ? WeaponLevel[lv].GodModeEnmyDmgMult : 1)
 ```
-적 기본 공격력 = 적 CombatFile 공격.damage × AI1 "Damage Multiplier"(대부분 1.0, 아레스/악몽 크라토스 2.0) [추정: AI1 배율 적용 위치 미확인].
+적 기본 공격력 = 적 CombatFile 공격.damage × AI1 "Damage Multiplier"(대부분 1.0, 아레스/악몽 크라토스 2.0) × AI Damage Mult × 코스튬 AI Damage × (영웅 신 모드 ? GodModeEnmyDmgMult : 1) — 0x1D3E80 (AI vtable 0x2BB01C), 맞는 쪽이 누구든 (적끼리도) [확실].
 
 | 표 | 값 |
 |---|---|
@@ -412,6 +412,22 @@ m = Difficulty.AIDamageMult × Costume.AIDamageMult × (GodMode ? WeaponLevel[lv
 | GodModeDmgMult / GodModeEnmyDmgMult | (lv0 불가) 2.0 / 0.75, 0.6, 0.45, 0.3, 0.3 |
 | 코스튬 0–5 Damage / AI Damage | 1/1, 1/1, 0.5/1, 2/4, 0.5/1, 2/0.25 |
 | 아르테미스의 검 단계 0–2 | 1.75, 2.25, 3.0 |
+
+### 난이도가 바꾸는 규칙 전부 [확실: g_difficulty u16 0x29DB54 읽는 15 곳, 표 0x337728 + d×0xC 읽는 7 곳]
+방어·가드 확률, 경직/poise, 잡기·QTE 창·연타율, 무적 시간, 오브/체력 드롭, 보스 HP 는 난이도와 무관하다 (0x1E1428 의 0x337720 = Circle Sound Delay).
+
+| 규칙 | 원작 | 값 (쉬움/보통/어려움/신) | 엔진 |
+|---|---|---|---|
+| 영웅이 주는 피해 | 0x1DBD18 | Damage Mult 2/1/0.75/0.5 | `DamageRules.playerScale` |
+| 적이 주는 피해 | 0x1D3E80 | AI Damage Mult 0.5/1/2.5/5 | `EnemyFighter.setIncomingScale` |
+| 공격 뒤 대기·재사용 대기 | 0x1CCCC8 / 0x1D3074, 잎 고르기 0x229258 | AI Recovery Time Mult 2/1/0.75/0.5 | `AiBrain` |
+| 바닥 재질 피해 | 0x1EAC70 → 0x1EADC8 (1 초마다, 시트 "Damage"/"AIDamage" × AI Damage Mult × 코스튬 × 신 모드) | 예 PAND04J 10 → 초당 5/10/25/50 | `GameScene.surfaceDamage` [근사: 벽 면 없음] |
+| 범위 피해 (SCR_ConcussionBurst) | 0x191720: 템플릿 "Damage" 하위 바이트 × 주인 배율 | 주인 배율 따라 | `MagicFx.concussionDamage` [근사: 한 번, 밀어내기 없음] |
+| 쉬움으로 다시 하기 제안 | 0x1DBF90 ← 사망 메뉴 0x220360: 보통·어려움, 사망 수 % "Deaths Before Easy Offer"(5) == 0, Arena 아님 → DeadMenu_Event 3, 선택 → 0x29F484 → 체크포인트 로드 때 난이도 0 | – | `GameScene.openDeadMenu` (사망 메뉴 FLP DeadMenu: Choice 0 다시 / 1 나가기 / 2 쉬움으로) |
+| 스크립트 변수 Internal 48 DifficultyLevel | 0x1AFF94 | OLYMP02 크레딧: 신만 Bonus24 | `GameScriptHost.difficulty` |
+| 해금 비트 | 0x1B1168 | d0/1→1, d2→2, d3→4 | `Unlocks` |
+
+배율이 붙지 않는 것: 마법 직접 피해 (포세이돈 번개 0x195718, 투사체 0x19D460), SELF_HP, CONCUSSION 이벤트 48, 스크립트 HEALTH.
 
 예: Normal, 블레이드 lv3(DmgMult 3), COMBO6A(6) → 18. 미노타우르스 Lv1(HP 90)은 5타.
 

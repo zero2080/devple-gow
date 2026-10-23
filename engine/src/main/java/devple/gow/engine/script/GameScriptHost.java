@@ -104,8 +104,17 @@ public class GameScriptHost implements EscHost {
 		return null;
 	}
 
+	/** Internal 변수 48 DifficultyLevel (getter 0x1AFE18 → 0x1AFF94 = 0x29DB54): 0 쉬움 .. 3 신. 게임 쪽이 넣는다. */
+	public java.util.function.IntSupplier difficulty = () -> 1;
+	public static final int VAR_DIFFICULTY = 48;
+
 	@Override
 	public Object getVar(EscContext ctx, int scope, int id, int type) {
+		if (scope == 1 && id == VAR_DIFFICULTY) {
+			// OLYMP02 PlayMovie-HistoryCredits0..3: DifficultyLevel == d → 0·1·2 "Bonus01", 3 (신) "Bonus24"
+			int d = difficulty.getAsInt();
+			return type == 0 ? (Object) (float) d : type == 2 ? (Object) (d != 0) : (Object) d;
+		}
 		Map<Integer, Object> m = scope == 2 ? globalData : scope == 3 ? levelData : null;
 		Object v = m == null ? null : m.get(id);
 		if (v != null) {

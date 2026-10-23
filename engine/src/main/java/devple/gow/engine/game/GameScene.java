@@ -457,9 +457,11 @@ public final class GameScene implements Scene {
 					onPowerUpClosed();
 				} else if (questionId >= 0 && name.equals("PS2_Done") && "1".equals(String.valueOf(value).replace(".0", ""))) {
 					answerQuestion(vars.get("PS2_Menu_Choice"));
+				} else if (deadMenu == 2 && name.equals("PS2_Done") && "1".equals(String.valueOf(value).replace(".0", ""))) {
+					onDeadMenuClosed(vars.get("PS2_Menu_Choice"));
 				} else if (saveAsk && name.equals("PS2_Done") && "1".equals(String.valueOf(value).replace(".0", ""))) {
 					onSaveAnswered("1".equals(String.valueOf(vars.get("PS2_Menu_Choice")).replace(".0", "")));
-				} else if (paused && !powerUp && !saveAsk && saveFlow == null
+				} else if (paused && !powerUp && !saveAsk && saveFlow == null && deadMenu == 0
 						&& (name.equals("PS2_PauseDone") || name.endsWith("Menu_Choice"))) {
 					onMenuClosed(name, value);
 				}
@@ -520,6 +522,21 @@ public final class GameScene implements Scene {
 		magicFx = preFx != null ? preFx : new devple.gow.engine.fx.MagicFx(session.rom); // 원작 이펙트 GO (40 문서)
 		hero.magic.setSink(magicFx.sink((name, at) -> session.sound.play(name, at)));
 		bindPresentation(hero.combat);
+		magicFx.concussionDamage = (owner, c, r, dmg) -> {
+			// 범위 피해 (0x191720): 영웅 것은 반경 안의 적에게, 적 것은 영웅에게 — 템플릿 피해 × 주인 배율 (난이도 포함)
+			if (owner == null || owner == hero.combat) {
+				float v = dmg * hero.combat.damageScale();
+				for (Enemy en : enemies) {
+					EnemyFighter f = en.fighter();
+					if (!f.dead() && !f.invulnerable() && f.pos.distance(c) < r + f.bodyRadius()) {
+						f.selfHp(v);
+					}
+				}
+			} else if (hero.player.hp > 0 && hero.ctl.position.distance(c) < r + 12f && !hero.combat.invulnerable()) {
+				hero.player.hp = Math.max(0, hero.player.hp - dmg * owner.damageScale());
+			}
+		};
+		session.scriptHost.difficulty = () -> session.difficulty; // 스크립트 Internal 48 DifficultyLevel
 		magicFx.bindHero(hero.combat, hero::jointWorld);
 		if (!preGodBlades) {
 			setGodBlades(magicFx, hero);
@@ -1681,6 +1698,51 @@ public final class GameScene implements Scene {
 	private boolean scriptIdle;
 	private static final Input IDLE_INPUT = new devple.gow.engine.input.ScriptedInput(0, List.of());
 
+	/** 재질 피해 타이머 (원작 +0x2B0): 영웅 하나, 적은 개체마다. */
+	private float surfTimer;
+	private final java.util.Map<EnemyFighter, Float> enemySurfTimer = new java.util.IdentityHashMap<>();
+
+	/**
+	 * 바닥 재질 피해 (원작 0x1EAC70 → 0x1EADC8, 공용 내비 0x1EBD78 매 프레임): 밟은 면의 시트 속성 "Damage" (영웅) / "AIDamage" (적) 를
+	 * 0..최대 HP 로 자르고, 타이머가 0 이면 값 × AIDamageMult (난이도 0.5/1/2.5/5) × 코스튬 AIDamage × 신 모드 감소 를 입히고 타이머 = 1 초.
+	 * 예 PAND04J visualsPand04J_Damage 10 → 초당 쉬움 5 / 보통 10 / 어려움 25 / 신 50. [근사: 벽 면 접촉은 보지 않음]
+	 */
+	private void surfaceDamage(float dt) {
+		surfTimer = Math.max(0, surfTimer - dt);
+		Vector3f p = hero.ctl.position;
+		int d = hero.ctl.grounded ? surfaceValue(p, false) : 0;
+		if (d > 0 && surfTimer <= 0 && hero.player.hp > 0) {
+			hero.player.hp = Math.max(0, hero.player.hp - Math.min(d, hero.player.maxHp()) * hero.incomingScale());
+			surfTimer = 1f;
+		}
+		for (Enemy en : enemies) {
+			EnemyFighter f = en.fighter();
+			float t = Math.max(0, enemySurfTimer.getOrDefault(f, 0f) - dt);
+			int ad = !f.dead() && f.onGround() ? surfaceValue(f.pos, true) : 0;
+			if (ad > 0 && t <= 0) {
+				f.selfHp(Math.min(ad, f.maxHp()) * hero.incomingScale());
+				t = 1f;
+			}
+			enemySurfTimer.put(f, t);
+		}
+		enemySurfTimer.keySet().removeIf(f -> enemies.stream().noneMatch(en -> en.fighter() == f));
+	}
+
+	private int surfaceValue(Vector3f p, boolean ai) {
+		int best = 0;
+		for (LevelCollision c : new LevelCollision[]{col, otherCol}) {
+			if (c == null) {
+				continue;
+			}
+			LevelCollision.Floor fl = c.floorAt(p.x, p.y + STEP, p.z, STEP + 4);
+			var info = fl != null ? fl.tri().info() : null;
+			if (info != null) {
+				best = Math.max(best, ai ? info.aiDamage() : info.damage());
+			}
+		}
+		return best;
+	}
+
 	private int minigameIconIndex() {
 		if (!grab.active()) {
 			// 아이콘 슬롯 8 개 중 번호가 큰 것 하나 (0x21E908): 2 = 잡은 TAndF·크랭크 연타 (0x1E17F0, 열리면 끔 0x1C38A8),
@@ -1746,8 +1808,67 @@ public final class GameScene implements Scene {
 		}
 		hero.player.deaths++;
 		orbPickups.clear(); // 영웅 HP ≤ 0 이면 떠 있던 오브는 사라진다 (0x226710)
+		if (auto == null && bot == null && debugInput == null && System.getProperty("gow.nodeadmenu") == null) {
+			openDeadMenu();
+			return;
+		}
+		restartAtCheckpoint();
+	}
+
+	private void restartAtCheckpoint() {
 		hero.player.onCheckpointRestart(hero.player.hp);
 		respawn(checkpoint);
+	}
+
+	/** 사망 메뉴 상태: 0 없음, 1 "죽었습니다" 화면 (DeadMenu On), 2 선택 대기. */
+	private int deadMenu;
+	private float deadMenuTime;
+
+	/**
+	 * 사망 메뉴 (FLP_HUDK DeadMenu, 원작 0x220360): PS2_DeadMenu_Event 1 = "죽었습니다" (SND_IG_YOUAREDEAD, Pause_Check 7), 잠시 뒤 2 = 선택
+	 * (다시 하기 / 나가기), 3 = 그 위에 "쉬움으로 다시 하기" (0x1DBF90 EasyOffer: 보통·어려움이고 사망 수 % "Deaths Before Easy Offer"(5) == 0,
+	 * 레벨 이름이 Arena 로 시작하지 않음). 확정 → PS2_Done 1 + PS2_Menu_Choice 0 다시 / 1 나가기 / 2 쉬움으로 (0x29F484 → 체크포인트 로드 때 난이도 0).
+	 */
+	private void openDeadMenu() {
+		paused = true;
+		deadMenu = 1;
+		deadMenuTime = 0;
+		hud.variables().set("PS2_Menu_Choice", 0);
+		hud.variables().event("PS2_DeadMenu_Event", 1);
+	}
+
+	private boolean easyOffer() {
+		int d = session.difficulty;
+		int every = (int) orbTweaks.f("/Player/", "Deaths Before Easy Offer", 5f);
+		return (d == 1 || d == 2) && every > 0 && hero.player.deaths % every == 0 && !levelName.toUpperCase(java.util.Locale.ROOT).startsWith("ARENA");
+	}
+
+	private void updateDeadMenu(float dt) {
+		if (deadMenu == 1 && (deadMenuTime += dt) > 2f) {
+			deadMenu = 2;
+			hud.variables().event("PS2_DeadMenu_Event", easyOffer() ? 3 : 2);
+		}
+	}
+
+	private void onDeadMenuClosed(Object choice) {
+		deadMenu = 0;
+		paused = false;
+		int c = (int) Float.parseFloat(String.valueOf(choice));
+		if (c == 1 && pendingEngine != null) {
+			leaving = true;
+			pendingEngine.scenes().transitionTo(new ShellScene(session.rom)); // 나가기 → 주 메뉴
+			return;
+		}
+		if (c == 2) {
+			// 쉬움으로 다시 하기: 난이도 0 (세이브에도 0), 적 배율·회복 시간도 새 난이도로
+			session.difficulty = 0;
+			hero.difficulty = 0;
+			for (Enemy en : enemies) {
+				en.fighter().setDifficulty(0);
+			}
+			System.out.println("쉬움으로 다시 하기 (사망 " + hero.player.deaths + ")");
+		}
+		restartAtCheckpoint();
 	}
 
 	/**
@@ -1865,6 +1986,9 @@ public final class GameScene implements Scene {
 		if (saveFlow != null) {
 			updateSaveFlow(dt);
 		}
+		if (deadMenu > 0) {
+			updateDeadMenu(dt);
+		}
 		if (paused || leaving) {
 			return;
 		}
@@ -1981,6 +2105,7 @@ public final class GameScene implements Scene {
 			}
 		}
 		magicFx.weaponWorld(hero.combat, (n, at) -> session.sound.play(n, at)); // 무기-월드 베기 Slice Hit (40 문서 §6)
+		surfaceDamage(dt);
 		if (hero.player.hp <= 0) {
 			heroDied();
 		}

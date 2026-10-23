@@ -611,4 +611,21 @@ class ScriptWorldTest {
 		}
 		assertTrue(log.contains("WARP null"), "영역 1 에서 Warp: " + log);
 	}
+
+	/** OLYMP02 크레딧 동영상: Internal 48 DifficultyLevel (0x1AFF94) == d — 신 (3) 만 "Bonus24", 그 밖은 "Bonus01". */
+	@Test
+	void creditsMovieDependsOnDifficulty() throws Exception {
+		for (int d = 0; d <= 3; d++) {
+			ScriptHost host = new ScriptHost();
+			int dd = d;
+			host.difficulty = () -> dd;
+			ScriptWorld w = new ScriptWorld(level("OLYMP02.WAD"), host, new ScriptListener() {
+			});
+			for (int k = 0; k <= 3; k++) {
+				ScriptEntity e = w.find("PlayMovie-HistoryCredits" + k);
+				assertNotNull(e);
+				assertEquals(k == d, Boolean.TRUE.equals(w.slot(e, devple.gow.tools.script.EntitySlots.CONDITION)), "난이도 " + d + " 크레딧 " + k);
+			}
+		}
+	}
 }

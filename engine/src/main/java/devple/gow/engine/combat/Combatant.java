@@ -148,6 +148,11 @@ public final class Combatant {
 	}
 
 	/** 공격자 측 피해 배율 (영웅 = Player_DamageScale, 적 = AI1 Damage Multiplier × 난이도 AI 배율). */
+	/** 이 전투원이 주는 피해 배율 (영웅 = Damage Mult × 코스튬 × 무기, 적 = AI1 배율 × AI Damage Mult × …). */
+	public float damageScale() {
+		return damageScale.get();
+	}
+
 	public void setDamageScale(Supplier<Float> s) {
 		damageScale = s;
 	}

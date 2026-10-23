@@ -351,7 +351,7 @@ public final class MagicFx implements AutoCloseable {
 			if (e.hash() == SCR_PLAY_EFFECT) {
 				playFx(e.index(), c, joints);
 			} else if (e.hash() == SCR_CONCUSSION_BURST) {
-				concussion(e.index(), joints, null);
+				concussion(e.index(), joints, null, c);
 			}
 		});
 		c.addContactListener((a, victim, r) -> {
@@ -474,7 +474,22 @@ public final class MagicFx implements AutoCloseable {
 	 * Scale X/Y/Z 플래그(비트 0x1/0x2/0x4) 면 이펙트를 반경만큼 늘린다 — 메시 기준 반경 27 (medheadNuke) 으로 맞춤 [근사].
 	 * 이펙트는 Duration 뒤 0.5초 페이드 [근사: 원작은 Concussion 객체 수명].
 	 */
+	/** 범위 피해 받는 쪽 (게임): 주인 (null = 영웅 마법), 중심, 반경, 템플릿 피해 (주인 배율 전). */
+	public interface ConcussionDamage {
+		void apply(Combatant owner, Vector3f center, float radius, int damage);
+	}
+
+	public ConcussionDamage concussionDamage;
+
 	public void concussion(int template, Joints joints, Vector3f at) {
+		concussion(template, joints, at, null);
+	}
+
+	/**
+	 * @param owner 이 범위 피해를 낸 전투원 (0x191720: 피해 = 템플릿 "Damage" 하위 바이트 × 주인 AttackerScale — 영웅이면 Damage Mult,
+	 *              적이면 AI Damage Mult (난이도)). null = 영웅 (마법·메두사 머리)
+	 */
+	public void concussion(int template, Joints joints, Vector3f at, Combatant owner) {
 		String n = String.format("/TweakTemplates/Concussion/%03d/", template);
 		String name = tw.s(n, "Effect Name", null);
 		if (name == null) {
@@ -490,6 +505,10 @@ public final class MagicFx implements AutoCloseable {
 		Vector3f p = m.getTranslation(new Vector3f());
 		float r0 = tw.f(n, "Start Radius", 1f), r1 = tw.f(n, "End Radius", r0), dur = Math.max(tw.f(n, "Duration", 0.3f), 0.05f);
 		boolean scaled = (tw.raw(n, "Scale X").orElse(0) & 0xFF) != 0;
+		int dmg = tw.raw(n, "Damage").orElse(0) & 0xFF;
+		if (dmg > 0 && concussionDamage != null) {
+			concussionDamage.apply(owner, p, Math.max(r0, r1) * Magic.UNIT, dmg); // [근사: 반경 시간 변화·밀어내기 (Ground/Air Impulse) 없음, 터지는 순간 한 번]
+		}
 		EffectSystem.Effect e = fx.play(name, EffectSystem.Anchor.at(p, heroYaw), dur + 0.5f);
 		if (e == null) {
 			return;
