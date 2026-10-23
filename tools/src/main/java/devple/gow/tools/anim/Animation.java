@@ -73,11 +73,17 @@ public final class Animation {
 	 */
 	public final List<List<AnimTrack>> channelGroups = new ArrayList<>();
 	/**
-	 * 타입 11 (unk10 = 4) 트랙. 이동 트랙(타입 5)이 없는 오브젝트 세트에서는 <b>관절 이동</b>으로 쓴다 [추정, 38 문서 §5]:
+	 * 타입 11 (unk10 = 4) 트랙. <b>세트가 이동 데이터 타입 (5) 을 선언하지 않을 때만</b> 관절 이동으로 쓴다 ({@link #declaresTranslation}) [추정, 38 문서 §5]:
 	 * ATHN05D 엘리베이터는 데이터 타입이 [0, 11, 11] 이고 스트림 5/9 (관절 1/2 의 Y) 절대값 138.47 = 바인드 로컬 Y, 이후 가산으로 -52.2 까지
 	 * 내려간다 (발판이 190 내려가 Warp 도착점 WarpFrom4A 높이와 일치).
+	 * 타입 5 를 선언한 세트의 타입 11 은 이동이 아니다 — 원작은 데이터 타입 번호로 채널 소비자를 따로 만든다 (0x100EA8, 점프표 0x2B2810:
+	 * 5 → vtable 0x2C0730, 11 → 0x2C0500) [확실: 코드]. 그런 세트에서 이동 트랙 없이 타입 11 만 있는 act 100 개는 모두 스트림 8 하나에
+	 * 0 → 500/1000/2000 → 0 펄스 (부서지는 문·모래주머니·상자, SEM 소리 이미터를 가진 물체) 나 FX 크기의 값이고 바인드 로컬과 맞는 것이 없다
+	 * [확실: 데이터]. 이동으로 읽으면 ATHN01B {@code fallenposts} 의 cdHull (관절 2) x 가 바인드 −74.9 → 0 으로 옮겨져 충돌 hull 이 복도 밖에 놓인다 (41 §2.1).
 	 */
 	public final List<AnimTrack> objectTracks = new ArrayList<>();
+	/** 세트의 데이터 타입 목록에 이동 (5) 이 있는가 — 있으면 타입 11 은 관절 이동이 아니다 ({@link #objectTracks}). */
+	public final boolean declaresTranslation;
 	/** 타입 10 u8 채널: 관절별 상태 값 (미노타우로스 maiMin01 에서 도끼 부착 관절 36→54 전환). */
 	public final List<ByteTrack> byteTracks = new ArrayList<>();
 	public final float frameTime;
@@ -133,6 +139,11 @@ public final class Animation {
 				}
 			}
 		}
+		boolean t5 = false;
+		for (int id : typeIds) {
+			t5 |= id == 5;
+		}
+		declaresTranslation = t5;
 		frameTime = ft > 0 ? ft : pft > 0 ? pft : 1f / 30f;
 		posFrameTime = pft > 0 ? pft : frameTime;
 	}
@@ -296,7 +307,12 @@ public final class Animation {
 	}
 
 	public boolean hasSkeletalData() {
-		return !rotTracks.isEmpty() || !posTracks.isEmpty() || !objectTracks.isEmpty();
+		return !rotTracks.isEmpty() || !posTracks.isEmpty() || !objectTranslation().isEmpty();
+	}
+
+	/** 관절 이동으로 쓰는 타입 11 트랙: 이동 데이터 타입 (5) 을 선언하지 않은 세트에서만 ({@link #objectTracks}). */
+	public List<AnimTrack> objectTranslation() {
+		return declaresTranslation ? List.of() : objectTracks;
 	}
 
 	/** 애니메이션이 건드리는 최대 관절 번호 + 1. */
@@ -344,7 +360,7 @@ public final class Animation {
 		}
 		List<AnimTrack> pt = new ArrayList<>(posTracks);
 		if (posTracks.isEmpty()) {
-			pt.addAll(objectTracks);
+			pt.addAll(objectTranslation());
 		}
 		for (AnimTrack t : channelTracks) {
 			if (locatorTrack(sk, t)) {

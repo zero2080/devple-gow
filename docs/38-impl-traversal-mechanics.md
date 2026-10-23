@@ -228,7 +228,7 @@ PAND05B `pBoxPand05B-Marker511` → `semoMovieHaveBox-…-semo08marker511` (Filt
   영웅 질의 제외 마스크 (Water·Death·AIBlock·GeneralGuide·NoPlayerCollision·ClimbGuide·CombatGuide) 에 안 걸리는 것** [확실: 0x1E3298 / 0x1E2100 → 0x139218, 43 §13.10 6].
   바닥 속성 = 그 재질 (`NavWorld.Floor.attrs`). 이름 규칙에서 빠졌던 PAND04AA 엘리베이터 `SheetM`, PAND04F goelevator, PAND02C 우리 승강기 등 해결.
 - **BallHull off[6] = hull 별 관절 번호** [확실: 엘리베이터 hull 0 → 관절 2, hull 1 → 관절 1]. 이전에는 모든 볼륨을 관절 0 에 붙였다 (ENV/CMV 쪽은 그대로).
-- **오브젝트 애니 타입 11 (unk10 = 4) = 관절 이동** (이동 타입 5 가 없는 세트만) [추정, 수치 일치]: ATHN05D `WarpElevator5D` 스트림 5/9 (관절 1/2 의 Y) 절대값 138.47 = 바인드 로컬 Y, 가산으로 −52.2 까지 → 발판 윗면 871 → **677 = Warp 도착점 WarpFrom4A 높이**. (`Animation.objectTracks`)
+- **오브젝트 애니 타입 11 (unk10 = 4) = 관절 이동** (이동 타입 5 가 없는 세트만) [추정, 수치 일치]: ATHN05D `WarpElevator5D` 스트림 5/9 (관절 1/2 의 Y) 절대값 138.47 = 바인드 로컬 Y, 가산으로 −52.2 까지 → 발판 윗면 871 → **677 = Warp 도착점 WarpFrom4A 높이**. (`Animation.objectTranslation()` — 세트가 타입 5 를 선언하면 타입 11 은 이동이 아님, 41 §2.1)
 - 윗면 = hull 평면들로 수직선 구간을 잘라 위 끝. 서 있으면 지지 관절의 틱 간 이동을 영웅에 적용 (carry). Animator `AnimName "!n"` = n 번째 act [추정].
 - 도착점 아래 정적 바닥이 없으면 발판 애니 중 윗면이 도착점 ±24 에 오는 시각으로 자세를 맞춘다 [근사] → ATHN05D 도착 해결.
 - ~~한계: 발판 모델의 렌더링 자세는 아직 바인드~~ → 애니 자세로 그림 (42 §3·§5). ~~CDV 벽(문·창살)은 영웅을 막지 않는다~~ → 막는다 (42 §5).

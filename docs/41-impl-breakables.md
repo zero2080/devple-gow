@@ -88,12 +88,23 @@ ANM 타입 10 원소 크기 1 (05 문서 §2.8) 의 12B 엔트리 `{u16 관절, 
 - 원인: `Platforms.staticOwner` 가 **비헤이비어가 붙은 GO 를 모두** 정지 충돌에서 뺐다 (상자·밀기·크랭크는 각자 시스템이 맡는다는 규칙) — Breakable 은 충돌을 맡는 시스템이 없어 몸이 통째로 빠졌다.
   원작은 GO 를 만들 때 CDV 리소스마다 충돌 인스턴스를 올리고 (38 §4, 0x138E70 → 0x138FD0), Breakable 비헤이비어 코드 (0x1DDDF0 / 0x1DDF70 / 0x1DE278) 는 그것을 건드리지 않는다.
   파괴 애니가 끝나면 0x1DE370 이 GO 플래그 |= 3 (숨김·비활성) [추정: 이때 충돌도 빠짐].
-- ATHN01B 데이터: `gofallenposts` (Brkb 912 HydraBreakBig HP 25 → OrbEmitter 902 "large obj break", CDV_fallenPosts 평면 hull 6 장 관절 2, 경계 구 95) 가 복도 (x ≈ 1621) 를 z ≈ 1400 에서 막는다.
+- ATHN01B 데이터: `gofallenposts` (Brkb 912 HydraBreakBig HP 25 → OrbEmitter 902 "large obj break", CDV_fallenPosts 평면 hull 6 장 관절 2, 경계 구 95) 가 복도를 z ≈ 1400 에서 막는다.
+  복도 폭 = 정지 충돌 바닥 x 1590–1636 (z 1340–1520 같음, 양옆 벽 x ≈ 1588 / 1638, 바닥 y −143 → −136 로 기욺) [확실: 시트 질의].
   `gobreakablebunk01–08` (Brkb 910 HP 1, hull 6 장 관절 2, 반지름 29–33) 은 침상, `gobarrel*` 은 공 CDV (평면 hull 없음 → 정지 몸 아님).
 - 엔진: Breakable GO 도 정지 몸 (`staticOwner` 가 Breakable 은 남김), 부서지면 `GameScene.onBreak` → `Platforms.setSolid(owner, false)` [근사: 원작은 애니 끝 (0x1DE370) 에서 빠짐 — 엔진은 부서진 순간].
   꺼진 상태는 `Platforms.states()` 로 이음에 넘어간다. 판정 구: 평면 hull CDV 는 반지름 = 경계 구 (`BallHull.sphere`), 중심 = hull 관절 월드의 hull 중심 (경계 중심과 침상은 15 어긋남) [근사: 원작은 hull].
-- 확인: `-Dgow.script=LS:0.5:2:0:1,SQUARE…` — 영웅이 z 1468 에서 멈춤 → □ 연타 약 2.5 초 (HP 25) 뒤 "파괴: gofallenposts 오브 10" (기둥 파편·먼지·붉은 오브) → z 1180 까지 통과.
-  시험 `ChestPropsTest.athn01bBlockersSolidUntilBroken` (복도 훑기: 부서지기 전 z &gt; 1420 에서 밀림, 끈 뒤 끝까지 안 밀림).
+- **hull 위치 정정 (자동 진행 봇이 x 1598 로 그냥 지나감)**: hull 관절 cdHull (2) 이 시작 act `fallenPosts` 자세에서 x 1659.8 (바인드 1585.0) 에 놓여
+  hull 이 x 1627–1723 = 복도 동쪽 벽 바깥에 있었다 (렌더 메시는 관절 1 group1238 에 스킨, x 1569–1674). 원인은 act 의 **타입 11 트랙** (스트림 8 = 관절 2 x,
+  0 → 1000 → 0 펄스, 세트 데이터 타입 [0, 5, 10×6, 11]) 을 관절 이동으로 읽은 것 — 이동 트랙 (타입 5) 이 비어 있으면 타입 11 로 대신하던 규칙 (38 §5, ATHN05D 엘리베이터).
+  - 원작은 데이터 타입 번호마다 다른 채널 소비자를 만든다: 0x100EA8 이 세트 데이터 타입을 돌며 점프표 0x2B2810 으로 갈라 5 → vtable 0x2C0730 (샘플러 0x2C2278),
+    11 → 0x2C0500 (샘플러 0x2C4448 → 재생 0x2C50C8/0x2C5110, 평가 0x269ED8 = 대상 포인터 배열 +0x5C 에 쓰는 범용 f32 채널) [확실: 코드 / 미해석: 대상 결정 0x262360].
+  - 타입 5 를 선언한 세트에서 이동 트랙 없이 타입 11 만 가진 act 100 개 (전 WAD) 는 모두 스트림 8 하나에 0 → 500/1000/2000/600 → 0 (부서지는 문·모래주머니·상자·병풍, SEM 소리 이미터 보유)
+    또는 0.22 같은 FX 값이고, 바인드 로컬과 맞는 것이 없다. 반대로 타입 5 가 없는 [0, 11, …] 세트 (엘리베이터·breakPallete·breakPlank·TIT) 의 타입 11 절대값은 바인드 로컬과 같다 [확실: 데이터].
+  - 엔진: 타입 11 은 세트가 타입 5 를 선언하지 않을 때만 관절 이동 (`Animation.declaresTranslation` / `objectTranslation()`) [추정: 대상 결정 미해석, 데이터 일치].
+    → cdHull 바인드 x 1585.0, hull 월드 x 1552–1648 · y −160–−32 · z 1351–1455 가 복도 전폭 (1590–1636) 과 렌더 메시를 덮는다. 같은 유형 (ATHN02C 모래주머니·상자, ATHN03–04 부서지는 문 등) 의 hull 도 바인드로 돌아간다.
+- 확인: 자동 진행 봇 (`-Dgow.auto=1`) 이 x 1598 로 걷다 z 1468 에서 멈춤 (이전: z 1317 까지 통과) → 걷기 한도 뒤 순간이동.
+  `-Dgow.script=LS:0:5:0:1,SQUARE…(5–11초),LS:12:5:0:1` — 기둥 앞에서 멈춤 → □ 연타 뒤 "파괴: gofallenposts 오브 10" (기둥 파편·먼지·붉은 오브) → 통과.
+  시험 `ChestPropsTest.athn01bBlockersSolidUntilBroken` (cdHull x = 바인드, 복도 전폭 x 1596–1628 을 4 간격으로 훑기: 부서지기 전 z &gt; 1440 에서 밀림, 끈 뒤 끝까지 안 밀림).
 
 ## 3. IO_TandF 들어 올리는 문·함정문 (`Interactables.Kind.LIFT`)
 - GO 비헤이비어 `IO_TandF` 37 개 (ATHN01C goliftdoor1/2 "HydraLiftDoor", ATHN05BB 압력 문 4, DEST02, PAND00C/00D/01B/02D/03A–C …).

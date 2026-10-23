@@ -140,16 +140,23 @@ class ChestPropsTest {
 		for (String o : List.of("gofallenposts", "gobreakablebunk01", "gobreakablebunk08")) {
 			assertNotNull(ps.body(o), o + " 충돌");
 		}
-		// 영웅이 복도를 따라 (x 1621, −z 로) 걸으면 기둥 앞에서 막힌다 (기록: z 1468 에서 멈춤), 부서진 뒤에는 끝까지 지나간다
-		assertTrue(sweepBlockedAt(ps) > 1420, "부서지기 전 = 막음");
+		// cdHull (관절 2) 은 바인드 자세 — act 의 타입 11 스트림 8 (0 → 1000 → 0 펄스) 은 관절 이동이 아니다 (41 §2.1). 렌더 메시 x 1569–1674 를 덮는다
+		float[] j2 = ps.body("gofallenposts").joints()[2];
+		assertEquals(1585, j2[12], 1, "cdHull x = 바인드");
+		// 복도 바닥은 x 1590–1636 (양옆 벽). 그 폭 어디로 (−z 로) 걸어도 기둥 앞에서 막힌다 (자동 진행 봇: x 1598), 부서진 뒤에는 끝까지 지나간다
+		for (float x = 1596; x <= 1628; x += 4) {
+			assertTrue(sweepBlockedAt(ps, x) > 1440, "부서지기 전 = 막음 x " + x);
+		}
 		ps.setSolid("gofallenposts", false);
-		assertTrue(Float.isNaN(sweepBlockedAt(ps)), "부서진 뒤 = 지나감");
+		for (float x = 1596; x <= 1628; x += 4) {
+			assertTrue(Float.isNaN(sweepBlockedAt(ps, x)), "부서진 뒤 = 지나감 x " + x);
+		}
 	}
 
-	/** 복도 (x 1621, 영웅 몸 구 = 발 + 16, 반지름 9.6) 를 z 1520 → 1300 으로 훑어 처음 밀려나는 z (없으면 NaN). */
-	private static float sweepBlockedAt(Platforms ps) {
+	/** 복도 (x, 영웅 몸 구 = 발 + 16, 반지름 9.6) 를 z 1520 → 1300 으로 훑어 처음 밀려나는 z (없으면 NaN). */
+	private static float sweepBlockedAt(Platforms ps, float x) {
 		for (float z = 1520; z > 1300; z -= 2) {
-			Vector3f c = new Vector3f(1621, -138 + 16, z);
+			Vector3f c = new Vector3f(x, -138 + 16, z);
 			if (ps.collideSphere(c, 9.6f, Set.of())) {
 				return z;
 			}
