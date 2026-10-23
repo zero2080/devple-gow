@@ -16,11 +16,17 @@ public final class Camera {
 	/** 반사 패스의 월드 자름 평면 (a, b, c, d) — 스키닝 셰이더 uClipPlane (GL_CLIP_DISTANCE0 켤 때만). null = 없음. */
 	public float[] clipPlane;
 
+	/** 흔들림 ({@link CameraShake}): 카메라 로컬 X 회전 (도) 과 로컬 Y 이동 — 카메라 행렬 앞에 곱함 = 뷰 앞에 역으로. */
+	public float shakePitchDeg, shakeDy;
+
 	private final Matrix4f viewProj = new Matrix4f();
 
 	public Matrix4f viewProj(float aspect) {
-		viewProj.setPerspective((float) Math.toRadians(fovDeg), aspect, near, far)
-				.lookAt(eye, target, new Vector3f(0, 1, 0));
+		viewProj.setPerspective((float) Math.toRadians(fovDeg), aspect, near, far);
+		if (shakePitchDeg != 0 || shakeDy != 0) {
+			viewProj.rotateX((float) Math.toRadians(-shakePitchDeg)).translate(0, -shakeDy, 0);
+		}
+		viewProj.lookAt(eye, target, new Vector3f(0, 1, 0));
 		return mirror != null ? viewProj.mul(mirror) : viewProj;
 	}
 }

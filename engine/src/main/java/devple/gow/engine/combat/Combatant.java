@@ -52,6 +52,24 @@ public final class Combatant {
 	private int stanceTag = -1;
 	private final Set<Long> hitLog = new HashSet<>();
 	private final Set<Integer> firedEvents = new HashSet<>();
+	/** 이벤트 5 CAMERA_SHAKE (템플릿 번호) / 7 GLOBAL_TIME (지속 a, 배율 b) 받는 쪽 (0x206030 — 어느 전투원의 이벤트든 카메라·게임 시간에). */
+	private java.util.function.IntConsumer shakeSink = i -> { };
+	private java.util.function.BiConsumer<Float, Float> timeSink = (a, b) -> { };
+	/** 마지막으로 발동한 HIT_PAUSE (이벤트 24) — 원작 combatant +0x44, 기술 시작 때 지움 (0x206C08 / 0x2061C0). */
+	private Event hitPauseEvent;
+
+	public void onCameraShake(java.util.function.IntConsumer s) {
+		shakeSink = s != null ? s : i -> { };
+	}
+
+	public void onGlobalTime(java.util.function.BiConsumer<Float, Float> s) {
+		timeSink = s != null ? s : (a, b) -> { };
+	}
+
+	/** 히트스톱 (메시지 0x414 수신 0x2652E4: 개체 시간 배율 0.01 을 s 초) — 피격자 쪽. */
+	public void pause(float s) {
+		hitPause = Math.max(hitPause, s);
+	}
 	private boolean hitThisFrame;
 	private boolean hitThisMove;
 	private float hitPause;
@@ -199,6 +217,15 @@ public final class Combatant {
 	/** 공격 판정을 대상과 함께 받는 개체 목록 (피격자 receive 만, 공격자 HIT_CONFIRM 분기는 대상 적중에서만). */
 	public void setBystanders(Supplier<java.util.List<? extends Hittable>> s) {
 		bystanders = s != null ? s : java.util.List::of;
+		bystandersSameTeam = false;
+	}
+
+	/** 휘말림 후보가 같은 편 (+0xF4 &amp; 3 이 겹침) 이면 true — 그때는 공격 플래그 0x8 일 때만 피해 (0x203798). */
+	private boolean bystandersSameTeam;
+
+	public void setBystanders(Supplier<java.util.List<? extends Hittable>> s, boolean sameTeam) {
+		setBystanders(s);
+		bystandersSameTeam = sameTeam;
 	}
 
 	/** 현재 기술에 SCRIPT(8) 이벤트가 있는지 (잡기 미니게임 등 스크립트 템플릿 구동). */
@@ -292,6 +319,7 @@ public final class Combatant {
 		stanceTag = -1;
 		hitLog.clear();
 		firedEvents.clear();
+		hitPauseEvent = null;
 		hitThisMove = false;
 		if (clip != null) {
 			anim.playClip(clip, 0, m.speed() > 0 ? m.speed() : 1f);
@@ -348,6 +376,11 @@ public final class Combatant {
 
 	public boolean invulnerable() {
 		return move != null && eventActive(9);
+	}
+
+	/** 지금 진행률이 이 종류 이벤트의 창 안인지 (예 15 FLAG_1 = +0x1AC &amp; 1). */
+	public boolean eventOn(int type) {
+		return move != null && eventActive(type);
 	}
 
 	/**
@@ -764,6 +797,15 @@ public final class Combatant {
 		}
 	}
 
+	/** 카메라 흔들림 (5, 0x2068A8 → 0x1F09C8) / 전역 시간 (7, 0x2068DC → 0x337C1C 지속 a · 0x337C20 배율 b). */
+	private void presentation(Event e) {
+		if (e.type() == 5) {
+			shakeSink.accept(e.index());
+		} else {
+			timeSink.accept(e.a(), e.b());
+		}
+	}
+
 	private static List<Branch> eventBranches(List<Branch> src, int code, int reaction) {
 		List<Branch> l = new ArrayList<>();
 		for (Branch b : src) {
@@ -810,6 +852,12 @@ public final class Combatant {
 				case 21 -> {
 					if ((e.cond() != 1 && e.cond() != 2) || hitThisFrame) {
 						(godMeterOwner != null ? godMeterOwner : this).addGodMeter(e.b()); // GOD_METER_ADD
+					}
+				}
+				case 24 -> hitPauseEvent = e; // HIT_PAUSE: 적중 때 공격자·피격자 양쪽 (contact)
+				case 5, 7 -> {
+					if (e.cond() != 1 && e.cond() != 2) {
+						presentation(e); // 조건 없는 것은 창에서, 적중 조건 (1·2) 은 contact 에서
 					}
 				}
 				default -> {
@@ -902,9 +950,13 @@ public final class Combatant {
 		Vector3f bp = b.position();
 		float dx = bp.x - hit.x, dz = bp.z - hit.z;
 		boolean inRange = dx * dx + dz * dz <= hitRadius * hitRadius;
+		boolean sameTeam = bystandersSameTeam;
 		for (Attack a : move.attacks()) {
 			if (t < a.start() || t > a.end()) {
 				continue;
+			}
+			if (sameTeam && (a.flags() & 0x8) == 0) {
+				continue; // 같은 편은 공격 플래그 0x8 (날아가는 몸 — 던진 해골 MAISKB02, HITSPIN, AIRTHROW …) 일 때만 (0x203798)
 			}
 			boolean real = volumes != null && victim != null && !victim.isEmpty() && volumes.hasPart(a.part());
 			if (!(real ? volumes.sweptHit(a.part(), victim) : inRange)) {
@@ -1019,9 +1071,17 @@ public final class Combatant {
 			if (dmg > 0) {
 				hitCounter++;
 			}
+			// HIT_PAUSE (0x203688): 마지막으로 발동한 이벤트 24 의 a 초를 공격자와 피격자 양쪽에 (메시지 0x414 ×2)
+			if (hitPauseEvent != null) {
+				hitPause = Math.max(hitPause, hitPauseEvent.a());
+				victim.hitPause(hitPauseEvent.a());
+			}
+			// 적중 조건 (1 적중 프레임마다 / 2 적중 1 회) 의 흔들림·전역 시간 — 창 안에서
+			float tp = progress();
 			for (Event e : move.events()) {
-				if (e.type() == 24) {
-					hitPause = Math.max(hitPause, e.a()); // HIT_PAUSE
+				if ((e.type() == 5 || e.type() == 7) && (e.cond() == 1 || e.cond() == 2) && tp >= e.start() && tp <= e.end()
+						&& e.level() <= owner.bladeLevel() && (e.cond() == 1 || firedEvents.add(e.bit()))) {
+					presentation(e);
 				}
 			}
 			fire(CombatInput.EV_HIT_CONFIRM, -1, null);

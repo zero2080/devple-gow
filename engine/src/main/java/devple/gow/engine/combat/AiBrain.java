@@ -294,14 +294,19 @@ public final class AiBrain {
 
 	// ------------------------------------------------------------------ 토큰
 
-	/** 0x1CDEC8: 토큰 획득(거리 &lt; R_wait×16×1.1) / 반납(&gt; ×1.5, 자신 경직, 대상 경직). */
+	/**
+	 * 0x1CDEC8: 토큰 획득(거리 &lt; R_wait×16×1.1) / 반납(&gt; ×1.5, 자신 경직, 대상 무적). 대상 쪽은 경직 (guard 2) 이 아니라
+	 * 대상 combatant 의 무적 비트 (+0x1AC &amp; 2 = 기술 이벤트 9, 0x2441E0) 또는 전역 정지 0x29DB58 (0x1BF108) — 영웅이 처형
+	 * (MAISKB02/05/06, MAIMIN*, 무적) 중이면 주변 적은 토큰을 내려놓고 대기 반경으로 물러나 도발, 붙잡기 (GRAB 200·MAISKB00/01/03,
+	 * 무적 아님) 나 일반 피격 (guard 2) 중에는 계속 공격한다.
+	 */
 	void updateToken(float dist) {
 		if (!tmpl.usesToken() || !tmpl.groupMode() || slot == null) {
 			return;
 		}
 		float r = tmpl.waitRadius * 16f;
 		boolean selfStagger = guardOf(self.combat()) == 2;
-		boolean targetBusy = targetCombat != null && guardOf(targetCombat) == 2;
+		boolean targetBusy = targetLocked();
 		if (!hasToken) {
 			if (dist < r * 1.1f && !selfStagger && !targetBusy && slot.canTake(sold.cost())) {
 				slot.take(sold.cost());
@@ -331,6 +336,11 @@ public final class AiBrain {
 		if (tmpl.usesToken()) {
 			hasToken = false;
 		}
+	}
+
+	/** 대상 무적 (이벤트 9 창, 0x2441E0(+0x1AC, 2)) — 전역 정지 0x29DB58 은 엔진에 없음 [근사]. */
+	private boolean targetLocked() {
+		return targetCombat != null && targetCombat.invulnerable();
 	}
 
 	private static int guardOf(Combatant c) {
@@ -510,8 +520,10 @@ public final class AiBrain {
 		if (leaf == null) {
 			return false;
 		}
-		int freeA = hasToken || tmpl.mode == 1 ? slot.freeA() : 0;
-		int freeB = slot.freeB();
+		// 대상 무적이면 공격 용량 0 (0x206954 가 대상 슬롯 +0x16 bit0 을 세우고 0x1CCB60 이 용량 A·B 를 0 으로) — 비용 0 행동 (도발) 만
+		boolean lock = targetLocked();
+		int freeA = !lock && (hasToken || tmpl.mode == 1) ? slot.freeA() : 0;
+		int freeB = lock ? 0 : slot.freeB();
 		float rec = recovery.get();
 		boolean coolReady = clockMs >= coolUntil.getOrDefault(leaf, 0f);
 		DecisionTree.Attack a = DecisionTree.pickAttack(leaf, dist, freeA, freeB, coolReady, rnd);

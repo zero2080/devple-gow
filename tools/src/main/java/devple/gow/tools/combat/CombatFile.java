@@ -318,7 +318,7 @@ public final class CombatFile {
 	public static String eventName(int t) {
 		return switch (t) {
 			case 1 -> "TARGET_FX";
-			case 2 -> "ARROW_EMIT";
+			case 2 -> "ORB_EMIT"; // OrbEmitter_Emit 0x2258D8 (idx = 적 WAD OrbEmitter 템플릿, 해골 머리치기 503 "SKS Decap")
 			case 3 -> "SOUND";
 			case 4 -> "MSG_3FE";
 			case 5 -> "CAMERA_SHAKE";

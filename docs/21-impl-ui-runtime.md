@@ -148,3 +148,8 @@ HUD 변수 규약 (HUD 루트 `SimKeyEvent` 스크립트에서 확인):
 - 마스크 추정 비트(§6)와 SELECT/START 역할은 실행 파일 패드 처리와 대조 필요.
 - 오디오: `PS2_Sound1/2` 요청은 리스너로만 노출 (AudioSystem 연결은 게임 쪽 몫).
 - 성능: 글리프마다 드로우콜 1회 (메뉴 화면 수백 회). 필요하면 배칭.
+
+## 메시지 줄 수 · 히트 카운터 · 버튼 안내 (FLP_HUDK)
+- `PS2_MessageTemplate_Event` 값 = **줄 수** (스크립트가 MessageTemplates 를 GotoFrame2(값+1), 프레임 n = 줄 1..n). 1 로 보내면 첫 줄만 보인다 (튜토리얼 269 둘째 줄 "[△] 강한 공격").
+- 히트 카운터 (0x1DB608 → Hud_SetHitCounter 0x1BA070, 매 프레임 바뀐 값만): `PS2_HitCounter_Event` 1 + `PS2_HitCounter_Value` = 히트 수 (1 타는 안 보냄, 0 이면 숨김), 2 = 마일스톤 (HitCounterShake·ComboMilestone·ComboEXP, `PS2_Combo_Message` = 보너스 템플릿 메시지, `PS2_Combo_Amount` = 붉은 오브), 0 = 메뉴·메시지 쪽 리셋 (0x1BA150).
+- 아이콘 슬롯 8 개 (0x21DA50, 표시 0x21E908 = 번호 큰 것): 0 = R2 로 잡힐 가까운 오브젝트의 "Show R2" (#ca686863 bit 0, 0x1DC3F8 → 14 R2ButtonStatic — ATHN01A 바닥문 TAndF 051 HydraHatchDoor), 1 = 버튼 안내 센서, 2 = 잡은 TAndF 연타 (0xB R2ButtonPress, 0x1E17F0) / 크랭크 (0xD).

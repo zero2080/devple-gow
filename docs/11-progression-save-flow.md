@@ -462,3 +462,9 @@ completeGame(k): k==0: unlock |= {0,0,1,2,4}[difficulty 0..3 → bit0,bit0,bit1,
 - #b60d39a0(흔들림 진폭), #117c872e(수명) 원래 키 이름.
 - ZoneReport 번호 ↔ 구역 이름 메시지(601..) 대응, 일시정지 패드 비트 0x100/0x800 의 실제 버튼.
 - 사망 횟수 증가 지점(0x1D6FE4 추정)과 사망 메뉴의 세부 선택지.
+
+## 떨어진 오브 (OrbPickups) [확실: 0x2258D8, 0x226518, 0x226710 / 근사 표시]
+- 개수 세트는 셋 중 하나 (0x225AB0): HP < Health Threshold → Low Health (체력 슬롯만), 아니고 MP < Magic Threshold → Low Magic (마법 슬롯만), 아니면 Normal. 마법 오브는 마법 보유 때만.
+- N 개를 2π/N 방향으로, 착지점 = 목표 + 방향 × Target Radius × 16 × rand. 동시에 30 개까지 (0x2A2678).
+- 상태 1 비행 (Spawn Time × (rand+0.5), 남은 시간 포물선) → 2 떠 있음 → 영웅 Attract Radius × 16 안이면 4 흡수 (Attract Time, 목표 = 영웅 + 16, Pickup Sound) → **도착 때 합산** (붉은 바가 하나씩 참). 흔들림 = (Y Offset + sin·진폭) × 16, 수명 × (rand+0.5), 마지막 1 초 페이드, 영웅 사망 시 전부 사라짐.
+- 모양 = Orb 템플릿 GO (goWeaponOrb → R_PERMK weaponorb, FXC/PTC) 를 이펙트로 재생. 이벤트 2 (ORB_EMIT, 해골 머리치기 503 등) 도 같은 방출.

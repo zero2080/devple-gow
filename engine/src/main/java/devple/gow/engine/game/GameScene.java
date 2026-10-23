@@ -519,6 +519,7 @@ public final class GameScene implements Scene {
 		ph = devple.gow.engine.core.PerfMonitor.phase(". grab+magic", ph);
 		magicFx = preFx != null ? preFx : new devple.gow.engine.fx.MagicFx(session.rom); // 원작 이펙트 GO (40 문서)
 		hero.magic.setSink(magicFx.sink((name, at) -> session.sound.play(name, at)));
+		bindPresentation(hero.combat);
 		magicFx.bindHero(hero.combat, hero::jointWorld);
 		if (!preGodBlades) {
 			setGodBlades(magicFx, hero);
@@ -680,6 +681,9 @@ public final class GameScene implements Scene {
 					}
 					EnemyFactory.Kind k = pre != null ? (EnemyFactory.Kind) pre : EnemyFactory.load(path, session.permk, -1);
 					kinds.put(name, k);
+					// 레벨 WAD 의 적용 외부 애니 그룹 (ANM_SKS_Athn01A — 523 SKSshipDismount 난간 넘어 오르기, hatchSpawn; ANM_SKC_Athn02B):
+					// 적 ANM 의 외부 그룹 (예 R_SKS 그룹 6 "Athn01A", act 0) 이 레벨에서 채워진다. 영웅 ANM_hero_Athn01A 와 같은 구조 (05 §2.2)
+					k.anims().attachAll(level.data().wad);
 					orbTweaks.load(k.assets().wad());
 					session.sound.load(k.assets().wad());
 					hero.attachExternalAnims(k.assets().wad());
@@ -984,12 +988,36 @@ public final class GameScene implements Scene {
 
 			@Override
 			public void orbs(String emitter, Vector3f at) {
-				for (OrbDrops.Orb o : OrbDrops.roll(orbTweaks, emitter, rnd, hero.player.hp, hero.player.mp)) {
-					hero.player.pickupOrb(o.type(), o.points());
-				}
-				session.sound.play("SND_PICKUPS_ORBS_E");
+				emitOrbs(orbTweaks.findTemplate("/TweakTemplates/OrbEmitter/", emitter), at);
 			}
 		};
+	}
+
+	/** 떨어진 오브 (원작 Orb_Update 0x226710) — 날아가 떠 있다가 빨려 들어와 도착할 때 합산. */
+	private final OrbPickups orbPickups = new OrbPickups(new java.util.Random(7));
+
+	private final OrbPickups.Sink orbSink = new OrbPickups.Sink() {
+		@Override
+		public void credit(int type, float points) {
+			hero.player.pickupOrb(type, points);
+		}
+
+		@Override
+		public void sound(String name, Vector3f at) {
+			session.sound.play(name);
+		}
+
+		@Override
+		public devple.gow.engine.fx.EffectSystem.Effect show(String go, devple.gow.engine.fx.EffectSystem.Anchor anchor) {
+			return magicFx != null ? magicFx.effects().play(go, anchor) : null;
+		}
+	};
+
+	/** OrbEmitter 방출 (0x2258D8). @return 만든 오브 수 */
+	private int emitOrbs(String emitterNode, Vector3f at) {
+		List<OrbDrops.Orb> orbs = OrbDrops.rollNode(orbTweaks, emitterNode, rnd, hero.player.hp, hero.player.mp, hero.player.mpLevel > 0);
+		orbPickups.emit(orbTweaks, emitterNode, orbs, new Vector3f(at), orbSink);
+		return orbs.size();
 	}
 
 	private void respawn(Vector3f at) {
@@ -1385,16 +1413,30 @@ public final class GameScene implements Scene {
 		float[] w = r.world();
 		f.pos.set(w[12], w[13], w[14]);
 		f.prevPos.set(f.pos);
-		if (bossKind != null) {
-			// 보스는 스폰 엔티티 방향으로 (헤드리스 BossRig 와 같은 규칙) — 히드라는 이 방향에 고정, 잡기 카메라·동기 정렬의 기준 (37 문서 §4)
-			f.yaw = (float) Math.atan2(w[8], w[10]);
-		}
+		// 스폰 엔티티 방향으로 (원작 0x1AC850 → 0x1A4DB0 이 엔티티 월드 행렬로 생성) — 보스: 히드라 고정 방향·잡기 카메라·동기 정렬 기준 (37 문서 §4),
+		// 해골 ClimbSkellys: Z 축이 난간 바깥이라 523 SKSshipDismount 가 배 밖 아래에서 올라와 난간을 넘는다 (28 §7)
+		f.yaw = (float) Math.atan2(w[8], w[10]);
 		f.setDifficulty(session.difficulty);
 		if (bossKind == null && f.brain().tree != null && nav != null) {
 			f.setNavWorld(devple.gow.engine.combat.EnemyNav.of(nav.navWorld)); // 바닥·중력·벽·줄 이동 (32 문서 §적 자신의 벽·줄 이동)
 		}
 		f.setCrowd(() -> bodies); // 생물끼리 밀어내기 0x1E2DD8 — 보스도 (Sold +0x1C 비트 1·BMI Think 이면 자기는 밀지 않음)
 		f.setFoe(hero.hittable());
+		bindPresentation(f.combat());
+		EnemyFighter self = f;
+		// 다른 적도 맞을 수 있다 (접촉 0x203AF0 은 편을 거르지 않음) — 같은 편 피해는 공격 플래그 0x8 일 때만 (Combatant.bystanderHits)
+		f.combat().setBystanders(() -> enemies.stream().map(Enemy::fighter).filter(o -> o != self && !o.dead()).toList(), true);
+		if (bossKind == null) { // 보스는 BossFight 가 처리
+			EnemyFighter ef = f;
+			f.combat().addEventListener(ev -> {
+				if (ev.type() == 10) {
+					ef.selfHp(ev.b()); // SELF_HP
+				} else if (ev.type() == 2) {
+					// ORB_EMIT (0x206030 → OrbEmitter_Emit 0x2258D8, idx = 적 WAD 의 OrbEmitter 템플릿) — 해골 머리치기 222 → 503 "SKS Decap", MAISKB06 504
+					emitOrbs(orbTweaks.findNode(String.format("/TweakTemplates/OrbEmitter/%03d/", ev.index())), ef.pos);
+				}
+			});
+		}
 		f.brain().setSightBlocked((eye, to) -> { // 인지 시선 가림 (17 문서 §인지)
 			Vector3f d = new Vector3f(to).sub(eye);
 			float len = d.length();
@@ -1500,6 +1542,33 @@ public final class GameScene implements Scene {
 	}
 
 
+	private int hudHits = -1;
+
+	/**
+	 * 히트 카운터 HUD (원작 0x1DB608 매 프레임 → Hud_SetHitCounter 0x1BA070): 이벤트 1 = 히트 수 (HitCounter AnimateOn, 1 타는 알리지 않음),
+	 * 2 = 마일스톤 (HitCounterShake·ComboMilestone·ComboEXP — Combo_Message = 보너스 템플릿 메시지, Combo_Amount = 붉은 오브),
+	 * 값이 바뀔 때만 (0x1BA0D8: 같은 이벤트·값이면 건너뜀). 히트 0 도 이벤트 1 로 보내 숨긴다. 이벤트 0 은 메뉴·메시지 쪽 리셋 (0x1BA150).
+	 */
+	private void hitCounterHud() {
+		UiVariables v = hud.variables();
+		int hits = hero.hitCounter.hits();
+		HitCounter.Reward r = hero.comboReward;
+		if (r != null) {
+			hero.comboReward = null;
+			String msg = session.messages != null && r.messageId() >= 0 ? session.messages.get(r.messageId()) : null;
+			v.set("PS2_HitCounter_Value", hits);
+			v.set("PS2_Combo_Amount", r.redOrbs());
+			v.set("PS2_Combo_Message", msg != null ? msg.replace("----", " ").replace('\n', ' ').trim() : "");
+			v.event("PS2_HitCounter_Event", 2);
+			hudHits = hits;
+		} else if (hits != hudHits && hits != 1) {
+			// 0 = 리셋 시간 (/Player/Hit Counter Reset Time) 이 지나 끊김: HUD 스크립트가 HitCounter 를 프레임 0 (Off) 으로 두고 0 &lt; 값이 아니라 다시 켜지 않음 → 사라짐
+			v.set("PS2_HitCounter_Value", hits);
+			v.event("PS2_HitCounter_Event", 1);
+			hudHits = hits;
+		}
+	}
+
 	private void showMessage(int id, float seconds) {
 		String text = session.messages != null ? session.messages.get(id) : null;
 		messageId = id;
@@ -1512,7 +1581,9 @@ public final class GameScene implements Scene {
 		for (int i = 1; i <= 5; i++) {
 			v.set("PS2_MessageTemplate_Line" + i, i <= lines.length ? lines[i - 1].trim() : "");
 		}
-		v.event("PS2_MessageTemplate_Event", 1);
+		// 이벤트 값 = 줄 수: HUD 스크립트가 MessageTemplates 를 GotoFrame2(값 + 1) — 프레임 n 이 줄 1..n 배치 (FLP_HUDK).
+		// 1 로 보내면 첫 줄만 보였다 (튜토리얼 269 "[□] 보통 공격. / [△] 강한 공격." 의 둘째 줄, 메두사 520 의 둘째 줄)
+		v.event("PS2_MessageTemplate_Event", Math.max(1, Math.min(5, lines.length)));
 		messageTimer = seconds > 0 ? seconds : 4f;
 		System.out.println("메시지 " + id + ": " + text.replace('\n', ' '));
 	}
@@ -1531,10 +1602,81 @@ public final class GameScene implements Scene {
 	 * 예 → 원작 메모리카드 화면을 {@link MemoryCardFlow} 로 진행 (카드 → 파일 → 덮어쓰기/새 파일 → 저장 중 → 완료).
 	 */
 	/** 현재 미니게임 아이콘 (35 문서 §6): 타이밍 프롬프트 = 종류 아이콘, 연타 = XButtonPress [추정: 연타 아이콘 선택], 없으면 숨김. */
+	/** 잡은 동안 던질 대상 (원작 combatant +0x80 — 잡은 적 +0x84 는 제외) 과 그 위 조준 표식 goTargetLK (Player +0x80). */
+	private EnemyFighter throwTarget;
+	private devple.gow.engine.fx.EffectSystem.Effect reticle;
+	private final org.joml.Matrix4f reticleAt = new org.joml.Matrix4f();
+	static final float MANUAL_TARGET_RANGE = 50f * 16f, AUTO_AIM_DAMPING = 0.1f;
+
+	/**
+	 * 플레이어 갱신 0x1D8470 (영웅 현재 기술 플래그 +0x0E): 0x18 둘 다 = 잡은 적을 뺀 가장 가까운 적을 고름 (Manual Targeting Range 50,
+	 * 후보 콜백 0x1DA038 이 +0x84·죽은 적 제외) — 해골 MAISKB00 220·MAISKB01 223 (잡고 있는 동안), 0x8 만 = 유지 (MAISKB02 221 던지기),
+	 * 0x8 이면 대상 위에 표식 (높이 = 대상 CombatFileSet #a58b9446 × 16, 크기 = Reticle Scale), 아니면 숨김.
+	 * 자동 조준 0x2077A0: 잡은 동안 영웅이 대상 쪽으로 돈다 (Auto Aim Damping 0.1, FLAG_1 (이벤트 15) 창이면 생략) → 던지기가 그 적을 향한다.
+	 * [근사: 왼쪽 스틱으로 다른 후보 넘기기 없음, 표식 틴트 (/Player/Reticle) 없음]
+	 */
+	private void updateThrowTarget(float dt) {
+		var hc = hero.combat;
+		int fl = hc.active() ? hc.move().flags() : 0;
+		EnemyFighter partner = grab.partner();
+		if ((fl & 0x18) == 0x18) {
+			EnemyFighter best = null;
+			float bd = MANUAL_TARGET_RANGE * MANUAL_TARGET_RANGE;
+			for (Enemy en : enemies) {
+				EnemyFighter f = en.fighter();
+				float d = f.pos.distanceSquared(hero.ctl.position);
+				if (f != partner && !f.dead() && d < bd) {
+					bd = d;
+					best = f;
+				}
+			}
+			throwTarget = best;
+		} else if ((fl & 0x8) == 0) {
+			throwTarget = null;
+		}
+		if (throwTarget != null && (throwTarget.dead() || !enemies.stream().anyMatch(en -> en.fighter() == throwTarget))) {
+			throwTarget = null;
+		}
+		if (throwTarget != null && partner != null && !hc.eventOn(15)) {
+			float want = (float) Math.atan2(-(throwTarget.pos.x - hero.ctl.position.x), -(throwTarget.pos.z - hero.ctl.position.z));
+			float diff = (float) Math.IEEEremainder(want - hero.ctl.yaw, Math.PI * 2);
+			hero.ctl.yaw += diff * AUTO_AIM_DAMPING;
+		}
+		boolean show = throwTarget != null && (fl & 0x8) != 0;
+		if (show) {
+			EnemyFighter t = throwTarget;
+			Enemy te = enemies.stream().filter(x -> x.fighter() == t).findFirst().orElse(null);
+			Tweaks tw = te != null ? te.kind().tweaks() : null;
+			String set = tw != null ? tw.firstNode("/TweakTemplates/CombatFileSet/") : null;
+			float h = set != null ? Float.intBitsToFloat(tw.rawHash(set, 0xa58b9446).orElse(0)) * 16f : 0f;
+			float sc = set != null ? tw.f(set, "Reticle Scale", 1f) : 1f;
+			reticleAt.translation(t.pos.x, t.pos.y + h, t.pos.z).scale(sc);
+			if (reticle == null && magicFx != null) {
+				reticle = magicFx.effects().play("goTargetLK", out -> {
+					out.set(reticleAt);
+					return true;
+				});
+			}
+		} else if (reticle != null) {
+			reticle.stop();
+			reticle = null;
+		}
+	}
+
 	private int minigameIconIndex() {
 		if (!grab.active()) {
-			// 버튼 안내 센서 (슬롯 1, 원작 0x1AAD40) — 엔진은 아이콘 하나만 보이므로 잡기가 없을 때만
-			return world.promptActive() ? devple.gow.engine.ui.MinigameIcon.PROMPT : devple.gow.engine.ui.MinigameIcon.NONE;
+			// 아이콘 슬롯 8 개 중 번호가 큰 것 하나 (0x21E908): 2 = 잡은 TAndF·크랭크 연타 (0x1E17F0, 열리면 끔 0x1C38A8),
+			// 1 = 버튼 안내 센서 (0x1AAD40), 0 = R2 로 잡힐 가까운 오브젝트의 "Show R2" (0x1DC3F8) — ATHN01A 해치 HydraHatchDoor (TAndF 051)
+			var nv = hero.nav;
+			var held = nv != null ? nv.item() : null;
+			if (held != null && held.showPrompt && held.progress < 1f && (held.kind == devple.gow.engine.nav.Interactables.Kind.LIFT || held.crank)) {
+				return held.crank ? devple.gow.engine.ui.MinigameIcon.WIGGLE_BACK_FORTH : devple.gow.engine.ui.MinigameIcon.R2_PRESS;
+			}
+			if (world.promptActive()) {
+				return devple.gow.engine.ui.MinigameIcon.PROMPT;
+			}
+			var near = nv != null && held == null ? nv.promptItem() : null;
+			return near != null && near.showPrompt ? devple.gow.engine.ui.MinigameIcon.PROMPT : devple.gow.engine.ui.MinigameIcon.NONE;
 		}
 		if (grab.timed() != null) {
 			return grab.timed().iconIndex();
@@ -1585,6 +1727,7 @@ public final class GameScene implements Scene {
 			auto.died(hero.ctl.position);
 		}
 		hero.player.deaths++;
+		orbPickups.clear(); // 영웅 HP ≤ 0 이면 떠 있던 오브는 사라진다 (0x226710)
 		hero.player.onCheckpointRestart(hero.player.hp);
 		respawn(checkpoint);
 	}
@@ -1631,7 +1774,26 @@ public final class GameScene implements Scene {
 
 	private int firstUpdates, firstRenders;
 
-	private void updateTick(Engine e, float dt) {
+	/** 카메라 흔들림 (이벤트 5) · 전역 시간 배율 (이벤트 7: 0x337C1C 남은 시간 (실시간), 0x337C20 배율). */
+	private final devple.gow.engine.render.CameraShake shake = new devple.gow.engine.render.CameraShake();
+	private float warpTimer, warpScale = 1;
+
+	/** 전투원의 흔들림·전역 시간 이벤트를 장면에 연결 (0x206030: 영웅이든 적이든). */
+	private void bindPresentation(devple.gow.engine.combat.Combatant c) {
+		c.onCameraShake(i -> shake.start(orbTweaks, i));
+		c.onGlobalTime((a, b) -> {
+			warpTimer = a;
+			warpScale = b;
+		});
+	}
+
+	private void updateTick(Engine e, float real) {
+		// 0x204AB0: 타이머 > 0 이면 실시간으로 줄이고 배율 = max(b, 0.001), 아니면 1 → 게임 dt (0x17DA78) 에 곱함 [근사: HUD·소리도 같이 느려짐]
+		float dt = real;
+		if (warpTimer > 0) {
+			warpTimer -= real;
+			dt = real * Math.max(warpScale, 0.001f);
+		}
 		pendingEngine = e;
 		if (session.openingPending && levelName.equals(GameFlow.START_LEVEL)) {
 			session.openingPending = false;
@@ -1656,6 +1818,7 @@ public final class GameScene implements Scene {
 		}
 		if (!powerUp) {
 			hudBinding.update(hero.player, hud.variables());
+			hitCounterHud();
 		}
 		if (debugInput != null && questionId >= 0) {
 			debugInput.advance(dt); // 질문 메뉴 중에는 게임 틱이 멈추므로 스크립트 입력을 여기서 진행해 HUD 로 (검증용)
@@ -1764,6 +1927,7 @@ public final class GameScene implements Scene {
 				target.hp = 0; // 처형 성공 → 사망 처리 (원작은 처형 기술의 피해/스크립트) [근사]
 			}
 		}
+		updateThrowTarget(dt);
 		if (minigameIcon.show(hud.player(), minigameIconIndex())) {
 			session.sound.play("SND_ICON");
 		}
@@ -1784,8 +1948,10 @@ public final class GameScene implements Scene {
 		cameraRig.setHeroState(heroStateBits(), enemies.stream().anyMatch(en -> !en.fighter().dead() && en.fighter().brain() != null
 				&& en.fighter().brain().state() == devple.gow.engine.combat.AiBrain.State.COMBAT));
 		cameraRig.update(dt, p, hero.ctl.yaw, !hero.ctl.grounded);
+		shake.update(dt, cam);
 		session.sound.setUnderwater(cameraRig.underwater()); // 수중 카메라 → 소리 수중 처리 (29 문서 §10)
 		world.tick(dt, p.x, p.y, p.z);
+		orbPickups.update(dt, p, hero.player.hp > 0, orbSink);
 		hero.tickBlades(dt); // 블레이드 사슬 (0x1FDB18): 이번 틱 자세가 정해진 뒤, 블레이드 GO 앵커보다 먼저
 		magicFx.update(hero.magic, p, hero.ctl.yaw, enemies.stream().map(Enemy::fighter).toList(), dt, cam.eye);
 		for (BladeChain.Side s : hero.chain.sides) { // 블레이드 벽 불꽃 (0x1FAFC8 → 0x202248, 45 문서 §3.7)
@@ -1900,10 +2066,7 @@ public final class GameScene implements Scene {
 				if (en.actor() != null && !en.actor().destroyed()) {
 					world.destroy(en.actor()); // DestructionSensor (예: 튜토리얼 메시지)
 					String emitter = en.kind().assets().wad().name().replace(".WAD", "").substring(2) + " Death";
-					for (OrbDrops.Orb o : OrbDrops.roll(orbTweaks, emitter, rnd, hero.player.hp, hero.player.mp)) {
-						hero.player.pickupOrb(o.type(), o.points());
-					}
-					session.sound.play("SND_PICKUPS_ORBS_E");
+					emitOrbs(orbTweaks.findTemplate("/TweakTemplates/OrbEmitter/", emitter), f.pos); // 적 사망 0x1DDDF0
 				}
 			}
 		}
@@ -2005,14 +2168,8 @@ public final class GameScene implements Scene {
 		if (it.matrix != null) {
 			magicFx.breakObject(owner, new org.joml.Matrix4f().set(it.matrix), it.fadeDelay, it.fadeTime, it.debrisPhysics);
 		}
-		List<OrbDrops.Orb> orbs = OrbDrops.rollNode(orbTweaks, it.orbNode(), rnd, hero.player.hp, hero.player.mp);
-		for (OrbDrops.Orb o : orbs) {
-			hero.player.pickupOrb(o.type(), o.points());
-		}
-		if (!orbs.isEmpty()) {
-			session.sound.play("SND_PICKUPS_ORBS_E");
-		}
-		System.out.println("파괴: " + owner + " 오브 " + orbs.size());
+		int orbs = emitOrbs(it.orbNode(), it.matrix != null ? new Vector3f(it.matrix[12], it.matrix[13], it.matrix[14]) : hero.ctl.position); // 0x215DA0
+		System.out.println("파괴: " + owner + " 오브 " + orbs);
 	}
 
 	private int surfaceFx(Vector3f p) {
@@ -2147,6 +2304,14 @@ public final class GameScene implements Scene {
 	private void updateCamera(float alpha) {
 		// 원작 카메라 시스템 (CMV 선택 + 레일/궤도 + 전환 보간): CameraRig, 30 문서. 갱신은 update() 틱에서
 		cameraRig.apply(cam, alpha);
+		// 원작 투영 0x1692D8: CAM 0x70 은 가로 화각으로 고정 (x 배율 = 1/tan(f/2)), 세로는 화면비 0x330A30 (와이드 16/9, 0x1B61B8) 로 줄인다.
+		// CameraRig 는 4:3 세로 화각을 주므로 창 비율에 맞춰 가로를 유지 — 세로 고정이던 때는 16:9 에서 가로 68.9° (원작 54.4°) 로 넓어져
+		// 크레토스가 작게·카메라가 멀어 보였다 (ATHN01A 시작, 사용자 보고)
+		float aspect = pendingEngine != null ? pendingEngine.window().aspect() : 4f / 3f;
+		if (aspect > 0) {
+			double t = Math.tan(Math.toRadians(cam.fovDeg) / 2) * (4.0 / 3.0) / aspect;
+			cam.fovDeg = (float) Math.toDegrees(2 * Math.atan(t));
+		}
 		camYaw = (float) Math.atan2(-(cam.target.x - cam.eye.x), -(cam.target.z - cam.eye.z));
 	}
 

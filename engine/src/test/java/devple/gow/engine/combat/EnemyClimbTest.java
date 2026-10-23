@@ -477,4 +477,36 @@ class EnemyClimbTest {
 		float expect = zip.length() * 0.95f / 320f + 1f;
 		assertEquals(expect, frames * DT, 1.0f, "Sold+0x160 20 m/s, +0x164 10 m/s²");
 	}
+
+	/**
+	 * ATHN01A 리스폰 해골 (ClimbSkellys, SpawnAction 523): 클립 SKSshipDismount 는 레벨 WAD 의 외부 그룹 ANM_SKS_Athn01A 에만 있다 —
+	 * 붙이면 3.7 초 재생되고, 엔티티 방향 (Z 축 = 난간 바깥) 으로 두면 시작 골반이 좌현 난간 (x 1416) 밖·갑판 아래에서 올라온다.
+	 * 전에는 클립이 없어 기술이 바로 끝나 갑판 위에 갑자기 나타났다 (사용자 보고).
+	 */
+	@Test
+	void shipRespawnClimbsOverRailing() throws Exception {
+		EnemyFactory.Kind k = kind("R_SKS.WAD");
+		WadFile lv = WadFile.load(rom().resolve("ATHN01A.WAD"));
+		k.anims().attachAll(lv);
+		ScriptWorld w = new ScriptWorld(new LevelData(lv), new ScriptHost(), new devple.gow.engine.script.ScriptListener() {
+		});
+		ScriptEntity e = w.entities().stream().filter(x -> x.name().equals("ClimbSkellys-SkellyLevel1AI4")).findFirst().orElseThrow();
+		float[] m = e.world();
+		EnemyFighter f = k.spawn();
+		f.pos.set(m[12], m[13], m[14]);
+		f.prevPos.set(f.pos);
+		f.yaw = (float) Math.atan2(m[8], m[10]);
+		assertTrue(f.startSpawnAction(523), "523 시작");
+		assertEquals("SKSshipDismount", f.combat().clipName());
+		f.animator().update(0);
+		var sk = f.animator().skeleton();
+		int pelvis = devple.gow.engine.fx.MagicFx.joint(sk, "pelvis");
+		org.joml.Matrix4f pw = new org.joml.Matrix4f().translation(f.pos).rotateY(f.yaw).scale(f.scale)
+				.mul(new org.joml.Matrix4f().set(f.animator().pose().world(sk)[pelvis]));
+		assertTrue(pw.m30() < 1416 && pw.m31() < -50, "시작 골반은 난간 밖 갑판 아래: " + pw.m30() + ", " + pw.m31());
+		for (float t = 0; t < 3.4f; t += DT) {
+			f.update(DT);
+		}
+		assertTrue(f.combat().active() && f.combat().move().id() == 523, "3.4 초까지 오르기 유지");
+	}
 }

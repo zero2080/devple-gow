@@ -753,4 +753,21 @@ class NavDataTest {
 		assertEquals(NavState.GROUND, nav.state(), "턱으로 올라섬 " + b.pos);
 		assertTrue(b.pos.y > surface - HeroNavigator.SWIM_DEPTH, "바닥 > 수면 − 28.16");
 	}
+
+	/** "Show R2" (#ca686863 bit 0): ATHN01A 바닥문 gotrapdoorcsm = TAndF 051 HydraHatchDoor (id 6), ATHN01C goliftdoor1 — 가까이 서면 R2 안내 (슬롯 0). */
+	@Test
+	void hatchShowsR2Prompt() throws Exception {
+		LevelData a = level("ATHN01A");
+		Tweaks tw = new Tweaks();
+		tw.load(a.wad);
+		Interactables.Item hatch = Interactables.of(a, tw).byOwner("gotrapdoorcsm");
+		assertNotNull(hatch);
+		assertEquals(Interactables.Kind.LIFT, hatch.kind);
+		assertEquals(6, hatch.id);
+		assertTrue(hatch.showPrompt, "해치 Show R2");
+		LevelData c = level("ATHN01C");
+		Tweaks tc = new Tweaks();
+		tc.load(c.wad);
+		assertTrue(Interactables.of(c, tc).byOwner("goliftdoor1").showPrompt, "goliftdoor1 Show R2");
+	}
 }

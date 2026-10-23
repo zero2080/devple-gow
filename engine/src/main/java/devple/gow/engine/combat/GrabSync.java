@@ -83,6 +83,11 @@ public final class GrabSync {
 		return partner != null;
 	}
 
+	/** 결합 상대 (잡고 있는 적, 원작 combatant +0x84) — 없으면 null. */
+	public EnemyFighter partner() {
+		return partner;
+	}
+
 	public RepeatPressQte qte() {
 		return qte;
 	}

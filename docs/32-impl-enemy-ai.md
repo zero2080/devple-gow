@@ -136,7 +136,7 @@ SpawnEnemy 슬롯 (등록 0x1A3840 기본값: 0 0, 1 −1, 2–6 0, **7 −1**, 
 | −1 (없음) | 바로 AI | ATHN01D CargoRopeEnemies1–6 (그물 옆 → 첫 프레임 벽), ATHN02B RopeEnemies, ClimbWallEnemies3(일부)·6·7 |
 | 500/501/502/550 | SPAWN (`spawn` 3.7 초, 땅에서 솟음, PlayFX 020 goSpawnHole, 슈퍼아머) | ATHN01D CaptKey, ATHN02A Deck/Respawn, PAND01A HoleSkellys, ATHN02B Sec*… |
 | **504** | **SKSWALLSPAWN** (`SKSwallSpawn` 2 초: 벽 안에서 몸을 빼 벽 매달림 자세로 끝, PlayFX 034 "WallSpawn" goSpawnHole, 0–0.83 무적) | ATHN02B ClimbWallEnemies2·3(35/36)·4·5 |
-| 523 | #97406ae2 (사다리 소리, 애니가 R_SKS 에 없음 → 엔진에선 즉시 끝) | ATHN01A ClimbSkellys, ATHN02B ClimbWallEnemies1 |
+| 523 | #97406ae2 = **SKSshipDismount** (레벨 외부 그룹 ANM_SKS_Athn01A / ANM_SKC_Athn02B, 3.73 초, 배 밖 아래 골반 (−6, −107, +58) 에서 올라와 난간을 넘음 — `GameScene.loadEnemyKinds` 가 레벨 WAD 를 적 애니에 붙이고, 스폰 방향 = 엔티티 Z 축 (난간 바깥)) | ATHN01A ClimbSkellys, ATHN02B ClimbWallEnemies1 |
 | 0/1/2 | TAUNT02/03/04 | ATHN01A TauntEnemy1–4 |
 루트 액션 A500–A504 분기 플래그 0x148242 = 지상 전용 → 원작은 초기화 상태(지상)에서 Match. 엔진 `EnemyFighter.startSpawnAction(id)` 는 요청 동안 상태 마스크를 0x2 로 두고
 `combat.request` → 벽 옆 스폰은 동작 중(공중 → 0x1C7828) 벽을 잡고, 애니가 벽 자세로 끝나 벽 상태로 이어진다. GameScene 스폰이 `SpawnRequest.spawnAction` 으로 부른다 (보스 제외).
@@ -293,7 +293,7 @@ A170–173 (자신 HP 0..5) WALLHITRIGHT/LEFT → AUTO [0–0.6] WALLCLIMBATR/L 
   둘째 질의 (0x80000000) 가 적 뒤 벽을 맞히면 그쪽으로 당긴다. 엔진 `BladeWalls` 가 살아 있는 적의 `HitVolumes.segmentCast` (몸 구) 를 넣는다.
 
 미구현/근사: 매단 줄 위 회전 속도·질점 줄 흔들림 (적은 흔들기 입력이 없으므로 잡을 때 운동량만 — 엔진은 0), 0x2D8 0x100/0x200 의 정확한 출처,
-날기 높이·상태 이탈, 슬롯 5 (204/202/12/20…, 의미 미상), 523 사다리 스폰 애니(레벨 쪽 애니 미확인), 사망 낙하 착지 HITLAND, 헤드리스 보스 하네스 (`HeadlessBoss`) 는 밀기 없음.
+날기 높이·상태 이탈, 슬롯 5 (204/202/12/20…, 의미 미상), 사망 낙하 착지 HITLAND, 헤드리스 보스 하네스 (`HeadlessBoss`) 는 밀기 없음.
 
 ## 이동 속도 출처 [확실]
 (owner+0x320)+8 = **TWK_Sold 구조체** (sub_00243700; 같은 포인터로 +0x244 토큰 비용, +0x26C 동결 저항, +0x270 석화 기술을 읽는 곳과 같음). 쓰는 곳:

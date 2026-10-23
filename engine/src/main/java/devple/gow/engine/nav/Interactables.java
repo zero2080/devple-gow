@@ -58,6 +58,11 @@ public final class Interactables {
 		public boolean done;
 		/** 스크립트 Vis 로 숨겨짐 (Visible 2) — 잡을 수 없다 (예 PAND00C 엘리베이터 레버는 고리 퍼즐 205 뒤 LeverOn). */
 		public boolean hidden;
+		/**
+		 * "Show R2" (#ca686863, 값의 bit 0): 가까이 서면 R2 안내 (슬롯 0, 0x1DC3F8 → 0x21DA50(0, 14)), TAndF 를 잡은 동안 R2 연타 안내
+		 * (슬롯 2, 0x1E17F0 → 0xB). 로더 PushPull 0x216738 (+0x108 &amp; 8) · TAndF 0x2138C0 (+0x158 &amp; 2) · CSM 0x215238 (+0xB8 &amp; 4).
+		 */
+		public boolean showPrompt;
 		/** 오브젝트 애니 길이 (초): 과제 진행률의 분모 (원작 0x215928 f13). 애니를 못 찾으면 1 초 [근사]. */
 		public float length = 1f;
 		private TaskProgress task;
@@ -181,6 +186,7 @@ public final class Interactables {
 					it.lengthKnown = len >= 0;
 					it.length = len >= 0 ? len : it.length;
 					it.hold = tw != null && (tw.rawHash(node, CSM_HOLD_FLAG).orElse(0) & 1) != 0;
+					it.showPrompt = showR2(tw, node);
 					out.items.add(it);
 				}
 				case "PushPull" -> {
@@ -213,6 +219,7 @@ public final class Interactables {
 							it.maxBack = Float.intBitsToFloat(tw.rawHash(node, SPEED_MAX_BACK).orElse(Float.floatToIntBits(2f)));
 						}
 					}
+					it.showPrompt = showR2(tw, node);
 					out.items.add(it);
 				}
 				case "IO_TandF" -> {
@@ -237,6 +244,7 @@ public final class Interactables {
 						it.maxSpeed = Float.intBitsToFloat(tw.rawHash(node, SPEED_MAX).orElse(Float.floatToIntBits(1.5f)));
 						it.maxBack = Float.intBitsToFloat(tw.rawHash(node, SPEED_MAX_BACK).orElse(Float.floatToIntBits(20f)));
 					}
+					it.showPrompt = showR2(tw, node);
 					out.items.add(it);
 				}
 				default -> {
@@ -270,6 +278,12 @@ public final class Interactables {
 		}
 	}
 
+	private static final int SHOW_R2 = 0xca686863;
+
+	private static boolean showR2(Tweaks tw, String node) {
+		return tw != null && (tw.rawHash(node, SHOW_R2).orElse(0) & 1) != 0;
+	}
+
 	/** Creator "chest" (unk5 = CSM 템플릿, unk6 = 과제 id [추정: ATHN01D Chest4 unk6 = 1, ChestMessage 가 1023 인자 1 == 1 을 기다림]). */
 	public Item addChest(String owner, Vector3f pos, int csmTemplate, int taskId, Tweaks tw) {
 		String node = String.format("/TweakTemplates/CSM/%03d/", csmTemplate);
@@ -282,6 +296,7 @@ public final class Interactables {
 		Item it = new Item(Kind.CHEST, owner, pos, csmTemplate, taskId, grab, open, label, 20);
 		// 상자 템플릿 (CSM 000 "chest open" 처럼 비트 키가 없으면) = 누르고 있기 [추정: 다른 상자 템플릿 002–065 는 모두 1]
 		it.hold = tw == null || (tw.rawHash(node, CSM_HOLD_FLAG).orElse(1) & 1) != 0;
+		it.showPrompt = showR2(tw, node);
 		return add(it);
 	}
 

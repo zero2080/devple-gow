@@ -136,3 +136,8 @@ MAIMIN02 의 SCRIPT 이벤트 → RepeatPress 템플릿: 5초, ○ 한 번 +0.2,
 
 `GrabTest`: 연타 → PASSED → 402, 무입력 → FAILED → 403, 휘말린 HP 가득한 미노타우로스는 3 blockShove (`grabSparesBystander` — 전에는 적 쪽 조건을 건너뛰어 혼자 MAIMIN01 → MAIMIN02 (재생 속도 0) 에 들어가 결합 상대 없이 무적으로 멈췄다, ATHN03C 자동 플레이 43 문서). 처형 성공 후 적 사망은 근사(기술 종료 시 HP 0).
 TimedPress / 스틱 회전, RepeatPress 필드 재해석(시작 0.5 → 누름 간격 제한)은 [35 문서](35-impl-magic-minigames.md) §5. 남은 것: 미니게임 버튼 아이콘 HUD 표시.
+
+## 12. 붙잡은 동안 던질 대상 · 강공격 연출 (사용자 보고 2·3·6, 추가 2)
+- 던질 대상 (0x1D8470): 영웅 기술 플래그 0x18 (MAISKB00 220·01 223) 이면 잡은 적 (+0x84) 을 뺀 가장 가까운 적 (Manual Targeting Range 50 ×16), 0x8 만 (MAISKB02 221) 유지, 0x8 이면 대상에 조준 표식 goTargetLK (높이 CombatFileSet #a58b9446 × 16, 크기 Reticle Scale). 자동 조준 0x2077A0: 영웅이 대상 쪽으로 (Damping 0.1, FLAG_1 창 제외). [근사: 스틱 넘기기·틴트 없음]
+- 던진 몸: 적 휘말림 후보 = 다른 적, 같은 편 피해는 공격 플래그 0x8 일 때만 (0x203798 — MAISKB02·HITSPIN·AIRTHROW …). 일반 적도 SELF_HP (이벤트 10, 던진 해골 221 [0.20] 200 → 사망) 와 ORB_EMIT (이벤트 2).
+- 이벤트 5 CAMERA_SHAKE (`render/CameraShake`, 0x1F09C8/0x1F0A30: 진행 중이면 무시, 회전 A·d·sin, 이동 16·B·d·sin), 7 GLOBAL_TIME (0x204AB0: 실시간 a 초 동안 게임 dt × max(b, 0.001) — combo3F 76 0.3 초 × 0.1), 24 HIT_PAUSE = 마지막 발동 이벤트의 a 초를 공격자·피격자 양쪽 (0x203688 → 0x414). 적중 조건 (1·2) 흔들림·시간은 적중 때 (`Combatant.contact`). [근사: 히트스톱 0.01 배 대신 정지, 시간 배율은 HUD·소리도]

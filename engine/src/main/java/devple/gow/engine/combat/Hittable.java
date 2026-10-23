@@ -46,6 +46,10 @@ public interface Hittable {
 		return false;
 	}
 
+	/** 히트스톱 받기 (0x2652E4: 개체 시간 배율 0.01 을 s 초). 기본 없음. */
+	default void hitPause(float s) {
+	}
+
 	/** 돌 상태 (석화). 돌인 대상은 맞으면 부서진다 (Stone Kill). */
 	default boolean petrified() {
 		return false;

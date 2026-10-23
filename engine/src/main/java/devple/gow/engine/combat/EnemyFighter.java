@@ -231,6 +231,11 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 	public void update(float dt) {
 		prevPos.set(pos);
 		prevYaw = yaw;
+		if (combat.hitPause() > 0 && hp > 0) {
+			// 히트스톱 (0x2652E4: GO +0x16C 개체 시간 배율 0.01 — 이동·애니 dt 에 곱함) [근사: 0.01 대신 정지]
+			combat.update(null, dt);
+			return;
+		}
 		if (stone) {
 			// 돌: AI·전투 정지, 석화 자세(freezePose)만 끝까지 재생 후 유지. 지속 후 원상 복귀 (UnFreeze 0x1E8AF8)
 			stoneElapsed += dt;
@@ -659,6 +664,27 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 	@Override
 	public boolean invulnerable() {
 		return hp <= 0 || (!stone && combat.invulnerable());
+	}
+
+	/**
+	 * SELF_HP (기술 이벤트 10): 양수 = 자기 피해 (HP 바닥 무시, 0 이 되면 EV_DEATH 분기 — (block) 이면 기술을 끝까지), 음수 = 회복.
+	 * 예: 던져지는 해골 MAISKB02 221 [0.20] b 200 → 날아가는 동안 사망 (BossFight.selfHp 와 같은 규칙).
+	 */
+	public void selfHp(float v) {
+		if (v >= 0) {
+			float before = hp;
+			hp = Math.max(0, hp - v);
+			if (before > 0 && hp <= 0) {
+				combat.fire(CombatInput.EV_DEATH, -1, null);
+			}
+		} else {
+			hp = Math.min(maxHp, hp - v);
+		}
+	}
+
+	@Override
+	public void hitPause(float s) {
+		combat.pause(s);
 	}
 
 	@Override

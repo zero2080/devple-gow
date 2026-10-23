@@ -83,6 +83,11 @@ public final class ScriptEntity {
 		return new float[]{world[12], world[13], world[14]};
 	}
 
+	/** 월드 행렬 (열 우선 16, 사본) — 스폰 방향 등. */
+	public float[] world() {
+		return world.clone();
+	}
+
 	public boolean hasSlot(String name) {
 		return handlers.containsKey(EntitySlots.index(type(), name));
 	}

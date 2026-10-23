@@ -269,6 +269,13 @@ public final class HeroNavigator {
 		return item;
 	}
 
+	private Interactables.Item promptItem;
+
+	/** R2 로 잡힐 가까운 오브젝트 (지상·붙어 있지 않을 때만, 아니면 null) — HUD 안내 슬롯 0. */
+	public Interactables.Item promptItem() {
+		return state == NavState.GROUND ? promptItem : null;
+	}
+
 	/** 강제로 지상 상태로 (리스폰·Goto). */
 	public void reset() {
 		if (item != null && (state == NavState.PUSH || state == NavState.INTERACT)) {
@@ -379,8 +386,11 @@ public final class HeroNavigator {
 				enterWater(f, 0);
 				return true;
 			}
+			// 근접 사용 안내 (원작 슬롯 0, 매 프레임 0x1DC3F8 — 붙어 있지 않을 때, R2 로 잡힐 대상과 같은 질의)
+			Interactables.Item near = items.nearest(p, USE_RADIUS);
+			promptItem = near != null && !released.contains(near) && !near.hidden ? near : null;
 			if (in.pressed(PadButton.USE)) {
-				Interactables.Item it = items.nearest(p, USE_RADIUS);
+				Interactables.Item it = near;
 				// 놓은 뒤 되감기는 중인 오브젝트는 0 으로 돌아갈 때까지 잡히지 않는다 (원작: 잡기 클래스 비트 0x400000 / 0x30000 을 끄고 0 에서 다시 켬,
 				// CSM 0x2160B4 → 0x216254, 레버 0x21287C → 0x21290C) [확실]
 				if (it != null && !released.contains(it)) {

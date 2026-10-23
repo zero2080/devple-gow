@@ -40,6 +40,8 @@ public final class HeroRig implements AutoCloseable {
 	public final Combatant combat;
 	public final GodMode godMode;
 	public final HitCounter hitCounter;
+	/** 아직 HUD 에 알리지 않은 히트 마일스톤 보상 (없으면 null). */
+	public HitCounter.Reward comboReward;
 	public final DamageRules rules;
 	public final devple.gow.engine.combat.Magic magic;
 	public int difficulty = 1;
@@ -105,6 +107,11 @@ public final class HeroRig implements AutoCloseable {
 		}
 		this.rom = rom;
 		hittable = new Hittable() {
+			@Override
+			public void hitPause(float s) {
+				combat.pause(s); // 맞은 영웅도 히트스톱 (HeroController.updateCombat 가 hitPause 동안 멈춤)
+			}
+
 			public Vector3f position() {
 				return ctl.position;
 			}
@@ -287,6 +294,7 @@ public final class HeroRig implements AutoCloseable {
 			HitCounter.Reward r = hitCounter.hit();
 			if (r != null) {
 				player.addRedOrbs(r.redOrbs());
+				comboReward = r; // HUD 마일스톤 표시 (0x1DB608 → HitCounter_Event 2)
 			}
 		}
 		hitCounter.update(dt);

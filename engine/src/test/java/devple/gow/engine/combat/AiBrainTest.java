@@ -384,4 +384,90 @@ class AiBrainTest {
 		assertTrue(kinds >= 25, "적 종류 " + kinds);
 		System.out.println("AI 스모크: 종류 " + kinds + ", 템플릿 " + spawned);
 	}
+
+	/**
+	 * 영웅이 무적 처형 (MAISKB02 221, 이벤트 9 [0–1]) 중이면 주변 해골은 토큰을 반납하고 비용 있는 공격을 하지 않는다 (0x1CDEC8 대상 +0x1AC&amp;2,
+	 * 0x1CCB60 용량 0). 붙잡기 GRAB (200, 무적 아님·guard 2) 중에는 토큰을 유지한다 — 전에는 guard 2 로 판단해 거꾸로였다.
+	 */
+	@Test
+	void surroundingEnemiesBackOffDuringInvulnerableExecution() throws Exception {
+		Path rom = rom();
+		WadFile hero = WadFile.load(Content.file(rom, "R_HERO0.WAD"));
+		devple.gow.tools.anim.Skeleton sk = devple.gow.tools.anim.Skeleton.loadAll(hero).stream().filter(s -> s.name.equals("hero")).findFirst().orElseThrow();
+		devple.gow.tools.anim.AnimationSet set = devple.gow.tools.anim.AnimationSet.load(hero, "ANM_hero");
+		devple.gow.engine.game.Tweaks tw = new devple.gow.engine.game.Tweaks();
+		kind("R_SKS.WAD");
+		tw.load(permk);
+		tw.load(hero);
+		devple.gow.engine.anim.Animator an = new devple.gow.engine.anim.Animator(sk, set, tw, "/Animation/goHero/");
+		Vector3f tp = new Vector3f();
+		CombatOwner owner = new CombatOwner() {
+			public float hp() { return 100; }
+			public boolean onGround() { return true; }
+			public int bladeLevel() { return 3; }
+			public boolean godMode() { return false; }
+			public boolean artemisEquipped() { return false; }
+			public int selectedMagic() { return 0; }
+			public int classId() { return 0; }
+			public Vector3f position() { return tp; }
+			public float yaw() { return 0; }
+		};
+		CombatData cd = new CombatData(permk, CombatData.heroFiles(), set);
+		set.attachAll(kind("R_SKS.WAD").assets().wad()); // 영웅용 MAISKB* 애니 (적 WAD 외부 그룹)
+		cd.reindexAnimations();
+		Combatant hc = new Combatant(cd, an, owner);
+		Hittable target = new Hittable() {
+			public Vector3f position() { return tp; }
+			public float hp() { return 100; }
+			public int classId() { return 0; }
+			public boolean invulnerable() { return true; }
+			public Combatant combatant() { return hc; }
+			public Result receive(devple.gow.tools.combat.CombatFile.Attack a, Combatant at, float d, Vector3f kn) { return Result.IGNORED; }
+		};
+		EnemyFactory.Kind k = kind("R_SKS.WAD");
+		List<EnemyFighter> group = new ArrayList<>();
+		for (int i = 0; i < 3; i++) {
+			EnemyFighter f = k.spawn();
+			double a = i * Math.PI * 2 / 3;
+			f.pos.set((float) Math.sin(a) * 120, 0, (float) Math.cos(a) * 120);
+			f.setFoe(target);
+			group.add(f);
+		}
+		devple.gow.engine.input.Input idle = new devple.gow.engine.input.ScriptedInput(0, List.of());
+		java.util.function.IntConsumer hold = id -> {
+			if (!hc.active() || hc.move().id() != id) {
+				hc.forceMove(id);
+			}
+		};
+		java.util.function.BiFunction<Integer, Float, int[]> run = (id, secs) -> {
+			int costly = 0;
+			for (float t = 0; t < secs; t += DT) {
+				hold.accept(id);
+				hc.update(idle, DT);
+				for (EnemyFighter f : group) {
+					f.update(DT);
+				}
+				if (t > 0.1f) {
+					for (EnemyFighter f : group) {
+						DecisionTree.Attack at = f.brain().currentAttack();
+						if (at != null && at.costA() > 0 && f.brain().hasToken()) {
+							costly++;
+						}
+					}
+				}
+			}
+			int h = 0;
+			for (EnemyFighter f : group) {
+				h += f.brain().hasToken() ? 1 : 0;
+			}
+			return new int[]{h, costly};
+		};
+		int[] grab = run.apply(200, 6f);
+		assertTrue(grab[0] > 0, "붙잡기 (무적 아님) 중에는 토큰 유지: " + grab[0]);
+		hc.forceMove(221);
+		assertTrue(hc.invulnerable(), "MAISKB02 는 이벤트 9");
+		int[] exec = run.apply(221, 3f);
+		assertEquals(0, exec[0], "처형 (무적) 중 토큰 전부 반납");
+		assertEquals(0, AiTargets.slot(target).tokenBudget(), "예산 0");
+	}
 }
