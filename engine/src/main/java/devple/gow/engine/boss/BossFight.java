@@ -150,6 +150,9 @@ public abstract class BossFight {
 		}
 		if (!bossTemplates.contains(template)) {
 			minions.put(f, a);
+			// 보스전 쫄 (아기 히드라 등) 도 기술 이벤트 SELF_HP / ExplodeDeath 는 자기 몫 — GameScene 의 일반 적 처리는 보스 종류를 건너뛰므로 여기서.
+			// 예: 아기 히드라 113/117 닻 고정 SELF_HP 15 × 11 (HP 0, EV_DEATH 는 (block) → 고정 반복), 825 BHABABYGRAB 0.5 SELF_HP 10 (37 문서 §4.4)
+			f.combat().addEventListener(e -> minionEvent(f, e));
 			return;
 		}
 		boss = f;
@@ -296,6 +299,13 @@ public abstract class BossFight {
 		return best;
 	}
 
+	/**
+	 * 자동 플레이(-Dgow.auto) 가 지금 가야 할 점 (없으면 null) — 원작에 없는 검증 보조. 예: 쓰러진 아기 히드라를 고정하는 닻 볼륨 (HydraFight).
+	 */
+	public float[] autoObjective() {
+		return null;
+	}
+
 	/** 영웅을 점으로 (데모). */
 	protected void placeHero(float[] p) {
 		if (p != null) {
@@ -344,6 +354,51 @@ public abstract class BossFight {
 			sonicScream(f, e);
 		}
 		script(f, e);
+	}
+
+	/**
+	 * 쫄 애니 이벤트: SELF_HP (한 번씩), SCR_ExplodeDeath. 지금 기술이 EV_DEATH 를 (block) 하면 HP 1 에서 멈춘다 — 원작은 HP 0 이어도 사망 분기가 막히면
+	 * 생물이 남는다 (아기 히드라 113/117 고정은 "dead IMPOSSIBLE", 큰 히드라가 죽은 뒤 trigHydras-EventInstantDie252/253 의 1029 로 없앤다). 엔진은
+	 * HP 0 = 사망·제거라 1 로 둔다 [근사: 미터는 1/250 ≈ 빈 칸].
+	 */
+	protected void minionEvent(EnemyFighter f, CombatFile.Event e) {
+		if (e.type() == EV_SELF_HP) {
+			if (once(f, e, f.combat().moveSerial())) {
+				float v = e.b();
+				if (v >= 0 && f.hp - v <= 0 && deathBlocked(f)) {
+					v = Math.max(0, f.hp - 1);
+				}
+				selfHp(f, v);
+			}
+		} else if (e.type() == 8 && e.hash() == SCR_EXPLODE_DEATH && once(f, e, f.combat().moveSerial())) {
+			f.hp = 0;
+		}
+	}
+
+	/** 지금 기술에 EV_DEATH → (block) 분기가 있는지. */
+	static boolean deathBlocked(EnemyFighter f) {
+		var c = f.combat();
+		if (!c.active()) {
+			return false;
+		}
+		for (CombatFile.Branch b : c.move().branches()) {
+			if (b.input() == CombatInput.EV_DEATH && b.target() == -2) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * 자동 플레이가 싸울 대상에서 뺄 적 (엔진 전용) — 예: 닻에 고정된 아기 히드라 (무적, 다시 싸울 수 없음).
+	 */
+	public boolean autoIgnores(EnemyFighter f) {
+		return false;
+	}
+
+	/** 이 템플릿이 보스전의 쫄 (보스전이 리소스를 대는 비보스 템플릿, 예 아기 히드라 253/258). */
+	public boolean minionTemplate(int template) {
+		return kinds.containsKey(template) && !bossTemplates.contains(template);
 	}
 
 	/** 보스별 SCRIPT 이벤트 추가 처리. */

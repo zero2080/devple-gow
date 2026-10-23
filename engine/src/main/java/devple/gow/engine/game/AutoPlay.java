@@ -122,6 +122,15 @@ public final class AutoPlay {
 			finish("TIMEOUT", hero);
 		}
 		if (enemy != null && (bossActive || enemy.distance(hero) < FIGHT && !giveUp(enemy, hero, dt))) { // 보스전은 포기하지 않음
+			if (bossActive && unstick && bossStuck(hero, enemy, dt)) {
+				// 보스전에서 대상에 못 다가간 채 갇힘 (닻이 떨어진 상자·머리 사이 틈, ATHN01E) — 대상 쪽 같은 높이 점으로 순간이동 (기록)
+				float dx = hero.x - enemy.x, dz = hero.z - enemy.z, l = Math.max(1f, (float) Math.hypot(dx, dz));
+				float[] p = {enemy.x + dx / l * 150f, hero.y + 10f, enemy.z + dz / l * 150f};
+				log(String.format(Locale.ROOT, "t=%.2f 보스전 갇힘 → 순간이동 %s", time, fmt(p)));
+				teleports++;
+				pendingTeleport = p;
+				return bot.press(null);
+			}
 			bot.steer(hero, enemy, camYaw, dt);
 			return bot;
 		}
@@ -203,6 +212,58 @@ public final class AutoPlay {
 		bot.walkTo(hero, cur, camYaw);
 		return bot;
 	}
+
+	private float[] objective;
+	private float objectiveTime;
+
+	/**
+	 * 보스전이 정한 목적지 (BossFight.autoObjective — 쓰러진 아기 히드라의 닻 볼륨): 걸어가서 가까우면 이단 점프, {@link #WALK_LIMIT} × 2 초 안에
+	 * 못 들어가면 순간이동 (기록). 볼륨이 공중 (갑판 위 265) 이라 봇은 상자 오르기를 못 한다.
+	 */
+	public BotInput reach(Vector3f hero, float[] p, float camYaw, float dt) {
+		time += dt;
+		if (objective == null || objective[0] != p[0] || objective[2] != p[2]) {
+			objective = p;
+			objectiveTime = 0;
+			log(String.format(Locale.ROOT, "t=%.2f 보스 목적지 %s", time, fmt(p)));
+		}
+		objectiveTime += dt;
+		float d = (float) Math.hypot(p[0] - hero.x, p[2] - hero.z);
+		if (objectiveTime > WALK_LIMIT * 2 && objectiveTime - dt <= WALK_LIMIT * 2) {
+			log(String.format(Locale.ROOT, "t=%.2f 보스 목적지 순간이동 (거리 %.0f, 높이 차 %.0f)", time, d, p[1] - hero.y));
+			teleports++;
+			pendingTeleport = new float[]{p[0], p[1], p[2]};
+			return bot.press(null);
+		}
+		if (d < ARRIVE) {
+			float c = objectiveTime % 0.6f;
+			return bot.press(c < 0.05f || c >= 0.25f && c < 0.3f ? PadButton.CROSS : null);
+		}
+		bot.walkTo(hero, p, camYaw);
+		return bot;
+	}
+
+	/** GameScene 이 매 틱: 보스전 쫄 (보스 본체 아님) 과 싸우는 중 — 갇힘 순간이동 허용 (본체 히드라는 바다 위라 순간이동 점이 없다). */
+	public boolean unstick;
+	private final Vector3f stuckAt = new Vector3f(Float.NaN, 0, 0);
+	private float stuckTime;
+
+	/** 보스전: {@link #STUCK_SECS} 초 동안 {@link #STUCK_MOVE} 도 못 움직였고 대상이 {@link #REACH} × 2 보다 멀면 참 (한 번 참이면 다시 셈). */
+	private boolean bossStuck(Vector3f hero, Vector3f enemy, float dt) {
+		if (Float.isNaN(stuckAt.x) || stuckAt.distance(hero) > STUCK_MOVE || (float) Math.hypot(enemy.x - hero.x, enemy.z - hero.z) < REACH * 2) {
+			stuckAt.set(hero);
+			stuckTime = 0;
+			return false;
+		}
+		stuckTime += dt;
+		if (stuckTime > STUCK_SECS) {
+			stuckAt.x = Float.NaN;
+			return true;
+		}
+		return false;
+	}
+
+	static final float STUCK_SECS = 8f, STUCK_MOVE = 24f;
 
 	/** 적별 싸운 시간 / 가장 가까이 간 거리 (적 위치 벡터의 동일성으로 구분). */
 	private final java.util.Map<Vector3f, float[]> fights = new java.util.IdentityHashMap<>();

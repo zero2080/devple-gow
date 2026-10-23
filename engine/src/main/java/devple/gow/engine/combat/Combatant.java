@@ -472,6 +472,10 @@ public final class Combatant {
 	public boolean request(int moveId) {
 		for (Branch b : data.rootActions()) {
 			if (b.target() == moveId && score(b, other()) >= 0) {
+				// 원작 Combat_RequestAction 0x209378 은 분기 큐 링 (+0x1C0: +0x1C5 머리 = 0xFF, +0x1C6 꼬리 = 0) 을 비우고 넣는다 [확실: 코드].
+				// 예전엔 이전 기술의 대기 AUTO 가 남아 새 기술 위에서 실행 — 아기 히드라 111 루프 중 스크립트 1019 113 (닻 고정) 이 끝나면
+				// 111 의 AUTO 로 쓰러진 루프에 돌아갔다 (113 자체 AUTO → 113 @0.10 이 고정 유지, 37 문서 §4.4)
+				queued = null;
 				start(b, null);
 				return true;
 			}

@@ -81,6 +81,16 @@ public final class BossKinds {
 		String idle = clip(anims, "standidle", "idle");
 		String walk = clip(anims, "walkforward", "walkfront", "runforward", "walk", "idle");
 		String animNode = tw.findNode("/Animation/go" + sk.name + "/");
+		if (animNode != null && sk.indexOf("BHA01JOCPEL1") >= 0 && !walk.toLowerCase(Locale.ROOT).contains("walk") && !walk.toLowerCase(Locale.ROOT).contains("runforward")) {
+			// 이동 클립을 이름으로 못 찾아 대기 클립이 걸음으로 잡힘: 원작 이동 애니 = Navigation ANIWalk. 아기 히드라 bhb 의 "bwalk" 는 ANM 에 없다
+			// → 걷기 없음 → 히드라 리그 (bha/bhb) 는 제자리 (EnemyFighter.stationary, 선창 히드라와 같은 규칙 37 문서 §4.3·§4.4). 예전엔 대기 클립으로
+			// Sold 속도 미끄러짐 — 갑판 구멍에서 나온 뿌리가 영웅 발밑까지 따라왔다 [확실: TWK / 추정: 원작 이동 실패 처리]
+			String nav = tw.s(animNode + "Navigation/", "ANIWalk", null);
+			if (nav != null && anims.groups.stream().flatMap(g -> g.acts.stream())
+					.noneMatch(a -> a.name.equalsIgnoreCase(nav) && a.hasSkeletalData())) {
+				walk = null;
+			}
+		}
 		return new EnemyFactory.Kind(assets, tw, sk, anims, mdl, ai1, files, new int[0], -1, idle, walk,
 				animNode != null ? animNode : "/Animation/go" + sk.name + "/", ai);
 	}

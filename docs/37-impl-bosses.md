@@ -102,7 +102,7 @@
 
 ## 4. 히드라 (ATHN01E) — 완료
 ```
-진입 볼륨 → a01Mp03 → 501 → Goto deckBossBegin, 아기 히드라 258/253 스폰 (enc3)
+진입 볼륨 → a01Mp03 → 501 → Goto deckBossBegin, 아기 히드라 258/253 스폰 (enc3, §4.4)
 아래 갑판 spawnDaddyHydra 볼륨 → 전역 301 → SpawnEnemy 250 (그룹 250, 바다 (-3163, 489, -115))
 구역 볼륨(ENV_bossEnt 영역 51–54) → LevelData28 → PlayerZoneTransmit 1054 → 플레이어 +0x88
   DTre_250: 높이 차 < 40 → "down mast"(공격 없음) / 구역 1 포효 55·도발 56, 2 → 52 오른쪽 물기 85%, 3 → 51 왼쪽, 4 → 62 가운데
@@ -200,6 +200,46 @@ DTre_251: 0..30 (×16 = 480) 물기 15/16(→17 BITE2X), 50..175 도발 18/19 �
   `r3_sheet.png` (적중 Hits, 미터 감소, HP ≤ 200 → 1019 100 기절 → ○ 아이콘). 남은 것: ○ 잡기 미니게임 830 (봇이 ○ 를 안 누름) 은 미검증,
   Burst 첫 프레임에 머리가 천장 위로 (목이 곧게 선 채 시작) 잠깐 나온다 — 원작 화면 대조 필요.
 
+### 4.4 갑판 아기 히드라 (ATHN01E enc3, 템플릿 258 = 그룹 252 "baby1" / 253 = 그룹 253 "baby2", `bhb`) [확실: 스크립트·CombatFile]
+```
+a01Mp03 끝 → 302/303 → SpawnEnemy 258 (-2741, 712, 129) SpawnAction 30 / 253 (-2720, 712, -353) SpawnAction 31 (BHABABYEMERGE, 갑판 구멍)
+피격 1039 → baby*Ent-healthSensor (LD53/54 = HP) / lowHealthSensorRevive HP ≤ 90 → stunTransmit 1019 110 (baby1) / 114 (baby2)
+  (조건: 고정 LD47/48 거짓 · 쓰러짐 LD49/50 거짓 · LD51/52 거짓) + movingBlock 애니 0
+  110 BHAENC3PINRIGHT / 114 PINLEFT (쓰러져 머리가 갑판에) → AUTO 111 / 115 고정 루프 (INVULNERABLE, SET_1B0 827/826, RegenHealthBar 253)
+  1035 110/114 → lowHealthSensorStop: LD49/50 참, recoverTransmit 1019 112/116 지연 18 초 (그때도 LD49 참 · 고정 아님이면 일어남, LD49 거짓)
+  쓰러진 동안 영웅이 닻 볼륨 gospike1 / gospike2 (갑판 위 공중 y 1079–1114, (-2763..-2694, 201..270) / (-2766..-2694, -520..-448)) 에 들어가면
+    spike*entry (재발동 6 초, 고정 전만): 닻 애니 act 8, LdropCam / RdropCam, spike*transmit 1019 113 / 117 지연 0.25 (LD49/50 참일 때)
+  113 / 117 PIN*SLAM: INVULNERABLE, SELF_HP 15 × 11 (EV_DEATH 는 (block)), AUTO → 자기 @0.10 반복 = 영구 고정 ("baby dead IMPOSSIBLE")
+  1035 113/117 → spike*-pinSensor LD47/48 참 (+ AnchorSplat 소리), trigHydras-pinBaby* LD12 +1 → LD12 ≥ 2 면 aftrBabiesCheckpoint
+```
+- 즉 아기 히드라는 **죽지 않는다** — 체력을 90 이하로 깎아 쓰러뜨린 뒤 18 초 안에 닻을 떨어뜨려 고정하는 것이 마무리다. 닻을 못 떨어뜨리면 일어나서 (112/116)
+  다시 싸우고, 다시 HP ≤ 90 피격이면 또 쓰러진다 (LD49 가 거짓으로 돌아왔으므로). "누운 채 끝나지 않음" 은 이 반복이다 (예전 녹화: 18 초 누움 → 일어남 → 봇 공격 → 쓰러짐).
+- ○ 는 서 있는 아기 히드라에 **영웅 A806 CIRCLE (대상 종류 252) → COMBO5A 800 (SET_1B0 800)** → 아기 255 의 A825 EV_HIT_REACT 태그 800 → **825 BHABABYGRAB**
+  (사슬로 크레토스를 끌어 [0–0.22] 이벤트 19, 0.5 에 SELF_HP 10) / 영웅 COMBO5A → GRABREJECT (§11.2, `GrabSync.lonePull`). 쓰러진 루프 111/115 는 피격을 전부 (block) 하므로
+  ○ 마무리 미니게임은 데이터에 없다 (826/827 BHAENC3GRAB* 은 어느 분기·태그도 가리키지 않는 미사용 기술, 111/115 의 SET_1B0 827/826 도 받는 쪽 없음) [확실: R_PERMK·ATHN01B/C/E CombatFile 검색].
+- 1035 는 기술 시작마다 (0x209488 → 0x209610, AUTO 자기 반복 포함) 라 113/117 이 반복될 때마다 LD12 가 오른다 — 하나만 고정해도 체크포인트 조건이 찬다 (원작 데이터 그대로).
+- **미터**: 51d51bc 의 슬롯 규칙 (AI1 #f3a51122 + 1: 258 → 2, 253 → 3) 이 FLP_Athn01E 의 HydraMeter2 (왼쪽 반) / HydraMeter3 (오른쪽 반) 와 맞다. 녹화에서도
+  baby1 피해로 왼쪽 막대가 줄어든다 (예전 녹화 e3: t 90 가득 → t 120 1/3, 새 녹화 t 112 에 붉은 감소분도 보임 — FLP 의 HydraMeterBar "On", 값이 줄 때).
+  "미터가 안 준다" 는 피해 2–12 에 HP 250 이라 몇 대로는 거의 안 보였던 것 + 머리가 엉뚱한 곳에 눕던 문제의 착시 [확실: 녹화]. RegenHealthBar (111/115 의 253) 는 여전히 무시 [미확인].
+- **고침 1 — 제자리** [확실: TWK / 추정: 원작 이동 실패 처리]: goBHB Navigation ANIWalk = "bwalk" 가 ANM 에 없는데 `BossKinds` 가 이름 규칙 (…"idle") 으로
+  BHAbabyIdle 을 걸음으로 잡아 Sold 속도로 미끄러졌다 → 뿌리가 갑판 구멍에서 영웅 발밑까지 따라와 (녹화 (-2741, 129) → (-2644, 188)) 쓰러진 머리가 엉뚱한 곳에 누웠다.
+  이제 히드라 리그 (BHA01JOCPEL1) 는 ANIWalk 가 ANM 에 없으면 걷기 없음 → `EnemyFighter.stationary` (선창 히드라 §4.3 과 같은 규칙, 회전만).
+- **고침 2 — 요청이 분기 큐를 비움** [확실: 코드]: 원작 Combat_RequestAction 0x209378 은 큐 링 (+0x1C5 = 0xFF, +0x1C6 = 0) 을 비우고 넣는다. 엔진 `Combatant.request` 는
+  이전 기술의 대기 AUTO 를 남겨, 111 루프 중 1019 113 (고정) 이 끝나면 111 의 AUTO 가 실행돼 쓰러진 루프로 돌아갔다 (113 의 AUTO → 113 @0.10 이 져서 고정이 풀림).
+- **고침 3 — 쫄의 기술 이벤트**: 보스전 리소스로 스폰한 쫄은 GameScene 의 일반 적 이벤트 처리 (SELF_HP·ExplodeDeath·생성 액션) 를 건너뛰고 BossFight 는 보스만
+  받아, 아기 히드라의 113/117 SELF_HP 15 × 11 · 825 SELF_HP 10 과 SpawnAction 30/31 (BHABABYEMERGE) 이 빠졌다 → `BossFight.minionEvent`, 쫄도 생성 액션.
+  EV_DEATH 가 (block) 인 기술 중 SELF_HP 로 HP 0 이 되면 **HP 1 에서 멈춘다** [근사]: 원작은 HP 0 이어도 사망 분기가 막히면 생물이 남고 (고정된 아기는
+  큰 히드라가 죽은 뒤 trigHydras-EventInstantDie252/253 의 1029 로 없앤다), 엔진은 HP 0 = 사망·4 초 뒤 제거라서. 미터는 1/250 ≈ 빈 칸.
+- 자동 플레이 [엔진 전용]: `BossFight.autoObjective` — 아기 히드라가 111/115 면 그 닻 볼륨 점으로 걷고 가까우면 이단 점프, 6 초 안에 못 들어가면 순간이동 (기록),
+  두 아기가 고정되면 (LD47·48) 아래 갑판 spawnDaddyHydra 볼륨으로. `autoIgnores` — 고정된 아기 (113/117/124/125) 는 대상에서 뺌. 쫄과 싸우다 8 초 동안 24 도
+  못 움직이면 대상 쪽 같은 높이 점으로 순간이동 (닻이 떨어진 상자·머리 사이 틈에 갇힘). 닻 볼륨은 갑판 위 265 (공중) 라 상자 위로 올라가야 하는데 봇은 오르기를 못 한다.
+- 녹화 (커밋 안 함, 스크래치 `hb/r4/sheet.png`, 1 fps): t 95 baby1 피격 → t 112 왼쪽 미터 대부분 빔 + 붉은 감소분 → t 120 쓰러진 머리 위 → t 123 LdropCam (닻 낙하)
+  → t 140 왼쪽 미터 빈 칸·baby2 와 싸움 → t 153–157 오른쪽 미터 빔·baby2 쓰러짐 → t 159 RdropCam → t 161 고정된 머리 → t 166– 아래 갑판, 큰 히드라 250 스폰
+  (그 뒤 봇은 바다 쪽 큰 히드라에 못 다가가 사망 — 큰 히드라 싸움은 `HydraFightTest` 몫). 예전 녹화 (`e3`): 뿌리가 영웅 발밑까지 미끄러져 와 머리가 엉뚱한 곳에 눕고,
+  봇은 닻으로 가지 않아 18 초 누움 ↔ 일어남이 끝없이 반복.
+- 시험: `BabyHydraTest` (제자리, 미터 슬롯 2/3, HP ≤ 90 → 110 → 111, spike1 → 113 유지·LD47, baby2 114 → 115 → spike2 → 117·LD48, LD12 ≥ 2,
+  닻 없이 18 초 → 1019 112 일어남).
+
 ## 5. 메두사 여왕 (ATHN02D) — 완료 (석화는 근사)
 ```
 MAmagicIcon-EntVol01 → MEWINTRO 컷신 + SpawnEnemy 62 (그룹 26) → mewintroDone → Goto magicPlace
@@ -255,7 +295,7 @@ HP ≤ 9800 → 잡기 원 → ○ GRAB → 260 MAIMEWGRAB (일반 GrabSync, 같
 | RegenHealthBar (RegenBar 250/252: Regen Speed 150, 비율 0.8/0.45) | 의미 미확정 → 무시 |
 | SonicScream 힘 | 근사 (거리 ×16 안에서 Force/500 단위/초) |
 | 히드라 정렬 = 원작 0x204BF0 [확실], 메두사 석화, 아레스 차지 | –/[추정]/[근사] |
-| 아기 히드라 enc3 (`bhb` 253/258) | 리소스·DTre 로 싸움, 돛대 핀(110–117) 연출 미검증 |
+| 아기 히드라 enc3 (`bhb` 253/258) | **§4.4**: 쓰러짐 110/114 → 닻 고정 113/117 (스크립트), 제자리, 미터 2/3. 원작 화면 대조는 닻 연출 (LdropCam) 만 남음 |
 | ATHN08B 분신 크레토스·가족 | **해결** (§9): 가족 보호·포옹(정렬 고침 §11)·휘말림·사망 실패, 분신 잡기 860–863 (흔들기 탈출 / 실패 피해), 포옹 신들의 분노 게이지 |
 | 판도라 수호자 BMI (PAND03G) | **구현** (§10, §10.1): 전용 클래스 Think/TakeDamage 원작 해독 → `BmiFight`, 결말(245 → p03MP07 → Pand03H)까지. 통나무 투사체·증기·갑옷 조각·모델 변형·HUD EnemyState·카메라 대상 슬롯 원작 해독 (§10.1). 피한 통나무가 빗나가는 판정만 근사 |
 | AresFight 데모 크레토스가 ~2.5초부터 멈춤 | **해결**: 1단계 데모는 0.9초마다 정면 60 에서 공격 (4 번에 500 임계 밑, 원 임계마다 290), 그 뒤 ○ 잡기. 예전엔 3초까지 서 있다가 불덩이에 맞고 정지 |

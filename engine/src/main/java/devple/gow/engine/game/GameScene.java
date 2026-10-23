@@ -1498,8 +1498,9 @@ public final class GameScene implements Scene {
 		f.setIncomingScale(hero::incomingScale);
 		EnemyFactory.Kind fk = kind;
 		f.onShatter(() -> stoneKill(f, fk));
-		if (bossKind == null) {
-			f.startSpawnAction(r.spawnAction()); // 스폰 슬롯 7: SPAWN / SKSWALLSPAWN / 도발 (32 문서 §벽 스폰)
+		if (bossKind == null || boss.minionTemplate(r.templateId())) {
+			// 스폰 슬롯 7: SPAWN / SKSWALLSPAWN / 도발 (32 문서 §벽 스폰). 보스전 쫄도 (아기 히드라 30/31 BHABABYEMERGE — 갑판을 뚫고 나옴, 37 §4.4)
+			f.startSpawnAction(r.spawnAction());
 		}
 		AnimatedModel em = kind.buildModel(enemyShader);
 		em.shadowMode = devple.gow.engine.light.ShadowVolume.MODE_SLAB; // AI 생물 (0x1C13E0 → 0x1EBD78 → 0x1BF680, +0x174 bit 31 없음), 47 문서 §7
@@ -2070,7 +2071,15 @@ public final class GameScene implements Scene {
 				hero.ctl.yaw = yaw;
 			}
 			// HP 32767 = 부술 수 없는 소품 (ATHN01F 침대 쌍둥이 aoxpt 305) — 싸울 대상이 아니다
-			in = auto.steer(hero.ctl.position, target != null && target.maxHp() < 32767 ? aimPoint(target) : null, boss != null, camYaw, dt);
+			float[] obj = boss != null ? boss.autoObjective() : null;
+			EnemyFighter at = target;
+			if (at != null && boss != null && boss.autoIgnores(at)) {
+				at = enemies.stream().map(Enemy::fighter).filter(f -> !f.dead() && !boss.autoIgnores(f))
+						.min(java.util.Comparator.comparingDouble(f -> f.pos.distanceSquared(hero.ctl.position))).orElse(null);
+			}
+			auto.unstick = at != null && boss != null && at != boss.boss();
+			in = obj != null ? auto.reach(hero.ctl.position, obj, camYaw, dt)
+					: auto.steer(hero.ctl.position, at != null && at.maxHp() < 32767 ? aimPoint(at) : null, boss != null, camYaw, dt);
 			if (auto.done()) {
 				e.window().requestClose();
 			}

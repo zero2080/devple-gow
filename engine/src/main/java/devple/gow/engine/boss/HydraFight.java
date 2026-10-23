@@ -114,6 +114,37 @@ public final class HydraFight extends BossFight {
 		}
 	}
 
+	/** 쓰러진 아기 히드라 고정 루프 → 닻 진입 볼륨 (spike1 = baby1 그룹 252 PINRIGHT 111, spike2 = baby2 그룹 253 PINLEFT 115). */
+	private final java.util.Map<String, float[]> spikePoints = new java.util.HashMap<>();
+
+	/**
+	 * 자동 플레이: 아기 히드라가 쓰러져 고정 루프 (111/115) 에 있으면 그 닻 볼륨으로, 둘 다 고정되면 큰 히드라 스폰 볼륨으로 (원작 데이터 흐름은
+	 * 37 문서 §4.4 — 스크립트가 처리하고 여기선 봇의 목적지만 고른다, 엔진 전용).
+	 */
+	@Override
+	public float[] autoObjective() {
+		for (EnemyFighter f : minions.keySet()) {
+			int m = f.combat().active() ? f.combat().move().id() : -1;
+			String vol = m == 111 ? "spike1-spike1entry" : m == 115 ? "spike2-spike2Entry" : null;
+			if (vol != null && arena != null) {
+				return spikePoints.computeIfAbsent(vol, v -> pointIn(v, 1100));
+			}
+		}
+		// 두 아기 고정 (LD47·LD48) 뒤 큰 히드라가 아직 없으면 아래 갑판 spawnDaddyHydra 볼륨 (전역 301 → SpawnEnemy 250)
+		var w = arena != null ? arena.world() : null;
+		if (boss == null && w != null && Boolean.TRUE.equals(w.host().levelData().get(47)) && Boolean.TRUE.equals(w.host().levelData().get(48))) {
+			return spikePoints.computeIfAbsent("spawnDaddy", v -> pointIn("spawnDaddyHydra-pCube4413-spawnDaddy", 606));
+		}
+		return null;
+	}
+
+	/** 닻에 고정된 아기 히드라 (113/117, 같은 클립 124/125) 는 봇 대상에서 뺀다. */
+	@Override
+	public boolean autoIgnores(EnemyFighter f) {
+		int m = f.combat().active() ? f.combat().move().id() : -1;
+		return minions.containsKey(f) && (m == 113 || m == 117 || m == 124 || m == 125);
+	}
+
 	@Override
 	protected void beforeSpawnDemo(float dt) {
 		if (demoTime > 1 && !demoPlaced) {
