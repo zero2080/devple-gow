@@ -13,6 +13,8 @@ import java.util.function.Predicate;
  * Warp()          0x1B0688 → 0x1B2CE0: 준비됐으면 다른 슬롯이 현재가 되고 Start(모드 2, 슬롯 0 = 떠나온 레벨) 로 이동
  * LoadCheck(w)    0x1BCA10: w 가 로드된 슬롯이면 현재 레벨 = w (0x29DAE8). 위치는 그대로 — 이웃 레벨은 월드 좌표를 공유한다
  * </pre>
+ * 적재가 끝나면 콜백 0x1B2AA8 (슬롯 +0x64 = 위 인자): LoadWad 면 0x1BC2E0 이 그 레벨 루트 컨텍스트를 켠다 (0x1BEEB8), LoadForWarp 면 Warp 준비만 —
+ * <b>LoadForWarp 로 새로 올린 레벨은 꺼진 채</b> (스크립트·충돌·CMV 없음) Warp 0x1BC3A0 에서야 켜진다 ({@link #otherActive()}) [확실: 분기].
  * LoadWad/LoadForWarp 는 호출한 엔티티의 레벨 기준이다 (그 레벨이 아닌 슬롯을 교체). 두 레벨의 스크립트·충돌이 동시에 살아 있어서
  * SEWR01 → SEWR02 처럼 LoadCheck 없이 이웃 레벨로 걸어 들어가는 연결도 있다.
  * 이 재구현은 레벨을 하나만 올리므로 LoadCheck 전환 = 같은 월드 위치로 새 GameScene (seamless), 다른 슬롯 레벨 바닥만 밟으면
@@ -34,6 +36,7 @@ public final class LevelLink {
 	private final Predicate<String> exists;
 	private String other;
 	private boolean warpReady;
+	private boolean otherActive;
 
 	/**
 	 * @param current 현재 레벨 (대문자 WAD 이름)
@@ -43,6 +46,7 @@ public final class LevelLink {
 	public LevelLink(String current, String other, Predicate<String> exists) {
 		this.current = norm(current);
 		this.other = norm(other);
+		this.otherActive = this.other != null;
 		this.exists = exists;
 	}
 
@@ -59,6 +63,15 @@ public final class LevelLink {
 		return other;
 	}
 
+	/**
+	 * 다른 슬롯 레벨이 켜져 있는지 (스크립트 루프·충돌·CMV 질의 대상). LoadWad·이음 도착 = 켜짐, LoadForWarp 로 새로 올린 레벨 = 꺼짐.
+	 * 이미 슬롯에 있는 레벨을 다시 부르면 0x1BC110 이 다시 읽지 않으므로 LoadForWarp 는 상태를 그대로 두고, LoadWad 는 켠다 [추정: 이미 올라 있는
+	 * 레벨에 0x1B2AA8 이 다시 불리는지는 미추적].
+	 */
+	public boolean otherActive() {
+		return other != null && otherActive;
+	}
+
 	public boolean warpReady() {
 		return warpReady;
 	}
@@ -69,7 +82,13 @@ public final class LevelLink {
 		switch (r.op()) {
 			case LOAD_WAD, LOAD_FOR_WARP -> {
 				if (w != null && !w.equals(current)) {
+					boolean same = w.equals(other);
 					other = exists.test(w) ? w : null;
+					if (r.op() == ScriptListener.LevelOp.LOAD_WAD) {
+						otherActive = true;
+					} else if (!same) {
+						otherActive = false; // LoadForWarp: 새로 올린 레벨은 Warp 전까지 꺼짐
+					}
 				}
 				warpReady = r.op() == ScriptListener.LevelOp.LOAD_FOR_WARP && other != null;
 				return null;

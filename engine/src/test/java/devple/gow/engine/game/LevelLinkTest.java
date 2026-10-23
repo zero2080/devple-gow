@@ -58,4 +58,24 @@ class LevelLinkTest {
 		assertNull(l.other(), "자기 자신 LoadWad 는 무시 (원작 0x1B0478)");
 		assertNull(l.handle(req(LevelOp.LOAD_CHECK, "ATHN01A")));
 	}
+	@Test
+	void loadForWarpLevelStaysOffUntilWarp() {
+		// ATHN01D: LoadWad(Athn01E) → 켜짐, toAthn01F LoadForWarp(Athn01F) → 슬롯 교체·꺼짐 (0x1B2AA8 인자 1: 0x1BC2E0 안 부름),
+		// 되돌아가 LoadE1 LoadWad(Athn01E) → 다시 켜짐
+		LevelLink l = new LevelLink("ATHN01D", "ATHN01C", Set.of("ATHN01C", "ATHN01E", "ATHN01F")::contains);
+		assertTrue(l.otherActive(), "이음 도착: 떠나온 레벨은 켜진 채");
+		l.handle(req(LevelOp.LOAD_WAD, "ATHN01E"));
+		assertTrue(l.otherActive());
+		l.handle(req(LevelOp.LOAD_FOR_WARP, "ATHN01F"));
+		assertEquals("ATHN01F", l.other());
+		assertFalse(l.otherActive(), "LoadForWarp 로 새로 올린 레벨은 Warp 전까지 꺼짐");
+		assertTrue(l.warpReady());
+		l.handle(req(LevelOp.LOAD_WAD, "ATHN01E"));
+		assertTrue(l.otherActive());
+		assertFalse(l.warpReady());
+		// 이미 켜진 레벨을 LoadForWarp: 다시 읽지 않음 (0x1BC110) → 켜진 채 Warp 준비
+		l.handle(req(LevelOp.LOAD_FOR_WARP, "ATHN01E"));
+		assertTrue(l.otherActive());
+		assertEquals(LevelLink.Kind.WARP, l.handle(req(LevelOp.WARP, null)).kind());
+	}
 }

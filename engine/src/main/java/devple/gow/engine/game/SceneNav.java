@@ -212,6 +212,16 @@ public final class SceneNav {
 		}
 	}
 
+	/** 다른 슬롯 비움 (LoadForWarp 가 꺼진 레벨을 올림): 충돌·발판·스크립트·이벤트 큐 연결 없음. */
+	public void clearOther() {
+		navWorld.setOther(null);
+		neighbourName = null;
+		neighbour = null;
+		neighbourPlatforms = new Platforms();
+		navWorld.setNeighbourPlatforms(neighbourPlatforms);
+		world.linkEvents(null);
+	}
+
 	public ScriptWorld neighbour() {
 		return neighbour;
 	}

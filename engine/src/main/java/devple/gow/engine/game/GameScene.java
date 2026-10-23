@@ -895,11 +895,37 @@ public final class GameScene implements Scene {
 		return s.camera();
 	}
 
+	/** LoadForWarp 로 다른 슬롯에 꺼진 채 올라간 레벨 (Warp 대상, 스크립트·충돌·CMV·렌더 없음). null = 없음. */
+	private String warpSlot;
+
+	/** 다른 슬롯 비우기 — 그 슬롯에 꺼진 레벨 (LoadForWarp) 이 들어온다. 렌더 장면은 캐시로 (같은 레벨을 다시 LoadWad 하면 재사용). */
+	private void unloadOther() {
+		if (otherName == null) {
+			return;
+		}
+		if (lights != null) {
+			lights.removeSource(otherName);
+		}
+		otherName = null;
+		otherCol = null;
+		otherData = null;
+		otherHidden.clear();
+		otherPosed.clear();
+		otherScenePending = true;
+		if (nav != null) {
+			nav.clearOther();
+		}
+		if (cameraRig != null) {
+			cameraRig.setOther(null);
+		}
+	}
+
 	/** 다른 슬롯 레벨의 충돌만 읽어 둔다 (렌더·스크립트 없음). 원작은 백그라운드 로드, 여기서는 즉시 [근사]. */
 	private void loadOther(String wad) {
 		if (wad.equals(otherName)) {
 			return;
 		}
+		warpSlot = null;
 		if (lights != null && otherName != null) {
 			lights.removeSource(otherName); // 이전 다른 슬롯 레벨의 라이트 빼기 (47 문서 §8)
 		}
@@ -1161,7 +1187,18 @@ public final class GameScene implements Scene {
 					return;
 				}
 				LevelLink.Transition t = link.handle(r);
-				if (link.other() != null && !link.other().equals(otherName)) {
+				if (link.other() != null && !link.otherActive()) {
+					// LoadForWarp 는 다른 슬롯 레벨을 비우고 새 레벨을 읽되 켜지 않는다 (LevelLink.otherActive): 적재 끝 콜백 0x1B2AA8 이 인자 (슬롯 +0x64)
+					// 0 (LoadWad) 이면 0x1BC2E0 (루트 컨텍스트 켬 0x1BEEB8 + 현재 슬롯 0x1BE4C0), 1 (LoadForWarp) 이면 Warp 준비 0x29D914 = 1 만 — 켜는 것은
+					// Warp 0x1BC3A0. 꺼진 레벨은 스크립트 루프·충돌·CMV 질의에서 빠진다 (43 §13.9·§13.11). 그래서 ATHN01F heroEntry (CMV 질의 끔 +
+					// AniRvlCam, 9.5 초 뒤 켬) 는 Warp 도착에서만 돈다 — 이웃으로 돌리면 되돌아가 ATHN01E 를 다시 LoadWad 할 때 질의가 꺼진 채 남아
+					// 떠난 레벨 카메라에 갇혔다 (갑판 그물 검은 화면, 30 §7.4) [확실: 분기]
+					if (otherName != null || !link.other().equals(warpSlot)) {
+						System.out.println("다른 슬롯 레벨: " + link.other() + " (" + r.op() + ", 꺼진 채)");
+					}
+					unloadOther();
+					warpSlot = link.other();
+				} else if (link.other() != null && !link.other().equals(otherName)) {
 					System.out.println("다른 슬롯 레벨: " + link.other() + " (" + r.op() + ")");
 					loadOther(link.other());
 				}
@@ -1979,6 +2016,12 @@ public final class GameScene implements Scene {
 					hp.z, hero.ctl.grounded, col.groundHeight(hp.x, hp.y + STEP, hp.z, 4000), session.sound.active(),
 					session.sound.currentMusic(), session.sound.backend().getClass().getSimpleName());
 			System.out.printf("[디버그] 카메라 눈 %s 대상 %s%n", cam.eye, cam.target);
+			for (Enemy en : enemies) { // 적 위치·내비 상태 (그물·벽 위 적 확인)
+				if (!en.fighter().dead()) {
+					Vector3f ep = en.fighter().position();
+					System.out.printf("[디버그]   적 %d (%.0f, %.0f, %.0f) %s%n", en.kind().ai1(), ep.x, ep.y, ep.z, en.fighter().nav().mode());
+				}
+			}
 		}
 		if (scriptIdle) {
 			// 전역 정지 (Idle) 동안 HUD 리셋 (Progress_UpdateHud 0x1D71A0 → 0x1BA150(hud, 1)): 미터를 내리고 갱신하지 않는다 —

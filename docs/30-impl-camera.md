@@ -220,6 +220,26 @@ ATHN01E 히드라 (이벤트 1035 = 기술 시작, Filter 250 = 히드라):
 - Warp 도착 Start 의 대상 발동 (Warp_Jump 끝 0x1A9C18, `ScriptWorld.fireStart` — 예 ATHN02A ShipTrans 0.5 초 PortCam), Warp 로 바로 되돌아오면 떠날 때의 화면 상태
   (`GameSession.warpLeft`) — 43 §13.10.
 
+### 7.4 LoadForWarp 슬롯은 꺼진 채 · 내려간 레벨 카메라 리셋 (ATHN01D 그물 검은 화면)
+QA (PS2 영상 ~980–1080 초, ATHN01D 돛대 그물): 엔진 자동 플레이가 t≈141 부터 비만 보이는 검은 화면, 크레토스가 몇 픽셀 — 카메라가 ATHN01F 의 `AniRvlCam`
+(눈 (548, 114, −535), 다른 좌표계) 에 갇혔다.
+- **원인** [확실: 분기]: 봇이 그물보다 먼저 아랫갑판 복도로 가 `toAthn01F-loadAthn01F` (LoadForWarp Athn01F) 를 밟았다. 엔진은 LoadForWarp 레벨도 이웃 스크립트로
+  돌려 ATHN01F `heroEntry-CreationSensor1` → `-specialCam` (2 초: CMV 질의 끔 + SwitchCamera AniRvlCam) 이 ATHN01D 안에서 발동, 9.5 초 뒤 질의를 켜는
+  `-idleOFF` 전에 봇이 되돌아가 `LoadE1` (LoadWad Athn01E) 로 슬롯이 바뀌어 질의가 꺼진 채 남았다 → 그물 CMV (`goendboatcams` → Boat3Cam12) 를 못 고름.
+- **원작**: LoadWad/LoadForWarp 는 0x1BC110(이름, 호출 레벨, **인자**) → 명령 3 (0x1BBA20) → 적재 (Hero_LoadWads 0x1BD270: 슬롯 +0x64 = 인자) →
+  끝 (0x1BDBE8: +0x68 |= 4) 에 콜백 0x3368F4 = **0x1B2AA8(슬롯, +0x64)**: 0 (LoadWad) → **0x1BC2E0** (루트 컨텍스트가 꺼져 있으면 켬 0x1BEEB8 → 서버 vt+0x34,
+  현재 슬롯 0x1BE4C0), 1 (LoadForWarp) → Warp 준비 0x29D914 = 1 (요청돼 있으면 바로 Warp 0x1B2CE0) 만. 켜는 것은 Warp 0x1BC3A0.
+  꺼진 컨텍스트는 스크립트 루프 (0x1A7D68 `+4 & 4`)·충돌·CMV 질의 (43 §13.11) 에서 빠진다 → **LoadForWarp 로 새로 올린 레벨은 Warp 전까지 생성 센서·카메라
+  조작이 없다** [확실: 분기 / 추정: 새로 만든 컨텍스트가 꺼진 채 시작 — 0x1BC2E0·0x1BC3A0 이 켜는 이유]. heroEntry 는 Warp 도착 (새 장면 `world.start`) 에서 돈다.
+- **레벨 내리기** (Hero_LoadWads → 0x1EE240, §7.1): 현재 카메라가 내려가는 레벨 것이면 0x1EDF48(0) 리셋 (템플릿 상태, 볼륨 선택 전환 0, 질의 켬).
+- 엔진: `LevelLink.otherActive()` (LoadWad·이음 도착 = 켜짐, LoadForWarp 로 새로 올림 = 꺼짐, 이미 있는 레벨 LoadForWarp = 그대로, LoadWad = 켬 [추정: 이미 올라
+  있는 레벨에 콜백이 다시 불리는지 미추적]). 꺼지면 `GameScene.unloadOther` — 다른 슬롯 충돌·이웃 스크립트·발판 (`SceneNav.clearOther`)·CMV·렌더·라이트 없음.
+  `CameraRig.setOther` 가 바뀔 때 떠난 레벨 카메라를 활성 목록에서 빼고, 현재 카메라가 그것이면 상태 링 비움 + 질의 켬 (다음 선택 = 템플릿·전환 0).
+- 검증: 자동 플레이 200 초 재녹화 — 복도 (t 140) → 그물 상자 위 (t 142) 에서 `ExitCam1 → Boat3Cam12`, 그물·돛대·하늘 보임 (이전: AniRvlCam 고정, 검은 화면).
+  `LevelLinkTest.loadForWarpLevelStaysOffUntilWarp`. 원작 순서 (그물 → 망대 → 상자 → 줄 → 아랫갑판) 로 그물을 오르면 처음부터 문제 없음 (32 문서 그물 해골).
+- 같은 대상에 LoadForWarp 와 LoadCheck 를 둘 다 쓰는 레벨 (ATHN03C↔04A, 06A↔06B, PAND00A↔00B, ATRET01A↔01B …) 은 Warp 짝이라 좌표계가 달라
+  이음이 원래 일어나지 않는다 (36 §2) — 꺼진 슬롯이어도 바뀌는 것 없음 [추정: 전 레벨 재순회 안 함].
+
 ## 8. 영웅 상태 마스크 · 화면 데드존 · 각도 범위 · IdleCam (43 문서 §10)
 
 ### 8.1 영웅 상태 마스크 0x1EE510 [확실: 비트·출처 / 추정: 엔진 상태 대응]

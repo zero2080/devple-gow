@@ -380,7 +380,19 @@ public final class CameraRig {
 	 * ATHN02D magicPlace 의 CameraName "Room2Cam3" 은 ATHN02C 카메라. null 이면 없음.
 	 */
 	public void setOther(LevelData other) {
+		LevelData old = this.other;
 		this.other = other == data ? null : other;
+		if (old == null || old == this.other) {
+			return;
+		}
+		// 레벨 내리기 (Hero_LoadWads → 0x1EE240): 현재 카메라가 내려가는 레벨 것이면 0x1EDF48(0) — 상태 링을 템플릿으로, 볼륨 선택을 전환 0 으로,
+		// CMV 질의 켬 (§7.1). 내려간 레벨 카메라는 활성 목록에서도 빠진다 (GO 가 없어짐).
+		active.removeIf(c -> old.placedCameras.contains(c));
+		Shot s = shots.isEmpty() ? null : shots.getLast();
+		if (s != null && s.cam != null && old.placedCameras.contains(s.cam)) {
+			shots.clear();
+			volumeQuery = true;
+		}
 	}
 
 	private LevelData other;
