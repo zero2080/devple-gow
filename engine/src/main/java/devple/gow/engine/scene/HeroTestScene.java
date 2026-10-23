@@ -325,9 +325,10 @@ public final class HeroTestScene implements Scene {
 			}
 			scripted = new ScriptedInput(e.window().handle(), st);
 		} else if (auto == Auto.MAGIC) {
-			// ← 메두사 선택 → R2 홀드(광선, 석화) → □□ (석상 파괴) → ↑ 하데스 → R2 (영혼)
+			// ← 메두사 선택 → L2 홀드 + □ 홀드 (광선, 석화 — 0x1972E8 은 □ 로 켠다) → □□ (석상 파괴) → ↑ 하데스 → L2 (영혼)
 			scripted = new ScriptedInput(e.window().handle(), List.of(new ScriptedInput.Step(0.2f, 0.05f, PadButton.LEFT),
-					new ScriptedInput.Step(0.5f, 3f, PadButton.L2), new ScriptedInput.Step(4.0f, 0.05f, PadButton.SQUARE),
+					new ScriptedInput.Step(0.5f, 3f, PadButton.L2), new ScriptedInput.Step(0.9f, 2.5f, PadButton.SQUARE),
+					new ScriptedInput.Step(4.0f, 0.05f, PadButton.SQUARE),
 					new ScriptedInput.Step(4.4f, 0.05f, PadButton.SQUARE), new ScriptedInput.Step(6.0f, 0.05f, PadButton.UP),
 					new ScriptedInput.Step(6.3f, 0.1f, PadButton.L2)));
 		}

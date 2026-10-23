@@ -301,6 +301,40 @@ HP ≤ 9800 → 잡기 원 → ○ GRAB → 260 MAIMEWGRAB (일반 GrabSync, 같
   66.4 초 메시지 141 → 미노타우로스 3 스폰 → 77.9 초 메시지 595 "[L2]+[□] 메두사의 시선 … 미노타우르스를 얼린 뒤 부숴야" → HUD 마법 아이콘
   메두사·MP 가득. 예전: 120 초 HP 9980, 머리를 뜯어도 (봇 수정 뒤) 그 뒤가 없음.
 
+### 5.2 여왕 뒤 미노타우로스 방 — "얼린 뒤 부숴야" (자동 플레이 QA, 2026-10-24)
+원작 영상: 메시지 141 → 메시지 595 → 미노타우로스 (+ 하피류) 와 싸우며 시선 (흰 섬광) 으로 석화 → 부숨 → 문이 열리고 아테나 석상 (금빛 얼굴)
+→ 여왕 사망 약 75 초 뒤 다음 연출. 엔진은 봇이 시선을 못 써 미노타우로스가 계속 다시 나왔다.
+- **메시지 595 [확실: R_PERMK 텍스트]**: "메두사의 시선을 사용하려면 [L2Button]을 누르고, [SquareButton]을 눌러서 발사하십시오. 전진하려면 모든
+  미노타우르스를 얼린 뒤 부숴야 합니다." 상황 시전이 아니라 시선의 기본 조작이다 — 업그레이드 설명 734 "고르곤의 응시: L2 홀드 + □ 홀드",
+  735 "고르곤의 투사: L2 홀드 + △", 737 "고르곤의 분노: L2 홀드 + ○ 홀드".
+- **원인 1 — 광선 버튼 [확실]**: 엔진은 USEHEAD 동안 L2 만 누르고 있으면 광선을 켰다. 원작 SCR_MedusaHead 0x1972E8 은 광선 상태 0x29D7F8 을
+  패드 현재 비트 (+0x28) **& 0x80 = □** 와 HasMagic(Drain/60, 0x1DCB20) 로 켜고 끈다 ("On"/"Off" 0x196B18). L2 (MAGIC 비트 0) 는 81 PSENTHEAD →
+  82 USEHEAD 를 유지할 뿐 (MAGIC/not-held → 83 PUTAWAYHEAD), MP 부족은 0x1E1AB0 (+0x1AC |= 0x400 → AUTO 91). 같은 패드 워드의 새 누름
+  0x10 = △ 섬광, 0x20 = ○ Nuke (SCR_TriggerMedusaHead 0x197FD8) 와 일치. `MedusaGaze.update`: 광선 = 머리 스크립트 && □ 홀드 && MP.
+- **원인 2 — 석상 파괴를 스크립트가 못 셈 [확실]**: 석화 상태 메시지 처리 sub_00265C48 (vtable 0x2C4DB4) 의 0x405 (사망) 분기가 0x1D38C8 뒤
+  `PostEvent(0x416 = 1046, 0, 0, 0, 보낸 쪽 = 그 적)` (0x265E04 → 0x1A8C78) 를 보낸다. ATHN02D 스크립트:
+  ```
+  EventSmash1 (1046, 모드 2 = 보낸 쪽이 MedusaRipZone 안, 조건 LevelData0 = 여왕 사망)
+      → LevelData1 += 1 (부순 수), LevelData5 = 참, LevelData4 += 1 (없어진 수), HulkSmashy (0.51 초 뒤 LevelData5 = 거짓)
+  MinoDestruction1 (제거 센서, Filter 25, 조건 LevelData5 == 거짓) → LevelData4 += 1          ← 보통 사망 (부수지 않음)
+  SpawnEnemy MinotaurLevel1AI6/9/10 (Respawn, 조건 LevelData1 ≤ LevelData2 (6)) → LevelData3 += 1 (스폰 수)
+  문 (MAcdHullOff, FinalCamOn → DrOffCam, doorFadeAnim, PlayTalk2, 9 초 뒤 DMCWall VisOff): LevelData1 ≥ 6 && LevelData3 == LevelData4
+  ```
+  엔진은 1046 을 보내지 않아 보통 사망만 세었다 (문 영영 닫힘). → `CombatScriptBridge.stoneKill` (GameScene.stoneKill).
+- **원인 3 — 두 번 세기 [추정: 원작 제거 시점]**: 엔진은 죽은 적의 스크립트 제거 (메시지 6, 제거 센서) 를 0.5 초 뒤에 했다. 0.5 초 안에 둘을
+  부수면 앞 석상의 HulkSmashy 가 LevelData5 를 끈 뒤 뒤 석상이 제거돼 MinoDestruction1 이 한 번 더 세어 LevelData4 > LevelData3 → 문이 안 열렸다
+  (실측 83.97 / 84.04 초 두 마리 → 85.00 MinoDestruction1). 스크립트 설계 (LevelData5 창 0.51 초) 는 제거가 그 창 안이라는 뜻이므로 부서진 석상은
+  1046 전달 다음 틱 (`GameScene.SHATTER_DESTROY` 0.05 초) 에 제거한다. 보통 사망은 그대로 0.5 초.
+- **봇 [엔진 전용]**: 시선 보유 + MP ≥ 15 + 대상 게이지 < 60000 이고 돌이 아니면 ← 로 선택 → 170 유닛 안으로 → 0.2 초 몸 돌리기 → L2 홀드,
+  0.35 초부터 □ 홀드 (최대 3 초) → 놓고 0.4 초 → 400 안 석상이 있으면 그쪽 □ 묶음 (`BotInput.gaze`, `AutoPlay.gaze`).
+- 결과 (쉬움, 결정적): 머리 뜯기 57.5 초 → 메시지 595 77.9 초 → 광선·석화·파괴 83.97 / 84.04 / 86.10 / 93.17 / 96.02 / 98.12 초 (6 번째) →
+  MAcdHullOff·DrOffCam·문 불꽃 사라짐·아테나 얼굴 PlayTalk2 99.1 초 (여왕 사망 약 42 초 뒤) → 107.1 초 DMCWall VisOff (문 열림), CheckPoint.
+  예전: 200 초 동안 미노타우로스만 다시 나옴 (석상 파괴 0 회 집계). 증거 `work/verify/athn02d_gaze/` (광선, 석화, 파괴, 문 카메라, 불꽃 벽 꺼짐).
+- 남은 차이: 석화된 적은 색이 그대로 (원작 돌 재질, 엔진은 회색 파티클 [근사]), 하피류는 이 구간에 나오지 않음 [미확인], 6 번째 뒤에도 남은
+  Respawn 이 3 마리를 더 낸다 (조건은 트리거 시점 LevelData1 ≤ 6 — 원작도 같은 데이터).
+- 테스트: `MedusaQueenFightTest.stoneKillCountsOncePerMinotaur` (1046 → LevelData1 2, 0.07 초 차이 두 석상 → LevelData4 2; 대조 0.5 초 제거 = 3),
+  `MagicSpellsTest.medusaBeamNeedsSquare`, `BotInputTest`.
+
 ## 6. 아레스 (ATHN08A 1단계 / ATHN08C 3단계) — 결말까지 동작, 연출 일부 미구현
 ```
 1단계: Ares1 SpawnAtStart 600 (그룹 600). DTre_600 HP 비율로 phase 1..4 (테스트로 확인)

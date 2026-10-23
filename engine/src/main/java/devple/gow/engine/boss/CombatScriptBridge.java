@@ -17,6 +17,7 @@ import java.util.Map;
  *  게임 → 스크립트   1035 기술 시작 (인자0 = 기술 ID)            Combat_StartBranch 0x209610      [확실]
  *                    1047 기술을 끝까지 재생 (인자0 = 기술 ID)      Combat_EndMove 0x209994          [확실]
  *                    1039 피해 후 (인자0 = 피해, 인자1 = 남은 HP)   0x203848 / 0x204830              [확실]
+ *                    1046 석상 파괴 Stone Kill (인자 없음)          0x265E04 (석화 상태 0x405 처리)   [확실]
  *  스크립트 → 오브젝트 1019 EvtForce: 적이면 인자1 기술 요청 (히드라 53/54 SLAM, 123 STUN)          [추정: 적 쪽 처리]
  *                    1054 플레이어 +0x88 = 인자1 (보스 구역, 결정 트리 조건 26)  0x25B5D0            [확실]
  *                    1055 / 1056 체력 미터 켬/끔 (+0x48 비트 4, 슬롯 = AI1 +0x9B + 1)  0x25B720      [확실]
@@ -25,7 +26,8 @@ import java.util.Map;
 public final class CombatScriptBridge {
 
 	static final boolean DEBUG = System.getProperty("gow.debug") != null;
-	public static final int EVENT_FORCE = 1019, EVENT_HEALTH = 1039, EVENT_ZONE = 1054, METER_ON = 1055, METER_OFF = 1056;
+	public static final int EVENT_FORCE = 1019, EVENT_HEALTH = 1039, EVENT_STONE_KILL = 1046, EVENT_ZONE = 1054, METER_ON = 1055,
+			METER_OFF = 1056;
 
 	private final ScriptWorld world;
 	private final Map<ScriptActor, EnemyFighter> byActor = new HashMap<>();
@@ -76,6 +78,18 @@ public final class CombatScriptBridge {
 		}
 		if (DEBUG) {
 			System.out.println("[스크립트 이벤트] " + line);
+		}
+	}
+
+	/**
+	 * 석상 파괴 (Stone Kill): 석화된 적이 맞아 부서지면 원작 sub_00265C48 (vtable 0x2C4DB4) 의 0x405 처리가 0x1D38C8 뒤
+	 * {@code PostEvent(0x416, 0, 0, 0, 보낸 쪽 = 그 적)} (0x265E04 → 0x1A8C78) 를 보낸다 [확실]. ATHN02D
+	 * MedusaRipZone-pCube3661-EventSmash1 (1046, 모드 2) 이 이것을 세어 (LevelData1 += 1, 6 이면 문) "모든 미노타우르스를 얼린 뒤 부숴야".
+	 */
+	public void stoneKill(EnemyFighter f) {
+		ScriptActor a = actorOf.get(f);
+		if (a != null) {
+			post(EVENT_STONE_KILL, 0, 0, a);
 		}
 	}
 

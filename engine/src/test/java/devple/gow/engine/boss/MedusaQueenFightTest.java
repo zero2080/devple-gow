@@ -138,6 +138,57 @@ class MedusaQueenFightTest {
 	}
 
 	/**
+	 * 여왕 뒤 미노타우로스 방 (메시지 595 "모든 미노타우르스를 얼린 뒤 부숴야"): 석상 파괴는 전역 이벤트 1046 (0x416, 0x265E04 → 0x1A8C78, 보낸 쪽 =
+	 * 그 적) 이고 MedusaRipZone-pCube3661-EventSmash1 (모드 2) 이 센다 — LevelData1 (부순 수, 6 이면 문) += 1, LevelData5 = 참,
+	 * LevelData4 (없어진 수) += 1. 제거 센서 MinoDestruction1 (조건 LevelData5 == 거짓) 은 LevelData5 가 켜진 동안 건너뛰고 0.51 초 뒤
+	 * HulkSmashy 가 끈다. 둘을 0.07 초 차이로 부숴도 한 번씩만 세야 LevelData3 (스폰 수) == LevelData4 가 맞아 문이 열린다.
+	 * 예전 엔진은 1046 을 보내지 않아 (일반 사망만) 부숴도 세지 않았고, 석상 제거를 0.5 초 뒤에 해 앞 석상의 HulkSmashy 가 창을 닫으면 두 번 셌다.
+	 */
+	@Test
+	void stoneKillCountsOncePerMinotaur() throws Exception {
+		assertEquals(2, smashTwo(devple.gow.engine.game.GameScene.SHATTER_DESTROY), "석상 제거 = 1046 전달 직후");
+		assertEquals(3, smashTwo(0.5f), "대조: 0.5 초 뒤 제거하면 뒤 석상을 두 번 셈 (LevelData3 ≠ 4 → 문이 안 열림)");
+	}
+
+	/** 미노타우로스 둘을 0.07 초 차이로 석화·파괴, 각자 destroyAfter 초 뒤 스크립트 제거 → LevelData4 (부순 수는 LevelData1 = 2 확인). */
+	private static int smashTwo(float destroyAfter) throws Exception {
+		BossRig r = spawned();
+		r.host.levelData().put(0, true); // 메두사 처치 (EventCombat1) — EventSmash1 조건
+		float[] p = r.inside("MedusaRipZone-pCube3661-EventCombat1");
+		assertNotNull(p);
+		devple.gow.engine.combat.EnemyFactory.Kind k = devple.gow.engine.combat.EnemyFactory.load(BossRig.ROM.resolve("R_MIN.WAD"), r.perm, -1);
+		EnemyFighter[] f = new EnemyFighter[2];
+		devple.gow.engine.script.ScriptActor[] a = new devple.gow.engine.script.ScriptActor[2];
+		for (int i = 0; i < 2; i++) {
+			f[i] = k.spawn();
+			f[i].pos.set(p[0], p[1], p[2]);
+			a[i] = r.world.addActor("MedusaRmEnemies#" + (42 + i), 25, p);
+			r.bridge.attach(f[i], a[i]);
+			assertTrue(f[i].addFreeze(30000), "석화");
+		}
+		float[] shatterAt = {0, 0.07f};
+		boolean[] shattered = new boolean[2];
+		float t = 0;
+		for (int n = 0; n < 120; n++, t += BossRig.DT) {
+			for (int i = 0; i < 2; i++) {
+				if (!shattered[i] && t >= shatterAt[i]) {
+					shattered[i] = true;
+					f[i].receive(null, r.hero, 1, new org.joml.Vector3f()); // 돌 적중 → 부서짐 (GameScene.stoneKill → bridge.stoneKill)
+					assertTrue(f[i].shattered());
+					r.bridge.stoneKill(f[i]);
+				}
+				if (shattered[i] && !a[i].destroyed() && t - shatterAt[i] > destroyAfter) {
+					r.world.destroy(a[i]); // GameScene.updateEnemies 의 제거 (DestructionSensor)
+				}
+			}
+			r.world.tick(BossRig.DT, r.ctl.position.x, r.ctl.position.y, r.ctl.position.z);
+		}
+		assertEquals(2, r.levelData(1), "EventSmash1 (1046) 두 번: " + r.bridge.log);
+		assertEquals(false, r.levelData(5), "HulkSmashy 가 LevelData5 를 끔");
+		return (Integer) r.levelData(4);
+	}
+
+	/**
 	 * 넘어져 착지 (105 hitLand) 의 SCR_ExplodeDeath 는 조건 6 (사망) — 살아 있으면 발동하지 않는다. 전에는 봇이 몇 번 때려 넘어뜨리자
 	 * HP 9808 에서 바로 격파됐다 (자동 플레이 43 문서). 머리 뜯기 (260) 의 것은 조건 0.
 	 */

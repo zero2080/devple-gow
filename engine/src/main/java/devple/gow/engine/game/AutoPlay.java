@@ -68,6 +68,15 @@ public final class AutoPlay {
 	public boolean grabCue;
 	/** 싸우는 대상이 잡기를 기다림 (자세 태그 ≥ 0, 예: 선창 히드라 기절 루프 107 SET_1B0 830) → 콤보 대신 ○ 부터. */
 	public boolean grabTarget;
+	/**
+	 * 메두사의 시선으로 대상을 석화할 때 (GameScene: 시선 보유 + MP ≥ {@link #GAZE_MP} + 대상 동결 게이지 &lt; 60000 이고 아직 돌이 아님) —
+	 * ATHN02D 메시지 595 "전진하려면 모든 미노타우르스를 얼린 뒤 부숴야" (EventSmash1 1046 만 센다). 석화된 대상은 보통 묶음 □ 로 부순다.
+	 */
+	public boolean gaze;
+	/** 시선이 선택 마법이 아님 (← 로 고른다). */
+	public boolean selectGaze;
+	/** 시선을 시작할 최소 MP (단계 0 Drain 12.5/초 × 미노타우로스 저항 6000 / 6000/초 ≈ 1 초, 여유 포함). */
+	public static final float GAZE_MP = 15f;
 	private final Set<String> vetoed = new LinkedHashSet<>();
 
 	public AutoPlay(String level) {
@@ -142,6 +151,8 @@ public final class AutoPlay {
 				return bot.press(null);
 			}
 			bot.grabTarget = grabTarget;
+			bot.gaze = gaze;
+			bot.selectGaze = selectGaze;
 			bot.steer(hero, enemy, camYaw, dt);
 			return bot;
 		}

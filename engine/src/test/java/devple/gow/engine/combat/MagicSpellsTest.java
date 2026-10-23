@@ -103,7 +103,9 @@ class MagicSpellsTest {
 		r.magic.setTargets(() -> List.of(en, side));
 		boolean[] shatterCb = {false};
 		en.onShatter(() -> shatterCb[0] = true);
-		ScriptedInput in = new ScriptedInput(0, List.of(new ScriptedInput.Step(0.1f, 3f, PadButton.L2)));
+		// L2 홀드 = USEHEAD 유지, □ 홀드 = 광선 (0x1972E8 +0x28 & 0x80, 메시지 595/734)
+		ScriptedInput in = new ScriptedInput(0, List.of(new ScriptedInput.Step(0.1f, 3f, PadButton.L2),
+				new ScriptedInput.Step(0.5f, 2.6f, PadButton.SQUARE)));
 		float stoneAt = -1, mpBefore = r.ps.mp;
 		for (float t = 0; t < 3.5f; t += DT) {
 			r.tick(in, en.pos);
@@ -134,6 +136,37 @@ class MagicSpellsTest {
 		assertTrue(en.dead());
 	}
 
+	/**
+	 * L2 만 누르고 있으면 머리를 들고 (81 → 82 USEHEAD) 있을 뿐 광선은 꺼져 있다: SCR_MedusaHead (0x1972E8) 는 □ (패드 +0x28 &amp; 0x80) 를
+	 * 누르고 있어야 "On" — 석화도 MP 소모도 없다. □ 를 누르면 그때부터 켜진다 (메시지 595 "L2 를 누르고, □ 를 눌러서 발사").
+	 */
+	@Test
+	void medusaBeamNeedsSquare() throws Exception {
+		Rig r = new Rig(4);
+		EnemyFighter en = EnemyFactory.load(r.rom.resolve("R_MIN.WAD"), r.perm, -1).spawn();
+		en.pos.set(0, 0, -150);
+		r.c.setTarget(en);
+		r.magic.setTargets(() -> List.of(en));
+		ScriptedInput in = new ScriptedInput(0, List.of(new ScriptedInput.Step(0.1f, 4f, PadButton.L2),
+				new ScriptedInput.Step(2.5f, 1.5f, PadButton.SQUARE)));
+		float mpBefore = r.ps.mp, mpAt2 = -1, stoneAt = -1;
+		for (float t = 0; t < 4f; t += DT) {
+			r.tick(in, en.pos);
+			en.update(DT);
+			if (mpAt2 < 0 && t >= 2.4f) {
+				mpAt2 = r.ps.mp;
+				assertFalse(r.magic.medusa.beamOn(), "□ 없이 광선 꺼짐");
+				assertEquals(en.freezeMax(), en.freezeMeter(), "□ 없이 동결 없음");
+			}
+			if (stoneAt < 0 && en.petrified()) {
+				stoneAt = t;
+			}
+		}
+		assertTrue(r.moves.contains(82), "L2 홀드 = USEHEAD: " + r.moves);
+		assertEquals(mpBefore, mpAt2, 1e-3f, "□ 없이 MP 소모 없음");
+		assertTrue(stoneAt > 2.5f, "□ 를 누른 뒤 석화: " + stoneAt);
+	}
+
 	/** 단계 2: 광선 중 ○ → HEADNUKESTART(64) → HEADNUKESLAM(65/66) 의 SCR_MedusaNuke → 반경 안(원뿔 밖 포함) 적 석화, Nuke Points 소모. */
 	@Test
 	void medusaNukeAtStage2() throws Exception {
@@ -146,7 +179,7 @@ class MagicSpellsTest {
 		behind.pos.set(0, 0, 120); // 뒤쪽 (광선 원뿔 밖), Nuke L 반경 15 × 16 = 240 안
 		r.magic.setTargets(() -> List.of(behind));
 		ScriptedInput in = new ScriptedInput(0, List.of(new ScriptedInput.Step(0.1f, 3.5f, PadButton.L2),
-				new ScriptedInput.Step(1.5f, 0.05f, PadButton.CIRCLE)));
+				new ScriptedInput.Step(0.5f, 3f, PadButton.SQUARE), new ScriptedInput.Step(1.5f, 0.05f, PadButton.CIRCLE)));
 		float mpBefore = r.ps.mp;
 		for (float t = 0; t < 3.5f && !behind.petrified(); t += DT) {
 			r.tick(in, new Vector3f(0, 0, -150));

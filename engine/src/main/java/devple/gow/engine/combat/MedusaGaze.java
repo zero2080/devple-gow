@@ -11,7 +11,9 @@ import java.util.List;
 /**
  * 메두사의 시선 (MedusaHead, 마법 4). 원작 SCR_MedusaHead 0x198348 → 0x1972E8, 원뿔 0x1964D0/0x1961D8, Freeze 0x1E1778 (35 문서 §2).
  * <ul>
- *   <li>광선: USEHEAD 의 SCRIPT {@code SCR_MedusaHead} 동안 마법 버튼을 누르고 있으면 켜짐. MP 초당 Stage Drain (12.5/10/8.33)</li>
+ *   <li>광선: USEHEAD 의 SCRIPT {@code SCR_MedusaHead} 동안 <b>□ 를 누르고 있으면</b> 켜짐 (0x1972E8: 패드 현재 비트 +0x28 &amp; 0x80 = □ 이고
+ *       HasMagic(Drain/60) 이면 "On", □ 를 떼거나 MP 부족이면 "Off"). L2 홀드는 USEHEAD 를 유지할 뿐 (MAGIC/not-held → PUTAWAYHEAD).
+ *       메시지 595 "L2 를 누르고, □ 를 눌러서 발사", 734 고르곤의 응시 "L2 홀드 + □ 홀드". MP 초당 Stage Drain (12.5/10/8.33)</li>
  *   <li>원뿔: 기울기 = (Base − Top)/Distance, 꼭짓점 = 눈 − 방향 × Top/기울기, 길이 (Distance + apexBack) × 16 — 적 반지름 포함 원뿔-구 판정</li>
  *   <li>명중한 적의 동결 게이지 −= Freeze Factor(u16 100/115/125) × 60 × dt; 0 이 되면 석화 ({@link Hittable#addFreeze})</li>
  *   <li>섬광(단계 1·2): 광선 중 △ (SCR_TriggerMedusaHead, 패드 비트 4) 또는 공중 AIRUSEHEAD 의 SCR_FlashMedusaHead
@@ -97,7 +99,10 @@ public final class MedusaGaze {
 		boolean held = in == null || in.held(PadButton.L2);
 		canHold = held && mp >= per;
 		boolean was = beam;
-		beam = head && held && mp >= per;
+		// 0x197350–0x1973D8: 광선 상태 0x29D7F8 — 켜져 있으면 □(+0x28 & 0x80) 와 HasMagic(0x1DCB20) 둘 다 맞아야 유지, 꺼져 있으면 둘 다 맞을 때 켬.
+		// MP 부족이면 0x1E1AB0 (+0x1AC |= 0x400 → AUTO M91 PUTAWAYHEAD) [확실]
+		boolean fire = in == null || in.held(PadButton.SQUARE);
+		beam = head && fire && mp >= per;
 		if (!head || !wasHead) {
 			aimYaw = c.owner().yaw(); // 공중 섬광 등 머리를 들지 않은 경우 = 몸 정면
 		}

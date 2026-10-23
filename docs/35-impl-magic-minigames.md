@@ -1,7 +1,7 @@
 # 35. 구현: 마법 3종(메두사·제우스·하데스) / 마법 선택 / TimedPress·스틱 미니게임
 
 분석: [10 문서](10-combat-system.md) §10·§12 (이번 단계에서 확장). 패키지 `devple.gow.engine.combat` (+ `fx/MagicFx`).
-실행: `./gradlew :engine:run --args="--hero --enemy R_MIN --auto magic"` (← 메두사 선택 → R2 홀드 광선 → 석화 → □ 로 파괴).
+실행: `./gradlew :engine:run --args="--hero --enemy R_MIN --auto magic"` (← 메두사 선택 → L2 홀드 + □ 홀드 광선 → 석화 → □ 로 파괴).
 연습 씬은 마법 4종을 모두 보유한 상태로 시작한다. 방향키로 선택하고 L2 로 시전한다 (원작 배치, 10 문서 §16).
 
 ## 1. 발동 경로: 영웅 기술의 SCRIPT 이벤트 = SCR_ 명령
@@ -42,7 +42,10 @@ TWK `/Player/MedusaHead` 의 일부 값은 덤프가 float 로 잘못 보여준�
 - 원작은 rWeapIH 관절 위치를 쓰고 시선 충돌 검사(0x195FB0)를 한다. 엔진은 고정 높이 50 [근사] + 레벨 충돌 레이로 시선 검사 (`Magic.setSightBlocked`).
 
 **광선**:
-- USEHEAD 동안 마법 버튼을 누르고 있고 MP ≥ Drain·dt 이면 켜진다. MP −= Drain·dt.
+- USEHEAD 동안 **□ 를 누르고 있고** MP ≥ Drain·dt 이면 켜진다. MP −= Drain·dt. [확실] 0x1972E8: 광선 상태 0x29D7F8 이 켜져 있으면
+  패드 현재 비트 (+0x28) & 0x80 (□) 과 HasMagic(Drain/60, 0x1DCB20) 이 모두 맞아야 유지, 꺼져 있으면 둘 다 맞을 때 "On". L2 (마법 버튼)
+  는 USEHEAD 를 유지할 뿐이다 (놓으면 PUTAWAYHEAD). 메시지 595 "[L2]를 누르고, [□]를 눌러서 발사", 734 "L2 홀드 + □ 홀드" 와 같다.
+  예전 엔진은 L2 만으로 광선을 켰다 (37 문서 §5.2).
 - 원뿔 안 적의 동결 게이지 −= FreezeFactor × 60 × dt.
 - 조준은 락온 대상 쪽으로 프레임당 0.15 보간한다 (Aim Speed). 몸 정면 ±80° 로 제한한다 [추정].
 
@@ -85,6 +88,8 @@ TWK `/Player/MedusaHead` 의 일부 값은 덤프가 float 로 잘못 보여준�
 - 게이지가 0 이 되면 메시지 0x407 → 석화 기술. 엔진은 freezePose 를 끝까지 재생한 뒤 그 자세로 정지하고 AI 를 멈춘다.
 - 지속 시간이 지나면 UnFreeze 로 원상 복귀하고 게이지를 최대로 되돌린다. 원작의 석상 흔들림(`경과/지속 × 1.6`)은 미구현.
 - 돌 상태에서 맞으면 석상(Brkb Hit Points 1)이 부서진다. 소유자는 사망(0x405)하고 0x416 = Stone Kill 이다.
+  0x416 (1046) 은 전역 스크립트 이벤트다 (0x265E04 → PostEvent 0x1A8C78, 보낸 쪽 = 그 적) — ATHN02D EventSmash1 이 세어 문을 연다
+  (`CombatScriptBridge.stoneKill`, 37 문서 §5.2). 부서진 석상의 스크립트 제거는 1046 전달 다음 틱 (`GameScene.SHATTER_DESTROY`).
 - 보너스는 적 WAD 의 Bonus 023 "Stone Kill" (붉은 오브 15, 메시지 33), 공중이면 024 "Air Stone Kill" (30, 34) [확실: 값].
 - `GameScene.stoneKill` 에서 오브를 더한다. 파편 모델 `*stonedbrk` 대신 회색 파편 파티클을 쓴다 [근사].
 
@@ -313,7 +318,8 @@ R_PERMK 값 (세 단계 같음): Bright **0 = CameraFilter/000 "None"** (색 전
 |---|---|
 | `MagicTest.poseidonsRage` (+) | SCR_Lightning 시작 뒤 Stage 0 Duration 1초 (±0.1) 에 M511 LIGHTNINGEXIT, 스크립트 동안 Fog 대체, 끝나면 해제, 필터 0 유지 |
 | `LightningScreenTest` (2) | 단계 표 Bright 0 / Dark −1 / Flash 5 / Fog 0 / Tint 1, Fog/000 "360 Lightning" 값, CameraFilter/000 "None", God Mode Tint; 플래시 초당 5회·재시작 |
-| `MagicSpellsTest.medusaPetrifiesMinotaurAndShatters` | R2 홀드 → 81→82, 정면 150 유닛 미노타우로스 석화 (저항 6000), 옆 적은 그대로, MP 초당 12.5, 돌 지속 5초, □ 공격 → 파괴 + 콜백 |
+| `MagicSpellsTest.medusaBeamNeedsSquare` | L2 만 = USEHEAD, 광선·동결·MP 소모 없음; □ 를 누른 뒤에야 석화 |
+| `MagicSpellsTest.medusaPetrifiesMinotaurAndShatters` | L2 홀드 + □ 홀드 → 81→82, 정면 150 유닛 미노타우로스 석화 (저항 6000), 옆 적은 그대로, MP 초당 12.5, 돌 지속 5초, □ 공격 → 파괴 + 콜백 |
 | `medusaStoneWearsOff` | 5초 후 해제, 게이지 최대 복귀 |
 | `zeusBoltHitsAtDistanceAndCostsMp` | 25m 표적 명중, 피해 = 8 × 발수, MP = 100 − 5 × 발수 |
 | `zeusChargedShotUsesCh2` | 단계 2 + □ 홀드 0.8초 → Ch2, 소모 20, 피해 65 |

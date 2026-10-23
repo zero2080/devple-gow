@@ -1574,6 +1574,9 @@ public final class GameScene implements Scene {
 		hero.player.addRedOrbs(orbs.isPresent() ? (int) Float.intBitsToFloat(orbs.getAsInt()) : 15);
 		magicFx.effect("shatter", f.pos);
 		session.sound.play("SND_PICKUPS_ORBS_E");
+		if (bridge != null) {
+			bridge.stoneKill(f); // 1046 Stone Kill → 스크립트 (0x265E04, ATHN02D EventSmash1)
+		}
 	}
 
 	/** 레벨 WAD 자체 AI1 템플릿의 종류 (처음 쓸 때 로드, 없으면 null). */
@@ -2197,11 +2200,25 @@ public final class GameScene implements Scene {
 				at = enemies.stream().map(Enemy::fighter).filter(f -> !f.dead() && !boss.autoIgnores(f))
 						.min(java.util.Comparator.comparingDouble(f -> f.pos.distanceSquared(hero.ctl.position))).orElse(null);
 			}
+			if (hero.player.owned(Weapon.MEDUSA)) {
+				// 석상은 지속 (AI1 +0x40, 5 초) 안에 부숴야 센다 — 가까운 석상부터 [엔진 전용 봇]
+				EnemyFighter stone = enemies.stream().map(Enemy::fighter).filter(f -> !f.dead() && f.petrified()
+						&& f.pos.distance(hero.ctl.position) < 400).min(java.util.Comparator.comparingDouble(
+						f -> f.pos.distanceSquared(hero.ctl.position))).orElse(null);
+				if (stone != null) {
+					at = stone;
+				}
+			}
 			auto.unstick = at != null && boss != null && at != boss.boss();
 			// 잡기를 기다리는 소품 (HP 32767, 자세 태그 설정 중 — ATHN01F 쌍둥이 M69 SET_1B0 305: 영웅 GRAB → 846) 이 가까우면 목표에서 ○ [엔진 전용]
 			auto.grabCue = enemies.stream().map(Enemy::fighter).anyMatch(f -> !f.dead() && f.maxHp() >= 32767
 					&& f.combat().stanceTag() >= 0 && f.pos.distance(hero.ctl.position) < 120);
 			auto.grabTarget = at != null && at.maxHp() < 32767 && waitsForGrab(at);
+			// 메두사의 시선 (원작 조작 L2 + □, 메시지 595): 보유 + MP + 석화 가능한 대상 (게이지 < 60000, 메두사·갑옷병 면역) 이 아직 돌이 아님 [엔진 전용 봇]
+			boolean gazeOwned = hero.player.owned(Weapon.MEDUSA);
+			auto.gaze = gazeOwned && hero.player.mp >= AutoPlay.GAZE_MP && at != null && !at.dead() && !at.petrified()
+					&& at.freezeMax() < 60000 && !grab.active();
+			auto.selectGaze = gazeOwned && hero.player.selectedMagic != Weapon.MEDUSA;
 			in = obj != null ? auto.reach(hero.ctl.position, obj, inputFrame.yaw(camYaw), dt)
 					: auto.steer(hero.ctl.position, at != null && at.maxHp() < 32767 ? aimPoint(at) : null, boss != null, inputFrame.yaw(camYaw), dt);
 			if (auto.done()) {
@@ -2502,6 +2519,9 @@ public final class GameScene implements Scene {
 		return best;
 	}
 
+	/** 부서진 석상의 스크립트 제거 (메시지 6) 시점, 초 — 1046 전달 (world.tick) 뒤. */
+	public static final float SHATTER_DESTROY = 0.05f;
+
 	private void updateEnemies(float dt) {
 		collectBodies();
 		for (Enemy en : enemies) {
@@ -2531,7 +2551,13 @@ public final class GameScene implements Scene {
 			if (en.actor() != null) {
 				en.actor().moveTo(f.pos.x, f.pos.y, f.pos.z);
 			}
-			if (f.dead() && f.deadTime() == 0 && !wasDead || (f.dead() && en.actor() != null && !en.actor().destroyed() && f.deadTime() > 0.5f)) {
+			// 부서진 석상은 곧바로 (1046 Stone Kill 이 전달된 다음 틱): ATHN02D EventSmash1 (1046) 이 LevelData5 = 참으로 MinoDestruction1
+			// (제거 센서, 조건 LevelData5 == 거짓) 을 막고 0.51 초 뒤 HulkSmashy 가 푼다 — 제거가 그 창 안이어야 한 번만 센다. 예전 0.5 초 뒤 제거는
+			// 0.5 초 안에 둘을 부수면 앞 석상의 HulkSmashy 가 뒤 석상의 창을 닫아 두 번 세어 (LevelData3 ≠ 4) 문이 영영 안 열렸다
+			// [추정: 원작 제거 시점 — 0x265C48 의 0x405 처리가 0x416 을 보내고 0x26B5D0 로 정리]
+			boolean shatterGone = f.shattered() && f.deadTime() > SHATTER_DESTROY;
+			if (f.dead() && f.deadTime() == 0 && !wasDead || (f.dead() && en.actor() != null && !en.actor().destroyed()
+					&& (f.deadTime() > 0.5f || shatterGone))) {
 				if (en.actor() != null && !en.actor().destroyed()) {
 					world.destroy(en.actor()); // DestructionSensor (예: 튜토리얼 메시지)
 					String emitter = en.kind().assets().wad().name().replace(".WAD", "").substring(2) + " Death";

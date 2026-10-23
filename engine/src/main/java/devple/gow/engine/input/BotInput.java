@@ -24,6 +24,16 @@ public final class BotInput extends Input {
 	private int combos;
 	/** 대상이 잡기를 기다림 (자세 태그 설정 중 — 선창 히드라 기절 107 SET_1B0 830): 묶음마다 ○ 부터 (GameScene 이 매 틱 넣음). */
 	public boolean grabTarget;
+	/**
+	 * 메두사의 시선으로 대상을 석화 (GameScene 이 매 틱: 시선 보유·MP 충분·대상이 석화 가능하고 아직 돌이 아님). 원작 조작 = 메시지 595
+	 * "L2 를 누르고, □ 를 눌러서 발사": 다가가서 몸을 대상 쪽으로 돌린 뒤 L2 홀드 (81 PSENTHEAD → 82 USEHEAD) + □ 홀드 (광선, 0x1972E8).
+	 */
+	public boolean gaze;
+	/** 시선이 선택 마법이 아님 → ← (방향키 왼쪽, 0x1D7E10) 를 누른다. */
+	public boolean selectGaze;
+	private float gazeClock, selectClock;
+	/** 시선을 쏠 거리 (유닛): 원뿔 Distance 15 m × 16 = 240 안쪽. 광선을 켜 두는 최대 초. */
+	private static final float GAZE_NEAR = 170f, GAZE_MAX = 3f;
 
 	public BotInput(long window) {
 		super(window);
@@ -45,6 +55,11 @@ public final class BotInput extends Input {
 		float dx = target.x - hero.x, dz = target.z - hero.z;
 		float d = (float) Math.hypot(dx, dz);
 		float a = (float) Math.atan2(-dx, -dz) - camYaw; // HeroController: 정면 = (-sin yaw, -cos yaw), 스틱 각 = atan2(-sx, sy)
+		if (gaze || gazeClock > 0) {
+			if (gazeStep(d, a, dt)) {
+				return;
+			}
+		}
 		if (d > NEAR && clock == 0) {
 			lx = (float) -Math.sin(a);
 			ly = (float) Math.cos(a);
@@ -66,6 +81,53 @@ public final class BotInput extends Input {
 			clock = 0;
 			combos++;
 		}
+	}
+
+	/**
+	 * 시선 한 번: 선택 (←) → 대상 쪽으로 걸어가 몸을 돌림 (0.2 초) → L2 홀드, 0.35 초부터 □ 홀드 (광선) → 석화되거나 {@link #GAZE_MAX} 초면
+	 * 버튼을 떼고 0.4 초 쉰다 (PUTAWAYHEAD). 그 뒤 석화된 대상은 보통 묶음 (□ 첫 타 = 석상 파괴).
+	 *
+	 * @return 이번 틱 입력을 정했으면 true
+	 */
+	private boolean gazeStep(float d, float a, float dt) {
+		if (gaze && selectGaze) {
+			selectClock += dt;
+			if (selectClock > 0.4f) {
+				selectClock = 0;
+				down.add(PadButton.LEFT);
+			}
+			return true;
+		}
+		if (gazeClock == 0 && d > GAZE_NEAR) {
+			if (!gaze) {
+				return false;
+			}
+			lx = (float) -Math.sin(a);
+			ly = (float) Math.cos(a);
+			clock = 0;
+			return true;
+		}
+		gazeClock += dt;
+		clock = 0;
+		if (gazeClock < 0.2f) { // 몸을 대상 쪽으로 (USEHEAD 조준은 몸 정면 ±80° 안)
+			lx = (float) -Math.sin(a) * 0.3f;
+			ly = (float) Math.cos(a) * 0.3f;
+			return true;
+		}
+		if (gaze && gazeClock < GAZE_MAX) {
+			down.add(PadButton.L2);
+			if (gazeClock > 0.35f) {
+				down.add(PadButton.SQUARE);
+			}
+			return true;
+		}
+		// 놓은 뒤 0.4 초 쉼 (PUTAWAYHEAD) — 석화가 끝나 gaze 가 꺼진 경우도 여기로
+		gazeClock = Math.max(gazeClock, GAZE_MAX);
+		if (gazeClock < GAZE_MAX + 0.4f) {
+			return true;
+		}
+		gazeClock = 0;
+		return false;
 	}
 
 	/** 걷기만 (자동 플레이 이동): 목표 쪽 스틱, 버튼 없음. */
