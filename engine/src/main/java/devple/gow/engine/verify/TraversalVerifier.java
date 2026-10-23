@@ -124,6 +124,8 @@ public final class TraversalVerifier {
 		/** LoadCheck 볼륨(영역) 안의 점들 (월드) — 도착 검사: 대상 레벨 바닥이 볼륨 안에 있는지. */
 		final Map<String, List<float[]>> loadCheckSamples = new LinkedHashMap<>();
 		public Req warp;
+		/** 모든 Warp 센서 (Warp 는 슬롯 레벨로 가므로 LoadForWarp 가 가까운 것이 그 레벨의 출구, {@link #warpFor}). */
+		public final List<Req> warps = new ArrayList<>();
 		/** 강제한 게임 이벤트 (EventId → 시도한 인자 수). */
 		public final Map<Integer, Integer> forcedEvents = new TreeMap<>();
 		/** 바닥 삼각형 표본 칸 (이웃 레벨 걸어 들어가기 판정용, {@link #FLOOR_CELL} 유닛). */
@@ -268,6 +270,11 @@ public final class TraversalVerifier {
 			}
 		}
 		b.warpLoads.addAll(a.warpLoads);
+		for (Req w : a.warps) {
+			if (b.warps.stream().noneMatch(x -> x.source().equals(w.source()))) {
+				b.warps.add(w);
+			}
+		}
 		if (b.warp == null || b.warp.forced() && a.warp != null && !a.warp.forced()) {
 			b.warp = a.warp;
 		}
@@ -441,6 +448,7 @@ public final class TraversalVerifier {
 						if (r.warp == null) {
 							r.warp = req;
 						}
+						r.warps.add(req);
 					}
 					case LOAD -> r.edges.add(new Edge(LevelLink.Kind.LOAD, wad, true, req.pos(), req.source(), req.forced()));
 					default -> {
@@ -1151,7 +1159,7 @@ public final class TraversalVerifier {
 	 * 볼륨 안의 한 점 (월드): 볼륨 안에 바닥이 있으면 바닥 위 4 유닛(걷는 위치), 없으면 아무 내부 점(공중, [3] = 1). 못 찾으면 null.
 	 * 반환 = {x, y, z, 공중 여부}.
 	 */
-	static float[] interior(LevelData.PlacedVolume v, LevelCollision col) {
+	public static float[] interior(LevelData.PlacedVolume v, LevelCollision col) {
 		return interior(v, col, -1);
 	}
 
@@ -1416,7 +1424,8 @@ public final class TraversalVerifier {
 				if (r.warp != null) {
 					for (String x : r.warpLoads) {
 						if (!hasEdge(r, LevelLink.Kind.WARP, x)) {
-							r.edges.add(new Edge(LevelLink.Kind.WARP, x, true, r.warp.pos(), r.warp.source(), r.warp.forced() || r.loads.get(x).forced()));
+							Req w = warpFor(r, x);
+							r.edges.add(new Edge(LevelLink.Kind.WARP, x, true, w.pos(), w.source(), w.forced() || r.loads.get(x).forced()));
 							changed = true;
 						}
 					}
@@ -1443,6 +1452,44 @@ public final class TraversalVerifier {
 			}
 		}
 		return out;
+	}
+
+	/**
+	 * x 로 가는 Warp 센서. Warp 는 그때 슬롯에 있는 레벨로 가므로, 각 Warp 센서를 가장 가까운 LoadForWarp 의 레벨에 짝짓고 (같은 볼륨 묶음이
+	 * 싣고 바로 넘김) 그중 x 의 것을 고른다. 짝이 없으면 x 의 LoadForWarp 에 가장 가까운 Warp. 첫 Warp 센서를 모든 대상에 쓰면 되돌아가는
+	 * Warp 가 출구가 된다 — ATRET01A: loadHDES01G (HDES01E 를 싣는 자리) 가 아니라 toAthn06BNEW (자동 플레이, 43 문서).
+	 */
+	static Req warpFor(LevelResult r, String x) {
+		Req best = null;
+		float bd = Float.MAX_VALUE;
+		for (Req w : r.warps) {
+			if (w.pos() != null && x.equals(nearestWarpLoad(r, w.pos())) && w.forced() == false) {
+				best = w;
+				break;
+			}
+		}
+		Req l = r.loads.get(x);
+		for (Req w : best != null || l == null || l.pos() == null ? List.<Req>of() : r.warps) {
+			float d = w.pos() == null ? Float.MAX_VALUE : dist2(w.pos(), l.pos()) + (w.forced() ? 1e9f : 0);
+			if (d < bd) {
+				bd = d;
+				best = w;
+			}
+		}
+		return best != null ? best : r.warp;
+	}
+
+	private static String nearestWarpLoad(LevelResult r, float[] p) {
+		String best = null;
+		float bd = Float.MAX_VALUE;
+		for (String x : r.warpLoads) {
+			Req l = r.loads.get(x);
+			if (l != null && l.pos() != null && dist2(p, l.pos()) < bd) {
+				bd = dist2(p, l.pos());
+				best = x;
+			}
+		}
+		return best;
 	}
 
 	/** 점에서 수평 {@link #SEAMLESS_REACH}, 수직 ±256 안에 바닥 칸이 있는지 (LoadCheck 가 실제 위치 이음인지 — Warp 짝 레벨은 좌표계가 달라 없다). */

@@ -91,4 +91,19 @@ class MedusaQueenFightTest {
 		assertEquals(true, r.levelData(0), "LevelData0 (메두사 처치)");
 		assertTrue(r.bridge.log.contains("1035 26 260"), r.bridge.log.toString());
 	}
+
+	/**
+	 * 넘어져 착지 (105 hitLand) 의 SCR_ExplodeDeath 는 조건 6 (사망) — 살아 있으면 발동하지 않는다. 전에는 봇이 몇 번 때려 넘어뜨리자
+	 * HP 9808 에서 바로 격파됐다 (자동 플레이 43 문서). 머리 뜯기 (260) 의 것은 조건 0.
+	 */
+	@Test
+	void landingDoesNotExplodeWhileAlive() throws Exception {
+		BossRig r = spawned();
+		EnemyFighter b = r.fight.boss();
+		b.hp = 9808;
+		b.combat().forceMove(105);
+		assertTrue(until(r, 4, () -> !b.combat().active() || bossMove(r) != 105));
+		assertEquals(9808f, b.hp, 1f, "hitLand 뒤에도 살아 있음");
+		assertFalse(r.fight.phases.contains("격파"), r.fight.phases.toString());
+	}
 }

@@ -66,6 +66,28 @@ public final class BotInput extends Input {
 		}
 	}
 
+	/** 걷기만 (자동 플레이 이동): 목표 쪽 스틱, 버튼 없음. */
+	public void walkTo(Vector3f hero, float[] p, float camYaw) {
+		prev.clear();
+		prev.addAll(down);
+		down.clear();
+		float a = (float) Math.atan2(-(p[0] - hero.x), -(p[2] - hero.z)) - camYaw;
+		lx = (float) -Math.sin(a);
+		ly = (float) Math.cos(a);
+	}
+
+	/** 멈춰서 버튼 하나만 (null = 아무것도). */
+	public BotInput press(PadButton b) {
+		prev.clear();
+		prev.addAll(down);
+		down.clear();
+		lx = ly = 0;
+		if (b != null) {
+			down.add(b);
+		}
+		return this;
+	}
+
 	@Override
 	public void poll() {
 	}

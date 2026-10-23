@@ -59,7 +59,7 @@ w.find("Start"); w.entity(id); w.slot(entity, "Delay");
 BallHull 수정: 평면 수를 헤더 0x38 이 아니라 hull 별 평면 수의 합으로 읽는다 (ENV_LoadCheckB 는 0x38 = 0 인데 평면 6개 → 이전엔 판정 불가).
 
 ## 6. 남은 일
-- 원작 접촉 판정은 오브젝트 충돌 형상 기준 — 여기서는 점(위치) 판정
+- 원작 접촉 판정 (0x1A7A78 → 0x11E5E8, 종류 0xFF9CE00F, 콜백 0x1A8410) 도 점이다: 오브젝트 관절 하나의 월드 위치 (0x1A6308 — 관절 = 모델 인스턴스 +0x86 ← 정의 +0x3C, 부품 슬롯이 있으면 그쪽 +0x34). 여기서는 발 위치 — 영웅이 어느 관절인지 미확인 (ATHN01F 출구 영역은 계단 위 +28 부터, 43 문서 자동 플레이)
 - Vis/Animator/Creator 효과를 실제 오브젝트에 적용 (GameScene 통합), 적 템플릿 대응
 - EventSensor 버튼 안내(PromptOnEnter), 세이브(메시지 7/8 발동 시각 저장)
 

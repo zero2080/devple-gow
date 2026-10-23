@@ -32,6 +32,8 @@
 | 6 LoadCheck(w) | `0x1BCA10` | w 가 로드된 슬롯이면 현재 레벨 이름(0x29DAE8) = w. **위치는 바꾸지 않는다** |
 | 7 Goto(name) | `0x1B07C4` | 같은 이름 Start/Marker 로 `Warp_Jump` |
 
+Warp 는 대상 이름이 없어 그때 슬롯에 있는 레벨로 간다. 검증기의 Warp 전환 위치 (`TraversalVerifier.warpFor`): 각 Warp 센서를 가장 가까운 LoadForWarp 의 레벨에 짝짓고 그 레벨의 것, 없으면 대상 LoadForWarp 에 가장 가까운 Warp. 전에는 첫 Warp 센서 하나를 모든 대상에 써서 되돌아가는 Warp 가 출구로 적혔다 — ATRET01A → ATRET01B 가 `loadHDES01G` (HDES01E 를 싣는 자리) 로, ATHN07 → SEWR01, PAND04H → PAND04IB, ATRET01B/01C, OLYMP01 도 (자동 플레이 43 문서).
+
 - **Warp 도착 (`0x1AE710`)**: Start 엔티티 목록(0x303D80) 중 새 레벨의 것에서, 모드 2 이고 슬롯 0 문자열 = 떠나온 레벨 이름인 것, 없으면 첫 모드 1. 데이터: `WarpFrom6A`(슬롯 0 "Athn06A"), `WarpFrmAthn08A`("athn08a") … 대소문자가 섞여 있어 비교는 대소문자 무시로 본다 [추정: 0x28DF50].
 - **Start 모드**: 1 기본 시작 (플레이어 생성), 2 Warp 도착 (슬롯 0 = 떠나온 레벨, 슬롯 2 = 도착 카메라), 3 Goto 지점. ATHN01E 처럼 첫 Start 가 Goto 지점(InMouth)인 레벨이 있다.
 - **이웃 레벨은 월드 좌표를 공유**한다 (ATHN01B 의 LoadCheck01A 볼륨이 ATHN01A 갑판 바로 아래). 두 레벨의 충돌·스크립트가 동시에 살아 있어서 SEWR01 → SEWR02 처럼 **LoadCheck 없이 걸어 들어가는 연결**, ATHN04C 처럼 **자기 레벨을 LoadCheck** 하는 볼륨도 있다. Warp 짝(ATHN06A ↔ 06B, 아레나들)은 좌표계가 달라 LoadCheck 지점 아래에 상대 레벨 바닥이 없다 → LoadCheck 는 "현재 레벨 표시" 일 뿐.

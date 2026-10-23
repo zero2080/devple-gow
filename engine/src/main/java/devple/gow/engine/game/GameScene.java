@@ -572,6 +572,10 @@ public final class GameScene implements Scene {
 		ph = devple.gow.engine.core.PerfMonitor.phase(". cameraRig", ph);
 		world = new ScriptWorld(level.data(), session.scriptHost, listener());
 		nav = new SceneNav(level.data(), col, hero, world, session.scriptHost, orbTweaks, navHost());
+		if (AutoPlay.ON) {
+			auto = new AutoPlay(levelName);
+			auto.plan(world, col);
+		}
 		buildRopeVisuals();
 		ph = devple.gow.engine.core.PerfMonitor.phase(". script+nav", ph);
 		if (otherName != null) {
@@ -723,6 +727,7 @@ public final class GameScene implements Scene {
 			return;
 		}
 		boss.autoPlay = System.getProperty("gow.boss.demo") != null; // GowMain --boss-demo
+		boss.autoMinigames = AutoPlay.ON; // 자동 플레이: 싸움은 봇, 미니게임 버튼만 자동
 		for (EnemyFactory.Kind k : boss.kinds().values()) {
 			orbTweaks.load(k.assets().wad());
 		}
@@ -1264,6 +1269,13 @@ public final class GameScene implements Scene {
 		if (leaving) {
 			return;
 		}
+		if (auto != null) { // 자동 플레이: 다음 레벨이면 성공으로 끝, 아니면 막는다
+			if (auto.allow(wad, hero.ctl.position)) {
+				leaving = true;
+				pendingEngine.window().requestClose();
+			}
+			return;
+		}
 		leaving = true;
 		System.out.println("레벨 전환 → " + wad + " (" + a.kind() + ", " + a.from() + " 에서)");
 		if (a.kind() != LevelLink.Kind.WARP && a.camera() == null && cameraRig != null) {
@@ -1296,6 +1308,8 @@ public final class GameScene implements Scene {
 	 * {@code -Dgow.giveAll} 이면 시작 시 마법 4종·아르테미스의 검·블레이드 Lv2·신들의 분노 게이지 100 지급.
 	 */
 	private final devple.gow.engine.input.ScriptedInput debugInput = parseDebugScript();
+	/** -Dgow.auto: 레벨 단위 자동 플레이 검증 (AutoPlay) [엔진 전용]. */
+	private AutoPlay auto;
 	/** -Dgow.bot: 시연 녹화용 자동 전투 (BotInput) [엔진 전용]. */
 	private final devple.gow.engine.input.BotInput bot = System.getProperty("gow.bot") != null ? new devple.gow.engine.input.BotInput(0) : null;
 
@@ -1567,6 +1581,9 @@ public final class GameScene implements Scene {
 	}
 
 	private void heroDied() {
+		if (auto != null) {
+			auto.died(hero.ctl.position);
+		}
 		hero.player.deaths++;
 		hero.player.onCheckpointRestart(hero.player.hp);
 		respawn(checkpoint);
@@ -1643,6 +1660,8 @@ public final class GameScene implements Scene {
 		if (debugInput != null && questionId >= 0) {
 			debugInput.advance(dt); // 질문 메뉴 중에는 게임 틱이 멈추므로 스크립트 입력을 여기서 진행해 HUD 로 (검증용)
 			hud.update(debugInput);
+		} else if (auto != null && questionId >= 0) {
+			hud.update(auto.menu(dt)); // 자동 플레이: 질문 메뉴는 × 로 첫 선택지
 		} else {
 			hud.update(e);
 		}
@@ -1699,6 +1718,20 @@ public final class GameScene implements Scene {
 		if (bot != null) {
 			bot.steer(hero.ctl.position, target != null ? target.pos : null, camYaw, dt);
 			in = bot;
+		}
+		if (auto != null) {
+			auto.redOrbs = hero.player.redOrbs;
+			float[] tp = auto.takeTeleport();
+			if (tp != null) {
+				float yaw = hero.ctl.yaw;
+				respawn(new Vector3f(tp[0], tp[1], tp[2]));
+				hero.ctl.yaw = yaw;
+			}
+			// HP 32767 = 부술 수 없는 소품 (ATHN01F 침대 쌍둥이 aoxpt 305) — 싸울 대상이 아니다
+			in = auto.steer(hero.ctl.position, target != null && target.maxHp() < 32767 ? target.pos : null, boss != null, camYaw, dt);
+			if (auto.done()) {
+				e.window().requestClose();
+			}
 		}
 		if (time < autoRun) {
 			in = new Input(e.window().handle()) {
@@ -2035,7 +2068,9 @@ public final class GameScene implements Scene {
 			p.x = hero.ctl.prevPosition.x;
 			p.z = hero.ctl.prevPosition.z;
 		}
-		float g = ground(p.x, p.y + STEP, p.z, 4000);
+		// 바닥 질의는 이번 틱 시작 높이와 현재 높이 중 높은 쪽에서 (원작 바닥 0x1E3298 은 이동 선분으로 "바닥 아래로만" 막는다, 32 문서).
+		// 현재 높이에서만 보면 기술 루트 모션이 한 틱에 STEP 넘게 내려간 때 (ATHN01A 갑판 위 공격 −13.6) 지나친 바닥을 놓쳐 아래층으로 빠진다
+		float g = ground(p.x, Math.max(p.y, hero.ctl.prevPosition.y) + STEP, p.z, 4000);
 		var c0 = hero.ctl;
 		if (!Float.isNaN(g) && p.y - g <= 2f && c0.vy <= 0) {
 			p.y = g;
@@ -2061,6 +2096,15 @@ public final class GameScene implements Scene {
 		}
 		long ex = heroBodyExclude(); // 몸 질의 0x1E2100 면 거름 (38 §18.6)
 		pushWalls(p, ex);
+		// 밀어내기가 몸을 아래로 민 만큼은 바닥이 막는다: 원작 이동 단계 순서는 밀어내기 0x1E2DD8 → 벽 0x1E2100 → 바닥 0x1E3298 ("바닥 아래로만" 막음, 32 문서).
+		// 여기서는 바닥을 먼저 맞추므로, 위에 있는 적 몸 (띄워진 해골·기어오르는 해골) 이 한 틱에 10–14 아래로 밀면 갑판 밑으로 빠져
+		// 다음 틱에는 그 높이에서 바닥을 찾아 아래층 (ATHN01B 선창 −64) 으로 떨어졌다 (ATHN01A 자동 플레이, 43 문서)
+		if (c0.grounded) {
+			float g2 = ground(p.x, Math.max(p.y, hero.ctl.prevPosition.y) + STEP, p.z, 4000);
+			if (!Float.isNaN(g2) && p.y < g2) {
+				p.y = g2;
+			}
+		}
 		// 이동 선분 마지막 검사 (0x1EAB78, 38 §19): 틱 시작 위치 → 새 위치가 막이·난간에 막히면 그 앞 + 0.05 에 두고 몸 질의부터 다시 (최대 3 회).
 		// 밀어내기 (적 몸·피격) 가 몸 가운데를 얇은 GeneralGuide 막 너머로 넘겨도 반대쪽으로 빠지지 않는다 (ATHN01A 갑판 구석 낙하)
 		if (nav != null) {

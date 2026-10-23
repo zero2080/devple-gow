@@ -72,6 +72,7 @@ public final class GowMain {
 					var session = new devple.gow.engine.game.GameSession(romDir);
 					int ci = java.util.Arrays.asList(args).indexOf("--costume"); // 코스튬 n (R_HERO<n>)
 					session.costume = ci >= 0 ? Integer.parseInt(args[ci + 1]) : 0;
+					session.difficulty = Integer.getInteger("gow.difficulty", session.difficulty); // 0 쉬움 1 보통 2 어려움 3 신 (자동 플레이 검증)
 					int ai = java.util.Arrays.asList(args).indexOf("--arrive"); // 도착 재현: FROM (Warp) 또는 FROM@x,y,z[,요°] (이음)
 					if (ai >= 0) {
 						String[] a = args[ai + 1].split("@");

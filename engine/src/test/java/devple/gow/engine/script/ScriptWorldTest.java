@@ -581,4 +581,34 @@ class ScriptWorldTest {
 		wc.tick(1 / 60f, FAR[0], FAR[1], FAR[2]);
 		assertNotEquals(true, hc.levelData().get(22));
 	}
+
+	/**
+	 * ATHN01F 출구 (WarpToAthn2A): 같은 볼륨이 영역 0 (LoadForWarp, FadeOut·FadeInWarp 의 Vis) 과 영역 1 (EntryWarp) 로 나뉘고, 영역 1 은
+	 * 계단 위 바닥 (164) 보다 28 높은 y 192 부터다 — 발 높이로는 닿지 않고 점프해야 (자동 플레이, 43 문서). 영역 1 진입 → FadeOut → FadeInWarp → Warp.
+	 */
+	@Test
+	void athn01fExitWarpRegionAboveStairs() throws Exception {
+		List<String> log = new ArrayList<>();
+		ScriptWorld w = new ScriptWorld(level("ATHN01F.WAD"), new ScriptHost(), new ScriptListener() {
+			@Override
+			public void level(LevelRequest q) {
+				log.add(q.op() + " " + q.wad());
+			}
+		});
+		ScriptEntity warp = w.entities().stream().filter(e -> e.name().equals("WarpToAthn2A-NewWarp-EntryWarp")).findFirst().orElseThrow();
+		LevelData.PlacedVolume v = warp.volume;
+		assertEquals(1, ScriptWorld.regionOf(warp));
+		assertFalse(v.regions(558, 180, -391).contains(1), "계단 위 골반 높이 (+16) 는 영역 1 밖");
+		assertTrue(v.regions(540, 196, -408).contains(1), "영역 1 은 y 192 부터");
+		w.start();
+		float[] s = w.startEntity().position();
+		for (int i = 0; i < 60 * 6; i++) {
+			float[] at = i < 60 ? s : i < 120 ? new float[]{558, 180, -391} : new float[]{540, 196, -408};
+			w.tick(1 / 60f, at[0], at[1], at[2]);
+			if (i == 119) {
+				assertFalse(log.contains("WARP null"), "발 높이에서는 Warp 없음: " + log);
+			}
+		}
+		assertTrue(log.contains("WARP null"), "영역 1 에서 Warp: " + log);
+	}
 }

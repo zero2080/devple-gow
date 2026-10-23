@@ -55,6 +55,8 @@ public abstract class BossFight {
 	private boolean defeated;
 	/** 데모/검증: 미니게임을 스스로 입력 ({@link AutoPad}). GowMain --boss-demo. */
 	public boolean autoPlay;
+	/** 미니게임 (연타·타이밍 버튼) 만 스스로 입력하고 데모 연출은 하지 않음 — 자동 플레이 (-Dgow.auto, 43 문서): 싸움은 봇 입력 그대로. */
+	public boolean autoMinigames;
 	private final AutoPad autoPad = new AutoPad();
 	/** 데모 경과 시간. */
 	protected float demoTime;
@@ -188,7 +190,7 @@ public abstract class BossFight {
 		pin();
 		if (sync != null) {
 			Input sin = in;
-			if (autoPlay) {
+			if (autoPlay || autoMinigames) {
 				autoPad.drive(sync.timed(), sync.qte());
 				sin = autoPad;
 			}
@@ -227,9 +229,9 @@ public abstract class BossFight {
 	protected void demo(float dt) {
 	}
 
-	/** 일반 잡기(GrabSync) 미니게임 입력: autoPlay 면 자동 입력, 아니면 그대로. */
+	/** 일반 잡기(GrabSync) 미니게임 입력: autoPlay·autoMinigames 면 자동 입력, 아니면 그대로. */
 	public Input minigameInput(Input in, devple.gow.engine.combat.TimedPressQte timed, devple.gow.engine.combat.RepeatPressQte qte) {
-		if (!autoPlay) {
+		if (!autoPlay && !autoMinigames) {
 			return in;
 		}
 		autoPad.drive(timed, qte);

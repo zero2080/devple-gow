@@ -605,9 +605,14 @@ public final class Combatant {
 		if ((f & 0x8) != 0 && (stateBits & STATE_TRIGGER) == 0) {
 			return -1; // combatant+0x1AC&0x1000 필요 (메두사 Nuke: SCR_TriggerMedusaHead 가 켬)
 		}
-		// 대상 조건 (10 문서 §2.4): 0x40 = 무시, 아니면 대상 +0x1B8(잡기 가능) == (0x10 ? 참 : 거짓). 폴링(락온 대상)에만 적용
-		if ((f & 0x40) == 0 && o.polled() && o.grabbable() != ((f & 0x10) != 0)) {
-			return -1;
+		// 잡기 조건 (10 문서 §2.4): 0x40 = 무시, 아니면 +0x1B8(잡기 가능) == (0x10 ? 참 : 거짓). 누구의 +0x1B8 인지는 0x208800:
+		// 플레이어 (owner+0x174 < 0) 는 공격 대상 (+0x80 핸들, 여기서는 폴링한 락온 대상), 그 밖 (적·보스) 은 자기 owner (+0x48).
+		// 적 피격 반응이 이것으로 갈린다 — 미노타우로스 GRAB(태그 200) 피격: 잡기 가능 → 400 MAIMIN01 (0x148212), 아니면 3 blockShove (0x148202)
+		if ((f & 0x40) == 0) {
+			boolean want = (f & 0x10) != 0;
+			if (owner.classId() == 0 ? o.polled() && o.grabbable() != want : selfGrabbable() != want) {
+				return -1;
+			}
 		}
 		if ((f & 0x400) != 0 && target == null) {
 			return -1;
@@ -651,6 +656,10 @@ public final class Combatant {
 			return -1;
 		}
 		return s;
+	}
+
+	private boolean selfGrabbable() {
+		return owner instanceof Hittable h && h.grabbable();
 	}
 
 	private void start(Branch b, Input in) {
@@ -780,6 +789,11 @@ public final class Combatant {
 	private void runEvents(float t) {
 		for (Event e : move.events()) {
 			if (t < e.start() || t > e.end() || e.level() > owner.bladeLevel()) {
+				continue;
+			}
+			if (e.cond() == 6 && owner.hp() > 0) {
+				// 조건 6 = 사망 (10 문서 §3): 살아 있으면 발동하지 않는다 — 메두사 여왕 hitLand·hitBounce 의 SCR_ExplodeDeath (cond 6) 가
+				// 넘어지기만 해도 사망시켰다 (머리 뜯기 260 의 것은 cond 0, 자동 플레이 43 문서)
 				continue;
 			}
 			boolean once = e.cond() == 0 || e.cond() == 2 || e.cond() == 6;

@@ -130,7 +130,7 @@ public final class AresFight extends BossFight {
 		int m = f.combat().active() ? f.combat().move().id() : -1;
 		if (demoStep == 0) {
 			demoStep = 1;
-			c.position.set(f.pos.x - (float) Math.sin(f.yaw) * 60, c.position.y, f.pos.z - (float) Math.cos(f.yaw) * 60);
+			c.position.set(f.pos.x - (float) Math.sin(f.yaw) * 60, f.pos.y, f.pos.z - (float) Math.cos(f.yaw) * 60); // 높이도 아레스 쪽 (도착 Start 가 투기장 밖 −417 이면 허공으로 떨어짐)
 			c.prevPosition.set(c.position);
 		} else if (demoStep == 1 && stage == 1 && demoTime > 0.8f && !sync.active()) {
 			// 1단계: 크레토스가 계속 싸운다 (예전엔 3초 동안 서 있다가 불덩이에 맞은 뒤 ~2.5초부터 멈춰 있었음) — 0.9초마다 정면 60 에서
@@ -164,7 +164,7 @@ public final class AresFight extends BossFight {
 
 	/** 영웅을 아레스 정면 dist 에, 아레스를 보게. */
 	private static void faceBoss(devple.gow.engine.anim.HeroController c, EnemyFighter f, float dist) {
-		c.position.set(f.pos.x - (float) Math.sin(f.yaw) * dist, c.position.y, f.pos.z - (float) Math.cos(f.yaw) * dist);
+		c.position.set(f.pos.x - (float) Math.sin(f.yaw) * dist, f.pos.y, f.pos.z - (float) Math.cos(f.yaw) * dist);
 		c.prevPosition.set(c.position);
 		c.yaw = f.yaw + (float) Math.PI;
 	}

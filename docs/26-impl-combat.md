@@ -127,12 +127,12 @@ MAIMIN02 의 SCRIPT 이벤트 → RepeatPress 템플릿: 5초, ○ 한 번 +0.2,
 ```
 | 구현 | 내용 |
 |------|------|
-| `Combatant.score` | 대상 조건 0x10/0x40 (대상 잡기 가능 여부) 구현, 0x4000 특수 태그는 잡기 조건으로 대체 [추정] |
+| `Combatant.score` | 잡기 조건 0x10/0x40: 영웅은 락온 대상의 잡기 가능 여부 (폴링), 적·보스는 자기 잡기 가능 여부 (피격 반응 포함, 0x208800) [확실]. 0x4000 특수 태그는 잡기 조건으로 대체 [추정] |
 | 이벤트 문맥 | 공격자 쪽 이벤트(17/22)는 맞은 대상을 상대로 매칭 (GRAB → MAIMIN01 선택에 필요) |
 | 영웅 종류 ID = 0 | 적 분기의 `tgt=0` 이 영웅 |
 | `GrabSync` | 결합 중 영웅은 적의 MAI 애니와 같은 이름의 영웅용 외부 애니를 재생. 정렬: 이벤트 22 창이면 원작 0x204BF0 (`SyncPull` — 영웅 421 MAISIRKILL [0.44–0.91]·221 MAISKB02 [0–0.76] 은 영웅이 적을 끈다) [확실], 이벤트 22 없는 처형 (사이클롭스·미노타우로스·하피·고르곤 …) 은 이벤트 19 창이 같은 0x24 검사로 끈다 (`SyncPull.linkedPullWindow`, 37 문서 §11.1/§11.5) [확실] |
 | 외부 애니 | 적 WAD 의 `ANM_MAIMIN`(0x10003) 을 영웅 세트에 연결 (`HeroRig.attachExternalAnims`) |
 | `RepeatPressQte` | 템플릿 키 일부는 해시만 존재 → 값 패턴으로 의미 추정(시간 5.0 / 시작 0.5 / Pass 402) |
 
-`GrabTest`: 연타 → PASSED → 402, 무입력 → FAILED → 403. 처형 성공 후 적 사망은 근사(기술 종료 시 HP 0).
+`GrabTest`: 연타 → PASSED → 402, 무입력 → FAILED → 403, 휘말린 HP 가득한 미노타우로스는 3 blockShove (`grabSparesBystander` — 전에는 적 쪽 조건을 건너뛰어 혼자 MAIMIN01 → MAIMIN02 (재생 속도 0) 에 들어가 결합 상대 없이 무적으로 멈췄다, ATHN03C 자동 플레이 43 문서). 처형 성공 후 적 사망은 근사(기술 종료 시 HP 0).
 TimedPress / 스틱 회전, RepeatPress 필드 재해석(시작 0.5 → 누름 간격 제한)은 [35 문서](35-impl-magic-minigames.md) §5. 남은 것: 미니게임 버튼 아이콘 HUD 표시.

@@ -28,7 +28,8 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class GrabTest {
 
-	private record Result(List<Integer> heroMoves, List<Integer> enemyMoves, RepeatPressQte.State qte, int pullFrames, float pulledYawGap) {
+	private record Result(List<Integer> heroMoves, List<Integer> enemyMoves, RepeatPressQte.State qte, int pullFrames, float pulledYawGap,
+						  List<Integer> bystanderMoves) {
 	}
 
 	private Result run(boolean mash) throws Exception {
@@ -36,6 +37,10 @@ class GrabTest {
 	}
 
 	private Result run(boolean mash, String wadName, float enemyHp) throws Exception {
+		return run(mash, wadName, enemyHp, false);
+	}
+
+	private Result run(boolean mash, String wadName, float enemyHp, boolean bystander) throws Exception {
 		Path rom = Path.of(System.getProperty("gow.rom", "../gow-rom"));
 		Assumptions.assumeTrue(Files.exists(Content.file(rom, wadName)), "gow-rom 없음");
 		WadFile hero = WadFile.load(Content.file(rom, "R_HERO0.WAD"));
@@ -76,6 +81,19 @@ class GrabTest {
 			public Result receive(CombatFile.Attack a, Combatant at, float d, Vector3f kn) { return Result.IGNORED; }
 		});
 		c.setTarget(en);
+		EnemyFighter by = bystander ? k.spawn() : null; // 옆의 같은 종류 적 (HP 가득 — 잡기 불가)
+		List<Integer> bm = new ArrayList<>();
+		if (by != null) {
+			by.pos.set(12, 0, -50);
+			by.setFoe(en.foe());
+			by.holdAi = true;
+			by.combat().onLog(s -> {
+				if (s.startsWith("기술 ")) {
+					bm.add(Integer.parseInt(s.split(" ")[1]));
+				}
+			});
+			c.setBystanders(() -> List.of(by));
+		}
 		List<Integer> hm = new ArrayList<>(), em = new ArrayList<>();
 		c.onLog(s -> {
 			if (s.startsWith("기술 ")) {
@@ -112,6 +130,9 @@ class GrabTest {
 				}
 			}
 			en.update(dt);
+			if (by != null) {
+				by.update(dt);
+			}
 			sync.update(in, en, k.tweaks(), dt);
 			if (sync.qte() != null) {
 				qs = sync.qte().state();
@@ -124,7 +145,7 @@ class GrabTest {
 				ctl.separate(en.pos, 22);
 			}
 		}
-		return new Result(hm, em, qs, pulls, yawGap);
+		return new Result(hm, em, qs, pulls, yawGap, bm);
 	}
 
 	@Test
@@ -154,5 +175,16 @@ class GrabTest {
 		assertTrue(r.pullFrames() > 30, "이벤트 22 창 동안 영웅이 세이렌을 끈다: " + r.pullFrames() + " hero " + r.heroMoves() + " enemy " + r.enemyMoves());
 		assertTrue(r.pulledYawGap() < 0.1f, "세이렌이 영웅을 마주 봄: " + r.pulledYawGap());
 		assertEquals(0, run(false).pullFrames(), "MAIMIN* 는 이벤트 22 없음");
+	}
+
+	/**
+	 * GRAB(태그 200) 에 휘말린 HP 가득한 미노타우로스는 자기 잡기 가능 여부로 반응을 고른다 (0x208800, 적은 자기 +0x1B8) → 3 blockShove.
+	 * 전에는 혼자 MAIMIN01→02 (재생 속도 0) 에 들어가 결합 상대 없이 무적으로 멈췄다 (ATHN03C 자동 플레이, 43 문서).
+	 */
+	@Test
+	void grabSparesBystander() throws Exception {
+		Result r = run(true, "R_MIN.WAD", 20, true);
+		assertTrue(r.heroMoves().contains(400), "영웅 MAIMIN01: " + r.heroMoves());
+		assertFalse(r.bystanderMoves().contains(400) || r.bystanderMoves().contains(401), "옆 적은 처형에 들어가지 않음: " + r.bystanderMoves());
 	}
 }
