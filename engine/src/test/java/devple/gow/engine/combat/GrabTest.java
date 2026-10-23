@@ -148,6 +148,102 @@ class GrabTest {
 		return new Result(hm, em, qs, pulls, yawGap, bm);
 	}
 
+	/**
+	 * 무리 전투: 해골병을 붙잡고 있는 동안 (영웅 MAISKB01 223, 무적 아님) 다른 적에게 맞아 HITKNOCKDOWN (182, 플래그 0x180 — 0x60 없음) 으로
+	 * 바뀌면 0x2050D8 이 영웅 동기 상대를 끊는다 → 결합 해제, 영웅은 다시 보통 갱신. 붙잡혔던 해골병은 자기 MAISKB01 을 끝까지 하고 풀린다.
+	 * 예전 엔진은 적 쪽 MAI* 애니만 보고 결합을 유지해 크레토스가 그 자리에 굳고 해골병은 끝없이 MAISKB01 이었다 (50 문서 §8).
+	 */
+	@Test
+	void hitWhileHoldingReleasesTheGrab() throws Exception {
+		Path rom = Path.of(System.getProperty("gow.rom", "../gow-rom"));
+		Assumptions.assumeTrue(Files.exists(Content.file(rom, "R_SKS.WAD")), "gow-rom 없음");
+		WadFile hero = WadFile.load(Content.file(rom, "R_HERO0.WAD"));
+		WadFile perm = WadFile.load(Content.file(rom, Region.of(rom).perm()));
+		Tweaks tw = new Tweaks();
+		tw.load(perm);
+		tw.load(hero);
+		Skeleton sk = Skeleton.loadAll(hero).stream().filter(x -> x.name.equals("hero")).findFirst().orElseThrow();
+		AnimationSet set = AnimationSet.load(hero, "ANM_hero");
+		Animator an = new Animator(sk, set, tw, "/Animation/goHero/");
+		HeroController ctl = new HeroController(an);
+		CombatOwner owner = new CombatOwner() {
+			public float hp() { return 100; }
+			public boolean onGround() { return true; }
+			public int bladeLevel() { return 3; }
+			public boolean godMode() { return false; }
+			public boolean artemisEquipped() { return false; }
+			public int selectedMagic() { return 0; }
+			public int classId() { return 0; }
+			public Vector3f position() { return ctl.position; }
+			public float yaw() { return ctl.yaw; }
+		};
+		CombatData cd = new CombatData(perm, CombatData.heroFiles(), set);
+		Combatant c = new Combatant(cd, an, owner);
+		EnemyFactory.Kind k = EnemyFactory.load(Content.file(rom, "R_SKS.WAD"), perm, -1);
+		set.attachAll(k.assets().wad());
+		cd.reindexAnimations();
+		EnemyFighter.resetSpawnCount();
+		EnemyFighter en = k.spawn(20);
+		en.pos.set(0, 0, -30);
+		en.holdAi = true;
+		en.setFoe(new Hittable() {
+			public Vector3f position() { return ctl.position; }
+			public float hp() { return 100; }
+			public int classId() { return 0; }
+			public int stanceTag() { return c.stanceTag(); }
+			public boolean invulnerable() { return true; }
+			public Result receive(CombatFile.Attack a, Combatant at, float d, Vector3f kn) { return Result.IGNORED; }
+		});
+		c.setTarget(en);
+		ScriptedInput in = new ScriptedInput(0, List.of(new ScriptedInput.Step(0.2f, 0.05f, PadButton.CIRCLE)));
+		GrabSync sync = new GrabSync(ctl, c);
+		float dt = 1 / 60f, t = 0;
+		boolean stillHeld = false;
+		boolean held = false;
+		for (; t < 6f && !held; t += dt) {
+			in.advance(dt);
+			if (!sync.active()) {
+				c.update(in, dt);
+				if (c.active()) {
+					ctl.updateCombat(c, in, 0, dt, en.pos);
+				} else {
+					ctl.update(in, 0, dt);
+				}
+			}
+			en.update(dt);
+			sync.update(in, en, k.tweaks(), dt);
+			held = sync.active() && c.active() && c.move().id() == 223 && en.combat().active() && en.combat().move().id() == 223;
+		}
+		assertTrue(held, "붙잡기 MAISKB01 (영웅·해골병 223)");
+		assertTrue(c.forceMove(182), "HITKNOCKDOWN (다른 적의 타격)");
+		in.stick(new ScriptedInput.Stick(in.time() + 4f, 1f, false, 0, 1)); // 일어난 뒤 (IDLECOMBAT 80 반복) 스틱 → ANY_INPUT → 영웅 기술 없음
+		boolean released = false, enemyFree = false;
+		for (float u = 0; u < 7f; u += dt) {
+			if (u > 0.5f && u < 3.5f && en.combat().active() && en.combat().move().id() == 223) {
+				stillHeld = true; // 영웅이 기술 중 (넘어짐·일어남) 인 동안 해골병은 아직 MAISKB01 (0x2050D8: 상대가 기술 중이면 유지)
+			}
+			in.advance(dt);
+			if (!sync.active()) {
+				released = true;
+				c.update(in, dt);
+				if (c.active()) {
+					ctl.updateCombat(c, in, 0, dt, null);
+				} else {
+					ctl.update(in, 0, dt);
+				}
+			}
+			en.update(dt);
+			sync.update(in, en, k.tweaks(), dt);
+			if (released && !(en.combat().active() && en.combat().move().id() == 223)) {
+				enemyFree = true;
+				break;
+			}
+		}
+		assertTrue(released, "영웅 기술에 0x60 없음 → 결합 해제");
+		assertTrue(stillHeld, "영웅이 기술 중인 동안은 유지");
+		assertTrue(enemyFree, "해골병 MAISKB01 이 끝나 풀림 (지금 " + (en.combat().active() ? en.combat().move().id() : -1) + ")");
+	}
+
 	@Test
 	void mashingWins() throws Exception {
 		Result r = run(true);

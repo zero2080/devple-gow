@@ -141,12 +141,22 @@ public final class GrabSync {
 			pull.link(); // 0x209830: 동기 연결 시작 → 비율 0.1
 			linkFloor = hero.position.y;
 		}
+		releaseOrphan();
 		if (partner == null) {
 			lonePull(target);
 			return false;
 		}
 		String ec = partner.combat().clipName();
-		if (!stillLinked(partner.combat())) {
+		// 0x2050D8 (Combatant 갱신 0x205968, 매 프레임 — 양쪽 각자): 지금 기술 플래그에 0x60 이 없으면 (기술 없음 포함) 자기 동기 상대 +0x84 = 0.
+		// 영웅이 붙잡은 채 (MAISKB01 등, 무적 아님) 다른 적에게 맞아 피격 기술 (HITKNOCKDOWN 0x190 …) 로 바뀌면 영웅 쪽 연결이 끊긴다 —
+		// 예전 엔진은 적 쪽 (MAI* 애니) 만 보고 결합을 유지해 영웅이 끝없이 갱신을 건너뛰었다 (무리 전투에서 크레토스가 굳음, 50 문서 §8).
+		// 붙잡혔던 적은 자기 기술을 끝까지 하고 (상대가 기술 중이므로 0x209918 로 끊지 않음) 보통 상태로 [확실: 0x2050D8]
+		boolean heroLeft = !heroCombat.active() || (heroCombat.move().flags() & SYNC_FLAGS) == 0;
+		if (heroLeft && stillLinked(partner.combat())) {
+			orphan = partner; // 적 쪽은 아직 동기 기술 — 아래 releaseOrphan
+			orphanSerial = partner.combat().moveSerial();
+		}
+		if (heroLeft || !stillLinked(partner.combat())) {
 			partner.rootHold = false;
 			partner = null;
 			qte = null;
@@ -276,6 +286,28 @@ public final class GrabSync {
 	private static void matchTime(Animator from, Animator to) {
 		if (from.current() != null && to.current() != null) {
 			to.seek(Math.min(from.time(), to.current().duration));
+		}
+	}
+
+	/** 영웅이 먼저 끊고 떠난 동기 상대 (적은 아직 MAI* 기술) 와 그 기술 순번. */
+	private EnemyFighter orphan;
+	private int orphanSerial;
+
+	/**
+	 * 0x2050D8 의 적 쪽: 동기 기술 (플래그 0x60) 이고 +0x1AC &amp; 0x4004 (상대의 이벤트 19/22 창이 세운 0x4000 은 지우기 전까지 남음) 인 적은
+	 * <b>상대 (영웅) 가 기술이 없을 때</b> 자기 기술을 끝낸다 (0x209918) — 영웅 IDLECOMBAT 80 은 반복 기술이라, 영웅이 맞고 일어나 아무 입력
+	 * (ANY_INPUT → 기술 없음) 이나 이동을 하면 그때 해골병 MAISKB01 (반복 애니) 이 풀린다 [확실: 0x2050D8 / 엔진: 0x4000 은 늘 선 것으로].
+	 */
+	private void releaseOrphan() {
+		if (orphan == null) {
+			return;
+		}
+		Combatant oc = orphan.combat();
+		if (orphan.dead() || !oc.active() || oc.moveSerial() != orphanSerial || orphan == partner) {
+			orphan = null;
+		} else if (!heroCombat.active()) {
+			oc.stop();
+			orphan = null;
 		}
 	}
 
