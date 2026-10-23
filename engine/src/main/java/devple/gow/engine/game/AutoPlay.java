@@ -24,7 +24,7 @@ import java.util.Set;
  * <ol>
  *   <li>적이 {@link #FIGHT} 안에 있으면 {@link BotInput} 이 싸운다</li>
  *   <li>아니면 스크립트 볼륨 (진입/이탈 센서가 붙은 것) 을 가까운 순서로 걸어서 방문, {@link #WALK_LIMIT} 초 안에 못 가면 순간이동 (기록)</li>
- *   <li>마지막으로 {@code gow.auto.goal} (주 경로 전환 지점) 에서 R1 을 누르며 기다린다</li>
+ *   <li>마지막으로 {@code gow.auto.goal} (주 경로 전환 지점) 에서 R1·R2 연타·× 를 누르며 기다린다</li>
  * </ol>
  * {@code gow.auto.next} 가 아닌 레벨로의 전환은 막고 기록한다. 결과 한 줄을 {@code gow.auto.log} 에 덧붙이고 창을 닫는다.
  */
@@ -166,9 +166,12 @@ public final class AutoPlay {
 				if (goalTime > GOAL_WAIT && !done) {
 					finish("STUCK_AT_GOAL", hero);
 				}
-				// R1 (문·레버·상자) 과 × (점프 — 출구 센서가 발 높이보다 위에 있는 곳, ATHN01F WarpToAthn2A 영역 1 은 계단 위 바닥 +28 부터)
+				// R1 (상자·CSM 누르고 있기), R2 연타 (사용 버튼 — 들어 올리는 문·해치 TAndF: 잡고 연타해야 열림, ATHN01A HydraHatchDoor),
+				// × (점프 — 출구 센서가 발 높이보다 위에 있는 곳, ATHN01F WarpToAthn2A 영역 1 은 계단 위 바닥 +28 부터)
 				float rc = r1Clock % 3f;
-				bot.press(rc < 0.1f ? PadButton.R1 : rc >= 1.5f && rc < 1.6f ? PadButton.CROSS : null);
+				PadButton b = rc < 0.1f ? PadButton.R1 : rc >= 2.6f && rc < 2.7f ? PadButton.CROSS
+						: (int) (rc / 0.075f) % 2 == 0 ? PadButton.USE : null;
+				bot.press(b);
 				return bot;
 			}
 			if (dwell > DWELL) {
