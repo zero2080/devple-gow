@@ -2187,6 +2187,7 @@ public final class GameScene implements Scene {
 			// 잡기를 기다리는 소품 (HP 32767, 자세 태그 설정 중 — ATHN01F 쌍둥이 M69 SET_1B0 305: 영웅 GRAB → 846) 이 가까우면 목표에서 ○ [엔진 전용]
 			auto.grabCue = enemies.stream().map(Enemy::fighter).anyMatch(f -> !f.dead() && f.maxHp() >= 32767
 					&& f.combat().stanceTag() >= 0 && f.pos.distance(hero.ctl.position) < 120);
+			auto.grabTarget = at != null && at.maxHp() < 32767 && waitsForGrab(at);
 			in = obj != null ? auto.reach(hero.ctl.position, obj, camYaw, dt)
 					: auto.steer(hero.ctl.position, at != null && at.maxHp() < 32767 ? aimPoint(at) : null, boss != null, camYaw, dt);
 			if (auto.done()) {
@@ -2336,6 +2337,19 @@ public final class GameScene implements Scene {
 		}
 	}
 
+	/** 영웅 GRAB 200 의 자세 태그 (SET_1B0 200) — 적 기술의 피격 분기가 이 태그로 잡기 미니게임에 들어간다. */
+	private static final int HERO_GRAB_TAG = 200;
+
+	/**
+	 * 자동 플레이: 대상의 지금 기술이 영웅 ○ GRAB 피격 (태그 200) 으로 다른 기술에 들어가는 분기를 가짐 = 잡기를 기다림
+	 * (선창 히드라 기절 101/107 → 830 BHAENC1GRAB) [엔진 전용].
+	 */
+	private static boolean waitsForGrab(EnemyFighter f) {
+		var m = f.combat().active() ? f.combat().move() : null;
+		return m != null && m.branches().stream().anyMatch(b -> b.input() == devple.gow.engine.combat.CombatInput.EV_HIT
+				&& b.matchB() == HERO_GRAB_TAG && b.target() >= 0);
+	}
+
 	/**
 	 * 자동 플레이가 다가갈 점: 보통 적 위치, 제자리 적 (선창 히드라 — 뿌리가 물속 바닥) 은 영웅에 가장 가까운 CDV 구 (머리) [엔진 전용].
 	 */
@@ -2413,7 +2427,8 @@ public final class GameScene implements Scene {
 			}
 		}
 		enemies.removeIf(en -> {
-			if (en.fighter().dead() && en.fighter().deadTime() > 4f) {
+			// 죽은 뒤 이어지는 기술 (선창 히드라 150 BHAENC1GRAB @0.83 — 830 이 끝난 뒤에야 시작) 은 끝까지 [엔진 전용 정리 시점]
+			if (en.fighter().dead() && en.fighter().deadTime() > 4f && (!en.fighter().combat().active() || en.fighter().deadTime() > 30f)) {
 				en.model().close();
 				magicFx.unbind(en.fighter().combat(), en.fighter());
 				enemyFall.remove(en.fighter());

@@ -143,18 +143,22 @@ public final class Animator {
 		return out;
 	}
 
-	/** {@link #setRollFix} 관절 (-1 = 없음) 과 대상 클립 판정. */
+	/** {@link #setRollFix} 관절 (-1 = 없음), 대상 클립 판정, 앞에 곱할 회전 (쿼터니언 x, y, z, w). */
 	private int rollJoint = -1;
 	private java.util.function.Predicate<Animation> rollClips;
+	private float[] rollQuat;
 
 	/**
-	 * 클립별 관절 회전 보정: 판정이 참인 클립에서 joint 의 로컬 회전 앞에 모델 Z 축 180° 회전을 곱한다 (부모 = 단위인 뿌리 관절 전용 —
-	 * 하위 관절 전체가 (x, y, z) → (−x, −y, z) 로 돈다). ATHN01B 선창 히드라 bhh 의 BHAenc1* 애니 (골반이 X 축 180° = 거꾸로 매달린 자세)
-	 * 를 영웅 동기 애니 BHAenc1Grab 의 배치 (영웅 = 히드라 뿌리 + 115 위 바닥, 앞 −Z 273) 에 맞춘다 (37 문서 §4.3) [추정: 원작 경로 미확인].
+	 * 클립별 뿌리 관절 회전 보정: 판정이 참인 클립에서 joint 의 로컬 회전 앞에 모델 공간 회전 r 을 곱한다 (q' = r ⊗ q — 부모 = 단위인
+	 * 뿌리 관절 전용이라 하위 관절 전체가 모델 원점 둘레로 r 만큼 돈다). ATHN01B 선창 히드라 bhh 의 BHAenc1* 애니 (골반이 X 축 180° =
+	 * 목이 뿌리 아래로 매달림) 를 세우는 데 쓴다 — r 은 {@link devple.gow.engine.combat.EnemyFighter} 가 정한다 (37 문서 §4.3).
+	 *
+	 * @param r 쿼터니언 (x, y, z, w)
 	 */
-	public void setRollFix(int joint, java.util.function.Predicate<Animation> clips) {
+	public void setRollFix(int joint, java.util.function.Predicate<Animation> clips, float[] r) {
 		rollJoint = joint;
 		rollClips = clips;
+		rollQuat = r.clone();
 		memo = null;
 	}
 
@@ -162,13 +166,14 @@ public final class Animator {
 		if (rollJoint < 0 || rollClips == null || !rollClips.test(a)) {
 			return p;
 		}
-		// q' = qz(π) ⊗ q, qz = (0, 0, 1, 0): (x, y, z, w) → (−y, x, w, −z) — 시험 RootMotion/HoldHydra 가 (−x, −y, z) 를 확인
+		// q' = r ⊗ q (해밀턴 곱: 벡터부 = rw·qv + qw·rv + rv × qv)
 		float[] q = p.rot[rollJoint];
 		float x = q[0], y = q[1], z = q[2], w = q[3];
-		q[0] = -y;
-		q[1] = x;
-		q[2] = w;
-		q[3] = -z;
+		float rx = rollQuat[0], ry = rollQuat[1], rz = rollQuat[2], rw = rollQuat[3];
+		q[0] = rw * x + w * rx + (ry * z - rz * y);
+		q[1] = rw * y + w * ry + (rz * x - rx * z);
+		q[2] = rw * z + w * rz + (rx * y - ry * x);
+		q[3] = rw * w - (rx * x + ry * y + rz * z);
 		return p;
 	}
 

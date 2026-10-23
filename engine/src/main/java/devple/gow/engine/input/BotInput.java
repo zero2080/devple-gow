@@ -22,6 +22,8 @@ public final class BotInput extends Input {
 	private float lx, ly;
 	private float clock, wander;
 	private int combos;
+	/** 대상이 잡기를 기다림 (자세 태그 설정 중 — 선창 히드라 기절 107 SET_1B0 830): 묶음마다 ○ 부터 (GameScene 이 매 틱 넣음). */
+	public boolean grabTarget;
 
 	public BotInput(long window) {
 		super(window);
@@ -48,7 +50,7 @@ public final class BotInput extends Input {
 			ly = (float) Math.cos(a);
 			return;
 		}
-		PadButton[] seq = combos % 4 == 3 ? GRAB : COMBO;
+		PadButton[] seq = grabTarget || combos % 4 == 3 ? GRAB : COMBO;
 		int i = (int) (clock / GAP);
 		if (i < seq.length) {
 			if (clock - i * GAP < 0.08f) {

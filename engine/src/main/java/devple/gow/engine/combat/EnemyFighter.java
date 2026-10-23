@@ -136,8 +136,11 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 		this.anim = new Animator(sk, set, tw, animNode);
 		int pel = sk.indexOf(HYDRA_ROOT);
 		if (pel >= 0 && sk.joints.get(pel).quaternion() && sk.joints.get(pel).parent() == 0) {
-			java.util.Map<devple.gow.tools.anim.Animation, Boolean> hang = new java.util.HashMap<>();
-			anim.setRollFix(pel, a -> hang.computeIfAbsent(a, x -> hangsUpsideDown(sk, x, pel)));
+			float[] lift = hangLift(sk, anim.find(idleClip), pel);
+			if (lift != null) {
+				java.util.Map<devple.gow.tools.anim.Animation, Boolean> hang = new java.util.HashMap<>();
+				anim.setRollFix(pel, a -> hang.computeIfAbsent(a, x -> hangsUpsideDown(sk, x, pel)), lift);
+			}
 		}
 		this.navNode = animNode + "Navigation/";
 		// 이동 속도: 루프 이동 클립의 zeroJoint Z × 15fps (25 문서, 크라토스와 같은 규칙). 없으면 주어진 값
@@ -186,10 +189,35 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 	/** 히드라 리그 (bha/bhb/bhh) 의 뿌리 관절. */
 	static final String HYDRA_ROOT = "BHA01JOCPEL1";
 
+	/** 히드라 턱 끝 관절 (BHA01JOCJAW1 의 자식). */
+	static final String HYDRA_JAW_TIP = "BHA01JOCTIP21";
+
 	/**
 	 * 클립 첫 프레임의 히드라 골반이 X 축 180° (정규화 |x| &gt; 0.95) = 목이 아래로 매달린 자세. ATHN01B bhh 의 BHAenc1* 21 개만 해당
-	 * (같은 리그의 BHAbabyEmerge·bha·bhb 클립은 거의 단위) — 37 문서 §4.3 [추정].
+	 * (같은 리그의 BHAbabyEmerge·bha·bhb 클립과 ATHN01E 보스 bha 클립은 거의 단위) — 37 문서 §4.3.
 	 */
+	/**
+	 * 매달린 히드라 클립을 세우는 골반 앞 회전 (쿼터니언, 매달리지 않았으면 null): 모델 X 축 (옆) 둘레로 θ = 2·atan2(−y, −z) —
+	 * 대기 클립 첫 프레임 턱 끝 (bhh BHAenc1Idle (9, −421, −889) → θ 50.7°) 을 수평면 위로 대칭인 (9, 421, −889) 로 옮긴다.
+	 * 머리 자리 (뿌리 + 126 위 · 앞 267, 배율 0.3) 는 예전 Z 축 180° 보정과 같고 (영웅 동기 BHAenc1Grab: 영웅 = 뿌리 + 115 = 선창 바닥),
+	 * 머리 자체는 뒤집히지 않는다 — Z 180° 는 머리를 등이 아래로 굴려 원작 영상과 달랐다 (두 눈 JOLEYE11/JOREYE11 이 턱 끝보다 아래).
+	 * BHAenc1Grab 내내 영웅 손 ↔ 머리 관절 평균 거리도 X 축 회전 중 θ ≈ 50° 에서 최소 (106, Z 180° 는 118, 무보정 254) [근사: 원작 경로 미확인 —
+	 * 같은 결과를 내는 원작 코드는 못 찾았다].
+	 */
+	static float[] hangLift(Skeleton sk, devple.gow.tools.anim.Animation idle, int pel) {
+		int tip = sk.indexOf(HYDRA_JAW_TIP);
+		if (tip < 0 || !hangsUpsideDown(sk, idle, pel)) {
+			return null;
+		}
+		float[] m = idle.sample(sk, 0, false).world(sk)[tip];
+		float y = m[13], z = m[14];
+		if (y >= 0 || z >= 0) {
+			return null;
+		}
+		double half = Math.atan2(-y, -z); // θ / 2
+		return new float[]{(float) Math.sin(half), 0, 0, (float) Math.cos(half)};
+	}
+
 	static boolean hangsUpsideDown(Skeleton sk, devple.gow.tools.anim.Animation a, int joint) {
 		if (a == null || !a.hasSkeletalData()) {
 			return false;
@@ -805,7 +833,9 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 			brain.tryBlock(attacker != null && attacker.move() != null ? attacker.move().id() : -1, fromFoe);
 		}
 		Result r = combat.takeHit(attack, attacker, damage);
-		if (r == Result.HIT && nav.grounded()) {
+		if (r == Result.HIT && nav.grounded() && !stationary) {
+			// 제자리 히드라 (선창 bhh: 뿌리가 바닥 구멍 속 noHero 바닥) 는 밀리지 않는다 — 예전엔 □ 콤보마다 뿌리가 뒤로 밀려
+			// 150 초 싸움에 z 91 → 7 (84) 물러나 기절한 머리가 바닥 끝에서 멀어졌다 (37 문서 §4.3) [근사: 원작 넉백 경로 미확인]
 			pos.add(knock.x / 400f, 0, knock.z / 400f);
 		}
 		return r;

@@ -807,6 +807,9 @@ BMI PAND03G (보스 등장 조건 미충족), 분신 크라토스 ATHN08B (가�
   R_MI2 5 마리가 400 → 401 → 402 MAIMIN03 으로 처형되고 (240 초) 오브가 마리당 40 오른다 (`GrabTest.armoredMinotaurExecution`, `EnemyFactoryTest.combatClassIsTemplateClassField`).
   같은 자리 (-1168, 1023, -272) 생성기가 죽을 때마다 두 마리씩 다시 낸다 — 미노타우로스 발판 퍼즐 (`gominopressureplate`·`goinstantminodeath`) 용으로 보이나 원작 대조 안 함 [미확인].
   `-Dgow.debug` 적 줄에 HP·기술·무적·잡기 가능, `-Dgow.debug.combat` 은 영웅·적 기술/적중 기록.
+- **선창 히드라가 뒤집힘 / ○ 마무리가 안 잡힘** (ATHN01B 첫 히드라, 사용자 플레이 보고): 매달린 BHAenc1* 클립을 Z 축 180° 로 세워 머리 등이 아래였다 → 옆축 50.7° 들어 올림.
+  ○ 는 넉백으로 뿌리가 84 밀려 기절 머리가 손에 안 닿고, GRAB 의 HIT_CONFIRM 이 플래그 0x4000 (원작 = 자세 태그 부정, 엔진 = 무시) 때문에 GRABREJECT 와 동점,
+  830 중 사망 뒤 150 (길막 치우는 DetectDeath) 이 안 나왔다 (원작 매 프레임 EV_DEATH 재검사 0x209024) — 37 §4.3. 봇: ○ → 830 → 150 → goplayerblock → 다음 구역.
 - **검증기 Warp 출구가 되돌아가는 Warp** (ATRET01A 등 6 곳): 36 §2 `warpFor`.
 - **메두사 여왕이 넘어지기만 해도 격파** (ATHN02D, 데모 없이 실제 전투): 피격 착지 hitLand 의 SCR_ExplodeDeath (이벤트 조건 6 = 사망) 를 조건 없이 발동해 HP 9808 에서 사망 → 조건 6 은 HP ≤ 0 일 때만 (10 §3, `MedusaQueenFightTest.landingDoesNotExplodeWhileAlive`).
 - 아레스 데모 연출이 영웅 높이를 도착 Start (−417) 그대로 두어 투기장 밖 허공으로 떨어짐 → 높이도 아레스 쪽.

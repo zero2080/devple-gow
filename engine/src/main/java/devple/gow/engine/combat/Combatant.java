@@ -477,9 +477,25 @@ public final class Combatant {
 			if ((clip == null && vdone && !moveHold.test(move.id()))
 					|| (clip != null && !clip.looping() && anim.time() >= clip.duration)) {
 				end();
+				if (owner.classId() != 0 && owner.hp() <= 0 && !deathHandled && queued == null) {
+					// 원작 0x208A98 끝 (0x209024–0x20907C): 분기 큐가 비어 있고 HP ≤ 0 이면 <b>매 프레임</b> EV_DEATH(14) 를 맞춰 넣는다 —
+					// 죽던 순간 기술의 EV_DEATH 가 (block) 이면 그 기술이 끝난 뒤 루트 액션의 EV_DEATH 로 이어진다 [확실: 코드].
+					// 선창 히드라: 830 BHAENC1GRAB 의 SELF_HP (0.79) 로 죽음 → (block) → 끝 → A150 EV_DEATH → 150 BHAENC1GRAB @0.83
+					// (1035 150 → playerBlock-DetectDeath → LD11, 길막이 치워짐). 엔진은 죽음 처리가 아직 기술로 이어지지 않았을 때 한 번만 [근사]
+					deathHandled = true;
+					fire(CombatInput.EV_DEATH, -1, null);
+					if (queued != null) {
+						Branch b = queued;
+						queued = null;
+						start(b, in);
+					}
+				}
 			}
 		}
 	}
+
+	/** 사망이 이미 EV_DEATH 분기 (기술) 로 처리됐는지 — {@link #update} 의 기술 끝 사망 재검사용. */
+	private boolean deathHandled;
 
 	/** AI/스크립트의 기술 요청 (sub_00209378): 해당 기술로 가는 루트 액션을 Match 해서 시작. */
 	public boolean request(int moveId) {
@@ -704,8 +720,12 @@ public final class Combatant {
 		}
 		if (b.matchB() == -1) {
 			s += 4;
-		} else if ((f & 0x4000) == 0 && b.matchB() != o.tag()) {
-			return -1; // 0x4000 = 특수 일치 (잡기 태그 14 등) → 위의 잡기 가능 조건으로 대체 [추정]
+		} else if ((b.matchB() == o.tag()) == ((f & 0x4000) != 0)) {
+			// 0x4000 = 태그 부정 ("상대 자세 태그 ≠ 이 값") [확실: 0x208578 의 0x2089B4–0x208A04 — 같으면 0x4000 일 때 실패,
+			// 다르면 0x4000 일 때만 통과]. 예전 엔진은 0x4000 을 "태그 무시" 로 읽어, 선창 히드라 기절 (SET_1B0 830) 에 ○ GRAB 의
+			// HIT_CONFIRM 이 830 BHAENC1GRAB (tag 830) 대신 같은 점수의 204 GRABREJECT (tag 830, 0x4000) 로 갈 수 있었다 (37 문서 §4.3).
+			// 원작 +0x1B0 기본값은 0 (매 프레임 0x2061C8 이 지움), 상대 없음은 −2 — 엔진 기본 −1 은 어느 분기 태그와도 같지 않아 같은 결과
+			return -1;
 		}
 		if (b.matchA() == -1) {
 			s += 8;
@@ -730,6 +750,9 @@ public final class Combatant {
 		}
 		if ((b.flags() & 0x800) != 0) {
 			stateBits &= ~STATE_CHARGED;
+		}
+		if (b.input() == CombatInput.EV_DEATH && b.target() >= 0) {
+			deathHandled = true;
 		}
 		if (b.target() == -2) {
 			return; // "(block)" 분기: 이벤트를 소비만 하고 현재 기술 유지 (예 KILLWIN 의 EV_DEATH, 슈퍼아머 EV_HIT_REACT)

@@ -66,6 +66,8 @@ public final class AutoPlay {
 	public int redOrbs;
 	/** 잡기를 기다리는 소품이 가까이 있음 (GameScene, ATHN01F 침대 쌍둥이): 목표에서 R2 대신 ○ (GRAB → MAIXPTBEDMOUNT). */
 	public boolean grabCue;
+	/** 싸우는 대상이 잡기를 기다림 (자세 태그 ≥ 0, 예: 선창 히드라 기절 루프 107 SET_1B0 830) → 콤보 대신 ○ 부터. */
+	public boolean grabTarget;
 	private final Set<String> vetoed = new LinkedHashSet<>();
 
 	public AutoPlay(String level) {
@@ -139,6 +141,7 @@ public final class AutoPlay {
 				pendingTeleport = p;
 				return bot.press(null);
 			}
+			bot.grabTarget = grabTarget;
 			bot.steer(hero, enemy, camYaw, dt);
 			return bot;
 		}

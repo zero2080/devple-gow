@@ -252,7 +252,7 @@ class RootMotionTest {
 	}
 
 	/**
-	 * ATHN01B 선창 히드라 (AI1 251 "hydra enc1" → bhh, 37 문서 §4.3): BHAenc1* 의 골반 X 축 180° (매달린 자세) 를 모델 Z 축 180° 로 바로 세워
+	 * ATHN01B 선창 히드라 (AI1 251 "hydra enc1" → bhh, 37 문서 §4.3): BHAenc1* 의 골반 X 축 180° (매달린 자세) 를 모델 X 축 ≈ 50.7° 들어 올려
 	 * 머리가 뿌리보다 위·앞 (영웅 쪽) 에 오고, 대기 = Navigation ANIStand "BHAEnc1Idle" (예전 "main" 바인드 자세 = 위로 선 기둥),
 	 * 걷기 클립이 없어 제자리 (예전 Sold 속도로 영웅 쪽 미끄러짐), 영웅 □ 콤보가 머리에 맞는다.
 	 */
@@ -303,5 +303,116 @@ class RootMotionTest {
 			tick(r, sq);
 		}
 		assertTrue(en.hp < hp0, "□ 콤보가 히드라에 맞는다: " + en.hp + " / " + hp0 + " 영웅 " + r.heroMoves());
+		for (int i = 0; i < 300; i++) {
+			r.ctl().position.set(0, 0, 250);
+			tick(r, sq);
+		}
+		assertEquals(0, Math.hypot(en.pos.x, en.pos.z), 1e-3, "맞아도 뿌리가 밀리지 않는다 (예전 넉백으로 150 초에 84 물러남)");
+	}
+
+	/**
+	 * 선창 히드라 머리는 모든 BHAenc1* 클립에서 바로 선다 (사용자 보고 "히드라 뒤집힘"): 예전 Z 축 180° 보정은 목 자리는 맞췄지만 머리를 등이 아래로
+	 * 굴렸다 — 두 눈 (JOLEYE11/JOREYE11) 이 턱 끝 (TIP21) 보다 아래. 새 X 축 들어 올림은 원래 애니의 머리 자세 (눈이 턱 끝 위) 를 지킨다.
+	 * 아기 히드라 bhb (같은 리그·메시, 원작과 대조된 자세) 도 대기에서 눈이 턱 끝 위다.
+	 */
+	@Test
+	void holdHydraHeadUprightInEveryClip() throws Exception {
+		Rig r = rig("ATHN01B.WAD", 251, "hydra enc1");
+		EnemyFighter en = r.en();
+		Skeleton sk = en.animator().skeleton();
+		int pel = sk.indexOf(EnemyFighter.HYDRA_ROOT), tip = sk.indexOf(EnemyFighter.HYDRA_JAW_TIP);
+		int le = sk.indexOf("JOLEYE11"), re = sk.indexOf("JOREYE11"), head = sk.indexOf("BHA01JOCHEA1");
+		float[] lift = EnemyFighter.hangLift(sk, en.animator().find("BHAenc1Idle"), pel);
+		assertNotNull(lift);
+		assertEquals(50.7, Math.toDegrees(2 * Math.atan2(lift[0], lift[3])), 0.5, "θ = 2·atan2(421, 889)");
+		// 머리 위쪽 = (머리 관절 → 턱 끝) × (오른눈 → 왼눈) 의 부호를 같은 세트의 매달리지 않은 (골반 ≈ 단위) BHAbabyEmerge 끝 자세로 정한다
+		en.animator().play("BHAbabyEmerge", true);
+		en.animator().update(1f);
+		en.animator().seek(en.animator().current().duration);
+		float ref = headUp(en.animator().pose().world(sk), head, tip, le, re);
+		assertTrue(Math.abs(ref) > 0.3f, "기준 머리 위쪽 " + ref);
+		int clips = 0;
+		for (var g : r.kind().anims().groups) {
+			for (var a : g.acts) {
+				if (!a.name.startsWith("BHAenc1") || !a.hasSkeletalData()) {
+					continue;
+				}
+				assertTrue(EnemyFighter.hangsUpsideDown(sk, a, pel), a.name);
+				en.animator().play(a.name, true);
+				en.animator().update(1f); // 전환 끝 (앞 클립과 섞지 않음)
+				for (int k = 0; k <= 8; k++) {
+					// Grab 끝 (0.83–1, EV_DEATH 150) 은 목을 뒤로 젖혀 물러나는 구간이라 제외
+					float t = a.duration * k / 8f * (a.name.equals("BHAenc1Grab") ? 0.8f : 1f);
+					en.animator().seek(t);
+					float up = headUp(en.animator().pose().world(sk), head, tip, le, re) * Math.signum(ref);
+					// 예전 Z 축 180° 보정은 이 값의 부호를 모두 뒤집었다 (머리 등이 아래)
+					assertTrue(up > 0f, a.name + " t" + t + ": 머리 위쪽 y " + up);
+				}
+				clips++;
+			}
+		}
+		assertTrue(clips >= 19, "BHAenc1 클립 " + clips);
+	}
+
+	/** 머리 위쪽 단위 벡터의 y: (턱 끝 − 머리 관절) × (왼눈 − 오른눈), 모델 공간. */
+	private static float headUp(float[][] w, int head, int tip, int le, int re) {
+		Vector3f s = new Vector3f(w[tip][12] - w[head][12], w[tip][13] - w[head][13], w[tip][14] - w[head][14]);
+		Vector3f l = new Vector3f(w[le][12] - w[re][12], w[le][13] - w[re][13], w[le][14] - w[re][14]);
+		return s.cross(l).normalize().y;
+	}
+
+	/**
+	 * 선창 히드라 ○ 마무리 (37 문서 §4.3): 기절 루프 107 (SET_1B0 830) 에 영웅 ○ GRAB 200 의 HIT_CONFIRM 은 항상 830 BHAENC1GRAB —
+	 * 같은 점수의 204 GRABREJECT (tag 830, 플래그 0x4000 = 태그 부정, 0x208578) 는 태그가 같으면 실패. 예전엔 0x4000 을 "태그 무시" 로 읽어
+	 * 동점 무작위로 GRABREJECT 가 자주 나왔다. 830 의 SELF_HP 로 죽으면 EV_DEATH 는 (block) → 830 이 끝난 뒤 루트 A150 EV_DEATH →
+	 * 150 BHAENC1GRAB @0.83 (0x208A98 끝의 매 프레임 사망 검사, 1035 150 → playerBlock-DetectDeath).
+	 */
+	@Test
+	void holdHydraCircleFinisherAndDeathMove() throws Exception {
+		Path rom = Path.of(System.getProperty("gow.rom", "../gow-rom"));
+		for (int run = 0; run < 6; run++) {
+			Rig r = rig("ATHN01B.WAD", 251, "hydra enc1");
+			EnemyFighter en = r.en();
+			WadFile heroWad = WadFile.load(Content.file(rom, "R_HERO0.WAD"));
+			r.hero().setHitVolumes(HitVolumes.forHero(heroWad, r.ctl().animator().skeleton(), WadFile.load(Content.file(rom, "R_WPN0_2.WAD"))));
+			en.pos.set(0, -115, 0);
+			en.yaw = (float) Math.PI;
+			r.ctl().position.set(0, 0, 300);
+			r.ctl().yaw = 0;
+			en.hp = 150;
+			assertTrue(en.combat().request(107));
+			ScriptedInput idle = new ScriptedInput(0, List.of());
+			for (int i = 0; i < 20 + run * 7; i++) {
+				tick(r, idle);
+			}
+			assertEquals(830, en.combat().stanceTag(), "기절 루프 SET_1B0 830");
+			ScriptedInput ci = new ScriptedInput(0, List.of(new ScriptedInput.Step(0.05f, 0.1f, PadButton.CIRCLE)));
+			for (int i = 0; i < 90; i++) {
+				tick(r, ci);
+			}
+			assertTrue(r.heroMoves().contains(830) && !r.heroMoves().contains(204), "○ → 830, GRABREJECT 아님: " + r.heroMoves());
+			assertEquals(830, en.combat().move().id(), "히드라 830: " + r.enemyMoves());
+		}
+		// 사망: 830 중 SELF_HP → (block) → 끝난 뒤 150
+		Rig r = rig("ATHN01B.WAD", 251, "hydra enc1");
+		EnemyFighter en = r.en();
+		en.pos.set(0, -115, 0);
+		r.ctl().position.set(0, 0, 100000); // 영웅은 멀리 (동기·피격 없음)
+		assertTrue(en.combat().forceMove(830));
+		ScriptedInput idle = new ScriptedInput(0, List.of());
+		for (int i = 0; i < 60; i++) {
+			tick(r, idle);
+		}
+		en.selfHp(en.hp);
+		assertTrue(en.dead());
+		for (int i = 0; i < 60 * 16 && !r.enemyMoves().contains(150); i++) {
+			tick(r, idle);
+		}
+		assertEquals(List.of(830, 150), r.enemyMoves().subList(r.enemyMoves().size() - 2, r.enemyMoves().size()), "830 끝 → 150: " + r.enemyMoves());
+		assertTrue(en.animator().time() >= 0.83f * en.animator().current().duration - 0.1f, "150 은 @0.83 부터: " + en.animator().time());
+		for (int i = 0; i < 60 * 5; i++) {
+			tick(r, idle);
+		}
+		assertEquals(1, r.enemyMoves().stream().filter(m -> m == 150).count(), "사망 기술은 한 번만: " + r.enemyMoves());
 	}
 }
