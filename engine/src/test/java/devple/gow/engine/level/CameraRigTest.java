@@ -148,4 +148,104 @@ class CameraRigTest {
 		assertEquals(-21.1, Math.toDegrees(Math.asin(f1.y)), 0.5);
 		assertEquals(0, Math.toDegrees(Math.atan2(-f1.x, -f1.z)), 1.0, "요 0 (−z)");
 	}
+
+	/**
+	 * 전투 카메라 덮어쓰기 (이벤트 23, 0x1F46D0 / 0x1F3768 / 0x1EF078 / 0x1EFB58): 가중치 0.01/프레임, 0x2000 카메라 눈 멈춤, 대상 T 가 AimJoint 쪽,
+	 * 줌 반경 = |Width − Aim|, 위 벡터 = 롤, 선택 생략 (볼륨을 넘어가도 카메라 유지), 해제하면 바로 원래 화각.
+	 */
+	@Test
+	void combatCameraOverride() throws Exception {
+		LevelData d = load("ATHN01A");
+		CameraRig rig = new CameraRig(d);
+		Vector3f hero = new Vector3f(1600, 0, 1840);
+		rig.setOwnerVolumes("goidlecamgroup", false);
+		rig.setOwnerVolumes("goenemyidlecamgroup", false);
+		for (int i = 0; i < 120; i++) {
+			rig.update(1 / 60f, hero, 0, false);
+		}
+		String cam0 = rig.current();
+		assertTrue((d.camera(cam0).def().p().flags() & CameraRig.F_FRAME_TARGET) != 0, cam0 + " 는 0x2000");
+		devple.gow.engine.render.Camera c = new devple.gow.engine.render.Camera();
+		rig.apply(c, 1);
+		float fov0 = c.fovDeg;
+		Vector3f eye0 = new Vector3f(c.eye);
+		Vector3f aim = new Vector3f(hero).add(30, 40, -20);
+		Vector3f up = new Vector3f(0.3f, 1, 0).normalize();
+		for (int i = 0; i < 160; i++) {
+			hero.z -= 0.6f; // 갑판을 따라 움직여도 (다른 볼륨) 선택은 멈춘다
+			rig.combatCamera(aim, 30, up);
+			rig.update(1 / 60f, hero, 0, false);
+		}
+		assertEquals(1f, rig.combatWeight(), 1e-4f, "0.01/프레임 → 100 프레임에 1");
+		assertEquals(cam0, rig.current(), "프레이밍 중 선택 생략");
+		rig.apply(c, 1);
+		assertTrue(c.eye.distance(eye0) < 0.5f, "0x2000 카메라 눈 멈춤: " + c.eye + " / " + eye0);
+		Vector3f fwd = new Vector3f(c.target).sub(c.eye).normalize();
+		Vector3f toAim = new Vector3f(aim).sub(c.eye).normalize();
+		assertTrue(fwd.dot(toAim) > 0.995f, "시선 = AimJoint: " + fwd.dot(toAim));
+		float want = CameraRig.verticalFov((float) (2 * Math.atan(30 / c.eye.distance(aim))));
+		assertEquals(want, c.fovDeg, 1.5f, "줌: 반경 30 이 화면 가로를 채움 (원래 " + fov0 + ")");
+		assertTrue(c.up.x > 0.1f, "CamPos Y 축 롤: " + c.up);
+		rig.update(1 / 60f, hero, 0, false); // 부르지 않은 틱 → 해제 (0x1EF058: 줌 바로 0)
+		rig.apply(c, 1);
+		assertEquals(0, rig.combatWeight());
+		assertEquals(0, c.up.x, 1e-6f);
+		assertTrue(Math.abs(c.fovDeg - fov0) < 1f, "원래 화각으로 바로: " + c.fovDeg + " / " + fov0);
+	}
+
+	/**
+	 * 점프 대상 높이 (0x1F2850, CAM 0x800/0x4000): 공중에서 T 는 이륙 높이 위로 오르지 않고 아래로는 따라 내려간다 (max(0, ·) 오프셋), 낮은 곳에
+	 * 내리면 오프셋 0, 높은 곳에 내리면 프레임당 ×0.9 로 따라 오른다.
+	 */
+	@Test
+	void jumpHoldFollowsDownNotUp() throws Exception {
+		LevelData d = load("ATHN02A");
+		LevelData.PlacedCamera hold = d.camera("ScafCam1"); // 0x43BFE (0x800)
+		assertTrue((hold.def().p().flags() & 0x800) != 0);
+		CameraRig rig = new CameraRig(d);
+		rig.setVolumeQuery(false);
+		Vector3f hero = new Vector3f(1600, 0, 1840);
+		rig.request(hold.def().shortName());
+		rig.update(1 / 60f, hero, 0, false);
+		assertEquals(hold.def().shortName(), rig.current());
+		rig.update(1 / 60f, hero, 0, false);
+		rig.update(1 / 60f, hero.add(0, 40, 0), 0, true); // 위로 뜸
+		assertEquals(CameraRig.TARGET_HEIGHT, rig.pose().target.y, 1e-3f, "이륙 높이 위로 안 오름");
+		// 대상 슬롯은 반지름 1.6 끈으로 끌려온다 (0x1F4380) — 한 틱에 크게 움직이면 원하는 자리에서 1.6 뒤
+		float r = CameraRig.SLOT_RADIUS;
+		rig.update(1 / 60f, hero.set(1600, -60, 1840), 0, true); // 이륙보다 아래로 떨어짐
+		assertEquals(-60 + CameraRig.TARGET_HEIGHT + r, rig.pose().target.y, 0.01f, "아래로는 따라감");
+		rig.update(1 / 60f, hero, 0, false); // 낮은 곳에 착지 → 오프셋 0
+		assertEquals(-60 + CameraRig.TARGET_HEIGHT + r, rig.pose().target.y, 0.01f);
+		rig.update(1 / 60f, hero, 0, true);
+		rig.update(1 / 60f, hero.set(1600, 0, 1840), 0, true);
+		float low = -60 + CameraRig.TARGET_HEIGHT + r, high = CameraRig.TARGET_HEIGHT - r;
+		assertEquals(low, rig.pose().target.y, 0.01f);
+		rig.update(1 / 60f, hero, 0, false); // 높은 곳에 착지 → 오프셋 (high − low) 에서 ×0.9
+		assertEquals(low, rig.pose().target.y, 0.01f);
+		rig.update(1 / 60f, hero, 0, false);
+		assertEquals(high - 0.9f * (high - low), rig.pose().target.y, 0.01f, "×0.9");
+	}
+
+	/**
+	 * 상태 보간 연쇄 (0x1F3C90): 상태 둘이면 smoothstep, 앞 보간의 도함수가 v0 — 도함수 = 0x1F3BC0 의 dp/ds.
+	 */
+	@Test
+	void hermiteChainCarriesDerivative() {
+		CameraRig.Pose a = new CameraRig.Pose(), b = new CameraRig.Pose(), c = new CameraRig.Pose(), out = new CameraRig.Pose(), v = new CameraRig.Pose();
+		a.dist = 0;
+		b.dist = 100;
+		CameraRig.blend(a, null, b, 0.5f, out, v);
+		assertEquals(50, out.dist, 1e-4f);
+		assertEquals(150, v.dist, 1e-3f, "smoothstep 도함수 6s(1−s)·Δ = 1.5·100");
+		c.dist = 100;
+		CameraRig.Pose o2 = new CameraRig.Pose();
+		CameraRig.blend(out, v, c, 0.25f, o2, null);
+		float s = 0.25f, h00 = 2 * s * s * s - 3 * s * s + 1, h10 = s * s * s - 2 * s * s + s, h01 = -2 * s * s * s + 3 * s * s;
+		assertEquals(h00 * 50 + h10 * 150 + h01 * 100, o2.dist, 1e-3f);
+		a.yaw = 170;
+		b.yaw = -170;
+		CameraRig.blend(a, null, b, 0.5f, out, null);
+		assertEquals(180, Math.abs(out.yaw), 1e-3f, "요는 짧은 쪽 (감김)");
+	}
 }

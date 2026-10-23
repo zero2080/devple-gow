@@ -8,6 +8,8 @@ public final class Camera {
 
 	public final Vector3f eye = new Vector3f(0, 3, 8);
 	public final Vector3f target = new Vector3f();
+	/** 위 벡터 (보통 (0, 1, 0) — 전투 카메라 이벤트 23 의 롤, CameraRig.frame). */
+	public final Vector3f up = new Vector3f(0, 1, 0);
 	public float fovDeg = 55f;
 	public float near = 0.1f;
 	public float far = 2000f;
@@ -26,7 +28,7 @@ public final class Camera {
 		if (shakePitchDeg != 0 || shakeDy != 0) {
 			viewProj.rotateX((float) Math.toRadians(-shakePitchDeg)).translate(0, -shakeDy, 0);
 		}
-		viewProj.lookAt(eye, target, new Vector3f(0, 1, 0));
+		viewProj.lookAt(eye, target, up);
 		return mirror != null ? viewProj.mul(mirror) : viewProj;
 	}
 }

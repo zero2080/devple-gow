@@ -143,4 +143,26 @@ class SoundManagerTest {
 		}
 		assertEquals(0, m.active());
 	}
+
+	/**
+	 * SND_SHAKE_* (GENERAL2, DPMS cmd 0x16 모터 1) → 카메라 흔들림 요청 (원작 IOP 상태 버퍼 0x29CAF0 +0x25C → 0x228C70): 템플릿 = 인자 (SMALL 1 … HUGE 4, SPECIAL 500),
+	 * 새 요청마다 serial, 크기 = 들림 크기 (거리 감쇠). 모터 0 (SND_RUMBLE_*) 은 흔들림이 아니다.
+	 */
+	@Test
+	void shakeSoundRequestsCameraShake() throws Exception {
+		SoundManager m = mgr("R_PERMK.WAD");
+		assertNull(m.shakeRequest());
+		m.listener(new Vector3f(), new Vector3f(0, 0, -1), new Vector3f(0, 1, 0));
+		m.play("SND_RUMBLE_BIG", null);
+		assertNull(m.shakeRequest(), "모터 0 = 패드 진동");
+		m.play("SND_SHAKE_BIG", null);
+		SoundManager.ShakeRequest r = m.shakeRequest();
+		assertEquals(3, r.template());
+		assertEquals(120 / 127f, r.scale(), 1e-3f, "2D: 소리 볼륨 120");
+		m.play("SND_SHAKE_HUGE", new Vector3f(10000, 0, 0));
+		SoundManager.ShakeRequest r2 = m.shakeRequest();
+		assertEquals(4, r2.template());
+		assertEquals(r.serial() + 1, r2.serial());
+		assertEquals(0, r2.scale(), 1e-6f, "far 밖이면 0");
+	}
 }

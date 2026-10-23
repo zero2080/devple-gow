@@ -194,8 +194,8 @@ public final class CameraRig {
 	private final java.util.Set<String> disabled = new java.util.HashSet<>();
 	private final Pose prev = new Pose(), cur = new Pose();
 	private boolean first = true;
-	/** 점프 중 대상 높이 고정 (플래그 0x800/0x4000, 0x1F2850). */
-	private float groundY = Float.NaN, jumpOffset;
+	/** 점프 중 대상 높이 고정 오프셋 (플래그 0x800/0x4000, 0x1F2850 +0x5C). */
+	private float jumpOffset;
 	private String last = "";
 
 	public CameraRig(LevelData data) {
@@ -542,11 +542,18 @@ public final class CameraRig {
 
 	/** 고정 틱 갱신. hero = 발 위치, heroYaw = 진행 방향(라디안), airborne = 공중. */
 	public void update(float dt, Vector3f hero, float heroYaw, boolean airborne) {
+		overrideUpdate(dt);
 		frameUpdate(dt);
 		prev.set(cur);
+		prevFrameT.set(frameT);
 		heroFeet.set(hero);
 		Vector3f t = target(hero, airborne);
-		select(t);
+		cut = false;
+		if (!framedLast) {
+			select(t); // 0x1EFB58: 프레이밍 줌 (0x1EF078) 을 건 프레임은 선택 생략 — 잡기·처형 클로즈업 동안 카메라가 바뀌지 않는다
+		}
+		// 덮어쓰기 중 대상 T = 영웅 슬롯 + (AimJoint − 영웅 슬롯)·가중치 (0x1F26E8 앞머리 — 다중 대상 0x10000 보다 먼저)
+		Vector3f tSolve = overActive ? new Vector3f(t).lerp(overAim, overW) : t;
 		// 상태 링: 오래된 것부터 진행, 전환이 끝나면 앞쪽을 버린다 (0x1EF3F0)
 		for (int i = shots.size() - 1; i >= 0; i--) {
 			Shot s = shots.get(i);
@@ -566,21 +573,29 @@ public final class CameraRig {
 				a.time += dt;
 			}
 		}
-		Pose out = null;
+		Pose out = null, vel = null;
 		for (Shot s : shots) {
-			solve(s, t, heroYaw, dt);
+			if (!(overActive && s.cam != null && (s.cam.def().p().flags() & F_FRAME_TARGET) != 0 && s.init)) {
+				solve(s, tSolve, heroYaw, dt); // 0x1F388C: 덮어쓰기 (관리자 +0x7AC) 중 0x2000 카메라는 위치·회전 풀기 생략 — 눈이 그 자리에 멈춘다
+			}
 			if (out == null) {
 				out = new Pose();
 				out.set(s.pose);
 			} else {
-				blend(out, s.pose, s.blend <= 0 ? 1 : Math.min(1, s.elapsed / s.blend), out);
+				Pose nv = new Pose();
+				blend(out, vel, s.pose, s.blend <= 0 ? 1 : Math.min(1, s.elapsed / s.blend), out, nv); // 0x1EF3F0 → 0x1F3C90 연쇄 (관리자 +0x10 누적)
+				vel = nv;
 			}
 		}
 		cur.set(out);
+		frameT.set(overActive ? tSolve : cur.target);
 		if (first) {
 			prev.set(cur);
+			prevFrameT.set(frameT);
 			first = false;
 		}
+		Shot top = shots.isEmpty() ? null : shots.getLast();
+		framedLast = zoomCur > 0.01f && (top == null || top.cam == null || (top.cam.def().p().flags() & F_FRAME_TARGET) != 0);
 		String n = current();
 		if (!n.equals(last)) {
 			if (System.getProperty("gow.debug") != null) {
@@ -596,11 +611,12 @@ public final class CameraRig {
 	/** 렌더 보간 결과를 카메라에 적용. */
 	public void apply(Camera c, float alpha) {
 		Pose p = new Pose();
-		blend(prev, cur, alpha, p);
+		lerp(prev, cur, alpha, p);
 		p.eye(c.eye);
 		p.forward(c.target).mul(Math.max(1, p.dist)).add(c.eye); // 시선 = 카메라 정면 (대상은 화면 sa/sb 자리)
 		c.fovDeg = p.fovDeg;
-		frame(c, p, zoomPrev + (zoomCur - zoomPrev) * alpha);
+		c.up.set(0, 1, 0);
+		frame(c, p, new Vector3f(prevFrameT).lerp(frameT, alpha), zoomPrev + (zoomCur - zoomPrev) * alpha);
 	}
 
 	// ---- 대상 프레이밍 줌 (전투 이벤트 11 CAMERA_FRAME, 0x1EF948 → 0x1EF078) ----
@@ -610,10 +626,16 @@ public final class CameraRig {
 	/** 관리자 +0x7A8 기본 1.5 ×16 (0x1EDC88). */
 	static final float FRAME_RADIUS = 1.5f * 16f;
 	private float zoomTgt, zoomCur, zoomPrev;
+	/** 프레이밍 대상 (상태 +0x70 = 이번 틱 T, 덮어쓰기면 AimJoint 쪽으로 섞인 T) — 렌더 보간용 직전 값. */
+	private final Vector3f frameT = new Vector3f(), prevFrameT = new Vector3f();
+	/** 지난 틱에 프레이밍 줌을 걸었는지 (0x1EF620 의 s2 → 선택 생략). */
+	private boolean framedLast;
 
-	/** 이번 틱 목표 가중치 (관리자 +0x7A4 — 이벤트가 매 프레임 넣고 카메라가 읽은 뒤 0 으로, 0x1EF9A4). */
+	/** 이번 틱 목표 가중치 (관리자 +0x7A4 — 이벤트가 매 프레임 넣고 카메라가 읽은 뒤 0 으로, 0x1EF9A4). 덮어쓰기 중엔 무시 (0x2070EC: 이벤트 23 이 있으면 11 을 안 넣음). */
 	public void frameTarget(float b) {
-		zoomTgt = b;
+		if (!overActive) {
+			zoomTgt = b;
+		}
 	}
 
 	private void frameUpdate(float dt) {
@@ -622,11 +644,53 @@ public final class CameraRig {
 		zoomTgt = 0;
 	}
 
+	// ---- 전투 카메라 덮어쓰기 (이벤트 23 goCamera, 표 0x304AB0, 매 프레임 0x1F46D0) ----
+
+	private boolean overActive, overSet;
+	private float overW, overR = FRAME_RADIUS;
+	private final Vector3f overAim = new Vector3f(), overUp = new Vector3f(0, 1, 0);
+
 	/**
-	 * 0x1EF078: 대상 T (카메라 대상 = 영웅 + 24) 를 반경 R 이 화면을 채우게 — 가로 FOV += (2·atan(R/|눈−T|) − FOV)·w, 시선은 T 쪽으로
-	 * slerp(w). 눈은 그대로. 가중치 &gt; 0.01 이고 지금 카메라가 0x2000 일 때만 (기본 추적 카메라는 받는다 [추정]).
+	 * 이번 틱 전투 카메라 (이벤트 23 창 동안 매 틱, {@link devple.gow.engine.combat.CombatCamera}). aim = AimJoint 월드, radius = |Width − AimJoint|,
+	 * up = CamPos 관절 Y 축. 0x1F46D0: 가중치 += 0.01/프레임 (최대 1) → 관리자 +0x7AC = 1 (0x2000 카메라 풀기 멈춤), +0x7A8 = 반경/16, +0x790 = 위 벡터,
+	 * +0x7A4 (줌 목표) = 가중치. 부르지 않은 틱이 오면 해제 — 가중치 0, 줌 목표·현재 0 (0x1EF058, 바로 돌아옴), 반경 1.5·16, 위 (0, 1, 0).
 	 */
-	private void frame(Camera c, Pose p, float w) {
+	public void combatCamera(Vector3f aim, float radius, Vector3f up) {
+		overSet = true;
+		overAim.set(aim);
+		overR = radius;
+		overUp.set(up);
+	}
+
+	/** 지금 덮어쓰기 가중치 (0x304AC4 — 0x205280 의 몸 회전 배율). 없으면 0. */
+	public float combatWeight() {
+		return overActive ? overW : 0;
+	}
+
+	private void overrideUpdate(float dt) {
+		if (overSet) {
+			if (!overActive) {
+				overActive = true;
+				overW = 0;
+			}
+			overW = Math.min(1, overW + 0.01f * dt * 60); // 0x1F4718: +0.01 (0x3C23D70A)
+			zoomTgt = overW; // 0x1EF040
+		} else if (overActive) {
+			overActive = false;
+			overW = 0;
+			zoomTgt = zoomCur = zoomPrev = 0; // 0x1EF058(0): +0x7A4 = +0x7A0 = 0
+			overR = FRAME_RADIUS;
+			overUp.set(0, 1, 0);
+		}
+		overSet = false;
+	}
+
+	/**
+	 * 0x1EF078: 대상 T 를 반경 R (기본 1.5·16, 덮어쓰기면 |Width − AimJoint|) 이 화면을 채우게 — 가로 FOV += (2·atan(R/|눈−T|) − FOV)·w,
+	 * 카메라 회전은 룩앳 (T, 위 = 관리자 +0x790 — 기본 (0, 1, 0), 덮어쓰기면 CamPos 관절 Y 축 = 롤) 쪽으로 사원수 slerp(w). 눈은 그대로.
+	 * 가중치 &gt; 0.01 이고 지금 카메라가 0x2000 일 때만 (엔진 Follow 는 받는다 [추정]).
+	 */
+	private void frame(Camera c, Pose p, Vector3f t, float w) {
 		if (w <= 0.01f) {
 			return;
 		}
@@ -634,32 +698,64 @@ public final class CameraRig {
 		if (s != null && s.cam != null && (s.cam.def().p().flags() & F_FRAME_TARGET) == 0) {
 			return;
 		}
-		float d = Math.max(1f, c.eye.distance(p.target));
+		float d = Math.max(1f, c.eye.distance(t));
 		double h = 2 * Math.atan(Math.tan(Math.toRadians(p.fovDeg) / 2) / 0.75); // 세로(4:3) → 원작 가로
-		h += (2 * Math.atan(FRAME_RADIUS / d) - h) * w;
+		h += (2 * Math.atan(overR / d) - h) * w;
 		c.fovDeg = verticalFov((float) h);
 		Vector3f f0 = new Vector3f(c.target).sub(c.eye).normalize();
-		Vector3f f1 = new Vector3f(p.target).sub(c.eye).normalize();
-		org.joml.Quaternionf q = new org.joml.Quaternionf().rotationTo(f0, f1);
-		new org.joml.Quaternionf().slerp(q, w, q);
-		Vector3f f = q.transform(f0).normalize();
+		Vector3f f1 = new Vector3f(t).sub(c.eye).normalize();
+		org.joml.Quaternionf q0 = new org.joml.Quaternionf().lookAlong(f0, new Vector3f(0, 1, 0));
+		org.joml.Quaternionf q1 = new org.joml.Quaternionf().lookAlong(f1, overUp);
+		org.joml.Quaternionf q = q0.slerp(q1, w, new org.joml.Quaternionf()).conjugate(); // 뷰 회전 → 카메라 회전
+		Vector3f f = q.transform(new Vector3f(0, 0, -1)).normalize();
+		q.transform(c.up.set(0, 1, 0)).normalize();
 		c.target.set(c.eye).add(f.mul(Math.max(1, p.dist)));
 	}
 
+	/**
+	 * 카메라 대상 T. ① 영웅 대상 슬롯 (0x1DCC20: 오프셋 (0, 1.5·16, 0), 반지름 +0x40 = 1.6) 은 매 프레임 0x1F4380 이 원하는 자리에서
+	 * 반지름 밖으로 벗어난 만큼만 끌려온다 (끈 1.6 — ×16 아님). ② CAM 0x800/0x4000 (0x1F3874 → 0x1F2850, 상태별 +0x58 단계 / +0x5C 오프셋 / +0x60 이륙 높이):
+	 * 공중 (영웅 +0x174 &amp; 0x4C, 날기 0x40 제외) 첫 프레임에 이륙 높이 = 직전 T 높이, 공중 동안 오프셋 = max(0, T.y − 이륙 높이) — T 는 이륙 높이 위로 오르지 않고
+	 * 아래로는 따라 내려간다. 착지 프레임에 같은 식으로 오프셋 (더 낮은 곳이면 0) 을 잡고, 그 뒤 프레임당 ×0.9 로 푼다 (0x1F2968).
+	 * [미해석: 영웅 +0x2D8 bit 0x8 — 0x800 카메라는 그 비트가 서면 ×0.95 로 풀고, 0x4000 만 있는 카메라는 그 비트가 있어야 고정. 엔진은 둘 다 0x800 처럼]
+	 */
 	private Vector3f target(Vector3f hero, boolean airborne) {
-		Vector3f t = new Vector3f(hero.x, hero.y + TARGET_HEIGHT, hero.z);
-		if (!airborne || Float.isNaN(groundY)) {
-			// 착지: 고정해 둔 높이 차를 프레임당 ×0.9 로 풀어 준다 (0x1F2968)
-			jumpOffset *= 0.9f;
-			groundY = hero.y;
+		desired.set(hero.x, hero.y + TARGET_HEIGHT, hero.z);
+		float d = slotInit ? desired.distance(slotPos) : 0;
+		if (!slotInit) {
+			slotPos.set(desired);
+			slotInit = true;
+		} else if (d > SLOT_RADIUS) {
+			slotPos.lerp(desired, (d - SLOT_RADIUS) / d);
+		}
+		Vector3f t = new Vector3f(slotPos);
+		if (!holdJump()) {
+			lastT.set(t);
+			return t;
+		}
+		if (airborne) {
+			if (jumpMode == 0) {
+				jumpMode = 1;
+				jumpGround = lastT.y;
+			}
+			jumpOffset = Math.max(0, t.y - jumpGround);
+		} else if (jumpMode != 0) {
+			jumpOffset = Math.max(0, t.y - jumpGround);
+			jumpMode = 0;
 		} else {
-			jumpOffset = groundY - hero.y;
+			jumpOffset *= 0.9f;
 		}
-		if (holdJump()) {
-			t.y += jumpOffset;
-		}
+		t.y -= jumpOffset;
+		lastT.set(t);
 		return t;
 	}
+
+	/** 영웅 대상 슬롯 반지름 (0x1DCC20 +0x40 = 1.6). */
+	static final float SLOT_RADIUS = 1.6f;
+	private final Vector3f desired = new Vector3f(), slotPos = new Vector3f(), lastT = new Vector3f();
+	private boolean slotInit;
+	private int jumpMode;
+	private float jumpGround;
 
 	private boolean holdJump() {
 		Shot s = shots.isEmpty() ? null : shots.getLast();
@@ -779,6 +875,16 @@ public final class CameraRig {
 			shots.clear();
 		}
 		shots.add(s);
+		cut = curShot != null && s.blend <= CUT_TIME; // 0x1EF310: 전환 ≤ 0.1초 → 영웅 입력 기준 유지 0x1DCE80
+	}
+
+	/** 0x29E15C: 이 이하 전환 시간은 컷 (입력 기준 유지). */
+	static final float CUT_TIME = 0.1f;
+	private boolean cut;
+
+	/** 마지막 {@link #update} 의 선택이 컷이었는지 (리셋 첫 선택 제외) — GameScene 이 입력 기준 유지에 쓴다 (30 문서 §9.1). */
+	public boolean cutThisTick() {
+		return cut;
 	}
 
 	private static CameraDef.Transition transition(LevelData.PlacedCamera c, String from) {
@@ -815,7 +921,9 @@ public final class CameraRig {
 	}
 
 	private void solveShot(Shot s, Vector3f t, float heroYaw, float dt) {
-		t = multiTarget(s, t);
+		if (!overActive) {
+			t = multiTarget(s, t);
+		}
 		Pose p = s.pose;
 		if (s.cam == null) {
 			followSolve(s, t, heroYaw, dt);
@@ -1173,16 +1281,66 @@ public final class CameraRig {
 
 	// ---- 보간 / 각도 ----
 
-	/** 상태 보간: 3차 Hermite(속도 0) = smoothstep, 각은 최단 방향 (0x1F3C90). */
+	/**
+	 * 상태 보간 0x1F3C90 (상태 +0x70..+0xEC 32 개 값마다 0x1F3BC0 3차 Hermite(p0, v0, p1, v1, s), s = 경과/전환 시간 그대로).
+	 * 속도 = (값 − 직전 프레임 값 +0xF0..)·60. 상태 갱신 0x1F3768 끝이 직전 값 = 지금 값으로 복사하므로 카메라 상태의 속도는 0 —
+	 * 0 이 아닌 것은 앞 보간 결과 (관리자 +0x10: 직전 값 = 결과 − 도함수/60) 뿐이다. 즉 상태 둘이면 smoothstep, 전환 중에 또 전환이 오면
+	 * 앞 보간의 도함수 dp/ds 가 v0 로 들어간다. 요 (+0x80) 만 ±180 감김 (도함수도). va / vout = 도함수 (null = 0).
+	 */
+	static void blend(Pose a, Pose va, Pose b, float s, Pose out, Pose vout) {
+		float s2 = s * s, s3 = s2 * s;
+		float h00 = 2 * s3 - 3 * s2 + 1, h10 = s3 - 2 * s2 + s, h01 = -2 * s3 + 3 * s2;
+		float d00 = 6 * s2 - 6 * s, d10 = 3 * s2 - 4 * s + 1, d01 = -6 * s2 + 6 * s;
+		float by = a.yaw + wrap180(b.yaw - a.yaw);
+		Pose v = va != null ? va : ZERO;
+		float[] p0 = {a.target.x, a.target.y, a.target.z, a.yaw, a.pitch, a.dist, a.fovDeg, a.sa, a.sb};
+		float[] v0 = {v.target.x, v.target.y, v.target.z, v.yaw, v.pitch, v.dist, v.fovDeg, v.sa, v.sb};
+		float[] p1 = {b.target.x, b.target.y, b.target.z, by, b.pitch, b.dist, b.fovDeg, b.sa, b.sb};
+		float[] r = new float[9], dr = new float[9];
+		for (int i = 0; i < 9; i++) {
+			r[i] = h00 * p0[i] + h10 * v0[i] + h01 * p1[i];
+			dr[i] = d00 * p0[i] + d10 * v0[i] + d01 * p1[i];
+		}
+		out.target.set(r[0], r[1], r[2]);
+		out.yaw = wrap180(r[3]);
+		out.pitch = r[4];
+		out.dist = r[5];
+		out.fovDeg = r[6];
+		out.sa = r[7];
+		out.sb = r[8];
+		if (vout != null) {
+			vout.target.set(dr[0], dr[1], dr[2]);
+			vout.yaw = dr[3];
+			vout.pitch = dr[4];
+			vout.dist = dr[5];
+			vout.fovDeg = dr[6];
+			vout.sa = dr[7];
+			vout.sb = dr[8];
+		}
+	}
+
+	/** 두 상태 smoothstep (속도 0 Hermite). */
 	static void blend(Pose a, Pose b, float s, Pose out) {
-		float h = s * s * (3 - 2 * s);
-		out.target.set(a.target).lerp(b.target, h);
-		out.yaw = a.yaw + wrap180(b.yaw - a.yaw) * h;
-		out.pitch = a.pitch + (b.pitch - a.pitch) * h;
-		out.dist = a.dist + (b.dist - a.dist) * h;
-		out.fovDeg = a.fovDeg + (b.fovDeg - a.fovDeg) * h;
-		out.sa = a.sa + (b.sa - a.sa) * h;
-		out.sb = a.sb + (b.sb - a.sb) * h;
+		blend(a, null, b, s, out, null);
+	}
+
+	private static final Pose ZERO = zeroPose();
+
+	private static Pose zeroPose() {
+		Pose z = new Pose();
+		z.fovDeg = 0;
+		return z;
+	}
+
+	/** 렌더 보간 (틱 사이, 원작에 없음): 선형 — smoothstep 이면 틱마다 가감속이 생겨 렌더 주기 &gt; 60Hz 에서 움직임이 떨린다. */
+	static void lerp(Pose a, Pose b, float s, Pose out) {
+		out.target.set(a.target).lerp(b.target, s);
+		out.yaw = a.yaw + wrap180(b.yaw - a.yaw) * s;
+		out.pitch = a.pitch + (b.pitch - a.pitch) * s;
+		out.dist = a.dist + (b.dist - a.dist) * s;
+		out.fovDeg = a.fovDeg + (b.fovDeg - a.fovDeg) * s;
+		out.sa = a.sa + (b.sa - a.sa) * s;
+		out.sb = a.sb + (b.sb - a.sb) * s;
 	}
 
 	/** 원작 FOV(라디안, 4:3 가로) → 세로 FOV(도): 세로 반폭 = tan(f/2)·0.75 (0x1F2AC4) [추정]. */

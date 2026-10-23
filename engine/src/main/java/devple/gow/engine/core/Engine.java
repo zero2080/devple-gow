@@ -41,6 +41,8 @@ public final class Engine implements AutoCloseable {
 	private static final Path RECORD = System.getProperty("gow.record") != null ? Path.of(System.getProperty("gow.record")) : null;
 	private static final int RECORD_EVERY = Integer.getInteger("gow.record.every", 2);
 	private static final long RECORD_END = (long) (Float.parseFloat(System.getProperty("gow.record.secs", "0")) * 60);
+	/** -Dgow.record.from=초: 그 전 틱은 기록하지 않는다 (긴 자동 플레이의 한 구간만). */
+	private static final long RECORD_FROM = (long) (Float.parseFloat(System.getProperty("gow.record.from", "0")) * 60);
 	private int recorded;
 
 	public void run(Scene first) {
@@ -68,7 +70,7 @@ public final class Engine implements AutoCloseable {
 			renderer.beginFrame();
 			scenes.render(this, (float) (acc / TICK));
 			renderer.endFrame(scenes.fade());
-			if (RECORD != null && ticks % RECORD_EVERY == 0) {
+			if (RECORD != null && ticks >= RECORD_FROM && ticks % RECORD_EVERY == 0) {
 				record();
 			}
 			if (++frames == captureFrame || (captureTick > 0 && ticks >= captureTick && captureFile != null)) {

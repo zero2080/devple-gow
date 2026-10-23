@@ -111,6 +111,9 @@ public final class GameScene implements Scene {
 	private final Vector3f checkpoint = new Vector3f();
 	private float spawnYaw;
 	private float camYaw;
+	/** 영웅 입력 기준 (카메라 컷 뒤 스틱 방향 유지, 원작 0x1DCE80 / 0x1DD1E8 — 30 문서 §9.1). */
+	private final devple.gow.engine.input.InputFrame inputFrame = new devple.gow.engine.input.InputFrame();
+	private boolean wasIdle;
 	private boolean paused;
 	/** 파워업(업그레이드) 메뉴 열림: 메뉴 스크립트가 투자를 처리하므로 HUD 값 쓰기를 멈춘다. */
 	private boolean powerUp;
@@ -1533,6 +1536,7 @@ public final class GameScene implements Scene {
 		f.combat().onSound((h, p) -> session.sound.play(h, p));
 		if (magicFx != null) {
 			magicFx.addWad(kind.assets()); // 적 WAD 의 이펙트 GO·PlayFX/MFX 템플릿 (40 문서 §9)
+			combatCamera().addWad(kind.assets().wad()); // 처형 카메라 act (ANM_camera 외부 그룹 MaiCy2 / MaiMin …)
 			magicFx.bind(f.combat(), devple.gow.engine.fx.MagicFx.joints(f), false); // 적 기술 PlayFX·적중 피 (40 문서)
 		}
 		f.setIncomingScale(hero::incomingScale);
@@ -2017,6 +2021,9 @@ public final class GameScene implements Scene {
 
 	/** 카메라 흔들림 (이벤트 5) · 전역 시간 배율 (이벤트 7: 0x337C1C 남은 시간 (실시간), 0x337C20 배율). */
 	private final devple.gow.engine.render.CameraShake shake = new devple.gow.engine.render.CameraShake();
+	private int shakeSerial;
+	/** 전투 카메라 이벤트 23 (처형 클로즈업 goCamera, 30 문서 §9.3). */
+	private devple.gow.engine.combat.CombatCamera combatCam;
 	private float warpTimer, warpScale = 1;
 
 	/** 전투원의 흔들림·전역 시간 이벤트를 장면에 연결 (0x206030: 영웅이든 적이든). */
@@ -2171,7 +2178,7 @@ public final class GameScene implements Scene {
 		}
 		EnemyFighter target = nearestEnemy();
 		if (bot != null) {
-			bot.steer(hero.ctl.position, target != null ? target.pos : null, camYaw, dt);
+			bot.steer(hero.ctl.position, target != null ? target.pos : null, inputFrame.yaw(camYaw), dt);
 			in = bot;
 		}
 		if (auto != null) {
@@ -2194,8 +2201,8 @@ public final class GameScene implements Scene {
 			auto.grabCue = enemies.stream().map(Enemy::fighter).anyMatch(f -> !f.dead() && f.maxHp() >= 32767
 					&& f.combat().stanceTag() >= 0 && f.pos.distance(hero.ctl.position) < 120);
 			auto.grabTarget = at != null && at.maxHp() < 32767 && waitsForGrab(at);
-			in = obj != null ? auto.reach(hero.ctl.position, obj, camYaw, dt)
-					: auto.steer(hero.ctl.position, at != null && at.maxHp() < 32767 ? aimPoint(at) : null, boss != null, camYaw, dt);
+			in = obj != null ? auto.reach(hero.ctl.position, obj, inputFrame.yaw(camYaw), dt)
+					: auto.steer(hero.ctl.position, at != null && at.maxHp() < 32767 ? aimPoint(at) : null, boss != null, inputFrame.yaw(camYaw), dt);
 			if (auto.done()) {
 				e.window().requestClose();
 			}
@@ -2214,11 +2221,22 @@ public final class GameScene implements Scene {
 			};
 		}
 		bodyTick++;
+		// 입력 기준 = 지금 카메라, 단 컷 뒤 스틱을 같은 쪽으로 밀고 있으면 컷 전 카메라 (0x1DD1E8). 전역 정지가 풀리면 유지 지우고 2 번의 선택 동안 컷 무시 (0x1BF080 → 0x1EF2F0(2))
+		boolean idleNow = globalIdle();
+		if (wasIdle && !idleNow) {
+			inputFrame.release(2);
+		}
+		wasIdle = idleNow;
+		float inYaw = inputFrame.update(camYaw, in.leftX(), in.leftY());
+		if (System.getProperty("gow.debug.inyaw") != null && bodyTick % 30 == 0) {
+			System.out.printf(java.util.Locale.ROOT, "[입력] t=%.1f stick (%.2f, %.2f) cam %.1f ref %.1f hold %d grab %s idle %s%n", time, in.leftX(), in.leftY(),
+					Math.toDegrees(camYaw), Math.toDegrees(inYaw), inputFrame.hold(), grab.active(), globalIdle());
+		}
 		if (!grab.active()) {
 			hero.combat.setTarget(target);
-			heroAim = selectHeroTarget(in, camYaw);
+			heroAim = selectHeroTarget(in, inYaw); // 스틱 월드 방향 = 입력 기준 (컷 뒤 유지 포함)
 			hero.autoAim = true;
-			hero.update(in, camYaw, dt, heroAim != null ? aimCenter(heroAim) : null);
+			hero.update(in, inYaw, dt, heroAim != null ? aimCenter(heroAim) : null);
 			if (boss == null || !boss.heroLocked()) {
 				physics(dt);
 			}
@@ -2270,9 +2288,20 @@ public final class GameScene implements Scene {
 			}
 		}
 		breakables.update(hero.combat, world, this::onBreak);
+		combatCameraTick();
 		cameraRig.setHeroState(heroStateBits(), enemies.stream().anyMatch(en -> !en.fighter().dead() && en.fighter().brain() != null
 				&& en.fighter().brain().state() == devple.gow.engine.combat.AiBrain.State.COMBAT));
 		cameraRig.update(dt, p, hero.ctl.yaw, !hero.ctl.grounded);
+		inputFrame.selected(cameraRig.cutThisTick() && !globalIdle()); // 0x1EF310 → 0x1DCE80 (전역 정지 0x1BF108 중엔 없음)
+		var sr = session.sound.shakeRequest(); // SND_SHAKE_* (DPMS 0x16 모터 1) → 0x228C70: 새 id 면 0x1F09C8 (진행 중이면 무시) + 배율 0x1F0A28 (30 문서 §9.2)
+		if (sr != null && sr.serial() != shakeSerial) {
+			shakeSerial = sr.serial();
+			shake.start(orbTweaks, sr.template());
+			shake.scale(sr.scale());
+			if (System.getProperty("gow.debug.cam") != null) {
+				System.out.printf(java.util.Locale.ROOT, "[흔들림] 소리 템플릿 %d 배율 %.2f t=%.1f%n", sr.template(), sr.scale(), time);
+			}
+		}
 		shake.update(dt, cam);
 		session.sound.setUnderwater(cameraRig.underwater()); // 수중 카메라 → 소리 수중 처리 (29 문서 §10)
 		world.tick(dt, p.x, p.y, p.z);
@@ -2552,6 +2581,47 @@ public final class GameScene implements Scene {
 	}
 
 	/** 이펙트 연결 (40/41 문서): 레벨·적 WAD 이펙트 GO, SEM 소리 → SoundManager, 충돌 질의. */
+	private devple.gow.engine.combat.CombatCamera combatCamera() {
+		if (combatCam == null) {
+			combatCam = new devple.gow.engine.combat.CombatCamera(session.rom == null ? null
+					: devple.gow.tools.content.Content.file(session.rom, devple.gow.tools.content.Region.of(session.rom).perm()));
+		}
+		return combatCam;
+	}
+
+	/**
+	 * 이벤트 23 창이 있는 전투원 (영웅 → 적 순, 먼저 잡은 쪽 유지) 의 goCamera — 몸 회전 (0x205280) 과 카메라 덮어쓰기 (0x1F46D0).
+	 */
+	private void combatCameraTick() {
+		if (System.getProperty("gow.nocombatcam") != null) {
+			return; // 비교용: 이벤트 23 전투 카메라 끔
+		}
+		var cc = combatCamera();
+		float w = cameraRig.combatWeight();
+		float[] y = {hero.ctl.yaw};
+		boolean on = cc.update(hero, hero.combat, hero.ctl.position, y, hero.ctl.animator(), 1f, cam.eye, w);
+		hero.ctl.yaw = y[0];
+		for (Enemy en : enemies) {
+			if (on) {
+				break;
+			}
+			EnemyFighter ef = en.fighter();
+			y[0] = ef.yaw;
+			on = cc.update(ef, ef.combat(), ef.pos, y, ef.animator(), ef.scale, cam.eye, w);
+			ef.yaw = y[0];
+		}
+		if (!on && cc.owner() != null) {
+			cc.clear(); // 잡은 전투원이 사라짐
+		}
+		var f = on ? cc.frame() : null;
+		if (f != null) {
+			cameraRig.combatCamera(f.aim(), f.radius(), f.up());
+			if (System.getProperty("gow.debug.cam") != null && (time % 0.5f) < 1 / 60f) {
+				System.out.printf(java.util.Locale.ROOT, "[전투 카메라] %s w=%.2f aim=%s R=%.1f%n", cc.actName(), w, f.aim(), f.radius());
+			}
+		}
+	}
+
 	private void wireEffects() {
 		magicFx.addWad(level.assets());
 		kinds.values().stream().filter(k -> k != null).forEach(k -> magicFx.addWad(k.assets()));

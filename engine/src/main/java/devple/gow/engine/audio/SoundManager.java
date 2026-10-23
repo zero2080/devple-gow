@@ -94,6 +94,31 @@ public final class SoundManager implements AutoCloseable {
 	private BiConsumer<Integer, Integer> rumble = (motor, value) -> {
 	};
 
+	/**
+	 * 카메라 흔들림 요청 (DPMS cmd 0x16 모터 1). 원작은 IOP 가 상태 버퍼 0x29CAF0 (0x280 바이트, 0x1389D0 이 IOP 에 넘김) +0x25C 에 {id, 값, 템플릿, 재생 중} 을 쓰고
+	 * 매 프레임 작업 0x228C70 이 id 가 바뀌면 0x1F09C8(템플릿) 으로 흔들림을 시작, 배율 +0x958 = 값/1024 (0x1F0A28) — 모터 0 (+0x24C) 은 패드 진동 (값·100/1024 %).
+	 * serial = 새 요청마다 1 증가, scale = 그 소리의 이번 들림 크기 (핸들러·소리 볼륨 × 거리 감쇠 — 백엔드와 같은 선형 [near, far]) [추정: IOP 가 보내는 값 = 보이스 볼륨].
+	 */
+	public record ShakeRequest(int serial, int template, float scale) {
+	}
+
+	private SoundInstance shakeInst;
+	private int shakeSerial, shakeTemplate;
+
+	/** 마지막 흔들림 요청 (없으면 null). SEM 이미터 범위가 재생 뒤에 정해지므로 크기는 물을 때 계산한다. */
+	public ShakeRequest shakeRequest() {
+		if (shakeInst == null) {
+			return null;
+		}
+		SoundInstance i = shakeInst;
+		float g = i.vol / 127f * i.sound.vol() / 127f;
+		if (i.pos != null) {
+			float d = i.pos.distance(listener);
+			g *= d <= i.near ? 1 : d >= i.far ? 0 : 1 - (d - i.near) / Math.max(1e-3f, i.far - i.near);
+		}
+		return new ShakeRequest(shakeSerial, shakeTemplate, Math.max(0, Math.min(1, g)));
+	}
+
 	public SoundManager(AudioBackend backend, Path romDir, long seed) {
 		this.backend = backend;
 		this.romDir = romDir;
@@ -531,6 +556,11 @@ public final class SoundManager implements AutoCloseable {
 		}
 		if (p.command() == 0x16) {
 			rumble.accept(p.arg0(), p.arg1());
+			if (p.arg0() == 1) { // 모터 1 = 카메라 흔들림 채널 (SND_SHAKE_SMALL/MEDIUM/BIG/HUGE/SPECIAL → 템플릿 1/2/3/4/500)
+				shakeInst = in;
+				shakeTemplate = p.arg1();
+				shakeSerial++;
+			}
 			return 0;
 		}
 		if (p.command() != 0) {
