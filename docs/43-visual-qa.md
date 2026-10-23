@@ -806,7 +806,7 @@ BMI PAND03G (보스 등장 조건 미충족), 분신 크라토스 ATHN08B (가�
   (R_MI2/4/5/F → 50, R_SKA·SK2–5 → 20/22/26, R_SKB 24 → 25, R_HA2/HAF → 70, 시민 301·313 → 280, 아기 히드라 258 → 253, 분신 667–669 → 666 …, 10 §2.3). 수정 뒤 같은 실행에서
   R_MI2 5 마리가 400 → 401 → 402 MAIMIN03 으로 처형되고 (240 초) 오브가 마리당 40 오른다 (`GrabTest.armoredMinotaurExecution`, `EnemyFactoryTest.combatClassIsTemplateClassField`).
   같은 자리 (-1168, 1023, -272) 생성기가 죽을 때마다 두 마리씩 다시 낸다 — 미노타우로스 발판 퍼즐 (`gominopressureplate`·`goinstantminodeath`) 용으로 보이나 원작 대조 안 함 [미확인].
-  `-Dgow.debug` 적 줄에 HP·기술·무적·잡기 가능, `-Dgow.debug.combat` 은 영웅·적 기술/적중 기록.
+  `-Dgow.debug` 적 줄에 HP·기술·무적·잡기 가능, `-Dgow.debug.combat` 은 영웅·적 기술/적중 기록. `-Dgow.debug.script` 은 발동한 스크립트 엔티티 (시각·이름·보낸 쪽).
 - **선창 히드라가 뒤집힘 / ○ 마무리가 안 잡힘** (ATHN01B 첫 히드라, 사용자 플레이 보고): 매달린 BHAenc1* 클립을 Z 축 180° 로 세워 머리 등이 아래였다 → 옆축 50.7° 들어 올림.
   ○ 는 넉백으로 뿌리가 84 밀려 기절 머리가 손에 안 닿고, GRAB 의 HIT_CONFIRM 이 플래그 0x4000 (원작 = 자세 태그 부정, 엔진 = 무시) 때문에 GRABREJECT 와 동점,
   830 중 사망 뒤 150 (길막 치우는 DetectDeath) 이 안 나왔다 (원작 매 프레임 EV_DEATH 재검사 0x209024) — 37 §4.3. 봇: ○ → 830 → 150 → goplayerblock → 다음 구역.

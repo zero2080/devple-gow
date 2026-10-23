@@ -64,6 +64,17 @@ public final class MedusaQueenFight extends BossFight {
 		f.brain().engage();
 	}
 
+	/**
+	 * 메두사 여왕은 일반 Enemy1 (AI1 062, Sold 062) — 벽 충돌이 있는 공용 내비게이션을 탄다. 예전에는 보스라서 세계가 없어 (벽 없음) 회피·꼬리치기
+	 * 루트 모션과 걷기로 방 기둥 벽 (ATHN02C 시트 x ≈ −887, GeneralGuide · NoPlayerCollision = 적만 막는 면) 을 뚫고 x −785 까지 나갔고,
+	 * 그 자리에서 머리를 뜯으면 MedusaRipZone-pCube3661 (x −1280..−864, z 1856..2176) 밖이라 EventCombat1 (모드 2 = 보낸 쪽이 볼륨 안,
+	 * 0x1AAE48 → 0x1A62B8 접촉 목록) 이 안 걸려 메시지 141·마법 보상·미노타우로스가 나오지 않았다.
+	 */
+	@Override
+	public boolean usesNavWorld() {
+		return true;
+	}
+
 	/** 메두사 여왕의 잡기는 일반 GrabSync(MAI* 같은 이름 애니)가 맡는다. */
 	@Override
 	public boolean claimsGrab(EnemyFighter target) {

@@ -61,6 +61,8 @@ public class ScriptHost extends GameScriptHost {
 		this.flow = main.flow;
 		this.player = main.player;
 		this.initedGlobals = main.initedGlobals;
+		this.players = () -> main.players.get(); // 이웃 레벨 스크립트도 같은 플레이어·난이도
+		this.difficulty = () -> main.difficulty.getAsInt();
 	}
 
 	/**

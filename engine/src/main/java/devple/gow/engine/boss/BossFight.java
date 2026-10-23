@@ -319,6 +319,15 @@ public abstract class BossFight {
 		return sync != null && sync.active();
 	}
 
+	/**
+	 * 이 보스 개체에 일반 적과 같은 공용 내비게이션 세계 (바닥·중력·벽 — {@link devple.gow.engine.combat.EnemyNav}) 를 붙이는지.
+	 * 기본 false: 제자리 히드라·아레스·BMI 는 전용 배치라 예전 그대로 (세계 없음 = 바닥 높이 유지, 벽 없음).
+	 * 일반 Enemy1 인 보스 (메두사 여왕) 는 true — 원작도 같은 이동 단계 0x1EA5F0 (벽 0x1E2100 · 이동 선분 0x1EAB78) 를 탄다.
+	 */
+	public boolean usesNavWorld() {
+		return false;
+	}
+
 	/** 이 적의 잡기/처형을 보스 동기({@link BossSync})가 맡는지 (GameScene 은 일반 GrabSync 를 건너뜀). */
 	public boolean claimsGrab(EnemyFighter target) {
 		return sync != null && target == boss;

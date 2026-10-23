@@ -37,7 +37,11 @@ public class GameScriptHost implements EscHost {
 		this.flow = flow;
 		this.player = player;
 		this.globalData = sharedGlobals;
+		this.players = () -> player;
 	}
+
+	/** Internal 플레이어 변수 (33..45) 의 대상 — 게임은 세션 플레이어를 넣는다 (호스트가 플레이어보다 먼저 생김). null = 없음 (헤드리스). */
+	public java.util.function.Supplier<PlayerState> players;
 
 	public void onMessage(BiConsumer<Integer, Float> l) {
 		onMessage = l;
@@ -108,12 +112,89 @@ public class GameScriptHost implements EscHost {
 	public java.util.function.IntSupplier difficulty = () -> 1;
 	public static final int VAR_DIFFICULTY = 48;
 
+	/**
+	 * Internal 플레이어 변수 (GameMgr 변수 getter 0x1AFE18 / setter 0x1AFFB0, 점프 표 0x2B5C10 / 0x2B5C80 — 번호 − 0x21) [확실: 디스어셈블]:
+	 * 33 HP (+0x178, 쓰기 = Entity_SetHP 0x1E1638 자르기) / 34 최대 HP (+0x17C) / 35 MP (0x30449C, 쓰기 = 0..최대 자르기) / 36 최대 MP
+	 * (0x304060 표 [MP 레벨 0x3044B7] +0x14) / 37 아이템 9 · 38..42 아이템 3..7 보유 (0x3044C2 비트 1 &lt;&lt; (아이템 − 1); 쓰기 참 = AddItem
+	 * 0x1D8CF0 (아이템, 1), 거짓 = DeductItem 0x1D9168) / 44 · 45 고르곤의 눈 · 불사조 깃털 개수 (쓰기 = AddItem (값 − 지금)).
+	 * 예: ATHN02D MedusaRipZone-EventCombat1 "set_bool Internal:39 true; set_float Internal:35 ← Internal:36" = 메두사의 시선 (아이템 4) 획득 +
+	 * MP 가득. 예전 엔진은 Internal 변수 쓰기를 버려 머리를 뜯어도 L2 시선 마법이 생기지 않았다.
+	 */
+	public static final int VAR_HP = 33, VAR_MAX_HP = 34, VAR_MP = 35, VAR_MAX_MP = 36, VAR_ITEM9 = 37, VAR_ITEM3 = 38, VAR_ITEM7 = 42,
+			VAR_EYES = 44, VAR_FEATHERS = 45;
+
+	/** Internal 변수 번호 → 아이템 번호 (보유 플래그 변수 37..42), 아니면 −1. */
+	static int itemVar(int id) {
+		return id == VAR_ITEM9 ? 9 : id >= VAR_ITEM3 && id <= VAR_ITEM7 ? id - VAR_ITEM3 + 3 : -1;
+	}
+
+	private Object playerVar(int id) {
+		PlayerState player = players.get();
+		if (player == null) {
+			return null;
+		}
+		int item = itemVar(id);
+		if (item > 0) {
+			return (player.itemFlags & (1 << (item - 1))) != 0;
+		}
+		return switch (id) {
+			case VAR_HP -> player.hp;
+			case VAR_MAX_HP -> player.maxHp();
+			case VAR_MP -> player.mp;
+			case VAR_MAX_MP -> player.maxMp();
+			case VAR_EYES -> (float) player.gorgonEyes;
+			case VAR_FEATHERS -> (float) player.phoenixFeathers;
+			default -> null;
+		};
+	}
+
+	private boolean setPlayerVar(int id, Object value) {
+		PlayerState player = players.get();
+		if (player == null) {
+			return false;
+		}
+		int item = itemVar(id);
+		if (item > 0) {
+			if (EscVm.bool(value)) {
+				player.addItem(item, 1);
+			} else {
+				player.itemFlags &= ~(1 << (item - 1)); // DeductItem 0x1D9168 [근사: 보유 비트만]
+			}
+			return true;
+		}
+		switch (id) {
+			case VAR_HP -> player.hp = Math.max(0, Math.min(player.maxHp(), EscVm.f(value)));
+			case VAR_MP -> player.mp = Math.max(0, Math.min(player.maxMp(), EscVm.f(value)));
+			case VAR_EYES -> player.addItem(10, Math.max(0, Math.round(EscVm.f(value)) - player.gorgonEyes));
+			case VAR_FEATHERS -> player.addItem(11, Math.max(0, Math.round(EscVm.f(value)) - player.phoenixFeathers));
+			default -> {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	private static Object typed(Object v, int type) {
+		return switch (type) {
+			case 0 -> EscVm.f(v);
+			case 1 -> EscVm.i(v);
+			case 2 -> EscVm.bool(v);
+			default -> String.valueOf(v);
+		};
+	}
+
 	@Override
 	public Object getVar(EscContext ctx, int scope, int id, int type) {
 		if (scope == 1 && id == VAR_DIFFICULTY) {
 			// OLYMP02 PlayMovie-HistoryCredits0..3: DifficultyLevel == d → 0·1·2 "Bonus01", 3 (신) "Bonus24"
 			int d = difficulty.getAsInt();
 			return type == 0 ? (Object) (float) d : type == 2 ? (Object) (d != 0) : (Object) d;
+		}
+		if (scope == 1) {
+			Object pv = playerVar(id);
+			if (pv != null) {
+				return typed(pv, type);
+			}
 		}
 		Map<Integer, Object> m = scope == 2 ? globalData : scope == 3 ? levelData : null;
 		Object v = m == null ? null : m.get(id);
@@ -130,7 +211,9 @@ public class GameScriptHost implements EscHost {
 
 	@Override
 	public void setVar(EscContext ctx, int scope, int id, int type, Object value) {
-		if (scope == 2) {
+		if (scope == 1) {
+			setPlayerVar(id, value);
+		} else if (scope == 2) {
 			globalData.put(id, value);
 		} else if (scope == 3) {
 			levelData.put(id, value);

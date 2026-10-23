@@ -64,6 +64,12 @@ class MedusaQueenFightTest {
 	@Test
 	void healsBelowRatioThenGrabRipsHead() throws Exception {
 		BossRig r = spawned();
+		// 스크립트 Internal 33..45 (HP·MP·아이템) 대상 플레이어 — GameScene 은 영웅 PlayerState 를 넣는다
+		devple.gow.engine.game.PlayerState player = new devple.gow.engine.game.PlayerState(devple.gow.engine.game.GameRules.load(r.perm));
+		player.addItem(3, 1); // 포세이돈의 분노 (ATHN01 에서 이미 얻음) → MP 레벨 1
+		player.mp = 5;
+		r.host.players = () -> player;
+		assertFalse(player.owned(devple.gow.engine.game.Weapon.MEDUSA));
 		EnemyFighter b = r.fight.boss();
 		faceOff(r, 40);
 		// HP 비율 ≤ 0.975 → DTre "heal!" → 30 (SELF_HP −50)
@@ -90,6 +96,45 @@ class MedusaQueenFightTest {
 		r.run(7);
 		assertEquals(true, r.levelData(0), "LevelData0 (메두사 처치)");
 		assertTrue(r.bridge.log.contains("1035 26 260"), r.bridge.log.toString());
+		// 같은 EventCombat1: set_bool Internal:39 true = AddItem(4) 메두사의 시선 (0x1AFFB0 → 0x1B0088), Internal:35 ← Internal:36 = MP 가득
+		assertTrue(player.owned(devple.gow.engine.game.Weapon.MEDUSA), "메두사의 시선 획득");
+		assertEquals(devple.gow.engine.game.Weapon.MEDUSA, player.selectedMagic, "새 마법 선택");
+		assertEquals(player.maxMp(), player.mp, 1e-3, "MP 가득");
+		assertTrue(r.log.contains("message 141"), "메시지 141 메두사의 시선을 획득: " + r.log);
+	}
+
+	/**
+	 * 여왕은 일반 Enemy1 이라 공용 내비게이션 (벽) 을 탄다: 방 동쪽 기둥 벽 (ATHN02C 시트 x ≈ −887, GeneralGuide · NoPlayerCollision = 적만 막음) 에
+	 * 막혀 MedusaRipZone (x ≤ −864) 안에 남는다. 예전에는 보스라 세계가 없어 x −785 까지 걸어 나가, 거기서 머리를 뜯으면 EventCombat1
+	 * (모드 2 = 보낸 쪽이 볼륨 안) 이 걸리지 않아 메시지 141·보상·미노타우로스가 없었다 (자동 플레이 120 초).
+	 */
+	@Test
+	void queenStaysInsideTheRipZone() throws Exception {
+		BossRig r = spawned();
+		EnemyFighter b = r.fight.boss();
+		assertTrue(r.fight.usesNavWorld());
+		devple.gow.engine.level.LevelCollision host = new devple.gow.engine.level.LevelCollision(new devple.gow.tools.level.LevelData(
+				devple.gow.tools.wad.WadFile.load(BossRig.ROM.resolve("ATHN02C.WAD"))).sheets);
+		devple.gow.engine.nav.NavWorld nw = new devple.gow.engine.nav.NavWorld(r.col, host);
+		devple.gow.engine.script.ScriptEntity zone = r.world.entities().stream()
+				.filter(e -> e.name().equals("MedusaRipZone-pCube3661-EventCombat1")).findFirst().orElseThrow();
+		r.run(1);
+		b.combat().stop();
+		b.setNavWorld(devple.gow.engine.combat.EnemyNav.of(nw));
+		b.pos.set(-950, 960, 2030);
+		b.prevPos.set(b.pos);
+		for (int i = 0; i < 240; i++) {
+			b.steer(new org.joml.Vector3f(1, 0, 0), Float.NaN, 1 / 60f);
+		}
+		assertTrue(b.pos.x < -880 && b.pos.x > -900, "벽 앞에서 멈춤: " + b.pos);
+		assertFalse(zone.volume.regions(b.pos.x, b.pos.y + 20, b.pos.z).isEmpty(), "머리 뜯기 구역 안: " + b.pos);
+		// 대조: 세계 없음 (예전 보스) 이면 같은 스틱으로 벽을 지나 구역 밖으로
+		b.setNavWorld(null);
+		for (int i = 0; i < 240; i++) {
+			b.steer(new org.joml.Vector3f(1, 0, 0), Float.NaN, 1 / 60f);
+		}
+		assertTrue(b.pos.x > -864, "세계 없으면 벽을 지나감: " + b.pos);
+		assertTrue(zone.volume.regions(b.pos.x, b.pos.y + 20, b.pos.z).isEmpty());
 	}
 
 	/**

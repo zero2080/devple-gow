@@ -545,6 +545,7 @@ public final class GameScene implements Scene {
 			}
 		};
 		session.scriptHost.difficulty = () -> session.difficulty; // 스크립트 Internal 48 DifficultyLevel
+		session.scriptHost.players = () -> hero != null ? hero.player : session.player; // 스크립트 Internal 33..45 HP·MP·아이템 (메두사의 시선 획득 = Internal:39)
 		magicFx.bindHero(hero.combat, hero::jointWorld);
 		if (!preGodBlades) {
 			setGodBlades(magicFx, hero);
@@ -1502,7 +1503,7 @@ public final class GameScene implements Scene {
 		// 해골 ClimbSkellys: Z 축이 난간 바깥이라 523 SKSshipDismount 가 배 밖 아래에서 올라와 난간을 넘는다 (28 §7)
 		f.yaw = (float) Math.atan2(w[8], w[10]);
 		f.setDifficulty(session.difficulty);
-		if (bossKind == null && f.brain().tree != null && nav != null) {
+		if ((bossKind == null || boss.usesNavWorld()) && f.brain().tree != null && nav != null) {
 			f.setNavWorld(devple.gow.engine.combat.EnemyNav.of(nav.navWorld)); // 바닥·중력·벽·줄 이동 (32 문서 §적 자신의 벽·줄 이동)
 		}
 		f.setCrowd(() -> bodies); // 생물끼리 밀어내기 0x1E2DD8 — 보스도 (Sold +0x1C 비트 1·BMI Think 이면 자기는 밀지 않음)
@@ -2383,8 +2384,11 @@ public final class GameScene implements Scene {
 	 */
 	private static boolean waitsForGrab(EnemyFighter f) {
 		var m = f.combat().active() ? f.combat().move() : null;
+		// 분기의 잡기 조건도 맞아야 한다 (Combatant 분기 점수: 0x40 = 무시, 아니면 +0x1B8 잡기 가능 == 0x10). 메두사 여왕은 모든 기술에
+		// GRAB(200) → 260 MAIMEWGRAB (0x148212 = 잡기 원 필요) 이 있어, 예전 봇은 원이 뜨기 전부터 ○ 만 눌러 204 GRABREJECT 를 반복했다
 		return m != null && m.branches().stream().anyMatch(b -> b.input() == devple.gow.engine.combat.CombatInput.EV_HIT
-				&& b.matchB() == HERO_GRAB_TAG && b.target() >= 0);
+				&& b.matchB() == HERO_GRAB_TAG && b.target() >= 0
+				&& ((b.flags() & 0x40) != 0 || ((b.flags() & 0x10) != 0) == f.grabbable()));
 	}
 
 	/**

@@ -36,6 +36,7 @@ public final class ScriptWorld {
 	public static final int EVENT_FORCE = 1019;
 	/** 스폰 재생성 최소 지연 (원작 0x29D93C 플래그 → max(delay, 0.25)). */
 	static final float RESPAWN_MIN_DELAY = 0.25f;
+	static final boolean TRACE = System.getProperty("gow.debug.script") != null;
 
 	private record Pending(float time, long seq, ScriptEntity entity, ScriptActor sender) {
 	}
@@ -633,6 +634,9 @@ public final class ScriptWorld {
 	private void fire(ScriptEntity e, ScriptActor sender) {
 		if (!boolSlot(e, EntitySlots.DELAYED_ENABLE, true)) {
 			return;
+		}
+		if (TRACE) { // -Dgow.debug.script: 발동한 엔티티 기록 [엔진 전용 QA]
+			System.out.printf(java.util.Locale.ROOT, "[스크립트 %.2f] %s (%s)%n", time, e.name(), sender != null ? sender.name : "-");
 		}
 		slot(e, EntitySlots.ACTION_SLOT);
 		String dbg = String.valueOf(slot(e, EntitySlots.DEBUG));

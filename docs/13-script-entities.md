@@ -176,6 +176,23 @@ LoadCheck 는 bool 을 반환하지만 데이터에서는 EntrySensor 의 Action
 - 메시지 1 에서 Init1..N 실행 → 초기값. GlobalData 는 게임 전체에서 한 번 (`"%s re-inited with different value"`, `GlobalData_Set` 0x1AEE90).
 - 스코프 객체: 0 Entity `0x303D50` (vt 0x2BA338), 1 Internal `0x303D70` (vt 0x2BA308), 2 GlobalData `0x2FFE38`, 3 LevelData `0x301548` — 등록 순서 `0x1A6EC0`.
 
+### 7.1 Internal 변수 (GameMgr getter 0x1AFE18 / setter 0x1AFFB0, 점프 표 0x2B5C10 / 0x2B5C80, 번호 − 0x21) [확실]
+| 번호 | 읽기 | 쓰기 |
+|------|------|------|
+| 33 | 영웅 HP (+0x178) | Entity_SetHP 0x1E1638 (0..최대) |
+| 34 | 최대 HP (+0x17C) | – |
+| 35 | MP (0x30449C) | 0..최대 MP 로 자름 |
+| 36 | 최대 MP (0x304060 [MP 레벨 0x3044B7] +0x14) | – |
+| 37 / 38..42 | 아이템 9 / 3..7 보유 (0x3044C2 비트 1 << (아이템 − 1)) | 참 = AddItem 0x1D8CF0 (아이템, 1), 거짓 = DeductItem 0x1D9168 |
+| 43 | 0x3044A8 (u16) | 0x1DBE10 |
+| 44 / 45 / 57 | 아이템 10 / 11 / 14 개수 (0x1D9278) | AddItem (값 − 지금) |
+| 48 | 난이도 0x29DB54 | – |
+| 50 | 0x3044BD + 1 | 0x1B01A0 |
+
+예: ATHN02D `MedusaRipZone-pCube3661-EventCombat1` = `set_bool Internal:39 true` (메두사의 시선 획득) + `set_float Internal:35 ← Internal:36` (MP 가득).
+엔진 `GameScriptHost` 가 33..36·37..42·44·45 를 영웅 PlayerState 로 (게임: `GameScene` 이 `players` 를 넣음, 이웃 레벨 호스트도 같은 플레이어) —
+예전엔 Internal 변수 쓰기를 버려 머리를 뜯어도 시선 마법이 생기지 않았다. Internal 0x12 (함수) = 0x3044A4 실수 저장 (의미 미상).
+
 ## 8. 남은 일
 - SpawnEnemy 슬롯 0/1/5..8, TemplateId → 적 템플릿(`CLI_WYP_Site%d`, `0x1A4E88`) 대응.
 - Vis 속성 번호(0x1C/0x1E/0x27/0x11/0x1A/0x17 → 오브젝트 속성 `0x1B1398`)의 의미 (보임/충돌/AI …).
