@@ -262,6 +262,9 @@ public final class HeroRig implements AutoCloseable {
 	}
 
 	/** 한 틱: 전투 → (내비게이션 상태면 내비게이터, 기술 중이면 루트 모션, 아니면 이동) → 신 모드 → 히트 카운터. */
+	/** 원작 자동 조준 (0x2077A0) 사용 — 게임 장면만 (대상 = 0x1D9CB0 고르기). 시험 장면은 예전 근사. */
+	public boolean autoAim;
+
 	public void update(Input in, float camYaw, float dt, Vector3f aimTarget) {
 		boolean navActive = nav != null && nav.active();
 		if (!navActive) {
@@ -281,7 +284,7 @@ public final class HeroRig implements AutoCloseable {
 				ctl.jump(Math.hypot(in.leftX(), in.leftY()) > 0.3);
 			}
 			if (combat.active()) {
-				ctl.updateCombat(combat, in, camYaw, dt, aimTarget);
+				ctl.updateCombat(combat, in, camYaw, dt, aimTarget, autoAim);
 			} else {
 				ctl.update(in, camYaw, dt);
 			}

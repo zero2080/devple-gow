@@ -1548,6 +1548,9 @@ public final class GameScene implements Scene {
 		if (System.getProperty("gow.debug.combat") != null) {
 			int ai = kind.ai1();
 			f.combat().onLog(x -> System.out.printf("[적 %d %.2f] %s%n", ai, time, x));
+			if (System.getProperty("gow.debug.group") != null) {
+				f.brain().onLog(x -> System.out.printf("[AI %d %.2f] %s%n", System.identityHashCode(f) % 1000, time, x));
+			}
 		}
 		enemies.add(new Enemy(f, em, r.actor(), kind));
 		if (boss != null) {
@@ -2068,6 +2071,9 @@ public final class GameScene implements Scene {
 				}
 			}
 		}
+		if (System.getProperty("gow.debug.group") != null && ((int) (time * 60)) % 15 == 0) {
+			groupDebug();
+		}
 		if (globalIdle()) {
 			// 전역 정지 (Idle) 동안 HUD 리셋 (Progress_UpdateHud 0x1D71A0 → 0x1BA150(hud, 1)): 미터를 내리고 갱신하지 않는다 —
 			// ATHN01A 시작 연출 13 초 동안 HUD 없음, 조작이 풀리면 다시 올라온다
@@ -2210,7 +2216,9 @@ public final class GameScene implements Scene {
 		bodyTick++;
 		if (!grab.active()) {
 			hero.combat.setTarget(target);
-			hero.update(in, camYaw, dt, target != null ? target.pos : null);
+			heroAim = selectHeroTarget(in, camYaw);
+			hero.autoAim = true;
+			hero.update(in, camYaw, dt, heroAim != null ? aimCenter(heroAim) : null);
 			if (boss == null || !boss.heroLocked()) {
 				physics(dt);
 			}
@@ -2371,6 +2379,78 @@ public final class GameScene implements Scene {
 			}
 		}
 		return new Vector3f(best[0], best[1], best[2]);
+	}
+
+	/**
+	 * -Dgow.debug.group: 무리 전투 요약 (0.25 초마다) [엔진 전용 QA] — 전투 중 적 수, 토큰 보유, 공격 중 (비용 있는 공격 / 전체),
+	 * 대상 슬롯 예산·공격 슬롯 A/B, 적끼리 최소 거리, 영웅까지 거리 목록.
+	 */
+	private void groupDebug() {
+		int combat = 0, tok = 0, atk = 0, costed = 0;
+		float minPair = Float.MAX_VALUE;
+		StringBuilder ds = new StringBuilder();
+		devple.gow.engine.combat.AiTargets.Slot slot = null;
+		List<EnemyFighter> live = enemies.stream().map(Enemy::fighter).filter(f -> !f.dead() && f.brain() != null).toList();
+		for (EnemyFighter f : live) {
+			var b = f.brain();
+			if (b.state() != devple.gow.engine.combat.AiBrain.State.COMBAT) {
+				continue;
+			}
+			combat++;
+			slot = b.slot();
+			tok += b.hasToken() ? 1 : 0;
+			var a = b.currentAttack();
+			if (a != null) {
+				atk++;
+				costed += a.costA() + a.costB() > 0 ? 1 : 0;
+			}
+			ds.append(String.format(" %.0f%s%s", f.pos.distance(hero.ctl.position), b.hasToken() ? "T" : "",
+					a == null ? (f.combat().active() ? "m" : "") : a.costA() > 0 ? "A" : "a")); // m = 공격 아닌 기술 (피격 반응·잡힘 등)
+			for (EnemyFighter g : live) {
+				if (g != f && g.brain().state() == devple.gow.engine.combat.AiBrain.State.COMBAT) {
+					minPair = Math.min(minPair, (float) Math.hypot(f.pos.x - g.pos.x, f.pos.z - g.pos.z));
+				}
+			}
+		}
+		if (combat > 0) {
+			System.out.printf("[무리 %.2f] 전투 %d 토큰 %d 공격 %d(비용 %d) 예산 %d A %d B %d 최소간격 %.0f 거리%s%n", time, combat, tok, atk, costed,
+					slot != null ? slot.tokenBudget() : -1, slot != null ? slot.usedA() : -1, slot != null ? slot.usedB() : -1,
+					minPair == Float.MAX_VALUE ? -1 : minPair, ds);
+			if (((int) (time * 60)) % 300 == 0 && slot != null) {
+				System.out.print("[무리 지도]\n" + slot.grid.map(c -> live.stream().anyMatch(f -> f.brain().cell() == c)));
+			}
+			if (((int) (time * 60)) % 60 == 0) {
+				for (EnemyFighter f : live) {
+					var c = f.combat();
+					System.out.printf("[무리]   %s 기술 %s%n", f.brain().debugString(), c.active() ? c.move().id() + " " + c.clipName() : "-");
+				}
+			}
+		}
+	}
+
+	/** 영웅 대상 (combatant +0x80) — 자동 조준이 향하는 적 ({@link devple.gow.engine.combat.HeroTargeting}, 0x1D9CB0). */
+	private EnemyFighter heroAim;
+
+	/**
+	 * 영웅 대상 고르기 0x1D9CB0 — 스틱 방향 ±60° 안 |d|/c² 최소, 스틱 ≤ 0.8 이면 이전 대상 유지. 예전 엔진은 스틱과 무관하게 가장 가까운 적을
+	 * 대상으로 삼고 기술 시작 때만 즉시 돌았다 → 무리 속에서 스틱으로 다른 적을 고를 수 없었다.
+	 */
+	private EnemyFighter selectHeroTarget(Input in, float camYaw) {
+		Vector3f hp = hero.ctl.position;
+		java.util.List<EnemyFighter> cands = new ArrayList<>();
+		for (Enemy en : enemies) {
+			EnemyFighter f = en.fighter();
+			if (!f.dead() && !f.bodiless && aimCenter(f).distance(hp) <= devple.gow.engine.combat.HeroTargeting.RANGE + f.bodyRadius()) {
+				cands.add(f); // 구 질의 = 몸이 범위 구에 닿으면 후보 [근사: 몸 반경만큼 여유]
+			}
+		}
+		float[] st = devple.gow.engine.combat.HeroTargeting.stickWorld(in.leftX(), in.leftY(), camYaw);
+		return devple.gow.engine.combat.HeroTargeting.select(heroAim, cands, GameScene::aimCenter, hp, st[0], st[1]);
+	}
+
+	/** 생물 중심 (vslot 0xE8) ≈ 발 + 키 / 2 [근사]. */
+	private static Vector3f aimCenter(EnemyFighter f) {
+		return new Vector3f(f.pos).add(0, f.bodyHeight() * 0.5f, 0);
 	}
 
 	private EnemyFighter nearestEnemy() {

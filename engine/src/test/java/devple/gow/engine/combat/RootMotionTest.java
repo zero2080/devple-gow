@@ -130,6 +130,7 @@ class RootMotionTest {
 		Assumptions.assumeTrue(move >= 0 && best.length() > 10, "이동 공격 없음");
 		en.pos.set(0, 0, -600); // 영웅에서 멀리 (적중 없음)
 		en.yaw = 0.7f;
+		en.holdAi = true; // 기술 중 자동 조준 (0x2077A0 — 대상 쪽으로 10 %/프레임, 50 문서 §6) 이 방향을 바꾸지 않게 AI 정지 (루트 모션만 본다)
 		Vector3f p0 = new Vector3f(en.pos);
 		en.combat().forceMove(move);
 		ScriptedInput in = new ScriptedInput(0, List.of());

@@ -77,21 +77,44 @@ public final class HeroController implements NavBody {
 
 	/** @param target 자동 조준 대상 위치 (스틱 중립일 때 기술 시작 시 그쪽으로 회전), null 이면 없음 */
 	public void updateCombat(Combatant c, Input in, float camYaw, float dt, Vector3f target) {
+		updateCombat(c, in, camYaw, dt, target, false);
+	}
+
+	/**
+	 * @param target  영웅 대상 (combatant +0x80, 고르기 0x1D9CB0) 위치 — null 이면 없음
+	 * @param autoAim true = 원작 자동 조준 0x2077A0: 기술 시작에 스틱 방향 즉시 회전 [근사: 시작 회전 출처 미확인] 뒤, 기술 중 매 프레임
+	 *                (FLAG_1 창 제외) 대상 쪽으로 남은 각의 10 % 씩 (Auto Aim Damping 0.1). 대상이 없으면 스틱 &gt; 0.8 일 때 스틱 방향으로 (0x207618).
+	 *                false = 예전 근사 (시작 때 스틱 아니면 대상 쪽으로 즉시) — 잡기 동기·헤드리스 보스 시험용.
+	 */
+	public void updateCombat(Combatant c, Input in, float camYaw, float dt, Vector3f target, boolean autoAim) {
 		prevPosition.set(position);
 		prevYaw = yaw;
 		if (c.hitPause() > 0) {
 			return;
 		}
 		Animation cur = anim.current();
+		float sx = in.leftX(), sy = in.leftY();
+		float mag = (float) Math.hypot(sx, sy);
 		if (cur != rootClip) {
 			rootClip = cur;
 			// 기술 시작 시 스틱 방향으로 즉시 회전 (원작 조작감)
-			float sx = in.leftX(), sy = in.leftY();
-			if (Math.hypot(sx, sy) > 0.3) {
+			if (mag > 0.3) {
 				yaw = camYaw + (float) Math.atan2(-sx, sy);
-			} else if (target != null && target.distance(position) < AUTO_AIM_RANGE) {
+			} else if (!autoAim && target != null && target.distance(position) < AUTO_AIM_RANGE) {
 				// 정면 -Z 기준: 방향 (dx, dz) → yaw = atan2(-dx, -dz)
 				yaw = (float) Math.atan2(-(target.x - position.x), -(target.z - position.z));
+			}
+		}
+		if (autoAim && !c.eventOn(15)) {
+			float want = Float.NaN;
+			if (target != null && (target.x - position.x) * (target.x - position.x) + (target.z - position.z) * (target.z - position.z) > 1e-4f) {
+				want = (float) Math.atan2(-(target.x - position.x), -(target.z - position.z));
+			} else if (target == null && mag > 0.8f) {
+				want = camYaw + (float) Math.atan2(-sx, sy);
+			}
+			if (!Float.isNaN(want)) {
+				float d = (float) Math.IEEEremainder(want - yaw, Math.PI * 2);
+				yaw += d * devple.gow.engine.combat.EnemyFighter.AUTO_AIM_DAMPING * Math.min(1f, dt * 60f);
 			}
 		}
 		anim.update(dt);

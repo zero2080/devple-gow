@@ -193,11 +193,13 @@ class AiBrainTest {
 		EnemyFactory.Kind k = kind("R_MIN.WAD");
 		for (int diff : new int[]{0, 1, 3}) {
 			EnemyFighter f = k.spawn();
-			f.pos.set(0, 0, -400);
-			Vector3f tp = new Vector3f();
-			Run r = run(f, tp, 30f, diff);
+			f.pos.set(16, 0, -384);
+			// 대상 = 32 격자 칸 중심 (16, 16): 격자 모서리 (0, 0) 에 서 있으면 대기 반경 칸 (중심 ±160) 이 대상에서 176.7 — 토큰 획득 거리
+			// (대기 반경 × 1.1 = 176) 밖이라 멈춘 대상 앞에서는 영영 도발만 한다 (원작 규칙 그대로의 경계 사례)
+			Vector3f tp = new Vector3f(16, 0, 16);
+			Run r = run(f, tp, 45f, diff); // 칸 = 반경 원 위 (0x20BFB0) + 선택 후 2 초 (0x22) — 첫 공격 ~11 초, AXECOMBO 가 길어 30 초에는 2 회
 			assertEquals(AiBrain.State.COMBAT, f.brain().state());
-			assertTrue(f.pos.distance(tp) < 120, "접근: " + f.pos.distance(tp));
+			// 접근 = 도끼 공격 자체 (DTre_050 거리 0..600 → 96 유닛 안에서만 고를 수 있다). 끝 시점 거리는 AXECOMBO 루트 모션으로 대상을 지나쳐 갈 수 있어 보지 않음
 			assertTrue(f.brain().hasToken(), "혼자면 토큰 보유");
 			List<float[]> axes = r.attacks().stream().filter(a -> a[2] == 10 || a[2] == 11).toList();
 			assertTrue(axes.size() >= 3, "도끼 공격 " + axes.size() + " (난이도 " + diff + ")");

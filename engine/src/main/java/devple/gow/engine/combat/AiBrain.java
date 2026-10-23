@@ -41,6 +41,21 @@ public final class AiBrain {
 	private java.util.function.IntUnaryOperator scriptSense = c -> 0;
 	/** 시선 가림 판정 (눈 → 대상 사이에 충돌면이 있으면 true, 원작 sub_0011E3E8). null 이면 검사 안 함. */
 	private java.util.function.BiPredicate<Vector3f, Vector3f> sightBlocked;
+	/** 생물 몸 목록 (영웅 + 모든 적 — 점유 비트 0x1E10E8). null 이면 같은 대상 AI 들 + 대상. */
+	private java.util.function.Supplier<? extends Iterable<? extends BodyPush.Body>> crowd;
+
+	public void setCrowd(java.util.function.Supplier<? extends Iterable<? extends BodyPush.Body>> c) {
+		crowd = c;
+	}
+
+	Vector3f selfPos() {
+		return self.pos;
+	}
+
+	float selfRadius() {
+		return self.bodyRadius();
+	}
+
 	/** 시선 높이 (발 위, 유닛) [추정]. */
 	static final float EYE = 48f;
 
@@ -206,6 +221,7 @@ public final class AiBrain {
 		if (slot.claimTick(this)) {
 			slot.history.observe(targetCombat);
 			slot.history.tick((int) ms);
+			slot.refresh(target, self.nav().world(), crowd != null ? crowd.get() : null); // 포위 격자 (대상 갱신 0x20B038 + 몸 점유 0x1E10E8)
 		}
 		float dist = dist(tp);
 		if (state != State.COMBAT) {
@@ -348,107 +364,172 @@ public final class AiBrain {
 		return m != null ? m.guard() : 0;
 	}
 
-	// ------------------------------------------------------------------ 포위 이동 (0x1CE2E0 / 0x1CD788)
+	// ------------------------------------------------------------------ 포위 이동 (0x1CE2E0 / 0x1CD788 / 0x1CD300)
 
+	/**
+	 * AI_CombatMove 0x1CE2E0 (AI Mode 0/3/4): 토큰 갱신 → 반경 = 토큰 보유 0x94 / 없음 0x96 (×16) → 격자 상자 (격자 중심 ±176) 안이면
+	 * 칸 판단 0x1CD788 + 칸으로 이동 0x1CD300, 밖이면 곧장 대상에게 (0x1CD2A0).
+	 */
 	private void surround(float dist, float ms) {
 		updateToken(dist);
-		Vector3f tp = target.position();
-		float box = (HALF + 0.5f) * CELL; // 0x1CE5E8: 칸 격자(11×11×32) 상자 ±176 밖이면 곧장 접근 (0x1CD2A0)
-		if (Math.abs(self.pos.x - tp.x) > box || Math.abs(self.pos.z - tp.z) > box) {
-			freeCell();
-			steer(tp, 1f);
+		if (self.nav().mode() == EnemyNav.Mode.ROPE) {
+			// 0x1CE428 → 0x1CDBF0: 줄 위 (+0x174 & 0x400) 는 격자 없이 대상 쪽 (내비 노드) 으로 줄 따라 이동 + 매 프레임 공격 시도 [확실: 흐름]
+			steer(target.position(), 1f);
+			tryAttack(dist);
+			return;
+		}
+		AiTargets.Grid g = slot.grid;
+		if (!g.inBox(self.pos)) {
+			steer(target.position(), 1f); // 0x1CD2A0 — 칸·타이머는 건드리지 않는다 (다시 들어오면 같은 칸 번호 = 격자를 따라 옮겨진 자리)
 			return;
 		}
 		float radius = (hasToken ? tmpl.tokenRadius : tmpl.waitRadius) * 16f;
-		if (cell < 0 || !cellFree(cell)) {
-			pickCell(radius);
+		cellThink(g, dist, radius, ms);
+		moveToCell(g, radius);
+	}
+
+	/**
+	 * 0x1CD788 칸 판단 [확실]:
+	 * <ol>
+	 *   <li>칸 없음 (0xFF) → 자기 칸에서 고르고 (0x20BA60) 타이머 0, 끝.</li>
+	 *   <li>칸 안 (칸 중심 ±16, 칸 높이 ≤ 자기 높이) 이면 도착 시간 (+0x76) 증가. 아니면: 토큰 보유·가까움 (거리 ≤ 0x78×16)·도착 시간 ≠ 0
+	 *       (= 칸에 있다가 밀려남) 이면 지금 선 칸을 새 칸으로, 아니면 칸이 벽·그림자일 때만 지금 칸으로. 도착 시간 0.</li>
+	 *   <li>시도 = 도착 시간 &gt; 0x20 또는 선택 후 시간 (+0x7A) &gt; 0x22 또는 거리 ≤ 0x74×16.</li>
+	 *   <li>토큰 없음: 거리 ≥ 0.75 × 대기 반경이면 공격 시도 (= 비용 0 도발) — 타이머를 되돌리지 않으므로 대기 반경에 선 적은 도발을 잇는다.
+	 *       토큰 없는 적은 여기서 칸을 다시 고르지 않는다 (0x24 "토큰 없을 때 재배치 시간" 은 이 경로에서 읽기만 하고 쓰지 않는다).</li>
+	 *   <li>토큰 보유: 공격 시도. 이어서 <b>멀 때만</b> (거리 &gt; 0x78×16): 성공이면 칸 해제·타이머 0, 실패이고 선택 후 ≥ 0x22 면 다시 고름.
+	 *       가까우면 칸·타이머 유지 → 공격 후 대기 (pause × 난이도) 가 끝나면 바로 다시 공격.</li>
+	 * </ol>
+	 */
+	private void cellThink(AiTargets.Grid g, float dist, float radius, float ms) {
+		if (cell < 0) {
+			pickCell(g, radius);
+			return;
 		}
-		Vector3f cp = cellPos(cell);
-		boolean atCell = Math.abs(self.pos.x - cp.x) <= 16f && Math.abs(self.pos.z - cp.z) <= 16f;
 		boolean farEnough = dist > tmpl.minRepickDist * 16f; // 0x1D3CC0
+		boolean atCell = inCell(g, cell);
 		sinceCellMs += ms;
 		if (atCell) {
 			atCellMs += ms;
 		} else {
-			atCellMs = 0; // 0x1CDA3C: 칸 밖이면 도착 타이머 0
+			if (hasToken && !farEnough && atCellMs != 0) {
+				cell = g.cellOf(self.pos); // 칸에 있다가 벗어남 → 선 자리를 칸으로 (0x1CDA30)
+			} else if (blockedOrShadow(g, cell)) {
+				cell = g.cellOf(self.pos);
+				log.accept("칸 벽/그림자 → 선 칸 " + cell);
+			}
+			atCellMs = 0;
 		}
 		boolean canTry = atCellMs > tmpl.dwellMs || sinceCellMs > tmpl.repickTokenMs
 				|| (tmpl.anyAttackDist >= 0 && dist <= tmpl.anyAttackDist * 16f);
-		if (canTry) {
-			if (!hasToken) {
-				if (tmpl.waitRadius * 16f * 0.75f <= dist && tryAttack(dist)) {
-					// 비용 0 행동(도발 등)만 가능. 원작은 여기서 칸 타이머를 되돌리지 않아 도발이 연달아 나올 수 있는데,
-					// 같은 자리에서 멈추지 않도록 칸 선택 후 경과만 0 으로 [근사]
-					sinceCellMs = 0;
-				}
-			} else if (tryAttack(dist)) {
-				freeCell();
-				return;
-			} else if (farEnough && sinceCellMs >= tmpl.repickTokenMs) {
-				pickCell(radius);
+		if (!canTry) {
+			return;
+		}
+		if (!hasToken) {
+			if (tmpl.waitRadius * 16f * 0.75f <= dist) {
+				tryAttack(dist);
 			}
+			return;
 		}
-		if (!hasToken && sinceCellMs >= tmpl.repickWaitMs && farEnough) {
-			pickCell(radius);
+		boolean ok = tryAttack(dist);
+		if (!farEnough) {
+			return;
 		}
-		if (!self.combat().active()) {
-			steer(cellPos(cell), tmpl.speedPct / 100f); // 칸 중심까지 (4 단위 안이면 정지)
+		if (ok) {
+			cell = -1;
+			atCellMs = sinceCellMs = 0;
+		} else if (sinceCellMs >= tmpl.repickTokenMs) {
+			pickCell(g, radius);
 		}
 	}
 
-	private Vector3f cellPos(int c) {
-		Vector3f tp = target.position();
-		int i = c / GRID - HALF, j = c % GRID - HALF;
-		return new Vector3f(tp.x + i * CELL, tp.y, tp.z + j * CELL); // 대상 중심 격자 (높이 = 대상, 0x20BFB0)
+	/** 자신이 벽에 붙음 — 벽 칸 판정 (바닥 없음) 을 쓰지 않는다: 원작 벽 칸 = AI 내비 노드 없음인데 그물·벽면 노드 유무를 알 수 없어 [근사]. */
+	private boolean onWall() {
+		return self.nav().mode() == EnemyNav.Mode.WALL;
 	}
 
-	private boolean cellFree(int c) {
-		Object o = slot.cells.get(c);
-		return o == null || o == this;
+	private boolean blockedOrShadow(AiTargets.Grid g, int c) {
+		return !onWall() && !wallsOff && g.blockedOrShadow(c);
+	}
+
+	/** 칸 안 (0x1CD8B0: 칸 중심 − 자기 의 위 성분 ≤ 0, 가로·세로 ±16). 높이는 1 단위 여유 [근사: 바닥 붙이기 오차]. */
+	private boolean inCell(AiTargets.Grid g, int c) {
+		Vector3f cp = g.cellPos(c, new Vector3f());
+		return cp.y - self.pos.y <= 1f && Math.abs(cp.x - self.pos.x) <= 16f && Math.abs(cp.z - self.pos.z) <= 16f;
 	}
 
 	/**
-	 * 칸 선택 (0x20BA60 → 0x20BFB0):
-	 * <ol>
-	 *   <li>막힌 칸 = 다른 적이 점유한 칸 + 대상 칸 + 벽 칸 (대상에서 시선이 막힌 칸 — 원작 +0x40 근사)</li>
-	 *   <li>자기 칸에서 4방향 flood fill → 도달 불가 칸도 제외 (자기 칸이 격자 밖이면 생략)</li>
-	 *   <li>대상 중심 ±반경 정사각형 안 균등 무작위 점 → 칸, 제외 칸이 아니면 채택. 최대 5번</li>
-	 *   <li>실패하면 121 칸 중 무작위, 막혔으면 대체 (원작 sub_00243B68 — 미상 → 자신에 가장 가까운 빈 칸 [근사])</li>
-	 * </ol>
+	 * 0x1CD300 칸으로 이동: 칸 없음 → 곧장 대상. 지금 칸이 벽·그림자면 칸 해제 + 곧장. 지금 칸 ≠ 목표 칸이면 A* (0x20C1B0) 다음 칸으로,
+	 * 경로가 없으면 (목표 칸에 다른 몸) 다시 고른다. 다음 칸 중심으로 걷는다 (기술 중이면 이동 없음).
+	 * [미상: 다음 칸이 AI+0x30 구 밖이고 자기가 그 칸에 없으면 서 있음 — 구의 정체를 몰라 생략]
 	 */
-	private void pickCell(float radius) {
-		freeCell();
-		int n = GRID * GRID;
-		boolean[] blocked = new boolean[n];
-		for (int c = 0; c < n; c++) {
-			blocked[c] = !cellFree(c);
+	private void moveToCell(AiTargets.Grid g, float radius) {
+		if (self.combat().active()) {
+			return;
 		}
-		blocked[HALF * GRID + HALF] = true;
-		// 벽 칸 (원작 격자 +0x40, 0x20B038 이 대상→칸 선분 sub_0020B870 + 충돌 질의 sub_001853E8 로 채움): 대상 눈높이 → 칸 중심 시선이 막히면 막힘 [근사]
-		if (sightBlocked != null) {
-			Vector3f te = new Vector3f(target.position()).add(0, EYE, 0);
-			for (int c = 0; c < n; c++) {
-				if (!blocked[c] && sightBlocked.test(te, cellPos(c).setComponent(1, te.y))) {
-					blocked[c] = true;
-				}
+		if (cell < 0) {
+			steer(target.position(), 1f);
+			return;
+		}
+		int mine = g.cellOf(self.pos);
+		if (blockedOrShadow(g, mine)) {
+			cell = -1;
+			atCellMs = 0;
+			steer(target.position(), 1f);
+			return;
+		}
+		int step = cell;
+		if (mine != cell && mine >= 0) {
+			step = g.nextStep(mine, cell, onWall() || wallsOff);
+			if (step == mine) {
+				atCellMs = 0;
+				pickCell(g, radius); // 경로 없음 → 다시 고름 (0x1CD3F0), 이번 프레임은 자기 칸 중심으로
 			}
 		}
+		steer(g.cellPos(step, new Vector3f()), tmpl.speedPct / 100f);
+	}
+
+	/**
+	 * 칸 선택 0x20BA60 → 0x20BFB0 [확실]:
+	 * <ol>
+	 *   <li>제외 = 점유 (+0x40, 지금 몸이 있는 칸) | 벽 | 그림자 | 자기 칸에서 4방향 flood fill 로 못 가는 칸 (자기 칸이 격자 밖이면 flood 생략)</li>
+	 *   <li>최대 5번: 방향 = 정규화 (X (2r−1) + Z (2r−1)), 점 = 격자 중심 + 방향 × 반경 → <b>반경 원 위</b>의 칸 (예전 엔진: ±반경 정사각형 안 균등 → 가까이·멀리 섞임)</li>
+	 *   <li>실패하면 121 칸 무작위 최대 5번 (점유·벽만 봄, 0x243B68), 그래도 없으면 칸 없음 (다음 프레임 다시)</li>
+	 * </ol>
+	 */
+	private void pickCell(AiTargets.Grid g, float radius) {
+		pickCell0(g, radius);
+		if (cell < 0 && !wallsOff && !onWall()) {
+			// 엔진의 벽 칸은 근사 (내비 노드 대신 바닥·장애물 질의) — 그것 때문에 고를 칸이 하나도 없으면 원작은 0xFF 로 매 프레임 다시 골라
+			// 타이머가 0 에 묶여 공격하지 않는다. 근사가 틀렸을 가능성이 커서 이 적은 다음 성공까지 벽 칸을 무시한다 [근사]
+			wallsOff = true;
+			pickCell0(g, radius);
+		} else if (cell >= 0 && wallsOff && !g.blockedOrShadow(cell)) {
+			wallsOff = false;
+		}
+	}
+
+	/** 벽 칸 근사가 모든 칸을 막아 무시 중 ({@link #pickCell}). */
+	private boolean wallsOff;
+
+	private void pickCell0(AiTargets.Grid g, float radius) {
+		int n = AiTargets.Grid.CELLS, N = AiTargets.Grid.N;
+		boolean[] blocked = new boolean[n];
+		for (int c = 0; c < n; c++) {
+			blocked[c] = g.occupied(c) || blockedOrShadow(g, c);
+		}
 		boolean[] excluded = blocked.clone();
-		int start = cellOf(self.pos);
+		int start = g.cellOf(self.pos);
 		if (start >= 0) {
 			boolean[] reach = new boolean[n];
 			java.util.ArrayDeque<Integer> q = new java.util.ArrayDeque<>();
 			reach[start] = true;
 			q.add(start);
 			while (!q.isEmpty()) {
-				int c = q.poll(), i = c / GRID, j = c % GRID;
-				int[][] nb = {{i - 1, j}, {i + 1, j}, {i, j - 1}, {i, j + 1}};
-				for (int[] e : nb) {
-					if (e[0] < 0 || e[0] >= GRID || e[1] < 0 || e[1] >= GRID) {
-						continue;
-					}
-					int d = e[0] * GRID + e[1];
-					if (!reach[d] && !blocked[d]) {
+				int c = q.poll(), j = c % N;
+				int[] nb = {j < 2 ? -1 : c - 1, j >= N - 1 ? -1 : c + 1, c - N, c + N}; // 0x20BB90: j−1 방향은 j < 2 면 없음 (원작 그대로)
+				for (int d : nb) {
+					if (d >= 0 && d < n && !reach[d] && !blocked[d]) {
 						reach[d] = true;
 						q.add(d);
 					}
@@ -458,55 +539,33 @@ public final class AiBrain {
 				excluded[c] |= !reach[c];
 			}
 		}
-		Vector3f tp = target.position();
 		int chosen = -1;
 		for (int tries = 0; tries < 5 && chosen < 0; tries++) {
-			Vector3f pnt = new Vector3f(tp.x + (2 * rnd.nextFloat() - 1) * radius, tp.y, tp.z + (2 * rnd.nextFloat() - 1) * radius);
-			int c = cellOf(pnt);
+			float dx = 2 * rnd.nextFloat() - 1, dz = 2 * rnd.nextFloat() - 1;
+			float l = (float) Math.hypot(dx, dz);
+			if (l < 1e-6f) {
+				continue;
+			}
+			Vector3f pnt = new Vector3f(g.centerX() + dx / l * radius, g.centerY(), g.centerZ() + dz / l * radius);
+			int c = g.cellOf(pnt);
 			if (c >= 0 && !excluded[c]) {
 				chosen = c;
 			}
 		}
-		if (chosen < 0) {
+		for (int tries = 0; tries < 5 && chosen < 0; tries++) {
 			int c = rnd.nextInt(n);
 			if (!blocked[c]) {
 				chosen = c;
-			} else {
-				float best = Float.MAX_VALUE;
-				for (int k = 0; k < n; k++) {
-					if (!excluded[k]) {
-						float d = flat(cellPos(k), self.pos);
-						if (d < best) {
-							best = d;
-							chosen = k;
-						}
-					}
-				}
 			}
 		}
-		cell = chosen < 0 ? HALF * GRID + HALF : chosen;
-		slot.cells.put(cell, this);
+		cell = chosen;
 		atCellMs = 0;
 		sinceCellMs = 0;
 	}
 
-	/** 0x20AF30: 위치 → 칸 번호 (대상 중심 11×11, 32 단위, 밖이면 −1). */
-	private int cellOf(Vector3f p) {
-		Vector3f tp = target.position();
-		float fx = (p.x - tp.x) / CELL + HALF + 0.5f, fz = (p.z - tp.z) / CELL + HALF + 0.5f;
-		if (fx < 0 || fz < 0 || fx >= GRID || fz >= GRID) {
-			return -1;
-		}
-		return (int) fx * GRID + (int) fz;
-	}
-
 	private void freeCell() {
-		if (cell >= 0 && slot != null && slot.cells.get(cell) == this) {
-			slot.cells.remove(cell);
-		}
 		cell = -1;
 	}
-
 	// ------------------------------------------------------------------ 공격 (0x1CC980)
 
 	/** 공격 시도. 성공하면 기술 요청 후 true. */
@@ -556,6 +615,10 @@ public final class AiBrain {
 		current = null;
 	}
 
+	public int cell() {
+		return cell;
+	}
+
 	public DecisionTree.Attack currentAttack() {
 		return current;
 	}
@@ -563,7 +626,12 @@ public final class AiBrain {
 	/** 디버그 요약: 상태, 토큰, 칸(대상 기준 오프셋), 타이머. */
 	public String debugString() {
 		String c = cell < 0 ? "-" : (cell / GRID - HALF) + "," + (cell % GRID - HALF);
-		return String.format("%s tok=%b cell=%s atCell=%.0f since=%.0f pause=%.0f", state, hasToken, c, atCellMs, sinceCellMs, pauseMs);
+		if (slot != null && cell >= 0) {
+			Vector3f cp = slot.grid.cellPos(cell, new Vector3f());
+			c += String.format("@%.0f dy=%.0f", (float) Math.hypot(cp.x - target.position().x, cp.z - target.position().z), cp.y - self.pos.y);
+		}
+		return String.format("%s tok=%b d=%.0f cell=%s atCell=%.0f since=%.0f pause=%.0f", state, hasToken,
+				target != null ? target.position().distance(self.pos) : -1f, c, atCellMs, sinceCellMs, pauseMs);
 	}
 
 	// ------------------------------------------------------------------ 방어 (0x1CBFF8)

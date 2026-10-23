@@ -351,6 +351,9 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 				yaw = nav.faceYaw();
 			} else if (!busy && !Float.isNaN(brain.face)) {
 				yaw = turn(yaw, brain.face, TURN_RATE * dt);
+			} else if (busy && tg != null && brain.state() == AiBrain.State.COMBAT && (combat.move().flags() & 0x20) == 0) {
+				// 0x2077A0 — 기술 플래그 0x20 (잡기: GRABHERO01·GRABHEROFAIL) 이면 대상 = 잡은 상대라 돌지 않음
+				yaw = autoAim(yaw, pos, tg.position(), combat, dt);
 			}
 			if (!busy) {
 				locomotionAnim();
@@ -554,6 +557,7 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 	 */
 	public void setCrowd(java.util.function.Supplier<? extends Iterable<? extends BodyPush.Body>> others) {
 		nav.setCrowd(this, others);
+		brain.setCrowd(others); // 포위 격자 점유 = 모든 생물의 몸 (0x1E10E8)
 	}
 
 	@Override
@@ -673,6 +677,29 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 		} else if (def != null && anim.find(def) != null) {
 			anim.play(def, false);
 		}
+	}
+
+	/** Auto Aim Damping (전역 0x29F2F4, R_PERMK 0.1): 기술 중 매 프레임 남은 각의 10 % 씩 대상 쪽으로. */
+	public static final float AUTO_AIM_DAMPING = 0.1f;
+
+	/**
+	 * 전투원 자동 조준 0x2077A0 (Combatant 갱신 0x205968 → 0x205AC0, 기술 중 매 프레임 — 영웅·적 공용) [확실: 흐름]:
+	 * FLAG_1 창 (이벤트 15, +0x1AC &amp; 1) 이면 안 돔, 벽·줄 (+0x174 &amp; 0x30 / 0x400) 이면 안 돔, 기술 플래그 0x20 이고 대상 = 잡은 상대면 안 돔.
+	 * 원하는 방향 = 대상 (combatant +0x80, 적은 AI_SetTarget 0x1D3414 가 넣은 영웅) 중심 − 자기 (0x207618, 수평), 회전 = slerp(t = 0.1 ×
+	 * clamp(프레임 시간 × 60 × 속도 배율)) [근사: 속도 배율 vslot 0xC8 / +0x16C = 1].
+	 * 예: 해골 SKU3HIT 는 FLAG_1 [0.60–1.00] 이라 두 번 베는 동안 영웅을 따라 돈다 — 예전 엔진은 기술 중 전혀 돌지 않아 옆걸음 한 번에 헛쳤다.
+	 */
+	public static float autoAim(float yaw, Vector3f self, Vector3f target, Combatant c, float dt) {
+		if (c.eventOn(15)) {
+			return yaw;
+		}
+		float dx = target.x - self.x, dz = target.z - self.z;
+		if (dx * dx + dz * dz < 1e-4f) {
+			return yaw;
+		}
+		float want = (float) Math.atan2(-dx, -dz);
+		float d = (float) Math.IEEEremainder(want - yaw, Math.PI * 2);
+		return yaw + d * AUTO_AIM_DAMPING * Math.min(1f, dt * 60f);
 	}
 
 	private static float turn(float from, float to, float max) {

@@ -97,9 +97,10 @@ class EvilKratosFightTest {
 		// 웨이브 1 분신 666 (giveAthenaSword CreationSensor → 2..5초 지연 SpawnEnemy)
 		assertTrue(until(r, 8, () -> r.enemies.stream().anyMatch(e -> e.ai1() == 666)), r.log.toString());
 		EnemyFighter clone = r.enemies.stream().filter(e -> e.ai1() == 666).findFirst().orElseThrow();
-		// 분신을 가족 옆에, 영웅은 멀리: 분신 칼날 공격(1)이 가족에게도 판정
+		// 분신을 가족 옆에, 영웅은 가족 너머 멀리: 분신 칼날 공격(1)이 가족에게도 판정. 분신은 기술 중 영웅 쪽으로 돈다 (자동 조준 0x2077A0,
+		// 50 문서 §6) — 영웅이 분신 뒤에 있으면 가족에서 돌아서므로 가족 너머에 둔다
 		assertTrue(until(r, 4, () -> move(fam) == 1));
-		r.ctl.position.set(fam.pos.x - (float) Math.sin(fam.yaw) * 70, fam.pos.y, fam.pos.z - (float) Math.cos(fam.yaw) * 70);
+		r.ctl.position.set(fam.pos.x + (float) Math.sin(fam.yaw) * 70, fam.pos.y, fam.pos.z + (float) Math.cos(fam.yaw) * 70);
 		clone.pos.set(fam.pos.x - (float) Math.sin(fam.yaw) * 30, fam.pos.y, fam.pos.z - (float) Math.cos(fam.yaw) * 30);
 		clone.yaw = fam.yaw + (float) Math.PI;
 		float hp = fam.hp;
