@@ -2745,7 +2745,18 @@ public final class GameScene implements Scene {
 		// 현재 높이에서만 보면 기술 루트 모션이 한 틱에 STEP 넘게 내려간 때 (ATHN01A 갑판 위 공격 −13.6) 지나친 바닥을 놓쳐 아래층으로 빠진다
 		float g = ground(p.x, Math.max(p.y, hero.ctl.prevPosition.y) + STEP, p.z, 4000);
 		var c0 = hero.ctl;
-		if (!Float.isNaN(g) && p.y - g <= 2f && c0.vy <= 0) {
+		boolean steep = false;
+		if (nav != null && c0.grounded && c0.vy <= 0 && (Float.isNaN(g) || p.y - g > 2f)) {
+			// 원작 바닥 질의 0x1E3298: 선분 = 발 + max(d − 6.4, 0) → 발 − (6.4 + d) (d = max(이번 변위, 3.2)), 처음 맞은 면이 법선 · 위 > 0.1 이면
+			// 그 위에 선다 [확실: 0x1E3308–0x1E3330, 0x1E3568]. 엔진 바닥 (법선 Y ≥ 0.7) 은 그보다 가파른 비탈을 구멍으로 봐서
+			// ATHN02B 사이클롭스 바닥의 945 → 937 경사 띠 (법선 Y 0.696, 폭 8) 를 밟으면 아래 데스존으로 떨어졌다 (자동 플레이)
+			float d = Math.max(p.distance(c0.prevPosition), 3.2f), top = p.y + Math.max(d - 6.4f, 0f);
+			float s = nav.navWorld.steepGround(p.x, top, p.z, top - (p.y - 6.4f - d));
+			if (!Float.isNaN(s) && (Float.isNaN(g) || s > g)) {
+				g = s;
+				steep = true;			}
+		}
+		if (!Float.isNaN(g) && (p.y - g <= 2f || steep) && c0.vy <= 0) {
 			p.y = g;
 			c0.vy = 0;
 			c0.grounded = true;

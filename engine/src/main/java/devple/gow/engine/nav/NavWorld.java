@@ -105,6 +105,21 @@ public final class NavWorld {
 		return best;
 	}
 
+	/**
+	 * 원작 바닥 질의 0x1E3298 의 면 조건 (법선 · 위 &gt; 0.1, {@link LevelCollision#QUERY_NY}) 으로 정적 바닥만 — 엔진 바닥 ({@link LevelCollision#FLOOR_NY} 0.7)
+	 * 이 놓치는 가파른 비탈 (ATHN02B 사이클롭스 바닥 945 → 937 경사 띠, 법선 Y 0.696) 용. 없으면 NaN.
+	 */
+	public float steepGround(float x, float y, float z, float drop) {
+		float best = Float.NaN;
+		for (LevelCollision c : statics) {
+			LevelCollision.Floor f = c.floorAt(x, y, z, drop, LevelCollision.QUERY_NY, t -> (t.attrs() & FLOOR_EXCLUDE_STATIC) == 0);
+			if (f != null && (Float.isNaN(best) || f.y() > best)) {
+				best = f.y();
+			}
+		}
+		return best;
+	}
+
 	public float groundHeight(float x, float y, float z, float drop) {
 		Floor f = floor(x, y, z, drop);
 		return f == null ? Float.NaN : f.y;

@@ -163,10 +163,21 @@ public final class LevelCollision {
 	 * 예전엔 아래를 보는 천장 면도 바닥으로 봐서 머리가 천장을 지난 점프가 천장 면 위 (ATHN01B 선창 → ATHN01A 갑판 밑면 −64) 에 내려섰다.
 	 */
 	public Floor floorAt(float x, float y, float z, float maxDrop, java.util.function.Predicate<Tri> ok) {
+		return floorAt(x, y, z, maxDrop, FLOOR_NY, ok);
+	}
+
+	/**
+	 * 원작 바닥 질의 0x1E3298 의 면 조건 = 법선 · 위 &gt; {@link #QUERY_NY} (0x1E3568 {@code 0x3DCCCCCD}) [확실: 디스어셈블].
+	 * 엔진의 일반 바닥 ({@link #FLOOR_NY}) 보다 가파른 비탈도 발밑 선분에 걸리면 바닥이다.
+	 */
+	public static final float QUERY_NY = 0.1f;
+
+	/** {@link #floorAt(float, float, float, float, java.util.function.Predicate)} 에서 바닥으로 보는 최소 법선 Y 를 고른다. */
+	public Floor floorAt(float x, float y, float z, float maxDrop, float minNy, java.util.function.Predicate<Tri> ok) {
 		float best = Float.NaN;
 		Tri bt = null;
 		for (Tri t : candidates(x, z, x, z)) {
-			if (t.n.y < FLOOR_NY || !ok.test(t)) {
+			if (t.n.y < minNy || !ok.test(t)) {
 				continue;
 			}
 			float h = heightAt(t, x, z);
