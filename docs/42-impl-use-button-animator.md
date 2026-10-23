@@ -111,6 +111,26 @@
 - 결과는 숨김 표시가 줄거나 보낸 전역 이벤트가 늘면 바꾸되, 원래 실행의 요청(적재·LoadCheck·Goto·Warp·전환)을 합친다 — 퍼즐 전·후 상태가 둘 다 게임에서 가능한 경로이기 때문이다 (PAND00C: 전 = LoadWad 03J, 후 = 03F).
 - 결과: **숨김 상태 상호작용 0** (ATHN01D·PAND01BB·PAND00C 모두 보이는 상태에서 쓰임).
 
+## 5.1 말하는 석상 (ATHN02A 부두 아테나 aoXSA) · 버튼을 기다리는 메시지 (2026-10-23 QA vs PS2 영상 2120–2132 초)
+- 스크립트 [확실: 데이터]: `SpawnEnemy shipGroup-topDeck-AthenaMime-aoXSAAI1` (AI1 307, 그룹 300). 안내 볼륨 `AthenaMime-volume-useWorld` (mode 2, 1024) →
+  Idle 참, `Goto MimeSpot`, CMV 끔, `AthenaCam` → `talky0` (LevelData:5 = 0: 1019 기술 0 AOXSA1A02MI03, 메시지 **218** "아레스를 파괴하라…") 또는
+  `talky1` (= 1: 기술 1, 메시지 **322** "오라클을 찾으면…") 번갈아 → 1040 (218/322) → CMV 켬, Idle 거짓, `quitMime` 1019 −1. 전투 파일 307 은 대사 동작
+  10 개뿐 (공격·피격·사망 분기 없음).
+- **몸이 없다**: ATHN02A 에 `CDV_aoXSA` 가 없다 (aoxsa CXT 는 ANM·MDL·사운드 이미터만) — 다른 레벨 AI (aoxpt/aoxf1/aoxor …) 와 R_ 적 32 종은 모두 CDV 가 있다
+  [확실: 데이터, 헤드리스 조사]. 원작 공격 접촉은 CDV 구 충돌 메시지 (0x203150 → Combat_OnContact) 로만 생긴다 [추정: 다른 접촉 경로 없음, 10 문서 §5.4].
+  엔진은 CDV 가 없으면 정면 구 근사로 맞혀 HP 20 석상이 쓰러졌고, 봇·자동 조준이 석상을 적으로 골랐다 → `EnemyFighter.bodiless` (CDV 없음) = 무적·영웅 대상
+  (`GameScene.nearestEnemy`) 에서 제외 [추정: 대상 선택도 몸 기준].
+- **버튼을 기다리는 메시지** [확실: 코드]: `ShowMessage(id, 초 ≤ 0)` (0x21D980 → GameMgr +0x1528/+0x153C) 는 쪽 표시 0x1B96D0 에서 0x1B9F60(gm, 1) →
+  0x1BF080(슬롯 1, 1) = 전역 정지 (스크립트 Idle 과 같은 0x29DB58, 슬롯만 다름) 를 걸고, `MessageTemplate_Style` (+0x9C) = 1 → HUD `XButtonOnOff` 프레임 1
+  (메시지 500–599 는 +0x1578 → 2.5 초 뒤 `MessageTemplate_Event` 10 으로 늦게). 갱신 0x1B8C00 은 시간 대신 확정 버튼 (0x29DB5C 가 4·5 면 패드 비트 5 ○,
+  아니면 비트 6 ×) 을 눌러야 다음 쪽 / 닫고 1040 을 보낸다. 엔진은 예전 4 초 뒤 저절로 닫았다 → ○ 를 기다리고 전역 정지 (조작 잠금·HUD 내림·적 정지)
+  [한국판 ○ — 영상의 ○ 아이콘과 일치]. AUTO·봇은 1.5 초 뒤 ○ [엔진 전용].
+- 버튼 안내 아이콘: R2 로 1024 를 보내면 아이콘을 지우고 (0x1DC3F8 → 슬롯 1 −1) 볼륨을 나갔다 다시 들어올 때만 다시 켠다 (0x1AAC88) — 예전엔 대사 상자 위에
+  R2 가 남았다. 전투 대기 IDLECOMBAT (M80) 중에도 R2 를 받는다 (원작 0x1DC3F8 은 전투 기술을 보지 않음; 엔진은 싸운 뒤 R2 가 먹지 않았다) [근사: 공격 중은 막음].
+- 결과 (`--game ATHN02A --arrive ATHN01F@671,-624,3940,0`, □ 3 번 뒤 R2 → ○ → R2 → ○): 석상 HP 20 그대로, 메시지 218 (○ 아이콘, HUD 내림, ○ 까지 유지)
+  → 1040 → 322 → 1040. AUTO 봇은 석상을 적으로 보지 않는다. 시험 `combat.MimeStatueTest`.
+- 남은 것: `AthenaCam` 화면이 석상이 아니라 물·부두를 비춘다 (ATHN01F `camVase`·`TwinCamLeft` 도 비슷 — GO 에 딸린 CAM 의 기준 변환 의심, 카메라 쪽 미확인).
+
 ## 6. 테스트
 
 | 테스트 | 내용 |

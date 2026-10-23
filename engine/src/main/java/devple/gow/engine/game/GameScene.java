@@ -1156,7 +1156,7 @@ public final class GameScene implements Scene {
 					// ATHN01F 진입·Warp 페이드
 					Object a = args.get(0);
 					scriptIdle = a instanceof Number n ? n.floatValue() != 0 : !(a instanceof Boolean b) || b;
-					devple.gow.engine.combat.AiTargets.globalHold = scriptIdle; // 0x1BF080 → 전역 정지 0x29DB58
+					devple.gow.engine.combat.AiTargets.globalHold = globalIdle(); // 0x1BF080 → 전역 정지 0x29DB58
 				}
 				if (func == 0x9 && !args.isEmpty()) {
 					Object a = args.get(0);
@@ -1658,10 +1658,15 @@ public final class GameScene implements Scene {
 	private void showMessage(int id, float seconds) {
 		String text = session.messages != null ? session.messages.get(id) : null;
 		messageId = id;
+		messageWait = false;
 		if (text == null) {
 			messageTimer = seconds > 0 ? seconds : 4f;
 			return;
 		}
+		UiVariables v0 = hud.variables();
+		boolean wait = seconds <= 0;
+		messageButtonLate = wait && id >= 500 && id < 600;
+		v0.set("PS2_MessageTemplate_Style", wait && !messageButtonLate ? 1 : 0); // +0x9C (0x1B9A80–0x1B9AD4)
 		String[] lines = text.replace("----", "\n").split("\n");
 		UiVariables v = hud.variables();
 		for (int i = 1; i <= 5; i++) {
@@ -1670,7 +1675,10 @@ public final class GameScene implements Scene {
 		// 이벤트 값 = 줄 수: HUD 스크립트가 MessageTemplates 를 GotoFrame2(값 + 1) — 프레임 n 이 줄 1..n 배치 (FLP_HUDK).
 		// 1 로 보내면 첫 줄만 보였다 (튜토리얼 269 "[□] 보통 공격. / [△] 강한 공격." 의 둘째 줄, 메두사 520 의 둘째 줄)
 		v.event("PS2_MessageTemplate_Event", Math.max(1, Math.min(5, lines.length)));
-		messageTimer = seconds > 0 ? seconds : 4f;
+		messageTimer = wait ? 0 : seconds;
+		messageWait = wait;
+		messageWaitTime = 0;
+		devple.gow.engine.combat.AiTargets.globalHold = globalIdle();
 		System.out.println("메시지 " + id + ": " + text.replace('\n', ' '));
 	}
 
@@ -1754,6 +1762,23 @@ public final class GameScene implements Scene {
 	/** 스크립트 Idle(true) (Internal 0xC) 동안 조작 잠금. */
 	private boolean scriptIdle, hudHidden;
 	/**
+	 * 버튼을 기다리는 메시지 (ShowMessage 초 ≤ 0, 원작 0x1B96D0 → 0x1B9F60(gm, 1) → 0x1BF080(슬롯 1, 1) = 전역 정지의 둘째 슬롯) [확실: 코드].
+	 * 확정 버튼 (한국판 ○ — 0x1B8C00: 0x29DB5C 가 4·5 면 패드 비트 5, 아니면 비트 6 ×) 을 누르면 다음 쪽 / 닫고 1040 (0x410, 인자 = 메시지 번호),
+	 * 슬롯 1 해제. 메시지 500–599 는 버튼 표시를 2.5 초 늦춘다 (+0x1578 → MessageTemplate_Event 10), 그 밖은 바로 (MessageTemplate_Style 1 →
+	 * HUD XButtonOnOff 프레임 1). 예전 엔진은 4 초 뒤 저절로 닫았다 (ATHN02A 아테나 석상 218/322, ATHN01F 쌍둥이 317/319).
+	 */
+	private boolean messageWait, messageButtonLate;
+	private float messageWaitTime;
+	/** 지난 틱의 실제 입력 (Idle 로 바꾸기 전 — 메시지 확정 버튼은 전역 정지 중에도 읽는다). */
+	private Input lastRawInput;
+	/** R2 (1024) 로 버튼 안내 아이콘을 지웠음 — 안내 볼륨을 나갈 때까지 다시 안 띄운다 (아테나 석상 대사 상자 위 R2). */
+	private boolean promptCleared;
+
+	/** 전역 정지 0x29DB58 = 슬롯 0 (스크립트 Idle) 또는 슬롯 1 (버튼을 기다리는 메시지). */
+	private boolean globalIdle() {
+		return scriptIdle || messageWait;
+	}
+	/**
 	 * 지난 틱 영웅이 받은 입력이 창 입력이 아닐 때 (디버그 스크립트·봇·AUTO) 그 입력 — R2 사용 버튼 (1024·세이브) 도 같은 입력으로 본다.
 	 * 예전에는 창 입력만 봐서 봇·스크립트 R2 가 버튼 안내 센서에 닿지 않았다 (ATHN01F 쌍둥이 teaseTwins-volumeR-talky) [엔진 전용].
 	 */
@@ -1816,7 +1841,10 @@ public final class GameScene implements Scene {
 			if (held != null && held.showPrompt && held.progress < 1f && (held.kind == devple.gow.engine.nav.Interactables.Kind.LIFT || held.crank)) {
 				return held.crank ? devple.gow.engine.ui.MinigameIcon.WIGGLE_BACK_FORTH : devple.gow.engine.ui.MinigameIcon.R2_PRESS;
 			}
-			if (world.promptActive()) {
+			boolean prompt = world.promptActive();
+			if (!prompt) {
+				promptCleared = false; // 볼륨을 나감 → 다음 진입에 다시 표시
+			} else if (!promptCleared && !globalIdle()) {
 				return devple.gow.engine.ui.MinigameIcon.PROMPT;
 			}
 			var near = nv != null && held == null ? nv.promptItem() : null;
@@ -2030,7 +2058,7 @@ public final class GameScene implements Scene {
 				}
 			}
 		}
-		if (scriptIdle) {
+		if (globalIdle()) {
 			// 전역 정지 (Idle) 동안 HUD 리셋 (Progress_UpdateHud 0x1D71A0 → 0x1BA150(hud, 1)): 미터를 내리고 갱신하지 않는다 —
 			// ATHN01A 시작 연출 13 초 동안 HUD 없음, 조작이 풀리면 다시 올라온다
 			if (!hudHidden) {
@@ -2064,6 +2092,20 @@ public final class GameScene implements Scene {
 			}
 			levelHud.update(e);
 		}
+		if (messageWait) {
+			messageWaitTime += dt;
+			if (messageButtonLate && messageWaitTime > 2.5f) { // 0x1B8EF8: 2.5 초 (0x40200000) 뒤 버튼 표시
+				messageButtonLate = false;
+				hud.variables().event("PS2_MessageTemplate_Event", 10);
+			}
+			// AUTO 검증·봇은 1.5 초 읽고 ○ [엔진 전용]
+			boolean botOk = (auto != null || bot != null) && messageWaitTime > 1.5f;
+			if (botOk || e.input().pressed(PadButton.CIRCLE) || lastRawInput != null && lastRawInput.pressed(PadButton.CIRCLE)) {
+				messageWait = false;
+				devple.gow.engine.combat.AiTargets.globalHold = globalIdle();
+				messageTimer = 1e-6f; // 아래에서 닫고 1040
+			}
+		}
 		if (messageTimer > 0 && (messageTimer -= dt) <= 0) {
 			hud.variables().event("PS2_MessageTemplate_Event", 0);
 			if (messageId >= 0) {
@@ -2094,8 +2136,11 @@ public final class GameScene implements Scene {
 		if (questionId >= 0) {
 			return; // 질문 메뉴가 열려 있는 동안 게임은 멈춘다 (원작 HUD Pause_Check 5, 입력은 HUD FLP 가 받음)
 		}
-		if (use && !hero.combat.active()) {
+		// 전투 대기 IDLECOMBAT (M80, ANY_INPUT → 끝) 은 막지 않는다 — 원작 0x1DC3F8 은 전투 기술을 보지 않고 (전역 정지·+0x10·0x29DC70 만),
+		// 엔진은 R2 가 같은 틱에 M80 을 끝내기 전에 여기를 지나 싸운 뒤에는 R2 가 먹지 않았다 (ATHN02A 아테나 석상) [근사: 공격 중은 여전히 막음]
+		if (use && (!hero.combat.active() || hero.combat.move() != null && hero.combat.move().id() == 80)) {
 			world.postEvent(SceneNav.EVENT_USE, 0, 0, 0, world.player()); // 버튼 안내 센서 (mode 2 = 볼륨 안일 때만 반응)
+			promptCleared = true; // 0x1DC3F8: 1024 뒤 아이콘 슬롯 1 지움 — 다시 켜는 것은 볼륨 진입 (0x1AAC88) 뿐
 		}
 		if (e.input().pressed(PadButton.SELECT)) {
 			paused = powerUp = true;
@@ -2138,8 +2183,9 @@ public final class GameScene implements Scene {
 				e.window().requestClose();
 			}
 		}
-		if (scriptIdle) {
-			in = IDLE_INPUT; // 스크립트 Idle(true): 입력 없음
+		lastRawInput = in == e.input() ? null : in;
+		if (globalIdle()) {
+			in = IDLE_INPUT; // 스크립트 Idle(true)·버튼 대기 메시지: 입력 없음
 		}
 		lastInput = in == e.input() ? null : in;
 		if (time < autoRun) {
@@ -2301,7 +2347,7 @@ public final class GameScene implements Scene {
 		EnemyFighter best = null;
 		float bd = Float.MAX_VALUE;
 		for (Enemy en : enemies) {
-			if (en.fighter().dead()) {
+			if (en.fighter().dead() || en.fighter().bodiless) { // 몸 CDV 없는 말하는 석상 (ATHN02A aoxsa) 은 싸울 대상이 아니다
 				continue;
 			}
 			float d = en.fighter().pos.distanceSquared(hero.ctl.position);

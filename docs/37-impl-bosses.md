@@ -673,6 +673,7 @@ SCR: BMITurnOffVents(b) = 배출구 수 −b, 누적 0 (204/207/209/222/227 — 
   시험 `combat.BedMinigameTest` (성공 순서·오브 850 ×5·생존·875 태그 306 / 실패 852 → 69 / `stop` 이 기술·태그를 지움).
 - 남은 것: `camVase`/`TwinCamLeft` 화면 구도 — 엔진 레일 카메라는 바닥과 오른쪽 끝 항아리를 비춘다 (원작 영상과 대조 못 함, 카메라 시스템 쪽) [근사].
   Animator 속도 슬롯 (H6 = 2 / 0.5) 이 엔진에서 1.0 으로 읽힘 — 슬롯 번호 미확인.
+- 이후 (ATHN02A 커밋): 317/319 는 `ShowMessage(…, −1)` 이라 ○ 를 누를 때까지 떠 있고 그동안 전역 정지 (42 문서 §5.1) — 예전엔 4 초 뒤 닫혔다.
 
 ## 보스 체력 미터 (HUD)
 - 미터는 FLP_HUDK 가 아니라 **레벨 WAD 의 FLP_&lt;레벨&gt;** (ATHN01B/C/E, ATHN08A/B/C, PAND03G) 에 있다. `GameScene` 이 이 FLP 를 HUD 와 변수를 공유하는

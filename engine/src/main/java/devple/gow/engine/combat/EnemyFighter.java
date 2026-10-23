@@ -698,9 +698,16 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 		return combat.hitVolumes();
 	}
 
+	/**
+	 * 몸 CDV 가 없는 생물 (ATHN02A 부두 아테나 석상 aoxsa, AI1 307): 원작 공격 접촉은 CDV 구 충돌 메시지 (0x203150 → Combat_OnContact) 로만 생기므로
+	 * 맞지도 잡히지도 않는다 [확실: 데이터 (ATHN02A 에 CDV_aoXSA 없음, 다른 레벨 AI aoxpt/aoxf1… 와 R_ 적은 모두 있음) / 추정: 접촉 경로가 CDV 뿐].
+	 * 엔진은 CDV 가 없으면 정면 구 근사로 맞혔다 → 석상이 HP 20 을 잃고 쓰러졌다. 영웅 대상 (나침반·봇) 에서도 뺀다 (GameScene.nearestEnemy) [추정].
+	 */
+	public boolean bodiless;
+
 	@Override
 	public boolean invulnerable() {
-		return hp <= 0 || (!stone && combat.invulnerable());
+		return hp <= 0 || bodiless || (!stone && combat.invulnerable());
 	}
 
 	/**

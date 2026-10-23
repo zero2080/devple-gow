@@ -46,7 +46,9 @@ public final class EnemyFactory {
 			EnemyFighter f = new EnemyFighter(assets.wad(), tweaks, skeleton, anims, ai1Template, combatFiles, attacks, block, idle,
 					walk, 30f, animNode, ai);
 			// 원작 CDV 히트 볼륨 (34 문서) — 종류마다 같은 CDV, 인스턴스마다 포즈 상태가 따로
-			f.combat().setHitVolumes(HitVolumes.forObject(assets.wad(), skeleton));
+			HitVolumes hv = HitVolumes.forObject(assets.wad(), skeleton);
+			f.combat().setHitVolumes(hv);
+			f.bodiless = hv == null; // 몸 CDV 없음 = 접촉 불가 (아테나 석상 aoxsa)
 			return f;
 		}
 

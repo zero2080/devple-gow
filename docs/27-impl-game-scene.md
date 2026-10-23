@@ -27,7 +27,7 @@
 ## 4. 스크립트·적 통합 (`GameSession` + `ScriptWorld`)
 | 스크립트 이벤트 | 게임 처리 |
 |----------------|----------|
-| ShowMessage(id, 초) | 원작 HUD 메시지 창: `PS2_MessageTemplate_Line1..5` 에 줄별 텍스트, `PS2_MessageTemplate_Event = 1`, 시간 후 0 |
+| ShowMessage(id, 초) | 원작 HUD 메시지 창: `PS2_MessageTemplate_Line1..5` 에 줄별 텍스트, `PS2_MessageTemplate_Event` = 줄 수, 시간 후 0. 초 ≤ 0 이면 ○ 를 기다림 (전역 정지 슬롯 1, `MessageTemplate_Style` 1 → ○ 아이콘, 42 문서 §5.1) |
 | CheckPoint | 재시작 위치 갱신 |
 | 데스존 (플레이어) | 사망 → 체크포인트 재시작 (원작 HP 보정 `onCheckpointRestart`) |
 | LoadWad / LoadForWarp / Warp / LoadCheck | 레벨 슬롯 2개 모델 `LevelLink` → SEAMLESS(LoadCheck, 위치 유지)·WALK(다른 슬롯 바닥)·WARP(도착 Start) 전환. 36 문서 §2 |
