@@ -228,6 +228,32 @@ class NavDataTest {
 	}
 
 	/**
+	 * ATHN06C 안뜰 석상 (Push 720 "Athens06CStatue", 관절 1 개 — 손잡이 관절 없음): 잡을 곳 = Radius 0.9·16 = 14.4 반 너비 몸의 옆면 가운데
+	 * (0x1C3CD8). 석상 북쪽 (z −405) 에서 남쪽을 보면 북쪽 면 (z −441 + 14.4, 높이 +16) 을 잡고, 예전처럼 72 떨어진 자리 (z −369) 에서는 못 잡는다.
+	 */
+	@Test
+	void athens06cStatueIsGrabbedAtItsPedestalFace() throws Exception {
+		LevelData d = level("ATHN06C");
+		Tweaks tw = new Tweaks();
+		tw.load(d.wad);
+		Interactables it = Interactables.of(d, tw);
+		Interactables.Item st = it.byOwner("gostatuepull1");
+		assertEquals(Interactables.Kind.PUSH, st.kind);
+		assertTrue(st.handles.isEmpty(), "석상 골격 = 관절 1 개");
+		assertEquals(14.4f, st.boxHalf, 1e-3f);
+		assertTrue(st.radius > 60, "CDV 경계 구 r " + st.radius);
+		Vector3f south = new Vector3f(0, 0, -1);
+		assertNull(it.grabbable(new Vector3f(st.pos.x, 112f, -369f), south, HeroNavigator.USE_RADIUS));
+		Object[] g = it.grabbable(new Vector3f(st.pos.x, 112f, -405f), south, HeroNavigator.USE_RADIUS);
+		assertNotNull(g);
+		assertSame(st, g[0]);
+		float[] h = (float[]) g[1];
+		assertEquals(st.pos.z + 14.4f, h[2], 0.01f);
+		assertEquals(st.pos.y + 16f, h[1], 0.01f);
+		assertEquals(1f, h[4], 1e-4f, "바깥 축 +z (북쪽)");
+	}
+
+	/**
 	 * 붙음 유지 규칙의 데이터 (38 문서 §3.4): CSM 비트 #fb908478 (문 0 / 상자 1), ANICSM2, 크랭크 Push Type·Acc/Dec, TAndF 속도 키.
 	 * IO_CSM 은 영웅 ANICSM1 길이 = 오브젝트 애니 길이라서 R1 한 번으로 끝까지 붙어 있으면 100 % 가 된다.
 	 */

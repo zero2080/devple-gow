@@ -165,6 +165,11 @@ public final class Interactables {
 		 * 0 = 템플릿 없음 (예전 구 반경 0.8·r). ATHN05B 발리스타 BallistaPlatfor (Push 025) 1.76 → 28.2.
 		 */
 		public float boxHalf, boxHeight;
+		/**
+		 * GO 행렬 (관절 0 월드, 열 우선 16) — 손잡이 관절이 없는 밀기 상자의 옆면 잡을 곳 ({@link #faceGrab}) 을 이 축으로 놓는다 (원작 GO +0x50).
+		 * null = 모름 (축 = 월드 x·z, 위치 = {@link #pos}).
+		 */
+		public float[] goMatrix;
 		public final Vector3f vel = new Vector3f();
 		public boolean twoWay;
 		public float detentTol = 0.03f;
@@ -440,6 +445,7 @@ public final class Interactables {
 		}
 		if (jw.length > 0) {
 			it.pos.set(jw[0][12], jw[0][13], jw[0][14]);
+			it.goMatrix = jw[0].clone();
 		}
 	}
 
@@ -450,6 +456,9 @@ public final class Interactables {
 
 	/** {@link #handles(Item, LevelLayout.Placement, Tweaks, String)} 를 배치 밖 GO 에 (Creator 상자: R_PERMK chest 의 handle1, 38 §21). */
 	public static void handles(Item it, devple.gow.tools.anim.Skeleton sk, float[][] jw, Tweaks tw, String node) {
+		if (jw.length > 0) {
+			it.goMatrix = jw[0].clone();
+		}
 		var joints = sk.joints;
 		for (int n = 1; n <= 8; n++) {
 			String want = "handle" + n;
@@ -479,6 +488,48 @@ public final class Interactables {
 
 	/** 영웅 앞 점 높이·앞 (0x1C3918: 위치 + 위·17.6 + 정면·9.6). */
 	public static final float GRAB_UP = 17.6f, GRAB_FWD = 9.6f;
+	/** 손잡이 없는 상자의 옆면 잡을 곳: 국소 높이 16 (0x1C3D70 0x41800000), 영웅 앞 점과 거리 &lt; 20 (0x1C3E70 0x41A00000), 정면·축 &lt; −0.5 (0x1C3EAC). */
+	public static final float FACE_UP = 16f, FACE_REACH = 20f, FACE_COS = 0.5f;
+
+	/**
+	 * 손잡이 관절 (handle1..8) 이 없는 밀기 상자의 잡을 곳 — 잡기 질의 0x1C3918 의 손잡이 없음 갈래 (0x1C3CD8–0x1C3EE0) [확실: 코드]:
+	 * GO 몸 크기 +0x120 (밀기 상자 = (2R, H, 2R)·16, 0x20F9F8) 의 반으로 네 옆면 가운데를 국소 (0, 16, −½z) 축 −z, (½x, 16, 0) +x,
+	 * (0, 16, ½z) +z, (−½x, 16, 0) −x 순서로 GO 행렬 (+0x50) 에 놓고, 영웅 앞 점 P (발 + 위·17.6 + 정면·9.6) 와의 3 차원 거리가 20 보다 작고
+	 * 정면·축 &lt; −0.5 (그 면을 봄) 인 첫 면을 잡는다. 잡으면 (0x1C3C7C → 0x1C3498) 국소 점과 −축을 남기고, 붙은 동안 (0x1C4258 의 0x1C43C0 갈래,
+	 * 관절 −1) 영웅 = GO 행렬 × 국소 점 − 위·반 키 + 축·반 깊이 (9.6), 높이는 그대로 (0x1C4674) — 손잡이 관절과 같은 꼴이다.
+	 * 예전 엔진은 CDV 경계 구 반지름 + 9.6 뒤에 세워 ATHN06C 석상 (r 62.7, 반 너비 0.9·16 = 14.4) 을 48 유닛 떨어져 허공을 밀었다 (영상 9426: 받침에 붙어 민다).
+	 * @return {x, y, z, 바깥 축 수평 x, z (정규화)} 또는 null
+	 */
+	public static float[] faceGrab(Item it, float px, float py, float pz, Vector3f fwd) {
+		float[] m = it.goMatrix;
+		float ox = m != null ? m[12] : it.pos.x, oy = m != null ? m[13] : it.pos.y, oz = m != null ? m[14] : it.pos.z;
+		float[] ax = m != null ? new float[]{m[0], m[1], m[2]} : new float[]{1, 0, 0};
+		float[] ay = m != null ? new float[]{m[4], m[5], m[6]} : new float[]{0, 1, 0};
+		float[] az = m != null ? new float[]{m[8], m[9], m[10]} : new float[]{0, 0, 1};
+		float h = it.boxHalf;
+		// 국소 점 (x, z) 와 바깥 축 (국소 축 부호): 0x1C3D88 (0, 16, −½z) / −z, 0x1C3DBC (½x, 16, 0) / +x, 0x1C3DE8 (0, 16, ½z) / +z, 0x1C3E18 (−½x, 16, 0) / −x
+		float[][] faces = {{0, -h, 0, -1}, {h, 0, 1, 0}, {0, h, 0, 1}, {-h, 0, -1, 0}};
+		for (float[] f : faces) {
+			float wx = ox + ax[0] * f[0] + ay[0] * FACE_UP + az[0] * f[1];
+			float wy = oy + ax[1] * f[0] + ay[1] * FACE_UP + az[1] * f[1];
+			float wz = oz + ax[2] * f[0] + ay[2] * FACE_UP + az[2] * f[1];
+			float dx = wx - px, dy = wy - py, dz = wz - pz;
+			if (dx * dx + dy * dy + dz * dz >= FACE_REACH * FACE_REACH) {
+				continue;
+			}
+			// 바깥 축 (월드) = ±GO x 또는 z 축 (0x1C3D2C–0x1C3D50: −z, x, z, −x)
+			float nx = ax[0] * f[2] + az[0] * f[3], ny = ax[1] * f[2] + az[1] * f[3], nz = ax[2] * f[2] + az[2] * f[3];
+			if (fwd.x * nx + fwd.y * ny + fwd.z * nz >= -FACE_COS) { // 원작도 행 벡터 그대로 (정규화 없음)
+				continue;
+			}
+			float hl = (float) Math.hypot(nx, nz);
+			if (hl < 1e-5f) {
+				continue;
+			}
+			return new float[]{wx, wy, wz, nx / hl, nz / hl};
+		}
+		return null;
+	}
 
 	/**
 	 * R2 로 잡힐 것 (0x1C3F18 → 0x1C3918): 손잡이가 있으면 영웅 앞 점 P 가 손잡이 J 와 |Δy| &lt; grabDy, 수평 &lt; grabR, 정면·축 &lt; −cos,
@@ -491,6 +542,17 @@ public final class Interactables {
 		float px = feet.x + fwd.x * GRAB_FWD, py = feet.y + GRAB_UP, pz = feet.z + fwd.z * GRAB_FWD;
 		for (Item it : items) {
 			if (it.done && it.kind != Kind.PUSH || !it.usable()) {
+				continue;
+			}
+			if (it.handles.isEmpty() && it.kind == Kind.PUSH && it.boxHalf > 0) {
+				float[] h = faceGrab(it, px, py, pz, fwd);
+				if (h != null) {
+					float d = (float) Math.sqrt((h[0] - px) * (h[0] - px) + (h[1] - py) * (h[1] - py) + (h[2] - pz) * (h[2] - pz));
+					if (d < bd) {
+						bd = d;
+						best = new Object[]{it, h};
+					}
+				}
 				continue;
 			}
 			if (it.handles.isEmpty()) {

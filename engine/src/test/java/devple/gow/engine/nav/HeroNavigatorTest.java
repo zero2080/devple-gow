@@ -1020,6 +1020,64 @@ class HeroNavigatorTest {
 	}
 
 	/**
+	 * 손잡이 관절이 없는 밀기 상자 (0x1C3918 의 0x1C3CD8 갈래): 잡을 곳 = 몸 (Push Radius·16 반 너비) 의 옆면 가운데 (국소 높이 16), 영웅 앞 점
+	 * (발 + 위 17.6 + 정면 9.6) 과 20 안 · 그 면을 봄 (정면·축 &lt; −0.5). 붙으면 영웅 = 면 + 축·9.6 (0x1C43C0 → 0x1C4638). ATHN06C 석상 (CDV 구 r 62.7,
+	 * 반 너비 14.4) 은 예전 엔진이 r + 9.6 = 72 뒤에 세워 허공을 밀었다 (영상 9426 은 받침에 붙어 민다).
+	 */
+	@Test
+	void handlelessBoxIsGrabbedAtItsSideFace() {
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -400, -400, 400, 400, 0, SurfaceAttr.GROUND);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		Interactables items = new Interactables();
+		Interactables.Item box = items.add(new Interactables.Item(Interactables.Kind.PUSH, "gostatuepull1", v(0, 0, -40), 720, 720, "pushIdle", null,
+				"Athens06CStatue", 62.7f));
+		box.boxHalf = 14.4f;
+		Vector3f ahead = v(0, 0, -1);
+		// 너무 멀다: 앞 점 z 0.4 ↔ 면 z −25.6 (26 > 20) — 예전 판정 (중심 거리 50 − r 62.7 ≤ 32) 은 잡혔다
+		assertNull(items.grabbable(v(0, 0, 10), ahead, HeroNavigator.USE_RADIUS));
+		// 면을 등짐
+		assertNull(items.grabbable(v(0, 0, 0), v(0, 0, 1), HeroNavigator.USE_RADIUS));
+		Object[] g = items.grabbable(v(0, 0, 0), ahead, HeroNavigator.USE_RADIUS);
+		assertNotNull(g);
+		assertArrayEquals(new float[]{0, 16, -25.6f, 0, 1}, (float[]) g[1], 1e-4f, "+z 면 가운데 (높이 16), 바깥 축 +z");
+
+		Body b = new Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		nav.setItems(items);
+		Pad in = new Pad();
+		in.down.add(PadButton.USE);
+		tick(nav, b, w, in);
+		assertEquals(NavState.PUSH, nav.state());
+		assertEquals(-25.6f + HeroNavigator.BODY, b.pos.z, 1e-3f, "영웅 = 면 + 축·9.6 — 상자 중심에서 14.4 + 9.6 = 24");
+		assertEquals(0f, b.pos.x, 1e-4f);
+		for (int i = 0; i < 30; i++) {
+			in.ly = 1;
+			in.down.add(PadButton.USE);
+			tick(nav, b, w, in);
+		}
+		assertEquals(box.boxHalf + HeroNavigator.BODY, b.pos.z - box.pos.z, 1e-3f, "밀어도 받침에 붙은 채");
+
+		// 돌아간 상자 (GO 행렬 yaw 30°): 옆면과 축도 GO 축을 따른다
+		Interactables rot = new Interactables();
+		Interactables.Item r = rot.add(new Interactables.Item(Interactables.Kind.PUSH, "r", v(0, 0, -40), 720, 721, "pushIdle", null, "r", 62.7f));
+		r.boxHalf = 14.4f;
+		float a = (float) Math.toRadians(30);
+		r.goMatrix = new float[16];
+		new org.joml.Matrix4f().translation(0, 0, -40).rotateY(a).get(r.goMatrix);
+		Vector3f n = v((float) Math.sin(a), 0, (float) Math.cos(a)); // 국소 +z → 월드
+		Vector3f face = v(0, 0, -40).fma(14.4f, n);
+		Vector3f feet = v(face.x, 0, face.z).fma(HeroNavigator.BODY, n);
+		Object[] gr = rot.grabbable(feet, v(-n.x, 0, -n.z), HeroNavigator.USE_RADIUS);
+		assertNotNull(gr);
+		float[] h = (float[]) gr[1];
+		assertEquals(face.x, h[0], 1e-3f);
+		assertEquals(face.z, h[2], 1e-3f);
+		assertEquals(n.x, h[3], 1e-4f);
+		assertEquals(n.z, h[4], 1e-4f);
+	}
+
+	/**
 	 * 원작 0x1C448C – 0x1C4630: 붙은 영웅 국소 속도 = 스틱의 옆·정면 성분 그대로 (옆걸음 포함) × Sold+0x188[w], 붙은 상자는 영웅 이동량을 그대로 따르고
 	 * 속도 0 (0x2119A8) — 옆으로 밀어도 상자가 같이 가고, 놓아도 미끄러지지 않는다 (ATHN05B 발리스타를 복도 끝에서 북쪽 홀로, 43 §22).
 	 */

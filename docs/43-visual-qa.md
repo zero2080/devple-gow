@@ -1521,7 +1521,9 @@ Semo03 (크라토스의 과거) → OracleSaved · R2 대화 342 → 출구 Warp
 ### 23.1 장면 대응 (진행 중)
 | 영상 | 원작 (스크립트·데이터) | 엔진 |
 |---|---|---|
+| 8806–8842 | ATHN06A 무덤지기 뒤 세이브 · 상자 둘: 깃털 카드 ("제물이 받아들여졌습니다" 셋째 줄 포함 — 원작도 나옴) · 고르곤의 눈 카드, 카드 위에 미터 없음 (8825 · 8839) | s1: 카드 문구 · 둘째 쪽 자동 넘김 같음 — 고치기 전 카드 위에 HP/MP 미터가 떠 있었다 (§23.2-8) |
 | 9399–9412 | 동영상 a06Mp02 → 줄에 매달린 오라클 (TriggeredEntryCam · PanBackCam) | c1 4–6 초 매달린 오라클 · 카메라 |
+| 9416–9456 | ATHN06C 안뜰 석상 (statuePull1, Push 720) 을 받침에 손을 대고 남쪽으로 민다 | p3: 받침 북쪽 면에 붙어 민다 (`09`) — 고치기 전 72 유닛 뒤에서 허공을 밀었다 (`08`, §23.2-9) |
 | 9676–9694 | 동영상 a06Mp03 ("크레토스! 손이 미끄러져요!", "하지만 서둘러야 해요!") — 덩굴 벽에서 카메라 UprCam21 (Internal 0xD) | 고치기 전 a06Mp03Done 의 카메라 조건이 늘 거짓 (§23.2-2) |
 | 9698–9699.5 | 안내 523 "건너가려면 가장자리에서 ✕" — 상자 동안 HUD·모래시계 숨김, 타이머는 흐름 | a6 (ARENA06 같은 구조): 메시지 2053 동안 숨김 → 닫힌 뒤 18 · 16 … (`01`) |
 | 9699.6–9760.75 | 모래시계 70 → 67 … 7 (흰색) → 6 (붉게, 경과 91 % = FLP 프레임 92) | a6 6 흰색 → 2 붉게 (`02`) · `OracleRescueTimerTest` 9760.25 / 9760.5 값 |
@@ -1550,15 +1552,27 @@ Semo03 (크라토스의 과거) → OracleSaved · R2 대화 342 → 출구 Warp
    레벨을 처음 상태로 다시 읽어 체크포인트에 둔다 [근사: 원작은 스냅샷 복원, 11 §5.5]. a6: ARENA06 21 초 → 1050 → 메시지 2005 → FailedScreen → 다시.
 7. 하네스 [엔진 전용]: 봇이 조준 가중 (CombatFileSet "Target Weight") 0 인 NPC (오라클 310 · 무덤지기 309) 를 적으로 골라 때렸다 (c5 수정 전: 대화 시작 전에 오라클이 쓰러짐)
    → `EnemyFighter.targetWeight`. 경로 단계 `jump:초:fx,fz` · `post:번호[:인자]` · `cam:이름`, 도착 상태 `In=값` (Internal 플레이어 변수, 예 I45=5 깃털).
+8. **아이템 카드 위에 HP/MP 미터가 떴다.** 카드 (Pause_Check 8) · 질문 메뉴 (5) 동안은 게임이 멈춰 영웅 갱신 0x1D6CF0 → Progress_UpdateHud 0x1D7148 이 돌지 않는다 —
+   AddItem 0x1D8CF0 의 표시 요청 (+0x1C0) 은 카드가 닫힌 뒤에 미터를 올린다 [확실: 호출 경로]. 영상 8825 (깃털 카드) · 8839 (고르곤의 눈 카드) 에 미터 없음.
+   엔진은 카드가 열린 프레임에 미터를 올렸다 → `GameScene` 미터 갱신을 `pickupOpen` · `questionId` 동안 건너뜀 (21 문서 §5).
+9. **손잡이 관절이 없는 밀기 상자를 너무 먼 데서 잡고 밀었다.** 잡기 질의 0x1C3918 은 손잡이 관절 (0x200A50 "handle%1d") 이 없으면 (0x1C3CD8) GO 몸 크기 +0x120
+   (밀기 상자 = (2R, H, 2R)·16, 0x20F9F8) 의 반으로 **네 옆면 가운데** — 국소 (0, 16, −½z) 축 −z · (½x, 16, 0) +x · (0, 16, ½z) +z · (−½x, 16, 0) −x — 를
+   GO 행렬로 놓고 영웅 앞 점 (발 + 위 17.6 + 정면 9.6) 과 3 차원 거리 &lt; 20 (0x41A00000), 정면·축 &lt; −0.5 인 첫 면을 잡는다 (0x1C3C7C: 국소 점 · −축 · 관절 −1).
+   붙은 동안 0x1C4258 의 관절 −1 갈래 (0x1C43C0) 가 영웅 = GO 행렬 × 국소 점 − 위·반 키 + 축·반 깊이 (9.6) 로 둔다 (높이 그대로) [확실: 코드].
+   엔진은 손잡이가 없으면 CDV 경계 구 반지름 + 9.6 뒤에 세웠다 — 밀기 상자 20 개 중 19 개가 손잡이 없음 (발리스타만 handle1/2): ATHN06C 석상 r 62.7 ↔ 반 너비
+   0.9·16 = 14.4 라 72 유닛 (영웅 키의 두 배) 뒤에서 허공을 밀었고 (`08`), 영상 9426 – 9456 은 받침에 붙어 민다. 판도라 상자 (r 30 ↔ 14.4) · PAND04EE 테트리스 블록
+   (r 64 ↔ 16) · PAND03B 미로 벽 (r 60 ↔ 32) · ATHN06B 석상 (r 52 ↔ 16) 도 같았다 → `Interactables.faceGrab` (GO 행렬 `goMatrix`, 밀면 `refreshHandles` 가 갱신),
+   잡은 면이 손잡이와 같은 꼴로 `HeroNavigator.startItem` 에 간다 (38 §3.2).
 
 ### 23.3 시험
 `OracleRescueTimerTest` (5: 타이머 표 · 붉은 경고 경과 % · a06Mp03 끝 + 카메라 UprCam21 → 523 · 70 초 모래시계 (다른 카메라면 없음), 70 초 → 오라클 떨어짐 → 6.4 초 뒤
 실패 화면, 접시 → 타이머 지움 · Semo03), `HourglassFailedMenuTest` (3: FLP 모래시계 프레임 5 · 91 · 92 · Off, 실패 메뉴 ○ = 다시 하기, 타자 효과),
-`MessagePagesTest` (오라클 342 두 쪽, 게임 안 메시지 모든 쪽 1..3 줄).
+`MessagePagesTest` (오라클 342 두 쪽, 게임 안 메시지 모든 쪽 1..3 줄), `HeroNavigatorTest.handlelessBoxIsGrabbedAtItsSideFace` (옆면 20 안 · 등지면 못 잡음 ·
+붙은 자리 = 면 + 9.6 · 돌아간 GO 축), `NavDataTest.athens06cStatueIsGrabbedAtItsPedestalFace` (ATHN06C 원본: 반 너비 14.4, 예전 자리 z −369 에선 못 잡음).
 
 ### 23.4 증거 (`work/verify/athn_oracle_temple/`, 커밋 안 함)
 `01_arena06_hourglass_16_a6` · `02_arena06_hourglass_red_2_a6` · `03_arena06_hourglass_0_white_a6` · `04_oracle_342_typing_c5` · `05_oracle_342_page1_c5` ·
-`06_oracle_342_page2_c5` · `07_oracle_by_exit_door_c5`.
+`06_oracle_342_page2_c5` · `07_oracle_by_exit_door_c5` · `08_statue_push_gap_before_fix` · `09_statue_push_at_pedestal_p3` · `10_video_9336-9506_statue_push`.
 
 ## 24. 안개를 파티클 뒤에 — 원작 안개 노드 순서 (층 2 칸 5) 와 장면 깊이 안개 (2026-10-24)
 

@@ -3175,7 +3175,9 @@ public final class GameScene implements Scene {
 				hudBinding.hideMeter(hud.variables());
 				hud.variables().event("PS2_HitCounter_Event", 0);
 			}
-		} else if (!powerUp) {
+		} else if (!powerUp && !pickupOpen && questionId < 0) {
+			// 아이템 카드 · 질문 메뉴 동안은 게임이 멈춰 (Pause_Check 8 / 5) 영웅 갱신 0x1D6CF0 → Progress_UpdateHud 0x1D7148 이 돌지 않는다 — AddItem 의
+			// 표시 요청 (+0x1C0) 은 카드가 닫힌 뒤에. 예전 엔진은 카드 위에 미터를 띄웠다 (영상 8825 · 8839 카드엔 미터 없음, 43 §23)
 			if (hudHidden) {
 				hudHidden = false;
 				hudBinding = newHudBinding(); // 값 다시 (미터는 내려간 채)

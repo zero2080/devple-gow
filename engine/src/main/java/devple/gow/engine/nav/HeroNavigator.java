@@ -1913,12 +1913,13 @@ public final class HeroNavigator {
 				kickAnimTime = -1;
 				if (handle != null && Math.abs(handle[3]) + Math.abs(handle[4]) > 1e-3f) {
 					// 잡은 손잡이 관절 (handle1/2, 0x1C3918) 을 향해 서고 그 축이 상자 국소 축 — 영웅 = 손잡이에서 몸 반 깊이 바깥 (0x1C4638: 붙잡기 관절
-					// − 위 × 반 키 + 정면 × 반 깊이) [확실: 코드 / 근사: 반 깊이 = 몸 반 너비]. 판 위에서 돌아간 발리스타도 그 옆면 축으로 민다
+					// − 위 × 반 키 + 정면 × 반 깊이) [확실: 코드 / 근사: 반 깊이 = 몸 반 너비]. 판 위에서 돌아간 발리스타도 그 옆면 축으로 민다.
+					// 손잡이 관절이 없는 상자 (석상·판도라 상자·테트리스 블록 …) 는 몸 옆면 가운데가 잡을 곳이다 (Interactables.faceGrab, 0x1C3CD8 / 0x1C43C0)
 					pushAxis.set(-handle[3], 0, -handle[4]).normalize();
 					p.x = handle[0] + handle[3] * BODY;
 					p.z = handle[2] + handle[4] * BODY;
 				} else {
-					// 손잡이 관절이 없는 상자: 영웅→상자 방향의 주축 (x 또는 z), 상자 경계구 반지름 + 몸 반 너비 뒤 [근사]
+					// Push 템플릿 Radius 도 손잡이 관절도 없는 상자 (합성 시험 상자뿐): 영웅→상자 방향의 주축 (x 또는 z), 상자 경계구 반지름 + 몸 반 너비 뒤 [근사]
 					if (Math.abs(to.x) > Math.abs(to.z)) {
 						pushAxis.set(Math.signum(to.x), 0, 0);
 					} else {

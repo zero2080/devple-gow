@@ -132,6 +132,8 @@ HUD 변수 규약 (HUD 루트 `SimKeyEvent` 스크립트에서 확인):
   내려가 있으면 `PS2_MeterBar_Event = 1`.
 - 아니면 올라와 있을 때만 유지 시간 −1/60 (고정, 시간 배율 없이), 0 이하 → `PS2_MeterBar_Event = 0`.
 - HP < 1 · 전역 정지 (0x1BF108) → HUD 리셋 0x1BA150 (올라와 있으면 MeterBar 0). 리셋 뒤 다시 뜨는 것은 위 변화뿐.
+- 아이템 카드 (Pause_Check 8) · 질문 메뉴 (5) 동안은 게임이 멈춰 영웅 갱신 0x1D6CF0 → 0x1D7148 이 돌지 않는다 — AddItem 의 표시 요청은 카드가 닫힌 뒤에
+  미터를 올린다 (영상 8825 · 8839: 깃털 · 고르곤의 눈 카드 위에 미터 없음). 엔진 `GameScene` 은 `pickupOpen` · `questionId` 동안 미터 갱신을 건너뛴다 (43 §23.2-8).
 
 엔진: `HudBinding.meter` (게임 씬 `autoMeter`, 마지막으로 본 값 `GameSession.meterSeen`), `PlayerState.meterPokes`, `GameRules.meterHoldTime`.
 UI·영웅 시험 씬은 예전처럼 첫 갱신에 띄우고 둔다. 시험 `HudMeterTest`. 미확인: Progress +0xC 비트 8 (표시 막음), 상자 앞 +0x1C0 (0x1DC5B0).
