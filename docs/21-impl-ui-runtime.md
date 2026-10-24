@@ -171,6 +171,24 @@ UI·영웅 시험 씬은 예전처럼 첫 갱신에 띄우고 둔다. 시험 `Hu
 - 히트 카운터 (0x1DB608 → Hud_SetHitCounter 0x1BA070, 매 프레임 바뀐 값만): `PS2_HitCounter_Event` 1 + `PS2_HitCounter_Value` = 히트 수 (1 타는 안 보냄, 0 이면 숨김), 2 = 마일스톤 (HitCounterShake·ComboMilestone·ComboEXP, `PS2_Combo_Message` = 보너스 템플릿 메시지, `PS2_Combo_Amount` = 붉은 오브), 0 = 메뉴·메시지 쪽 리셋 (0x1BA150).
 - 아이콘 슬롯 8 개 (0x21DA50, 표시 0x21E908 = 번호 큰 것): 0 = R2 로 잡힐 가까운 오브젝트의 "Show R2" (#ca686863 bit 0, 0x1DC3F8 → 14 R2ButtonStatic — ATHN01A 바닥문 TAndF 051 HydraHatchDoor), 1 = 버튼 안내 센서, 2 = 잡은 TAndF 연타 (0xB R2ButtonPress, 0x1E17F0) / 크랭크 (0xD).
 
+## 메시지 쪽 · 타자 효과 · 모래시계 · 실패 메뉴 (43 §23)
+- **쪽** (0x1B96D0) [확실]: 메시지 줄 중 첫 두 글자가 '-' 인 줄 ("----") 이 쪽 구분 (그 줄은 안 보임), 쪽마다 1..3 줄 (아니면 상자를 바로 닫음 0x1B97A0).
+  한 쪽 = Line1..n + Event n, 여러 쪽 = **첫 쪽에서만 Event 3** (세 줄 틀) — 한 줄인 쪽은 Line2 (가운데). 시간 메시지 (+0x153C > 0) 는 쪽마다 같은 시간
+  (0x1B8D44), 버튼 메시지는 ○ 마다 다음 쪽 (+0x1534, 0x1B8E5C) → 마지막 쪽 뒤 닫고 **1040 은 버튼으로 닫을 때만** (0x1B8EC0; 시간이 다 된 메시지는 조용히
+  0x1B8DCC). 게임 안 메시지 (100–699) 22 개가 여러 쪽 (오라클 342 · 관리인 130 네 쪽 · 파토스 일기 …), 모든 쪽 ≤ 3 줄. 예전 엔진은 "----" 를 빈 줄로 바꿔 다섯 줄 틀에
+  넣어 넷째 줄부터 잘렸다. `GameScene.messagePages` · `showMessagePage` · `nextMessagePage` · `closeMessage`.
+- **타자 효과** (0x1B9B00 → 0x1482E0 범위 "PS2_MessageTemplate_Line%d" from..to, 그리기 0x148600–0x148724: 경과 × **50 자/초** (0x29CCD8) — 앞 줄부터,
+  끝 표시 0x29CCCC 면 9999 자) [확실]. 확정 0x148360: 끝 표시가 아니면 끝 표시로 하고 거짓 → 메시지 상자 (0x1B8E40) 는 **첫 ○ 를 글자를 다 보이는 데만** 쓰고 둘째
+  ○ 에 넘긴다 (다 쳐진 뒤라도). 영상 9885 "문을 통해 사막으로" (0.2 초). `UiVariables.typeLines` / `typeTick` / `typeComplete` / `typed` (`FlpPlayer.textOf`),
+  [XButton] 태그는 한 글자 [근사]. 아이템 카드 글은 타자 없이. 자동 플레이 봇은 쪽마다 1.5 초 뒤 끝 표시 + 넘김을 한 번에 [엔진 전용].
+- **모래시계** (GameMgr 타이머 0x19 로 표시한 타이머, 0x1A827C – 0x1A83D4) [확실]: HUD +0x38 `PS2_Timer_Value` = 경과 % = 100 − (int)(남은 × 100 / 길이 + 0.5),
+  +0x3C `PS2_Timer_Seconds` = (int)(남은 + 0.5), +0x248 `PS2_Timer_Event` = 보임 (메시지 +0x1528 · 질문 +0x152C · 카드 +0x1530 이 없고 상태 0xB 면 1) — 셋 중 하나가
+  바뀔 때만 보낸다; 표시 타이머가 없으면 모두 0. FLP_HUDK HourGlassMeter: Event 0 → "Off" (프레임 0), 양수 → GotoFrame2(2 + 경과 %) (0 기반 2 + %, 모래가 내려감),
+  **0 기반 92 (경과 91 %) 부터 붉은 깜박임 clip#3** — 70 초 타이머면 남은 6.6 초 미만 (영상 9760.25 흰 7 → 9760.5 붉은 6). HourGlassTime/Time = 남은 초.
+  `GameScene.timerHud`.
+- **실패 메뉴** (FailedScreen 0x21D808) [확실]: `PS2_FailedMenu_Event` 1 → FailedMenu "On" + SND_IG_YOUAREDEAD (Pause_Check 12), ○ = 다시 하기 (Menu_Choice 0,
+  SND_MM_RESTART_YES) / 나가기 (1) → CloseFailedMenu → `PS2_Done` 1. `GameScene.failedScreen` / `onFailedMenuClosed` / `restartFailed` (11 §5.5).
+
 ## 아이템 카드 · 메시지 그림 · 첫 안내 · 메뉴 동안 미니게임 아이콘 (43 §18)
 - **PickUpInfoMenu** (FLP_HUDK): `PS2_PickUpInfo_Event` 3 = 고르곤의 눈, 4 = 불사조 깃털, 8 = GenericPickUp (그림), `PS2_MeterBarGrow` 1 HP / 2 MP (6 개째 레벨 업),
   Pause_Check 8 동안 게임 멈춤, ○ = ClosePickUpMenu → `PS2_Done` 1 [확실: FLP]. 엔진은 열 때·닫을 때 PS2_Done 0 (다음 메뉴의 1 이 변화로 들어오게).

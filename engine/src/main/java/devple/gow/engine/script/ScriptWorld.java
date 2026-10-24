@@ -181,7 +181,8 @@ public final class ScriptWorld {
 	}
 
 	/**
-	 * 검증 하네스 (-Dgow.arrive.state, 엔진 전용): 앞 구간에서 이미 지난 상태를 미리 둔다 — "Ln=값" LevelData n, "G이름=값" GlobalData,
+	 * 검증 하네스 (-Dgow.arrive.state, 엔진 전용): 앞 구간에서 이미 지난 상태를 미리 둔다 — "Ln=값" LevelData n, "G이름=값" GlobalData, "In=값" Internal
+	 * 플레이어 변수 (44 고르곤의 눈 · 45 불사조 깃털 개수 …),
 	 * "F=엔티티 이름" 그 엔티티를 이미 발동한 것으로 (재발동 대기 −1 이면 다시 안 탐). 예 ATHN04A 광장 사이클롭스 결투 끝 =
 	 * "L0=3,F=DMCsqr-DMC-TriggerVol0-PlayerEntry", ATHN04B 두 번째 = "GDoorKey=true" (43 §18).
 	 */
@@ -201,6 +202,8 @@ public final class ScriptWorld {
 				}
 			} else if (k.startsWith("G")) {
 				host.globalData().put(GameScriptHost.globalKey(k.substring(1)), val); // GlobalData 이름 (예 GDoorKey=true)
+			} else if (k.startsWith("I")) {
+				host.setVar(null, 1, Integer.parseInt(k.substring(1)), 0, val); // Internal 플레이어 변수 (예 I45=5 불사조 깃털 5 개)
 			} else if (k.startsWith("L")) {
 				host.levelData().put(Integer.parseInt(k.substring(1)), val);
 			}

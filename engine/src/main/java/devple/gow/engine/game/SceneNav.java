@@ -61,6 +61,15 @@ public final class SceneNav {
 		default void neighbourCamera(String name, Boolean query, List<String> owners, boolean on) {
 		}
 
+		/** Internal 0xD / 0xE 지금 / 바로 앞 카메라 이름 — 카메라 관리자는 하나라 이웃 스크립트도 같은 값 ({@link ScriptListener#cameraName}). */
+		default String cameraName(boolean previous) {
+			return "";
+		}
+
+		/** Internal 0x13 FailedScreen (0x1B0B58 → 0x29D958 = 1) — GameMgr 는 슬롯 구분 없음. */
+		default void failedScreen() {
+		}
+
 		/**
 		 * 이웃 레벨 스크립트의 Vis Visible (슬롯 0: 1 보임 / 2 숨김) — 원작은 두 슬롯 GO 가 같은 렌더 서버에 있어 이웃 스크립트의 숨김도 그대로 화면에 걸린다
 		 * (예 PAND01A AxeAlcWall-CamSensor1: 이벤트 1037 카메라 AltCam43 등이면 goaxealcwall 숨김, 43 §13.8).
@@ -402,6 +411,11 @@ public final class SceneNav {
 			}
 
 			@Override
+			public String cameraName(boolean previous) {
+				return host.cameraName(previous);
+			}
+
+			@Override
 			public void animate(ScriptEntity source, List<String> objects, String anim) {
 				applyAnimator(neighbour, neighbourPlatforms, source, objects, anim);
 			}
@@ -677,9 +691,14 @@ public final class SceneNav {
 
 	/**
 	 * 이웃 슬롯 스크립트의 Internal 호출 중 전역 상태를 바꾸는 것 — 원작 GameMgr / 카메라 관리자 / 전역 정지는 슬롯 구분이 없다:
-	 * 0x9 CMV 질의 on/off, 0xC Idle (0x1BF080 → 0x29DB58), 0x10 구역 제목 (0x1B0A28 → 0x1B8BA0, 43 문서 §19) [확실: 코드].
+	 * 0x9 CMV 질의 on/off, 0xC Idle (0x1BF080 → 0x29DB58), 0x10 구역 제목 (0x1B0A28 → 0x1B8BA0, 43 문서 §19), 0x13 FailedScreen (0x1B0B58,
+	 * 43 §23) [확실: 코드].
 	 */
 	static void neighbourInternal(Host host, int func, List<Object> args) {
+		if (func == 0x13) {
+			host.failedScreen(); // FailedScreen (인자 없음)
+			return;
+		}
 		if (args.isEmpty()) {
 			return;
 		}

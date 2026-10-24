@@ -446,7 +446,7 @@ public final class FlpPlayer {
 	/** 동적 라벨 노드의 표시 문자열 (변수는 라벨을 가진 클립 기준, 없으면 초기 텍스트). */
 	String textOf(FlpNode n) {
 		FlpFile.DynamicLabel dl = flp.dynamicLabels.get(n.index);
-		String v = dl.variable() == null ? "" : vm.getVar(n.parent, dl.variable());
+		String v = dl.variable() == null ? "" : vars.typed(dl.variable(), vm.getVar(n.parent, dl.variable())); // 메시지 타자 효과
 		return v.isEmpty() && dl.placeholder() != null ? dl.placeholder() : v;
 	}
 

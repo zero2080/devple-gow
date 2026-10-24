@@ -682,6 +682,7 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 				sx = hashF(tw, n, 0x35F40B1B, 1f);
 				sy = hashF(tw, n, 0x7A4A8930, 1f);
 				sz = hashF(tw, n, 0xDF4375E3, 1f);
+				targetWeight = tw.f(n, "Target Weight", 1f);
 				break;
 			}
 		}
@@ -846,6 +847,12 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 	 * 엔진은 CDV 가 없으면 정면 구 근사로 맞혔다 → 석상이 HP 20 을 잃고 쓰러졌다. 영웅 대상 (나침반·봇) 에서도 뺀다 (GameScene.nearestEnemy) [추정].
 	 */
 	public boolean bodiless;
+
+	/**
+	 * CombatFileSet "Target Weight" (해시 0x07FA8F27, +0x20, 0x202924) — 영웅 조준 가중. 0 = 싸울 대상이 아닌 말하는 NPC (ATHN06C 오라클 AOXOR 310,
+	 * ATHN06A 무덤지기 AOXDI 309; 해골 0.4). 자동 플레이 봇은 0 인 적을 대상으로 고르지 않는다 [엔진 전용 — 원작 조준 가중 경로는 미확인].
+	 */
+	public float targetWeight = 1f;
 
 	@Override
 	public boolean invulnerable() {

@@ -127,6 +127,16 @@ BallHull 수정: 평면 수를 헤더 0x38 이 아니라 hull 별 평면 수의 
   `ScriptWorld.restore` (start 전). 넘겨 쓰는 이음 세계 (`residentWorlds`) 는 그대로 이어지고, 버려졌다 다시 읽는 레벨만 되살린다. 세이브에 표를 같이 쓴다.
 - [근사] 적 기록 (살아 있던 적) · Animator 자세 · 미뤄 둔 발동 · 열린 상자 · 센서 한 번 발동 기록은 담지 않는다. 시험 `LevelMemoryTest`.
 
+## 10. 스크립트 타이머 · 카메라 이름 · 실패 화면 (43 §23) [확실: 디스어셈블]
+- GameMgr 타이머 표 0x3368F8 (칸 4) — Internal 0x14 만들기 · 0x15/0x16 멈춤/다시 · 0x17 지움 · 0x18 남은 초 · 0x19 HUD 모래시계 (13 §6.1). 매 프레임 스크립트 세계
+  갱신 (0x1A7A78) 이 1/60 씩 줄이고 다 되면 전역 이벤트 1050 (인자 0 = 번호, 보낸 쪽 = 영웅). 표는 하나라 두 슬롯이 같이 쓴다.
+- 엔진: `ScriptTimers` (`GameScriptHost.timers`, `ScriptHost.neighbour` 와 공유), `ScriptHost` 가 0x14–0x19 를 처리하고 (0x14 · 0x18 은 값 반환), `GameScene.scriptTimers` 가
+  `world.tick` 다음에 (일시정지·질문·카드·메뉴 동안은 세계와 같이 멈춤) 줄이고 1050 을 보낸다 (`world.postEvent` → 이웃 세계도). 실패 화면 다시 하기 · 레벨 새로 읽기에서 비움.
+- 0xD / 0xE (지금 / 바로 앞 카메라 이름) → `ScriptListener.cameraName` (`GameScene` 이 `CameraRig.onSwitch` 로 기록, 이웃 리스너는 `SceneNav.Host.cameraName`).
+- 0x13 FailedScreen → `ScriptListener.internal` → `GameScene.failedScreen` (이웃 슬롯도 `SceneNav.neighbourInternal`) (11 §5.5).
+- 1008 을 Creator 가 만든 GO 에 보내면 그 GO 를 지운다 (13 §4.1) → `GameScene.destroyCreated` (`ScriptWorld.destroy` = DestructionSensor).
+- 시험 `OracleRescueTimerTest` (타이머 표 · 붉은 경고 경과 % · 오라클 70 초 시작/실패/구출).
+
 ## Vis 의 Visible (표시/숨김)
 Vis 엔티티 슬롯 0 `Visible`: 1 = 보임, 2 = 숨김, 0 = 그대로 (`Attr11_0/1` 은 충돌·카메라 볼륨). 이전에는 카메라 볼륨만 반영하고 표시 상태는 무시해
 스크립트가 숨긴 오브젝트가 계속 그려지고 R1 로 잡혔다. 이제 `GameScene` 이 대상 오브젝트(소유 GO 인스턴스)를 렌더에서 빼고/되살리고, 숨긴 상호작용

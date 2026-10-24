@@ -1489,6 +1489,56 @@ toMagicDoor 한 틱 건너뛰기 → LevelData8, 발리스타 몸 28.16 / 32, �
 `01_strafe_into_hall_video_vs_engine` (7744 / 7748 / 7752 ↔ r15 40 / 45 / 50 초) · `02_turntable_video_vs_engine` (7792 / 7818 / 7836 / 7840 ↔ r15 63 / 66 / 90 / 95 초) ·
 `03_presliftdoor_skeletons_engine` (r6) · `04_zeus_face_item_engine` (r4) · `05_crank_bolt_door_video_vs_engine` (7852 / 7855 / 7858 ↔ r15 107 / 110 / 113 초).
 
+## 23. QA vs PS2 영상 — 오라클의 사원: ATHN06A 무덤지기 뒤 → ATHN06B 실내 · 들보 홀 → ATHN06C 오라클 구출 · 엔딩 대화 → ATHN07 세이브 (영상 8806–9917 초, 2026-10-24)
+
+레벨 연결 [확실: 스크립트]: ATHN06A (무덤지기 a06Mp04 뒤 GraveSpot · SaveGameZone (5467, 724, 1146) · Chest1 깃털 CSM 011 · Chest2 고르곤의 눈 CSM 010 · 신전 계단 위
+toAthn06B: LoadForWarp → Warp) ─ ATHN06B (WarpFrom6A → Harpies-Volume0 → 동영상 a06Mp05b (하피) → 석상 둘 (Marker 710/711) 로 하피 구멍 둘 막기 · 들보 홀 (FallingBeam
+17–29) · SaveGameZone (−3148, 992, −1833) · 복도 해골 셋 묶음 (DMCSpawner) → WarpTo6C) ─ ATHN06C (WarpFrom6B → beginIntro06C a06Mp02 (하피가 오라클을 매닮) →
+석상 당기기 (Marker 721/722) · 엘리베이터 (720) · 석상 쌓기 → 덩굴 벽 (x −310, y 198–418) → 카메라 UprCam21 → a06Mp03 → 70 초 구출 → 접시 saveOraclTrig → 동영상
+Semo03 (크라토스의 과거) → OracleSaved · R2 대화 342 → 출구 WarpToAth7) ─ ATHN07 (WarpFAthn06C · SaveGameZone1 → 세이브). 엔진 = origin/main 68b8f16 위.
+
+### 23.1 장면 대응 (진행 중)
+| 영상 | 원작 (스크립트·데이터) | 엔진 |
+|---|---|---|
+| 9399–9412 | 동영상 a06Mp02 → 줄에 매달린 오라클 (TriggeredEntryCam · PanBackCam) | c1 4–6 초 매달린 오라클 · 카메라 |
+| 9676–9694 | 동영상 a06Mp03 ("크레토스! 손이 미끄러져요!", "하지만 서둘러야 해요!") — 덩굴 벽에서 카메라 UprCam21 (Internal 0xD) | 고치기 전 a06Mp03Done 의 카메라 조건이 늘 거짓 (§23.2-2) |
+| 9698–9699.5 | 안내 523 "건너가려면 가장자리에서 ✕" — 상자 동안 HUD·모래시계 숨김, 타이머는 흐름 | a6 (ARENA06 같은 구조): 메시지 2053 동안 숨김 → 닫힌 뒤 18 · 16 … (`01`) |
+| 9699.6–9760.75 | 모래시계 70 → 67 … 7 (흰색) → 6 (붉게, 경과 91 % = FLP 프레임 92) | a6 6 흰색 → 2 붉게 (`02`) · `OracleRescueTimerTest` 9760.25 / 9760.5 값 |
+| 9761 | 구출 직후 "0" 흰색 (표시 타이머가 지워져 Event 0) | a6 21 초 다 된 뒤 "0" 흰색 (`03`) — 같은 FLP 동작 |
+| 9762–9880 | 동영상 Semo03 → Goto OracleSaved · killOrclonWIN (1008 → 줄의 오라클 제거) | c5 3.17 초 Semo03 끝 → 1008 로 매달린 오라클 제거 · 체크포인트 |
+| 9883–9890 | OracleTalk R2 → camOrcTalk · 대화 342 (양피지, 한 자씩: 9885 "문을 통해 사막으로") 세 줄 + ○ → 둘째 쪽 "유일한 방법입니다." | c5 7.73 초 R2 → 342 두 쪽, 타자 50 자/초 (`04` `05` `06`) — 고치기 전 넷째 줄부터 잘리고 한 번에 다 보임 (§23.2-4) |
+| 9892–9894 | 문 앞 크라토스, 왼쪽에 오라클 (HUD 없음) | c5 11 초 (`07`) — 고치기 전 봇이 오라클을 때려 죽여 사라짐 (§23.2-6) |
+| 9897–9901 | 복도 → 계단 아래 방 | c5 18–31 초 (순간이동 섞임) → ATHN07 |
+
+### 23.2 엔진 결함과 수정
+1. **스크립트 타이머가 아예 없었다 (Internal 0x14–0x19, 이벤트 1050).** GameMgr 타이머 표 0x3368F8 (칸 4: 남은 · 길이 · 플래그 1 사용 / 2 멈춤 / 4 HUD) —
+   0x14 만들기 (0x1B0B68, 번호 = 칸 + 1) · 0x15/0x16 멈춤/다시 · 0x17 지움 · 0x18 남은 초 · 0x19 모래시계 (0x1B0CE0), 매 프레임 0x1A81F8 이 1/60 씩 줄이고 다 되면
+   PostEvent(1050, 번호, 보낸 쪽 = 영웅 0x29D904) [확실]. 엔진은 0x14–0x19 를 버려 1050 이 한 번도 오지 않았다 — 오라클 구출 70 초 (영상 9699.6–9760), 아레나 6 곳의 시간
+   제한, 궁수 스폰 · 히드라 카메라 · VO 안내 타이머 (전 레벨 67 곳 만들기, 1050 센서 35 곳) 가 모두 멈춰 있었다 → `ScriptTimers` (13 §6.1, 28 §10).
+2. **HUD 모래시계** (0x1A827C – 0x1A83D4): 표시 타이머의 경과 % · 남은 초 · 보임 (메시지 · 질문 · 카드가 없을 때) 을 바뀔 때만 PS2_Timer_Value / _Seconds / _Event 로 →
+   FLP_HUDK HourGlassMeter (GotoFrame2(2 + %), 0 기반 92 부터 붉은 깜박임) [확실] → `GameScene.timerHud` (21 문서).
+3. **Internal 0xD / 0xE (지금 / 바로 앞 카메라 이름) 가 "" 였다.** 카메라 관리자 +0x808 / +0x820 (전환 0x1EEE04) [확실]. ATHN06C oraclPuzzle-a06Mp03Done 의 조건
+   (영상 이름 && (0xD == "UprCam21" || "UprCam3")) 이 늘 거짓이라 a06Mp03 뒤 체크포인트 · 안내 523 · 70 초 타이머가 없었다 → `ScriptListener.cameraName`.
+4. **여러 쪽 메시지 · 타자 효과 · 시간 메시지의 1040** (0x1B96D0 / 0x1B8C00 / 0x1482E0) [확실]: "----" 쪽 구분 (쪽마다 1..3 줄, 여러 쪽은 세 줄 틀), ○ 마다 다음 쪽,
+   첫 ○ 는 타자 끝 표시만, 글자 50 자/초, 1040 은 버튼으로 닫을 때만. 예전 엔진은 "----" 를 빈 줄로 넣어 다섯 줄 틀에서 넷째 줄부터 잘렸고 (게임 안 여러 쪽 메시지 22 개),
+   시간 메시지에도 1040 을 보냈다 → `GameScene.messagePages` · `showMessagePage` · `closeMessage`, `UiVariables.typeLines` (21 문서).
+5. **1008 이 Creator GO 를 지우지 않았다.** 원작 EventTransmitter 는 1008 (죽음) 을 Creator 가 만든 GO (핸들러 0x1ADEE0) 에 보내면 메시지 대신 0x1AE448 로 GO 를
+   지운다 (0x1AC154 – 0x1AC198) [확실] — killOrclonWIN 이 Semo03 뒤 줄의 오라클을 지우고, 실패 때 oraclFallDIE 가 매단 오라클을 지운 뒤 떨어지는 오라클
+   (aoXOR1a06hl02a) 을 새로 만든다. 엔진은 버려 구출 뒤에도 줄에 오라클이 남았다 → `GameScene.destroyCreated` (13 §4.1).
+6. **FailedScreen (Internal 0x13) 이 없었다** (0x1B0B58 → 0x21D808: HUD FailedMenu, 상태 0xE) [확실] → `GameScene.failedScreen` (메뉴 → 다시 하기 / 나가기). 다시 하기는
+   레벨을 처음 상태로 다시 읽어 체크포인트에 둔다 [근사: 원작은 스냅샷 복원, 11 §5.5]. a6: ARENA06 21 초 → 1050 → 메시지 2005 → FailedScreen → 다시.
+7. 하네스 [엔진 전용]: 봇이 조준 가중 (CombatFileSet "Target Weight") 0 인 NPC (오라클 310 · 무덤지기 309) 를 적으로 골라 때렸다 (c5 수정 전: 대화 시작 전에 오라클이 쓰러짐)
+   → `EnemyFighter.targetWeight`. 경로 단계 `jump:초:fx,fz` · `post:번호[:인자]` · `cam:이름`, 도착 상태 `In=값` (Internal 플레이어 변수, 예 I45=5 깃털).
+
+### 23.3 시험
+`OracleRescueTimerTest` (5: 타이머 표 · 붉은 경고 경과 % · a06Mp03 끝 + 카메라 UprCam21 → 523 · 70 초 모래시계 (다른 카메라면 없음), 70 초 → 오라클 떨어짐 → 6.4 초 뒤
+실패 화면, 접시 → 타이머 지움 · Semo03), `HourglassFailedMenuTest` (3: FLP 모래시계 프레임 5 · 91 · 92 · Off, 실패 메뉴 ○ = 다시 하기, 타자 효과),
+`MessagePagesTest` (오라클 342 두 쪽, 게임 안 메시지 모든 쪽 1..3 줄).
+
+### 23.4 증거 (`work/verify/athn_oracle_temple/`, 커밋 안 함)
+`01_arena06_hourglass_16_a6` · `02_arena06_hourglass_red_2_a6` · `03_arena06_hourglass_0_white_a6` · `04_oracle_342_typing_c5` · `05_oracle_342_page1_c5` ·
+`06_oracle_342_page2_c5` · `07_oracle_by_exit_door_c5`.
+
 ## 시연 녹화 (-Dgow.record, -Dgow.bot) [엔진 전용]
 
 - `-Dgow.record=DIR` 로직 틱 `gow.record.every`(기본 2 = 30fps) 번마다 `DIR/f000000.jpg` 저장, `gow.record.secs` 초 뒤 종료. 녹화 중에는 lockstep (프레임당 틱 하나) 이라 렌더 속도와 무관하게 영상 시간이 게임 시간과 같다.

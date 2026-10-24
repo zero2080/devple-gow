@@ -156,8 +156,18 @@ public final class GameScene implements Scene {
 	private final Map<String, Object[]> otherPosed = new java.util.concurrent.ConcurrentHashMap<>();
 	/** 다른 슬롯 레벨의 스크립트 재질 애니 시간 (소유 GO → 재질 → 시간, {@link devple.gow.engine.nav.Platforms#materialTimes}). */
 	private volatile Map<String, Map<String, Float>> otherMaterialTimes = Map.of();
-	/** 표시 중인 메시지 번호 (-1 없음): 닫힐 때 이벤트 1040(번호) 를 플레이어가 보낸다 (원작 0x1B8ECC/0x1B8F98/0x1B9170). */
+	/** 표시 중인 메시지 번호 (-1 없음): 버튼으로 닫힐 때 이벤트 1040(번호) 를 플레이어가 보낸다 (원작 0x1B8ECC/0x1B8F98/0x1B9170). */
 	private int messageId = -1;
+	/** 표시 중인 메시지의 쪽 (줄 첫 두 글자 "--" 로 나눔, 쪽마다 1..3 줄 — 0x1B96D0) 과 지금 쪽 (HUD +0x1534), 쪽마다 시간 (+0x153C, 0 이하 = 버튼). */
+	private List<List<String>> messagePages = List.of();
+	private int messagePage;
+	private float messageSeconds;
+	/** 카메라 관리자 +0x808 / +0x820: 지금 / 바로 앞 카메라 이름 (Internal 0xD / 0xE) — 전환 0x1EEE04 때만 바뀐다 (엔진 Follow 는 원작에 없어 넣지 않음). */
+	private String camNow = "", camPrev = "";
+	/** HUD 모래시계 마지막 값 (원작 HUD +0x38 Timer_Value 경과 %, +0x3C Timer_Seconds, +0x15A0 보임) — 바뀔 때만 보낸다 (0x1A830C – 0x1A8340, 0x1A83A4 – 0x1A83D4). */
+	private int timerPercent, timerSecs, timerVisible;
+	/** 실패 화면 (Internal 0x13 FailedScreen → HUD FailedMenu, 0x21D808) 이 열려 있음. */
+	private boolean failedMenu;
 	/** 열린 질문 메시지 번호 (Internal 0xB, −1 = 없음), 선택지 수, 지금 선택 (1 부터). */
 	private int questionId = -1, questionChoices, questionChoice;
 	private float stepTimer;
@@ -222,6 +232,14 @@ public final class GameScene implements Scene {
 		this(session, save.level, null, 0);
 		this.loadPos = save.pos;
 		this.loadYaw = save.yaw;
+	}
+
+	/** 레벨을 새로 읽고 (pos, yaw) 에 둔다 — 실패 화면 다시 하기 ({@link #restartFailed}). */
+	static GameScene at(GameSession session, String levelName, float[] pos, float yaw) {
+		GameScene s = new GameScene(session, levelName, (String) null, 0);
+		s.loadPos = pos;
+		s.loadYaw = yaw;
+		return s;
 	}
 
 	public GameScene(GameSession session, String levelName, String entry, float autoRun) {
@@ -516,9 +534,11 @@ public final class GameScene implements Scene {
 					closePickupCard(); // FLP ClosePickUpMenu (○, Pause_Check 8 → 0)
 				} else if (deadMenu == 2 && name.equals("PS2_Done") && "1".equals(String.valueOf(value).replace(".0", ""))) {
 					onDeadMenuClosed(vars.get("PS2_Menu_Choice"));
+				} else if (failedMenu && name.equals("PS2_Done") && "1".equals(String.valueOf(value).replace(".0", ""))) {
+					onFailedMenuClosed(vars.get("PS2_Menu_Choice")); // FLP CloseFailedMenu (Menu_Choice 0 다시 / 1 나가기 → Done 1)
 				} else if (saveAsk && name.equals("PS2_Done") && "1".equals(String.valueOf(value).replace(".0", ""))) {
 					onSaveAnswered("1".equals(String.valueOf(vars.get("PS2_Menu_Choice")).replace(".0", "")));
-				} else if (paused && !powerUp && !saveAsk && saveFlow == null && saveCloseTimer <= 0 && deadMenu == 0
+				} else if (paused && !powerUp && !saveAsk && saveFlow == null && saveCloseTimer <= 0 && deadMenu == 0 && !failedMenu
 						&& (name.equals("PS2_PauseDone") || name.endsWith("Menu_Choice"))) {
 					onMenuClosed(name, value);
 				}
@@ -653,6 +673,8 @@ public final class GameScene implements Scene {
 		cameraRig.setOther(otherData); // 다른 슬롯 레벨의 CMV·카메라도 질의 (원작 두 슬롯 상주)
 		// 카메라 전환 → 전역 이벤트 1037 (인자0 = 카메라 이름, 원작 0x1EEE88)
 		cameraRig.onSwitch(n -> {
+			camPrev = camNow; // 0x1EEE04: +0x820 ← +0x808, +0x808 ← 새 이름 (Internal 0xE / 0xD)
+			camNow = n;
 			if (world != null) {
 				world.postEvent(1037, n, 0, 0, null);
 			}
@@ -686,6 +708,15 @@ public final class GameScene implements Scene {
 			} else {
 				auto = new AutoPlay(levelName);
 				auto.plan(world, col);
+			}
+			if (auto != null) {
+				auto.scriptPost = (id, a0) -> world.postEvent(id, a0, 0, 0, world.player());
+				auto.camera = n -> { // 스크립트처럼 CMV 질의 끔 (Internal 0x9 false) + SwitchCamera, 빈 이름이면 질의 다시 켬
+					cameraRig.setVolumeQuery(n.isEmpty());
+					if (!n.isEmpty()) {
+						cameraRig.request(n);
+					}
+				};
 			}
 		}
 		buildRopeVisuals();
@@ -1232,6 +1263,16 @@ public final class GameScene implements Scene {
 			}
 
 			@Override
+			public String cameraName(boolean previous) {
+				return previous ? camPrev : camNow;
+			}
+
+			@Override
+			public void failedScreen() {
+				GameScene.this.failedScreen();
+			}
+
+			@Override
 			public void neighbourCreate(ScriptEntity source, Object name) {
 				// 이웃 레벨 Creator "savepoint" (원작 두 슬롯 GO 상주): 자리·빛기둥을 이 씬에 — R2 저장 (0x1DC678 은 슬롯 구분 없이 가장 가까운 것).
 				// 이웃 상자 ("chest") 는 아직 현재 레벨 것만 [근사]
@@ -1339,6 +1380,11 @@ public final class GameScene implements Scene {
 			}
 
 			@Override
+			public String cameraName(boolean previous) {
+				return previous ? camPrev : camNow; // Internal 0xE / 0xD
+			}
+
+			@Override
 			public void fade(float r, float g, float b, float seconds, boolean out) {
 				if (out) {
 					screenFade.fadeOut(r, g, b, seconds); // Entity 0x5 (0x1AFA20)
@@ -1419,6 +1465,9 @@ public final class GameScene implements Scene {
 				}
 				if (func == 0xB && !args.isEmpty()) { // 질문 (원작 0x21D9C8 → GameMgr +0x152C) → HUD 메뉴 템플릿 → 1021 (선택 번호, 메시지 번호)
 					openQuestion((int) num(args.get(0)));
+				}
+				if (func == 0x13) { // FailedScreen (0x1B0B58 → 0x29D958 → 0x21D808)
+					failedScreen();
 				}
 				if (func == devple.gow.engine.script.GameScriptHost.ZONE_REPORT && !args.isEmpty()) {
 					zoneReport((int) num(args.get(0)));
@@ -1524,6 +1573,9 @@ public final class GameScene implements Scene {
 					if (!hero.combat.request(e.arg1())) {
 						hero.combat.forceMove(e.arg1());
 					}
+					return;
+				}
+				if (e.event() == EVENT_DIE && e.actor() != null && destroyCreated(e.actor())) {
 					return;
 				}
 				boolean handled = boss != null ? boss.objectEvent(e) : bridge != null && bridge.objectEvent(e);
@@ -1645,6 +1697,26 @@ public final class GameScene implements Scene {
 		}
 		createdObjects.put(key, e);
 		System.out.printf("Creator 오브젝트 %s → %s (그룹 %d) at (%.0f, %.0f, %.0f)%n", source.name(), def.go(), group, m[12], m[13], m[14]);
+	}
+
+	/** 이벤트 1008 (0x3F0) "죽음" — 스크립트 이름 EvtDie · instantDie · KillEnemies · oraclFallDIE. */
+	static final int EVENT_DIE = 1008;
+
+	/**
+	 * EventTransmitter 의 1008 이 Creator 가 만든 GO 에 가면 그 GO 를 지운다 (원작 0x1AC154 – 0x1AC198: 메시지 0x3F0 이고 대상에 전투 컴포넌트가 없고 핸들러가
+	 * Creator GO 의 0x1ADEE0 이면 보내지 않고 0x1AE448 — GO 제거 + 레지스트리 제거 통지 0x1A6010 → DestructionSensor) [확실]. 예 ATHN06C killOrclonWIN
+	 * (구출 동영상 뒤 줄에 매달린 오라클 aoXOR1a06hl02 을 지움) · oraclFallDIE (실패: 매단 오라클을 지우고 떨어지는 오라클 aoXOR1a06hl02a 를 새로 만듦).
+	 * 예전 엔진은 1008 을 버려 구출 뒤에도 줄에 오라클이 남았다. @return Creator GO 였으면 true
+	 */
+	private boolean destroyCreated(devple.gow.engine.script.ScriptActor a) {
+		devple.gow.engine.fx.EffectSystem.Effect fx = createdObjects.remove(a.name);
+		if (fx == null) {
+			return false;
+		}
+		fx.stop();
+		world.destroy(a);
+		System.out.println("Creator 오브젝트 제거 (1008): " + a.name);
+		return true;
 	}
 
 	/** Animator 가 Creator 오브젝트를 가리키면 그 GO 에 act (슬롯 1 비트 0x2 = 반복, Platforms.play 와 같은 규칙). @return 처리했으면 true */
@@ -2141,6 +2213,7 @@ public final class GameScene implements Scene {
 				v.set("PS2_MessageTemplate_Line" + i, i <= lines.length ? lines[i - 1].trim() : "");
 			}
 		}
+		v.typeLines(null, 0, 0); // 카드 글은 타자 효과 없이
 		hud.renderer().swapTexture(hud.renderer().clipTexture("GenericPickUp"), picture);
 		v.set("PS2_MeterBarGrow", grow);
 		v.set("PS2_Done", 0); // 닫힘 (FLP ClosePickUpMenu → 1) 을 변화로 받도록
@@ -2224,7 +2297,9 @@ public final class GameScene implements Scene {
 		String text = session.messages != null ? session.messages.get(id) : null;
 		messageId = id;
 		messageWait = false;
+		messageSeconds = seconds;
 		if (text == null) {
+			messagePages = List.of();
 			messageTimer = seconds > 0 ? seconds : 4f;
 			return;
 		}
@@ -2232,19 +2307,96 @@ public final class GameScene implements Scene {
 		boolean wait = seconds <= 0;
 		messageButtonLate = wait && id >= 500 && id < 600;
 		v0.set("PS2_MessageTemplate_Style", wait && !messageButtonLate ? 1 : 0); // +0x9C (0x1B9A80–0x1B9AD4)
-		String[] lines = text.replace("----", "\n").split("\n");
-		UiVariables v = hud.variables();
-		for (int i = 1; i <= 5; i++) {
-			v.set("PS2_MessageTemplate_Line" + i, i <= lines.length ? lines[i - 1].trim() : "");
+		messagePages = messagePages(text);
+		messagePage = 0;
+		if (!showMessagePage(true)) {
+			System.out.println("메시지 " + id + ": 쪽 줄 수가 1..3 이 아님 → 바로 닫음 (0x1B97A0)");
+			closeMessage(false);
+			return;
 		}
-		// 이벤트 값 = 줄 수: HUD 스크립트가 MessageTemplates 를 GotoFrame2(값 + 1) — 프레임 n 이 줄 1..n 배치 (FLP_HUDK).
-		// 1 로 보내면 첫 줄만 보였다 (튜토리얼 269 "[□] 보통 공격. / [△] 강한 공격." 의 둘째 줄, 메두사 520 의 둘째 줄)
-		v.event("PS2_MessageTemplate_Event", Math.max(1, Math.min(5, lines.length)));
 		messageTimer = wait ? 0 : seconds;
 		messageWait = wait;
 		messageWaitTime = 0;
+		messagePressTime = 0;
 		devple.gow.engine.combat.AiTargets.globalHold = globalIdle();
-		System.out.println("메시지 " + id + ": " + text.replace('\n', ' '));
+		System.out.println("메시지 " + id + ": " + text.replace('\n', ' ') + (messagePages.size() > 1 ? " (" + messagePages.size() + " 쪽)" : ""));
+	}
+
+	/** 메시지 본문 → 쪽 (원작 0x1B96D0: 줄의 첫 두 글자가 '-' 면 쪽 구분, 그 줄은 보이지 않음) [확실]. */
+	static List<List<String>> messagePages(String text) {
+		List<List<String>> pages = new ArrayList<>();
+		pages.add(new ArrayList<>());
+		for (String line : text.split("\n", -1)) {
+			if (line.startsWith("--")) {
+				pages.add(new ArrayList<>());
+			} else {
+				pages.getLast().add(line.trim());
+			}
+		}
+		return pages;
+	}
+
+	/**
+	 * 메시지 한 쪽을 HUD MessageTemplates 에 (원작 0x1B96D0) [확실]: 쪽 줄 수가 1..3 이 아니면 거짓 (원작은 상자를 닫는다). 한 쪽짜리 = Line1..n + Event n
+	 * (FLP GotoFrame2(n + 1) — 프레임 n 이 줄 1..n 배치), 여러 쪽 = 첫 쪽에서만 Event 3 (세 줄 틀) — 줄 하나인 쪽은 가운데 줄 (Line2) 에. 쪽마다 글자를
+	 * 타자처럼 (0x1B9B00 → {@link UiVariables#typeLines}, 초당 50 자). 예: 오라클 342 "문을 통해 사막으로 가세요 …" 세 줄 + 둘째 쪽 "유일한 방법입니다."
+	 * (PS2 영상 9885–9890) — 예전 엔진은 "----" 를 빈 줄로 바꿔 다섯 줄 틀에 넣어 둘째 쪽 줄이 잘렸다.
+	 */
+	private boolean showMessagePage(boolean first) {
+		List<String> lines = messagePages.get(messagePage);
+		int n = lines.size();
+		if (n < 1 || n > 3) {
+			return false;
+		}
+		boolean multi = messagePages.size() > 1;
+		String[] l = {"", "", "", "", ""};
+		int from = 1;
+		if (multi && n == 1) {
+			l[1] = lines.get(0);
+			from = 2;
+		} else {
+			for (int i = 0; i < n; i++) {
+				l[i] = lines.get(i);
+			}
+		}
+		UiVariables v = hud.variables();
+		for (int i = 1; i <= 5; i++) {
+			v.set("PS2_MessageTemplate_Line" + i, l[i - 1]);
+		}
+		v.typeLines("PS2_MessageTemplate_Line", from, multi && n == 1 ? 2 : n);
+		if (first) {
+			v.event("PS2_MessageTemplate_Event", multi ? 3 : n);
+		}
+		messagePressTime = 0;
+		return true;
+	}
+
+	/** 다음 쪽 (원작 0x1B8D7C / 0x1B8E5C: +0x1534 + 1 < 쪽 수 → 0x1B96D0), 마지막 쪽이었으면 닫는다 — 버튼으로 닫을 때만 1040 (0x1B8EC0). */
+	private void nextMessagePage(boolean button) {
+		messagePage++;
+		if (messagePage < messagePages.size() && showMessagePage(false)) {
+			messageTimer = button ? 0 : messageSeconds;
+			return;
+		}
+		closeMessage(button);
+	}
+
+	/**
+	 * 메시지 상자 닫기: Event 0 · 타자 끔. 1040 (0x410, 인자 0 = 번호, 보낸 쪽 = 영웅) 은 버튼으로 닫을 때만 (0x1B8EC0) — 시간이 다 된 메시지는 조용히
+	 * 닫힌다 (0x1B8DCC) [확실]. 표에 없는 번호 (원작은 "Msg %d" 를 띄우고 버튼을 기다림) 는 엔진이 시간으로 닫되 버튼 메시지면 1040 을 보낸다.
+	 */
+	private void closeMessage(boolean post1040) {
+		UiVariables v = hud.variables();
+		v.event("PS2_MessageTemplate_Event", 0);
+		v.typeLines(null, 0, 0);
+		messageWait = false;
+		messageTimer = 0;
+		messagePages = List.of();
+		devple.gow.engine.combat.AiTargets.globalHold = globalIdle();
+		if (messageId >= 0 && post1040) {
+			world.postEvent(1040, messageId, 0, 0, world.player()); // 메시지 끝 (아레나 "완료" 메시지 → 워프 등)
+		}
+		messageId = -1;
 	}
 
 	/**
@@ -2527,6 +2679,8 @@ public final class GameScene implements Scene {
 	 */
 	private boolean messageWait, messageButtonLate;
 	private float messageWaitTime;
+	/** 지금 쪽을 띄우거나 ○ 를 누른 뒤 지난 시간 (자동 플레이의 ○ 간격). */
+	private float messagePressTime;
 	/** 지난 틱의 실제 입력 (Idle 로 바꾸기 전 — 메시지 확정 버튼은 전역 정지 중에도 읽는다). */
 	private Input lastRawInput;
 	/** R2 (1024) 로 버튼 안내 아이콘을 지웠음 — 안내 볼륨을 나갈 때까지 다시 안 띄운다 (아테나 석상 대사 상자 위 R2). */
@@ -2786,6 +2940,107 @@ public final class GameScene implements Scene {
 		restartAtCheckpoint();
 	}
 
+	/**
+	 * GameMgr 스크립트 타이머 (Internal 0x14–0x19, {@link devple.gow.engine.script.ScriptTimers}) 한 프레임 — 스크립트 세계 갱신과 같이 (원작 0x1A7A78 의
+	 * 0x1A81F8, 게임 상태 0xB 에서만: 일시정지·질문·카드·세이브·사망/실패 메뉴 동안은 멈춤). 다 된 타이머는 전역 이벤트 1050 (인자 0 = 번호, 보낸 쪽 = 영웅),
+	 * 표시 타이머는 HUD 모래시계.
+	 */
+	private void scriptTimers(float dt) {
+		devple.gow.engine.script.ScriptTimers t = world.host().timers;
+		t.tick(dt, id -> {
+			if (System.getProperty("gow.debug.script") != null) {
+				System.out.printf(java.util.Locale.ROOT, "[스크립트 %.2f] 타이머 %d 끝 → 1050%n", world.time(), id);
+			}
+			world.postEvent(devple.gow.engine.script.ScriptTimers.EVENT, id, 0, 0, world.player());
+		});
+		timerHud(t.hud());
+	}
+
+	/**
+	 * HUD 모래시계 (0x1A827C – 0x1A83D4) [확실]: 보임 = 메시지 (+0x1528) · 질문 (+0x152C) · 카드 (+0x1530) 가 없을 때 1 — 표시 타이머의 경과 % · 남은 초 · 보임 중 하나라도
+	 * 바뀌면 PS2_Timer_Value / _Seconds 를 쓰고 PS2_Timer_Event = 보임 (FLP_HUDK: 0 → HourGlassMeter "Off", 양수 → GotoFrame2(2 + 경과 %)).
+	 * 표시 타이머가 없으면 셋 중 하나라도 0 이 아닐 때 모두 0 + Event 0. ATHN06C 오라클 70 초: PS2 영상 9699.6 "67" … 9760.5 "6" (프레임 92 부터 붉은 깜박임).
+	 */
+	private void timerHud(int[] v) {
+		if (hud == null) {
+			return;
+		}
+		UiVariables vars = hud.variables();
+		if (v != null) {
+			int vis = messageId < 0 && questionId < 0 && !pickupOpen ? 1 : 0;
+			if (vis != timerVisible || v[0] != timerPercent || v[1] != timerSecs) {
+				timerVisible = vis;
+				timerPercent = v[0];
+				timerSecs = v[1];
+				vars.set("PS2_Timer_Value", v[0]);
+				vars.set("PS2_Timer_Seconds", v[1]);
+				vars.event("PS2_Timer_Event", vis);
+			}
+		} else if (timerVisible != 0 || timerPercent != 0 || timerSecs != 0) {
+			timerVisible = timerPercent = timerSecs = 0;
+			vars.set("PS2_Timer_Value", 0);
+			vars.set("PS2_Timer_Seconds", 0);
+			vars.event("PS2_Timer_Event", 0);
+		}
+	}
+
+	/**
+	 * Internal 0x13 FailedScreen (0x1B0B58 → 0x29D958 = 1 → 0x1B3070 → 0x21D808) [확실]: 게임 상태 0xB 면 전역 정지, HUD FailedMenu_Event = 1
+	 * (FLP_HUDK FailedMenu "On" + SND_IG_YOUAREDEAD, Pause_Check 12), Menu_Choice · Done = 0, 상태 0xE. 선택 0 = 다시 하기, 1 = 나가기.
+	 * 데이터: ATHN06C 오라클이 떨어지면 6.4 초 뒤 (oraclPuzzle-heroDIE) · 구출 중 06B 쪽으로 나가면 (failOracleEntry), 아레나 9 곳, ATHN08B 가족.
+	 * 자동 플레이·봇은 메뉴 없이 다시 하기 [엔진 전용].
+	 */
+	void failedScreen() {
+		if (failedMenu || deadMenu > 0 || leaving) {
+			return;
+		}
+		System.out.println("실패 화면 (FailedScreen)");
+		if (auto != null || bot != null || debugInput != null || System.getProperty("gow.nodeadmenu") != null || hud == null) {
+			restartFailed();
+			return;
+		}
+		paused = true;
+		failedMenu = true;
+		hud.variables().set("PS2_Menu_Choice", 0);
+		hud.variables().set("PS2_Done", 0);
+		hud.variables().event("PS2_FailedMenu_Event", 1);
+	}
+
+	private void onFailedMenuClosed(Object choice) {
+		failedMenu = false;
+		paused = false;
+		int c = (int) Float.parseFloat(String.valueOf(choice));
+		if (c == 1 && pendingEngine != null) {
+			leaving = true;
+			pendingEngine.scenes().transitionTo(new ShellScene(session.rom)); // 나가기 → 주 메뉴
+			return;
+		}
+		restartFailed();
+	}
+
+	/**
+	 * 실패 뒤 다시 하기: 원작은 체크포인트 스냅샷 복원 (0x22D440 — 플레이어 블록 0x1DC130 이 타이머 표를 비우고 0x1B15E0 이 GameMgr 블록 0x3368F8 을
+	 * 되돌림, 레벨 스크립트 상태 · 영웅 자세 (덩굴에 매달린 채) 도 스냅샷 것). 엔진은 세계·영웅 상태 스냅샷이 없어 이 레벨을 처음 상태로 새로 읽고 (레벨 기억
+	 * 지움) 마지막 체크포인트 자리·방향에 둔다 — 떨어진 오라클 · 시작된 아레나처럼 실패가 바꾼 세계를 되돌리려면 세계를 새로 시작해야 하고, 오라클
+	 * 체크포인트 (a06Mp03Done) 는 덩굴 위라 진행 중 LevelData 로 되살리면 떨어지자마자 heroFAILS 로 다시 실패한다 [근사: 이 레벨 진행이 처음으로].
+	 */
+	private void restartFailed() {
+		hero.player.onCheckpointRestart(hero.player.hp);
+		world.host().timers.reset();
+		if (pendingEngine == null || leaving) {
+			respawnAtCheckpoint();
+			return;
+		}
+		session.levelMemory.remove(levelName.toUpperCase(java.util.Locale.ROOT));
+		if (auto != null) {
+			auto.died(hero.ctl.position);
+			session.autoCarry = auto;
+		}
+		leaving = true;
+		System.out.printf(java.util.Locale.ROOT, "실패 → %s 다시 (체크포인트 %.0f, %.0f, %.0f)%n", levelName, checkpoint.x, checkpoint.y, checkpoint.z);
+		pendingEngine.scenes().transitionTo(at(session, levelName, new float[]{checkpoint.x, checkpoint.y, checkpoint.z}, checkpointYaw));
+	}
+
 	/** 게임 씬의 HUD 바인딩: 미터 자동 표시, 마지막으로 본 값은 세션 것 (레벨을 넘어 유지). */
 	private HudBinding newHudBinding() {
 		HudBinding b = new HudBinding();
@@ -2938,25 +3193,34 @@ public final class GameScene implements Scene {
 			}
 			levelHud.update(e);
 		}
+		if (messageId >= 0) {
+			hud.variables().typeTick(dt); // 타자 경과 (0x29CCD4)
+		}
 		if (messageWait) {
 			messageWaitTime += dt;
+			messagePressTime += dt;
 			if (messageButtonLate && messageWaitTime > 2.5f) { // 0x1B8EF8: 2.5 초 (0x40200000) 뒤 버튼 표시
 				messageButtonLate = false;
 				hud.variables().event("PS2_MessageTemplate_Event", 10);
 			}
-			// AUTO 검증·봇은 1.5 초 읽고 ○ [엔진 전용]
-			boolean botOk = (auto != null || bot != null) && messageWaitTime > 1.5f;
+			// AUTO 검증·봇은 쪽마다 1.5 초 읽고 ○ — 타자 중이면 끝 표시와 넘기기를 한 번에 [엔진 전용]
+			boolean botOk = (auto != null || bot != null) && messagePressTime > 1.5f && !messageButtonLate;
+			if (botOk) {
+				hud.variables().typeComplete();
+			}
 			if (botOk || e.input().pressed(PadButton.CIRCLE) || lastRawInput != null && lastRawInput.pressed(PadButton.CIRCLE)) {
-				messageWait = false;
-				devple.gow.engine.combat.AiTargets.globalHold = globalIdle();
-				messageTimer = 1e-6f; // 아래에서 닫고 1040
+				messagePressTime = 0;
+				// 0x1B8E40: 첫 ○ 는 글자를 다 보이게만 (0x148360), 0x1B8E50: 500–599 의 버튼이 아직 안 보이면 (+0x1578) 무시, 그 뒤 다음 쪽 / 닫고 1040
+				if (hud.variables().typeComplete() && !messageButtonLate) {
+					nextMessagePage(true);
+				}
 			}
 		}
 		if (messageTimer > 0 && (messageTimer -= dt) <= 0) {
-			hud.variables().event("PS2_MessageTemplate_Event", 0);
-			if (messageId >= 0) {
-				world.postEvent(1040, messageId, 0, 0, world.player()); // 메시지 끝 (아레나 "완료" 메시지 → 워프 등)
-				messageId = -1;
+			if (messagePages.isEmpty()) {
+				closeMessage(messageSeconds <= 0); // 표에 없는 번호 [엔진: 원작은 "Msg %d" 를 띄우고 버튼을 기다림]
+			} else {
+				nextMessagePage(false); // 시간 메시지: 쪽마다 같은 시간, 마지막 쪽 뒤 1040 없이 닫힘 (0x1B8D44 – 0x1B8DEC)
 			}
 		}
 		if (saveFlow != null) {
@@ -3198,6 +3462,7 @@ public final class GameScene implements Scene {
 		shake.update(dt, cam);
 		session.sound.setUnderwater(cameraRig.underwater()); // 수중 카메라 → 소리 수중 처리 (29 문서 §10)
 		world.tick(dt, contact.x, contact.y, contact.z);
+		scriptTimers(dt);
 		orbPickups.update(dt, p, hero.player.hp > 0, orbSink);
 		hero.tickBlades(dt); // 블레이드 사슬 (0x1FDB18): 이번 틱 자세가 정해진 뒤, 블레이드 GO 앵커보다 먼저
 		magicFx.update(hero.magic, p, hero.ctl.yaw, enemies.stream().map(Enemy::fighter).toList(), dt, cam.eye);
@@ -3382,8 +3647,8 @@ public final class GameScene implements Scene {
 		EnemyFighter best = null;
 		float bd = Float.MAX_VALUE;
 		for (Enemy en : enemies) {
-			if (en.fighter().dead() || en.fighter().bodiless) { // 몸 CDV 없는 말하는 석상 (ATHN02A aoxsa) 은 싸울 대상이 아니다
-				continue;
+			if (en.fighter().dead() || en.fighter().bodiless || en.fighter().targetWeight <= 0) {
+				continue; // 몸 CDV 없는 말하는 석상 (ATHN02A aoxsa) · 조준 가중 0 인 NPC (오라클 310 · 무덤지기 309) 는 싸울 대상이 아니다
 			}
 			float d = en.fighter().pos.distanceSquared(hero.ctl.position);
 			if (d < bd) {

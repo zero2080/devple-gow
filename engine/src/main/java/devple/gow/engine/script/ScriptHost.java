@@ -57,7 +57,7 @@ public class ScriptHost extends GameScriptHost {
 	}
 
 	private ScriptHost(ScriptHost main) {
-		super(main.flow, main.player, main.globalData());
+		super(main.flow, main.player, main.globalData(), main.timers);
 		this.flow = main.flow;
 		this.player = main.player;
 		this.initedGlobals = main.initedGlobals;
@@ -142,6 +142,21 @@ public class ScriptHost extends GameScriptHost {
 				return null;
 			}
 			case 0x8 -> listener.camera(s(args.get(0)));
+			case 0xD, 0xE -> {
+				return listener.cameraName(func == 0xE); // 인자 없음, 문자열 반환
+			}
+			case 0x14 -> { // CreateTimer(초) → 번호 (0x1B0B68)
+				pop(st, n);
+				return timers.create(EscVm.f(args.get(0)));
+			}
+			case 0x15 -> timers.pause(EscVm.i(args.get(0)));
+			case 0x16 -> timers.resume(EscVm.i(args.get(0)));
+			case 0x17 -> timers.destroy(EscVm.i(args.get(0)));
+			case 0x18 -> { // 남은 초 (0x1B0CA8)
+				pop(st, n);
+				return timers.remaining(EscVm.i(args.get(0)));
+			}
+			case 0x19 -> timers.show(EscVm.i(args.get(0))); // HUD 모래시계 (0x1B0CE0)
 			case MAGIC_REGEN -> { // 0x12 (0x1B0B34): 마법 재생 MP/초 → 0x3044A4 (ATHN02D RewardPlayer 10 / TurnFaceOffFinal 0)
 				PlayerState p = players.get();
 				if (p != null) {

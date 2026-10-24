@@ -23,20 +23,23 @@ public class GameScriptHost implements EscHost {
 	private final PlayerState player;
 	private final Map<Integer, Object> globalData;
 	private final Map<Integer, Object> levelData = new HashMap<>();
+	/** GameMgr 타이머 표 (원작 0x3368F8 하나 — 두 슬롯 레벨이 같이 쓴다, {@link ScriptTimers}). */
+	public final ScriptTimers timers;
 	private BiConsumer<Integer, Float> onMessage = (id, sec) -> { };
 	private Consumer<String> onGoto = name -> { };
 	private Runnable onCheckpoint = () -> { };
 	private float playTime;
 
 	public GameScriptHost(GameFlow flow, PlayerState player) {
-		this(flow, player, new HashMap<>());
+		this(flow, player, new HashMap<>(), new ScriptTimers());
 	}
 
-	/** GlobalData 를 다른 호스트와 공유 (같이 상주하는 이웃 레벨의 스크립트, 38 문서 §4). */
-	protected GameScriptHost(GameFlow flow, PlayerState player, Map<Integer, Object> sharedGlobals) {
+	/** GlobalData·타이머 표를 다른 호스트와 공유 (같이 상주하는 이웃 레벨의 스크립트, 38 문서 §4). */
+	protected GameScriptHost(GameFlow flow, PlayerState player, Map<Integer, Object> sharedGlobals, ScriptTimers sharedTimers) {
 		this.flow = flow;
 		this.player = player;
 		this.globalData = sharedGlobals;
+		this.timers = sharedTimers;
 		this.players = () -> player;
 	}
 

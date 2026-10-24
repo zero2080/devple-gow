@@ -255,6 +255,9 @@ public final class AutoPlay {
 	 *   up:초              카메라와 무관하게 스틱 위 (사다리 오르기)
 	 *   stick:초:x,y[:버튼] 카메라와 무관한 스틱 값 (벽에서 뒤로 점프 = 0,-1:CROSS), 버튼은 단계 첫 프레임에 한 번
 	 *   mash:초            R2 연타 (들어 올리는 문 TAndF)
+	 *   jump:초:fx,fz      첫 프레임 × + (fx, fz) 쪽으로 스틱 (벽에 뛰어 붙기)
+	 *   post:번호[:인자0]  스크립트 전역 이벤트 (보낸 쪽 = 영웅)
+	 *   cam:이름           CMV 질의 끄고 카메라 요청 (Internal 0x9 false + 0x8), "cam:" = 질의 다시 켬
 	 *   wait:초            입력 없음
 	 *   btn:이름           버튼 한 번 (PadButton 이름)
 	 * </pre>
@@ -325,6 +328,25 @@ public final class AutoPlay {
 			case "mash" -> {
 				return routeNext(routeTime > Float.parseFloat(a[0]), bot.press((int) (routeTime / 0.075f) % 2 == 0 ? PadButton.USE : null));
 			}
+			case "post" -> {
+				// post:번호[:인자0] — 스크립트 전역 이벤트 (보낸 쪽 = 영웅; 예 post:501:a06Mp03 = 동영상 끝) [엔진 전용: 앞 퍼즐을 건너뛸 때]
+				if (scriptPost != null) {
+					scriptPost.accept(Integer.parseInt(a[0]), a.length > 1 ? (a[1].matches("-?\\d+") ? (Object) Integer.parseInt(a[1]) : a[1]) : 0);
+				}
+				return routeNext(true, bot.press(null));
+			}
+			case "cam" -> {
+				// cam:이름 — 스크립트 SwitchCamera 와 같이 카메라 요청 [엔진 전용]
+				if (camera != null) {
+					camera.accept(a[0]);
+				}
+				return routeNext(true, bot.press(null));
+			}
+			case "jump" -> {
+				// jump:초:fx,fz — 첫 프레임 × 와 함께 (fx, fz) 쪽으로 스틱 (덩굴 벽에 뛰어 붙기)
+				float[] f = xz(a[1], hero);
+				return routeNext(routeTime > Float.parseFloat(a[0]), bot.hold(routeTime < 0.05f ? PadButton.CROSS : null, hero, f, null, camYaw));
+			}
 			case "wait" -> {
 				return routeNext(routeTime > Float.parseFloat(a[0]), bot.press(null));
 			}
@@ -360,6 +382,10 @@ public final class AutoPlay {
 			}
 		}
 	}
+
+	/** 경로 단계 post / cam 의 대상 (GameScene 이 넣음, 없으면 무시). */
+	public java.util.function.BiConsumer<Integer, Object> scriptPost;
+	public java.util.function.Consumer<String> camera;
 
 	/** "fx,fz" 또는 "fx,fy,fz" → 월드 점 (y = 영웅 높이). */
 	private static float[] xz(String s, Vector3f hero) {

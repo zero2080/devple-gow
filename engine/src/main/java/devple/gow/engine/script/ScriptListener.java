@@ -65,6 +65,15 @@ public interface ScriptListener {
 	default void camera(String name) {
 	}
 
+	/**
+	 * Internal 0xD / 0xE (0x1B098C / 0x1B09C8 → 0x1EE740 / 0x1EE750): 카메라 관리자 +0x808 (지금 카메라 이름) / +0x820 (바로 앞 카메라 이름) —
+	 * 전환 0x1EEE04 가 +0x820 ← +0x808, +0x808 ← 새 이름 [확실]. 없으면 "" (예 ATHN06C oraclPuzzle-a06Mp03Done: 영상 끝에 카메라가 UprCam21 / UprCam3,
+	 * PAND03B EndDoor-CamOff: 앞 카메라로 되돌림).
+	 */
+	default String cameraName(boolean previous) {
+		return "";
+	}
+
 	/** Vis 이펙터: 대상 오브젝트들의 속성 슬롯 0..8, 16, 17 값 (0 = 변경 없음, 1 켬, 2 끔). */
 	default void vis(ScriptEntity source, List<String> objects, int[] values) {
 	}

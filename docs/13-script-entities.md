@@ -133,7 +133,8 @@ Fire(e, sender)     0x1A98C0  (큐에서 꺼낼 때)
 |----|------|-------------|
 | 1019 | 184 | `EvtForce`: Arg1 = 강제 상태 번호 (PlayerStartZone 512, PatrolChange 0, ATHN05A 영웅 DeathZone **504**) |
 | 1029 | 100 | 적 DeathZone (ATHN01A Filter 8/2/3/4/5) → 제거 |
-| 1015 / 1025 / 1008 | 49 / 25 / 26 | 미확인 |
+| 1008 (0x3F0) | 26 | **죽음** (EvtDie · instantDie · KillEnemies · DeathVol · oraclFallDIE). Creator 가 만든 GO (전투 컴포넌트 없음, 핸들러 0x1ADEE0) 면 보내지 않고 GO 제거 0x1AE448 → 레지스트리 제거 0x1A6010 (DestructionSensor) [확실: 0x1AC154 – 0x1AC198]. 엔진 `GameScene.destroyCreated` (ATHN06C 구출 뒤 줄의 오라클), 전투원에 보낸 1008 은 [미구현] |
+| 1015 / 1025 | 49 / 25 | 미확인 (1015 = 들어 올리는 문 리셋, 38 §23.4) |
 | 1017 / 1018 | 13 / 15 | **영웅 PAUSE / UNPAUSE** (`0x1AC0EC`: 영웅에게 0x3F9/0x3FA 면 `"======== %sPAUSE Hero"`) [확실] |
 | 200..352 (모드 5) | 각 1 | 전역 이벤트 (EventSensor 로 수신) |
 
@@ -173,6 +174,22 @@ case 별 스택 감소량으로 읽고, **전 레벨 모든 핸들러를 실행�
 
 LoadCheck 는 bool 을 반환하지만 데이터에서는 EntrySensor 의 Action 으로만 쓰인다 (`LoadCheckB-Entryvol-EntrySensor1`: 볼륨에 들어가면 `LoadCheck("Athn01B")` — 로드가 끝났으면 GameMgr 가 전환).
 
+### 6.1 카메라 이름 · 실패 화면 · 타이머 (43 §23) [확실: 디스어셈블]
+| N | 동작 |
+|---|------|
+| 0xD / 0xE | 카메라 관리자 (0x29F16C) +0x808 지금 카메라 이름 / +0x820 바로 앞 카메라 이름 (0x1EE740 / 0x1EE750) — 전환 0x1EEE04 가 +0x820 ← +0x808, +0x808 ← 새 이름. 문자열 반환. 데이터: ATHN06C a06Mp03Done (영상 끝에 UprCam21/UprCam3 이면), PAND03B EndDoor-CamOff (앞 카메라로 되돌림). 예전 엔진은 "" 라 오라클 구출이 시작되지 않았다 |
+| 0x13 FailedScreen | 0x29D958 = 1 → 상태 처리 0x1B3070 이 0x21D808: 메시지 정리 (0x2207F8 → 0x1B9118), 전역 정지, HUD FailedMenu_Event 1, 상태 0xE (21 문서). 데이터 14 곳 (아레나 9 · ATHN06C 2 · ATHN08B 2) |
+| 0x14 CreateTimer(초) | GameMgr 타이머 표 0x3368F8 (남은 [4] +0 · 길이 [4] +0x10 · 플래그 u8 [4] +0x20) 에서 플래그 0 인 첫 칸: 플래그 1, 길이 = 남은 = 초, 번호 (칸 + 1) 반환 (0x1B0B68) |
+| 0x15 / 0x16 / 0x17 | 사용 중이면 플래그 \|= 2 멈춤 / &= ~2 다시 / 플래그 0 지움 (이벤트 없음) |
+| 0x18 | 남은 초 (0x1B0CA8) |
+| 0x19 | 모든 칸 표시 비트 4 를 지우고 이 칸만 4 → HUD 모래시계 (0 = 숨김). 데이터: ATHN06C 오라클 70 초, 아레나 6 곳 |
+| 0x1A | 0x22AEC8(0x2A26A8 의 값, 인자) — 소리 쪽 [미확인] |
+
+매 프레임 (스크립트 세계 갱신 0x1A7A78 의 0x1A81F8 – 0x1A8354, 게임 상태 0xB 만): 멈춤이 아닌 칸은 남은 −= 1/60, 0 이하면 칸을 비우고 PostEvent(1050, 인자0 = 번호,
+보낸 쪽 = 영웅 GO 0x29D904) — EventSensor 1050 (Filter 1 = 플레이어) 가 받는다 (전 레벨 35 곳: 궁수 스폰 · 히드라 카메라 · VO 안내 · 아레나 · 오라클). 표 비우기 0x1A72C8 =
+플레이어 진행도 초기화 0x1D6818 (Load_PlayerBlock 0x1DC130 이 부름), 스냅샷은 GameMgr 블록 0x3368F8 (0x1C4 바이트) 을 통째로 담아 되돌린다 (0x1B15B8 / 0x1B15E0).
+엔진 `ScriptTimers` (`GameScriptHost.timers`, 이웃 호스트와 공유), `GameScene.scriptTimers` / `timerHud`; 예전 엔진은 0x14–0x19 를 버려 1050 이 한 번도 오지 않았다.
+
 ## 7. 변수 (GlobalData / LevelData)
 - 메시지 0 에서 이름과 타입을 등록(`0x1AF2C0`, `"Too many LevelData variables!"`), 원본 0x4A = 변수 번호 시작, 0x4C = 개수.
 - LevelData 값은 전역 풀 0x301548 (0x500 칸 × 8 바이트) — 슬롯 문맥 +0x18 = 풀 기준, +0x1C = 개수 (0x1AF2C0 은 +0x1C 가 0 일 때만 기준을 잡는다). 풀은 새 게임
@@ -209,7 +226,7 @@ TurnFaceOffFinal 0, ATHN05B 0. 엔진 `PlayerState.mpRegen` / `regenMagic` (`Her
 ## 8. 남은 일
 - SpawnEnemy 슬롯 0/1/5..8, TemplateId → 적 템플릿(`CLI_WYP_Site%d`, `0x1A4E88`) 대응.
 - Vis 속성 번호(0x1C/0x1E/0x27/0x11/0x1A/0x17 → 오브젝트 속성 `0x1B1398`)의 의미 (보임/충돌/AI …).
-- 이벤트 1008/1015/1025 의 의미, EventSensor 슬롯 1.
+- 이벤트 1015/1025 의 의미 (1008 = 죽음 → §4.1), EventSensor 슬롯 1, 전투원에 보낸 1008 의 처리.
 - Creator, Animator 효과의 세부, Marker 웨이포인트.
 - Internal 0x9/0x11/0x34..0x37 의 의미 (0xB = 질문, 42 문서).
 
