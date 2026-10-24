@@ -19,6 +19,11 @@ public final class PlayerState {
 	 * 게임 중 매 프레임 MP += 값 × 1/60 × 시간 배율 (0..최대 자르기). {@link #regenMagic}
 	 */
 	public float mpRegen;
+	/**
+	 * HUD 미터 표시 요청 횟수 (원작 Progress +0x1C0 = 1: 오브 흡수 0x1D77B0 (Orb_Update 0x226710), AddItem 0x1D8CF0,
+	 * 업그레이드 메뉴 닫힘 0x1D7700). 값이 그대로여도 (가득 찬 HP 에 녹색 오브) 미터가 뜬다. 저장하지 않는다.
+	 */
+	public int meterPokes;
 	public float rage;
 	public int redOrbs;
 	public int hpLevel;
@@ -50,6 +55,10 @@ public final class PlayerState {
 		return rules.maxMp(mpLevel);
 	}
 
+	public float meterHoldTime() {
+		return rules.meterHoldTime();
+	}
+
 	/**
 	 * 영웅 갱신의 마법 재생 (원작 sub_001D6CF0 0x1D6F00–0x1D6F88) [확실: 코드]: 게임 상태 0xB (플레이 중) 이고 0x29DB58 · 영웅 +0x10 이 0 일 때
 	 * d = 0x3044A4 × (1/60) × (vt+0xC8 × 0.25 + 0.75) × +0x16C [시간 배율 추정 1], d ≠ 0 이면 MP = min(max(MP + d, 0), 최대 MP).
@@ -66,6 +75,7 @@ public final class PlayerState {
 
 	/** 오브 획득. type 0 = 체력(녹색), 1 = 마법(청색), 2 = 경험(붉은색). points = 템플릿의 Points. */
 	public void pickupOrb(int type, float points) {
+		meterPokes++;
 		float v = points * rules.orbMult(costume, type);
 		switch (type) {
 			case 0 -> hp = Math.min(hp + v, maxHp());
@@ -112,6 +122,7 @@ public final class PlayerState {
 
 	/** 아이템 획득 (11 문서 §8.2 addItem). */
 	public void addItem(int id, int n) {
+		meterPokes++;
 		boolean isNew = (itemFlags & (1 << (id - 1))) == 0;
 		itemFlags |= 1 << (id - 1);
 		if (id >= 3 && id <= 6 && isNew) {
@@ -135,6 +146,7 @@ public final class PlayerState {
 
 	/** 제우스의 선물 아이템 카드 (메시지 31): kind 1 = HP 레벨 +1, 2 = MP 레벨 +1. */
 	public void itemCard(int kind) {
+		meterPokes++;
 		if (kind == 1) {
 			hpLevel = Math.min(GameRules.HP_LEVELS - 1, hpLevel + 1);
 			hp = maxHp();

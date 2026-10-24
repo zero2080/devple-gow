@@ -26,6 +26,22 @@ public final class HudBinding {
 	private int lastPickUp = Integer.MIN_VALUE;
 	/** 선택 마법 시전 가능 여부 (원작 sub_001D93C0 HasMagic). 게임 씬이 Magic::has 를 연결. */
 	public java.util.function.IntPredicate castable = id -> true;
+	/** 미터 자동 표시 ({@link #meter}, 게임 씬). false 면 첫 갱신에 MainMeter 를 띄우고 그대로 둔다 (UI·영웅 시험 씬). */
+	public boolean autoMeter;
+	/** 미터가 마지막으로 본 값. 게임 씬은 세션 것을 넣어 레벨을 넘어 유지한다 (원작 정적 변수). */
+	public MeterSeen seen = new MeterSeen();
+	/** MainMeter 가 올라와 있는가 (원작 HUD +0x157C) 와 남은 유지 시간 (Progress +0x1C4). */
+	private boolean meterShown;
+	private float meterHold;
+
+	/**
+	 * 미터가 마지막으로 본 값 (원작 정적 0x29DC34 선택 마법 · 0x29DC38 HP · 0x29DC3C 최대 HP · 0x29DC40 MP · 0x29DC44 최대 MP ·
+	 * 0x29DC48 붉은 오브, 부팅 시 0) + 처리한 표시 요청 수 ({@link PlayerState#meterPokes}).
+	 */
+	public static final class MeterSeen {
+		int magic, orbs, pokes;
+		float hp, maxHp, mp, maxMp;
+	}
 
 	/**
 	 * 선택 마법 아이콘 값 (Progress_UpdateHud 0x1D75E8): 0 = 없음, 시전 가능 2·id − 1, 불가 2·id [추정: 짝/홀 의미].
@@ -69,11 +85,11 @@ public final class HudBinding {
 		}
 	}
 
-	/** 매 프레임: 바뀐 값만 이벤트로 알린다. 첫 호출은 MainMeter 를 띄운다. */
+	/** 매 프레임: 바뀐 값만 이벤트로 알린다. 자동 표시가 아니면 첫 호출이 MainMeter 를 띄운다. */
 	public void update(PlayerState ps, UiVariables v) {
 		boolean first = Float.isNaN(lastHp);
 		write(ps, v);
-		if (first) {
+		if (first && !autoMeter) {
 			v.event("PS2_MeterBar_Event", 1);
 		}
 		boolean again = resync > 0;
@@ -102,5 +118,62 @@ public final class HudBinding {
 		lastOrbs = ps.redOrbs;
 		lastHpLevel = ps.hpLevel;
 		lastMpLevel = ps.mpLevel;
+	}
+
+	/**
+	 * 미터 자동 표시 (원작 Progress_UpdateHud 0x1D7148 [확실: 디스어셈블]). 매 프레임 (전역 정지가 아닐 때):
+	 * <ul>
+	 *   <li>영웅이 전투 기술 중 (combatant vt+0x64 → +0x4C ≠ 0), 마법 재생 중 (0x3044A4 ≠ 0), 표시 요청 (+0x1C0), 또는 선택 마법 ·
+	 *       HP · 최대 HP · MP · 최대 MP · 붉은 오브 가 마지막으로 본 값과 다르면: 값을 기록하고 유지 시간 = Meter Bar Hold Time (0x1D72DC),
+	 *       미터가 내려가 있으면 MeterBar 1 (0x1D7378 → 0x1DCC00, +0xC 비트 8 은 [미확인] 이라 뺐다)</li>
+	 *   <li>아니면 미터가 올라와 있을 때만 유지 시간을 프레임마다 1/60 씩 (시간 배율 없이) 줄여 0 이하에서 MeterBar 0 (0x1D7340)</li>
+	 * </ul>
+	 * HP 가 1 미만이면 HUD 리셋 (0x1D71CC → 0x1BA150) 처럼 미터를 내린다. 게임 씬은 진행 중 탐험에서 미터가 사라지고 싸우거나 오브를 먹으면
+	 * 다시 뜬다 (PS2 영상 5664 초 없음 → 5665 초 공격 → 5670 초 사라짐).
+	 *
+	 * @param busy 영웅이 전투 기술 중 (Combatant.active)
+	 * @param real 프레임 시간 (원작은 고정 1/60)
+	 */
+	public void meter(PlayerState ps, UiVariables v, boolean busy, float real) {
+		if (ps.hp < 1f) {
+			hideMeter(v);
+			return;
+		}
+		int magic = ps.selectedMagic != null ? ps.selectedMagic.itemId : 0;
+		MeterSeen s = seen;
+		if (busy || ps.mpRegen != 0 || ps.meterPokes != s.pokes || magic != s.magic || ps.hp != s.hp || ps.maxHp() != s.maxHp
+				|| ps.mp != s.mp || ps.maxMp() != s.maxMp || ps.redOrbs != s.orbs) {
+			s.magic = magic;
+			s.hp = ps.hp;
+			s.maxHp = ps.maxHp();
+			s.mp = ps.mp;
+			s.maxMp = ps.maxMp();
+			s.orbs = ps.redOrbs;
+			s.pokes = ps.meterPokes;
+			meterHold = ps.meterHoldTime();
+			if (!meterShown) {
+				meterShown = true;
+				v.event("PS2_MeterBar_Event", 1);
+			}
+		} else if (!meterShown) {
+			meterHold = 0;
+		} else if (meterHold > 0) {
+			meterHold -= real;
+			if (meterHold <= 0) {
+				hideMeter(v);
+			}
+		}
+	}
+
+	/** 미터를 내린다 (HUD 리셋 0x1BA150: 올라와 있을 때만 MeterBar 0). 다시 뜨는 것은 {@link #meter} 의 변화뿐. */
+	public void hideMeter(UiVariables v) {
+		if (meterShown) {
+			meterShown = false;
+			v.event("PS2_MeterBar_Event", 0);
+		}
+	}
+
+	public boolean meterShown() {
+		return meterShown;
 	}
 }

@@ -594,7 +594,7 @@ public final class GameScene implements Scene {
 		ph = devple.gow.engine.core.PerfMonitor.phase(". lights", ph);
 		wireEffects();
 		ph = devple.gow.engine.core.PerfMonitor.phase(". wireEffects", ph);
-		hudBinding.castable = hero.magic::has;
+		hudBinding = newHudBinding();
 		boolean seamless = arrival != null && (arrival.kind() == LevelLink.Kind.SEAMLESS || arrival.kind() == LevelLink.Kind.WALK);
 		link = new LevelLink(levelName, seamless ? arrival.from() : null, w -> Stages.exists(session.rom, w));
 		if (link.other() != null) {
@@ -2054,9 +2054,19 @@ public final class GameScene implements Scene {
 	 * 원작 상태 13 PowerUpMenu 종료 (PSMDone): 메뉴가 바꾼 HUD 값을 진행도로 되돌려 쓴다 (0x1D7700 투자 오브 복사,
 	 * Upgrade_LoadWad 0x1D7890 레벨 복사). 무기 레벨이 바뀌면 원작은 R_WPN / 마법 WAD 를 교체한다 (여기서는 수치만).
 	 */
+	/** 게임 씬의 HUD 바인딩: 미터 자동 표시, 마지막으로 본 값은 세션 것 (레벨을 넘어 유지). */
+	private HudBinding newHudBinding() {
+		HudBinding b = new HudBinding();
+		b.castable = hero.magic::has;
+		b.autoMeter = true;
+		b.seen = session.meterSeen;
+		return b;
+	}
+
 	private void onPowerUpClosed() {
 		UiVariables v = hud.variables();
 		PlayerState ps = hero.player;
+		ps.meterPokes++; // 0x1D7700 (HUD → 진행도 복사) 끝에 +0x1C0 = 1
 		ps.redOrbs = (int) v.number("PS2_PowerOrb_Count", ps.redOrbs);
 		for (Weapon w : Weapon.values()) {
 			int lv = (int) v.number("PS2_" + w.key + "_Level", ps.level.get(w));
@@ -2156,19 +2166,20 @@ public final class GameScene implements Scene {
 		}
 		if (globalIdle()) {
 			// 전역 정지 (Idle) 동안 HUD 리셋 (Progress_UpdateHud 0x1D71A0 → 0x1BA150(hud, 1)): 미터를 내리고 갱신하지 않는다 —
-			// ATHN01A 시작 연출 13 초 동안 HUD 없음, 조작이 풀리면 다시 올라온다
+			// ATHN01A 시작 연출 13 초 동안 HUD 없음. 조작이 풀린 뒤 미터는 값이 바뀌거나 싸울 때만 다시 뜬다 (HudBinding.meter;
+			// 새 게임은 마지막으로 본 값이 0 이라 첫 프레임에 뜬다)
 			if (!hudHidden) {
 				hudHidden = true;
-				hud.variables().event("PS2_MeterBar_Event", 0);
+				hudBinding.hideMeter(hud.variables());
 				hud.variables().event("PS2_HitCounter_Event", 0);
 			}
 		} else if (!powerUp) {
 			if (hudHidden) {
 				hudHidden = false;
-				hudBinding = new HudBinding(); // 처음처럼 MeterBar 1 + 값 다시
-				hudBinding.castable = hero.magic::has;
+				hudBinding = newHudBinding(); // 값 다시 (미터는 내려간 채)
 			}
 			hudBinding.update(hero.player, hud.variables());
+			hudBinding.meter(hero.player, hud.variables(), hero.combat.active(), real);
 			hitCounterHud();
 		}
 		if (debugInput != null && questionId >= 0) {

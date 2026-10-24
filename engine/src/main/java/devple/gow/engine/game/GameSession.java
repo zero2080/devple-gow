@@ -31,6 +31,8 @@ public final class GameSession {
 	public final MessageTable messages;
 	public final ScriptHost scriptHost = new ScriptHost();
 	public PlayerState player;
+	/** HUD 미터가 마지막으로 본 값 (원작 정적 0x29DC34..0x29DC48 — 레벨을 넘어 유지, HudBinding.meter). */
+	public final devple.gow.engine.ui.HudBinding.MeterSeen meterSeen = new devple.gow.engine.ui.HudBinding.MeterSeen();
 	/** 오디오 (R_PERMK 의 GENERAL/GENERAL2/Hero 뱅크 상주). 메뉴와 게임 씬이 같은 인스턴스를 쓴다. */
 	public final SoundManager sound;
 	public int difficulty = 1;

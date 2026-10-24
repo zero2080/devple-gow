@@ -25,6 +25,7 @@ public final class GameRules {
 	private final float[] maxMp = new float[MP_LEVELS];
 	private final Map<Weapon, int[]> costs = new EnumMap<>(Weapon.class);
 	private final int shardsPerLevel;
+	private final float meterHoldTime;
 	private final Tweaks tweaks;
 
 	public GameRules(Tweaks tweaks, UpgradeTable upgrades) {
@@ -37,6 +38,8 @@ public final class GameRules {
 		}
 		// 정수형 TWK 값은 하위 바이트만 유효할 수 있음 (06 문서)
 		shardsPerLevel = tweaks.i("/Player/", "Shards Per Meter Level", 6) & 0xFF;
+		// 튜닝 구조체 0x304060 +0x3C (0x30409C) — Progress_UpdateHud 0x1D72DC 가 미터 유지 시간으로 읽는다
+		meterHoldTime = tweaks.f("/Player/", "Meter Bar Hold Time", 2f);
 		for (Weapon w : Weapon.values()) {
 			int[] c = new int[w.maxLevel];
 			Map<Integer, Integer> m = upgrades.costs.getOrDefault(w.key, Map.of());
@@ -69,6 +72,11 @@ public final class GameRules {
 
 	public int shardsPerLevel() {
 		return shardsPerLevel;
+	}
+
+	/** HUD 미터 유지 시간 (초): 마지막 변화 뒤 이만큼 지나면 미터를 내린다 (TWK {@code /Player/Meter Bar Hold Time} 2.0). */
+	public float meterHoldTime() {
+		return meterHoldTime;
 	}
 
 	/** 오브 종류(0 체력, 1 마법, 2 붉은 오브)별 코스튬 배율. */

@@ -113,12 +113,23 @@ HUD 변수 규약 (HUD 루트 `SimKeyEvent` 스크립트에서 확인):
 | `PS2_HealthMeter_Level` | 0..4 = hpLevel (검은 바 `BarLevel<n>`, 0 = frame 0 = 최대 100) |
 | `PS2_MagicMeter_Level` | 0..5 = mpLevel (0 = 마법 없음, 스크립트가 `BarLevel(n−1)`) |
 | `PS2_PowerOrb_Count` / `_Capacity` | 붉은 오브 / 300. 미터 = count mod 300, 배수 텍스트 = count div 300 |
-| `PS2_MeterBar_Event` | 1 = MainMeter AnimateOn(+미터 갱신), 0 = AnimateOff |
+| `PS2_MeterBar_Event` | 1 = MainMeter AnimateOn(+미터 갱신), 0 = AnimateOff. 게임 중에는 자동 (아래 "미터 자동 표시") |
 | `PS2_HealthMeter_Event` (≥1), `PS2_MagicMeter_Event` (2 = 값, 1 = 반짝임, 0 = 끔), `PS2_PowerOrb_Event` (1) | 값 반영 |
 | `PS2_<무기>_Level`, `PS2_<무기>Orb_Count`, `PS2_<무기>_Status` | 파워업 메뉴 (11 문서 §1) |
 
 주의: `SetHealthMeter/SetMagicMeter` 는 저장된 단계(`_level0/:HealthMeter_Level`)가 현재 단계와 **같을 때만** 바를 옮긴다
 (이벤트 처리 끝에 단계를 저장). 그래서 단계가 바뀐 프레임 다음에 이벤트를 한 번 더 보내야 한다 — `HudBinding` 이 처리.
+
+미터 자동 표시 (원작 Progress_UpdateHud 0x1D7148) [확실: 디스어셈블]: 게임 중 MainMeter 는 늘 떠 있지 않다. 매 프레임 (전역 정지·메뉴가 아닐 때)
+- 영웅이 전투 기술 중 (combatant vt+0x64 → +0x4C), 마법 재생 중 (0x3044A4 ≠ 0), 표시 요청 (Progress +0x1C0 = 1: 오브 흡수 0x1D77B0,
+  AddItem 0x1D8CF0, 업그레이드 메뉴 닫힘 0x1D7700), 또는 선택 마법 · HP · 최대 HP · MP · 최대 MP · 붉은 오브가 마지막으로 본 값 (정적
+  0x29DC34..0x29DC48, 레벨을 넘어 유지, 부팅 시 0) 과 다르면 → 값 기록, 유지 시간 = TWK_Player `Meter Bar Hold Time` **2.0 초** (0x30409C),
+  내려가 있으면 `PS2_MeterBar_Event = 1`.
+- 아니면 올라와 있을 때만 유지 시간 −1/60 (고정, 시간 배율 없이), 0 이하 → `PS2_MeterBar_Event = 0`.
+- HP < 1 · 전역 정지 (0x1BF108) → HUD 리셋 0x1BA150 (올라와 있으면 MeterBar 0). 리셋 뒤 다시 뜨는 것은 위 변화뿐.
+
+엔진: `HudBinding.meter` (게임 씬 `autoMeter`, 마지막으로 본 값 `GameSession.meterSeen`), `PlayerState.meterPokes`, `GameRules.meterHoldTime`.
+UI·영웅 시험 씬은 예전처럼 첫 갱신에 띄우고 둔다. 시험 `HudMeterTest`. 미확인: Progress +0xC 비트 8 (표시 막음), 상자 앞 +0x1C0 (0x1DC5B0).
 
 ## 6. 입력 마스크 (`UiPad`)
 
