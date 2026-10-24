@@ -171,6 +171,8 @@ public final class HeroNavigator {
 	private final NavWorld world;
 	private final NavAnims anims;
 	private Interactables items = new Interactables();
+	/** 다른 슬롯 레벨 R1/R2 오브젝트 — 원작 잡기 질의 0x1C3F18 은 슬롯 구분 없는 충돌 세계 질의 (SceneNav 가 채움, 43 §18). */
+	private Interactables neighbourItems = new Interactables();
 	private Listener listener = new Listener() {
 	};
 	private NavState state = NavState.GROUND;
@@ -237,6 +239,10 @@ public final class HeroNavigator {
 
 	public void setItems(Interactables it) {
 		items = it != null ? it : new Interactables();
+	}
+
+	public void setNeighbourItems(Interactables it) {
+		neighbourItems = it != null ? it : new Interactables();
 	}
 
 	public Interactables items() {
@@ -394,8 +400,11 @@ public final class HeroNavigator {
 			}
 			// 근접 사용 안내 (원작 슬롯 0, 매 프레임 0x1DC3F8 — 붙어 있지 않을 때, R2 로 잡힐 대상과 같은 질의)
 			Object[] g = items.grabbable(p, fwd, USE_RADIUS); // 손잡이 관절 판정 (0x1C3918) — 손잡이 쪽을 보고 손잡이 앞에 있어야
+			if (g == null) {
+				g = neighbourItems.grabbable(p, fwd, USE_RADIUS); // 다른 슬롯 레벨 것 (ATHN04C 에서 04A 창살 LiftDoor13)
+			}
 			Interactables.Item near = g != null ? (Interactables.Item) g[0] : null;
-			promptItem = near != null && !released.contains(near) && !near.hidden ? near : null;
+			promptItem = near != null && !released.contains(near) && near.usable() ? near : null;
 			if (in.pressed(PadButton.USE)) {
 				Interactables.Item it = near;
 				handle = g != null ? (float[]) g[1] : null;

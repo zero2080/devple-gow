@@ -310,6 +310,11 @@ ESC Internal 변수 44/45/48/50/57(07 문서) = 눈/깃털/난이도/블레이�
 | 17 SaveWrite | 0x220608 | `MemCard_WriteFlow` | 18 |
 | 18 SaveDone | 0x220740 | 결과 표시 후 복귀 | 11 |
 
+상태 15–18 세부 (43 §18, 22 §7) [확실]: 15 는 HUD Done (+0x27C) 을 기다려 Menu_Choice (+0x278) 0 → 18, 1 → 17. 17 은 쓰기 흐름 0x230A98 이 끝나면 (≠ −1)
+MemoryCard_Event (+0x274) = 0, 10 프레임 뒤 18; −1 (카드 선택 △) 이면 10 프레임 뒤 SaveGame_Event = 1 · Menu_Choice · Done = 0 → 15. 18 은 (0x29F478 이면 첫 프레임
+MemoryCard_Event 0) 10 프레임 뒤 SaveGame_Event (+0x268) = 0 → 11. 세이브 포인트 R2 (0x21D8B0) 는 SaveGame_Event = 1, Menu_Choice · Done = 0, 0x2207F8 (메시지 닫기 ·
+미니게임 아이콘 뗌) 뒤 15.
+
 ### 6.2 GameMgr 메시지 (ESC `Internal:N` = `GameMgr_OnMessage` 0x1B01E8 의 N) [확실: 코드 / 추정: 표시 이름]
 | N | 이름 | 인자 | 동작 |
 |---|------|------|------|

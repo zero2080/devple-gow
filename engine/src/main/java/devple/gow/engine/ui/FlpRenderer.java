@@ -53,6 +53,45 @@ public final class FlpRenderer implements AutoCloseable {
 	private FlpPlayer player;
 	/** 버튼 태그([CircleButton] 등)를 FLP 클립으로 그릴지. */
 	public boolean drawIcons = true;
+	/**
+	 * 텍스처 갈아 끼우기 (원작 0x1B8178: HUD 머티리얼 슬롯 표의 텍스처 칸을 다른 텍스처로) — FLP 텍스처 이름 (TXR_*) → 대신 그릴 텍스처.
+	 * 메시지 그림 MAT_FlashMat&lt;번호&gt; 를 PickUpInfoMenu 의 "GenericPickUp" 메시에 (0x1B80F8 이 그 이름으로 슬롯을 찾음, 0x1B96D0) [확실].
+	 */
+	private final Map<String, java.util.function.Supplier<Texture>> textureSwaps = new HashMap<>();
+
+	/** name 텍스처를 그릴 때 대신 쓸 텍스처 (null = 되돌림). */
+	public void swapTexture(String name, java.util.function.Supplier<Texture> t) {
+		if (name == null) {
+			return;
+		}
+		if (t == null) {
+			textureSwaps.remove(name);
+		} else {
+			textureSwaps.put(name, t);
+		}
+	}
+
+	/** 인스턴스 이름이 붙은 클립 (예 "GenericPickUp") 첫 레이어의 메시 머티리얼 텍스처 이름 (없으면 null). */
+	public String clipTexture(String instanceName) {
+		Integer h = iconClips.get(instanceName);
+		if (h == null) {
+			return null;
+		}
+		FlpFile.Timeline t = flp.clips.get(flp.handlers.get(h).index());
+		for (FlpFile.Layer l : t.layers()) {
+			for (FlpFile.KeyFrame k : l.keys()) {
+				if (k.handler() < flp.handlers.size() && flp.handlers.get(k.handler()).type() == 1) {
+					FlpFile.MeshRef ref = flp.meshRefs.get(flp.handlers.get(k.handler()).index());
+					for (FlpFile.Material m : ref.materials()) {
+						if (m.texture() != null) {
+							return m.texture();
+						}
+					}
+				}
+			}
+		}
+		return null;
+	}
 
 	public FlpRenderer(FlpFile flp, WadAssets assets, String modelName) {
 		this.flp = flp;
@@ -227,7 +266,14 @@ public final class FlpRenderer implements AutoCloseable {
 		int argb = mat != null ? mat.color() : 0xFFFFFFFF;
 		tint.set(col[0] * ((argb >> 16) & 0xFF) / 255f, col[1] * ((argb >> 8) & 0xFF) / 255f,
 				col[2] * (argb & 0xFF) / 255f, col[3] * ((argb >>> 24) & 0xFF) / 255f);
-		Texture tex = mat != null ? assets.texture(mat.texture()) : null;
+		Texture tex = null;
+		if (mat != null) {
+			java.util.function.Supplier<Texture> sw = mat.texture() != null ? textureSwaps.get(mat.texture()) : null;
+			tex = sw != null ? sw.get() : null;
+			if (tex == null) {
+				tex = assets.texture(mat.texture());
+			}
+		}
 		if (tex != null) {
 			tex.bind(0);
 			// UI 아틀라스는 가장자리 반복 필터링 시 이음선이 생겨 클램프 (UI 전용 텍스처라 공유 상태 변경 무해)

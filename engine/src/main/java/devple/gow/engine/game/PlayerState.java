@@ -32,6 +32,8 @@ public final class PlayerState {
 	public int phoenixFeathers;
 	public int deaths;
 	public int itemFlags;
+	/** 첫 안내 비트 (PlayerProgress +0x50) 와 안내 1 / 0x13 누적 (+0x54 / +0x55) — {@link #firstTimeHint}. 세이브 대상, 체크포인트 재시작에도 유지. */
+	public int hintMask, hintCount1, hintCount19;
 	public Weapon selectedMagic;
 	/** 아르테미스의 검 장착 중 (원작 player.flags&amp;0x20). BERSERKENTER/EXIT 의 SCR_Enable/DisableBerserkBlade 이벤트로 바뀐다. */
 	public boolean artemisEquipped;
@@ -49,6 +51,26 @@ public final class PlayerState {
 
 	public float maxHp() {
 		return rules.maxHp(hpLevel);
+	}
+
+	/**
+	 * FirstTimeHint 0x1DBEB0 [확실]: 플레이 2 초 전 (progress +0x4C &lt; 2.0) 이거나 비트 (+0x50, 1 &lt;&lt; id) 가 이미 서 있으면 거짓. 안내 1 은 3 번째
+	 * (+0x54), 0x13 은 8 번째 (+0x55) 부터. 그 뒤 비트를 세우고 참 — 호출자가 메시지 500 + id 가 있으면 띄운다 (0x1B9528 줄 수 &gt; 0 → 0x21D980).
+	 * 부르는 곳: 기술 SCRIPT 이벤트 SCR_FirstTimeMsg (0x19CD20, idx = id — R_SKB 방패 막기 SKBBLOCK 19 → 519, 영웅 MAIMEWGRAB 1 → 501,
+	 * MAIMIN01 7 → 507, BOLTPULLOUT 9 → 509 …), 코드 (18 오브 0x1DBE98, 21 고르곤에 메두사 시선 0x1964A4, 10 · 12 · 2 · 6 · 17 · 0 · 3 · 16).
+	 */
+	public boolean firstTimeHint(int id, float playTime) {
+		if (playTime < 2f || id < 0 || id >= 32 || (hintMask & (1 << id)) != 0) {
+			return false;
+		}
+		if (id == 1 && ++hintCount1 < 3) {
+			return false;
+		}
+		if (id == 0x13 && ++hintCount19 < 8) {
+			return false;
+		}
+		hintMask |= 1 << id;
+		return true;
 	}
 
 	public float maxMp() {
@@ -71,7 +93,15 @@ public final class PlayerState {
 
 	public void addRedOrbs(int n) {
 		redOrbs = Math.min(redOrbs + n, GameRules.MAX_RED_ORBS);
+		// SetRedOrbs 0x1DBE10: 붉은 오브 + 블레이드에 넣은 오브 ≥ 1500 이고 무기·마법 레벨 6 개가 모두 0 이면 (안내 18 비트가 없을 때 SND_LEVELUPCARD) 안내 18
+		if (onHint != null && redOrbs + invested.get(Weapon.BLADES) >= 1500 && level.values().stream().allMatch(l -> l == 0)
+				&& (hintMask & (1 << 18)) == 0) {
+			onHint.accept(18);
+		}
 	}
+
+	/** 코드가 부르는 첫 안내 (게임 씬이 소리·메시지를 낸다). 저장하지 않는다. */
+	public transient java.util.function.IntConsumer onHint;
 
 	/** 오브 획득. type 0 = 체력(녹색), 1 = 마법(청색), 2 = 경험(붉은색). points = 템플릿의 Points. */
 	public void pickupOrb(int type, float points) {

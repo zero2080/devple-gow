@@ -162,6 +162,16 @@ public final class EffectSystem implements AutoCloseable {
 			return act != null ? act.name : null;
 		}
 
+		/** 지금 act 의 경과 시간 (초). */
+		public float actTime() {
+			return act == def.anim() ? time : actTime;
+		}
+
+		/** 지금 act 의 길이 (초, 없으면 0). */
+		public float actDuration() {
+			return act != null ? act.duration : 0;
+		}
+
 		/** 수명 연장/단축 (Fade Time 등). */
 		public void setLife(float l) {
 			life = l;

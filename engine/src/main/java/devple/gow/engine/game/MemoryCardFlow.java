@@ -85,6 +85,11 @@ public final class MemoryCardFlow {
 		return state;
 	}
 
+	/** 지금 화면이 예/아니오 질문 (불러올까? 10 · 덮어쓸까? 15 · 새로 만들까? 16 — FLP 기본 선택 아니오) 인지. */
+	public boolean yesNoScreen() {
+		return state == LOAD_ASK || state == OVERWRITE_ASK || state == CREATE_ASK;
+	}
+
 	/** 불러온 세이브 ({@link Result#LOADED} 일 때). */
 	public SaveGame loaded() {
 		return loaded;

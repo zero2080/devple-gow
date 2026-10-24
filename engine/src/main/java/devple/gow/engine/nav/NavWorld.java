@@ -407,7 +407,7 @@ public final class NavWorld {
 	/** {@link #collideBodies(Vector3f, float, java.util.Collection)} 를 몸 제외 마스크 exclude 로 ({@link #bodyExclude}). */
 	public boolean collideBodies(Vector3f c, float r, java.util.Collection<String> skip, long exclude) {
 		boolean own = platforms.collideSphere(c, r, skip, exclude);
-		return neighbour.collideSphere(c, r, java.util.Set.of(), exclude) | own;
+		return neighbour.collideSphere(c, r, skip, exclude) | own; // 이웃 레버·밀기 상자도 붙잡은 동안 몸 제외 (SceneNav 가 두 슬롯 이름을 함께 줌)
 	}
 
 	// ---- 줄 공유 상태 (영웅·적이 같은 줄 오브젝트를 쓴다) ----

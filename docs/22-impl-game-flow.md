@@ -93,6 +93,15 @@ IN_GAME ─세이브 포인트→ SAVE_POINT → SAVE_DONE → IN_GAME
 | 오류·취소 | 2 / 14 → 21, 12 → 23, 19 → 22, △ 21 → 0 (취소), △ 22/23 → 21 |
 
 - 카드 1 = `~/Library/Application Support/devple-gow/slot0..3.save` (파일 4개), 카드 2 = 없음 (화면 2).
+- **세이브 질문 열기·닫기** (원작 상태 15 0x2204E0 → 17 0x220608 → 18 0x220740, 디스패치 0x21DB20 표 0x2B96B0) [확실: 코드]:
+  - 열기 0x21D8B0: 0x29F47C = 1, HUD SaveGame_Event (+0x268) = 1, Menu_Choice (+0x278) · Done (+0x27C) = 0, 미니게임 아이콘 뗌 (0x2207F8 → 0x1BA150 → 0x1BA338(−1)).
+  - ○ 에서 FLP 는 SaveGameMenu 를 "Off" (질문만 숨김 — **Ω 배경은 남음**) + Pause_Check 10 → 0, Menu_Choice · Done = 1.
+  - 아니오 → 상태 18: 첫 프레임 MemoryCard_Event (+0x274) = 0, 10 프레임 (0x29F468) 뒤 SaveGame_Event = 0 (FLP Animate_Off) → 상태 11 (놀이).
+  - 예 → 상태 17 쓰기 흐름 0x230A98: 끝 (≠ −1) 이면 MemoryCard_Event = 0, 10 프레임 뒤 상태 18 (1 + 10 프레임) → SaveGame_Event = 0.
+    카드 선택 △ (흐름 −1, 0x2A2730 ≠ 1) 이면 10 프레임 뒤 SaveGame_Event = 1 · Menu_Choice · Done = 0 → 상태 15 (질문으로 돌아감).
+  - 엔진 (예전): SaveGame_Event 0 을 보내지 않아 저장·아니오 뒤 Ω 배경이 화면에 남았고, Done 1 이 남아 두 번째 세이브 포인트의 ○ 가 "바뀜" 으로 들어오지 않아
+    질문이 닫히지 않았다 → `GameScene.askSave` (Done·Menu_Choice 0) · `closeSaveMenu` (11 / 21 / 10 프레임, 60 Hz 로 초 환산 [근사]) (43 §18).
+    시험 `AthensInteriorTest.saveMenuNeedsEventZeroToClose`.
 - 파일 표시 = 원작 `Save_SlotText` 0x22E810 처럼 난이도 이름(메시지 3–6) / 저장 날짜 / 플레이 시간 `h:mm:ss` (`SaveGame.playTime`, 일시정지가 아닐 때 누적),
   빈 파일 = 메시지 2 "비어있음".
 - 포맷·공간 부족·귀중품 화면(3–9, 24–27)은 PC 에서 일어나지 않아 쓰지 않는다.

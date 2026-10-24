@@ -120,6 +120,13 @@ public final class GameScene implements Scene {
 	/** 세이브 포인트: 저장 질문(SaveGameMenu) 대기 중 / 메모리카드 화면 진행 중 (22 문서 §7). */
 	private boolean saveAsk;
 	private MemoryCardFlow saveFlow;
+	/**
+	 * 세이브 메뉴 닫기 대기 (초): 원작 상태 18 0x220740 은 프레임 카운터 0x29F468 (10) 이 다 돼야 HUD SaveGame_Event(+0x268) = 0
+	 * (FLP SaveGameMenu Animate_Off — Ω 배경이 사라짐) 을 쓰고 상태 11 (놀이) 로 간다. 그동안 게임은 멈춰 있다.
+	 * {@link #saveReask} 면 대신 저장 질문을 다시 띄운다 (상태 17 의 -1 갈래 0x22063C).
+	 */
+	private float saveCloseTimer;
+	private boolean saveReask;
 	private final devple.gow.engine.ui.MinigameIcon minigameIcon = new devple.gow.engine.ui.MinigameIcon();
 	private float time;
 	private float messageTimer;
@@ -469,6 +476,18 @@ public final class GameScene implements Scene {
 			session.sound.load(level.data().wad);
 			ph = devple.gow.engine.core.PerfMonitor.phase(". sound", ph);
 			hero.combat.onSound((h, p) -> session.sound.play(h, p));
+			// 첫 안내: 영웅 기술의 SCRIPT SCR_FirstTimeMsg (0x19CD20, idx = 안내 번호 — MAIMEWGRAB 1, MAIMIN01 7, BOLTPULLOUT 9 …)
+			hero.combat.addEventListener(ev -> {
+				if (ev.type() == 8 && ev.hash() == SCR_FIRST_TIME_MSG) {
+					firstTimeHint(ev.index());
+				}
+			});
+			hero.player.onHint = id -> {
+				if (id == 18) {
+					session.sound.play("SND_LEVELUPCARD"); // 0x1DBE88 (비트 18 이 없을 때만)
+				}
+				firstTimeHint(id);
+			};
 			vars.addListener((name, value) -> {
 				if (System.getProperty("gow.debug.hudvars") != null && !name.startsWith("PS2_Sound")) {
 					System.out.println("HUD 변수 " + name + " = " + value);
@@ -480,11 +499,13 @@ public final class GameScene implements Scene {
 					onPowerUpClosed();
 				} else if (questionId >= 0 && name.equals("PS2_Done") && "1".equals(String.valueOf(value).replace(".0", ""))) {
 					answerQuestion(vars.get("PS2_Menu_Choice"));
+				} else if (pickupOpen && name.equals("PS2_Done") && "1".equals(String.valueOf(value).replace(".0", ""))) {
+					closePickupCard(); // FLP ClosePickUpMenu (○, Pause_Check 8 → 0)
 				} else if (deadMenu == 2 && name.equals("PS2_Done") && "1".equals(String.valueOf(value).replace(".0", ""))) {
 					onDeadMenuClosed(vars.get("PS2_Menu_Choice"));
 				} else if (saveAsk && name.equals("PS2_Done") && "1".equals(String.valueOf(value).replace(".0", ""))) {
 					onSaveAnswered("1".equals(String.valueOf(vars.get("PS2_Menu_Choice")).replace(".0", "")));
-				} else if (paused && !powerUp && !saveAsk && saveFlow == null && deadMenu == 0
+				} else if (paused && !powerUp && !saveAsk && saveFlow == null && saveCloseTimer <= 0 && deadMenu == 0
 						&& (name.equals("PS2_PauseDone") || name.endsWith("Menu_Choice"))) {
 					onMenuClosed(name, value);
 				}
@@ -494,6 +515,7 @@ public final class GameScene implements Scene {
 					saveFlow.command(cmd, arg);
 				}
 			});
+			chests.onItem = this::chestItem;
 			ph = devple.gow.engine.core.PerfMonitor.phase(". hud listeners", ph);
 			enemyShader = new Shader("skinned.vert", "basic.frag");
 			if (preOrbTweaks != null) {
@@ -623,7 +645,21 @@ public final class GameScene implements Scene {
 			}
 		});
 		ph = devple.gow.engine.core.PerfMonitor.phase(". cameraRig", ph);
-		world = new ScriptWorld(level.data(), session.scriptHost, listener());
+		// 두 슬롯 세계 넘겨 쓰기 (GameSession.residentWorlds, 43 §18): 이음 (LoadCheck·걷기) 이면 들어가는 레벨과 떠나는 레벨이 둘 다 슬롯에 그대로라
+		// 그 스크립트 세계 (LevelData·한 번 발동·지연·액터) 를 잇는다. Warp·Load 는 슬롯이 바뀌므로 새로.
+		if (!seamless) {
+			session.residentWorlds.clear();
+		}
+		ScriptWorld keptWorld = seamless ? session.residentWorlds.get(levelName.toUpperCase(java.util.Locale.ROOT)) : null;
+		ScriptWorld keptOther = seamless && otherName != null ? session.residentWorlds.get(otherName.toUpperCase(java.util.Locale.ROOT)) : null;
+		if (keptWorld != null) {
+			world = keptWorld;
+			world.rebind(listener());
+		} else {
+			// 넘겨 쓰는 이웃 세계가 세션 호스트를 쓰고 있으면 (떠나온 레벨이 그 호스트로 만든 현재 세계) 새 호스트 — LevelData 가 섞이지 않게
+			boolean hostBusy = keptOther != null && keptOther.host() == session.scriptHost;
+			world = new ScriptWorld(level.data(), hostBusy ? devple.gow.engine.script.ScriptHost.neighbour(session.scriptHost) : session.scriptHost, listener());
+		}
 		nav = new SceneNav(level.data(), col, hero, world, session.scriptHost, orbTweaks, navHost());
 		if (AutoPlay.ON) {
 			if (session.autoCarry != null) { // 경로 중 이음 전환 (덧붙는 레벨 → 숙주): 같은 경로를 이어서
@@ -636,13 +672,16 @@ public final class GameScene implements Scene {
 		}
 		buildRopeVisuals();
 		ph = devple.gow.engine.core.PerfMonitor.phase(". script+nav", ph);
+		if (otherName == null && keptWorld != null) {
+			world.linkEvents(null); // 넘겨 쓴 세계의 예전 이벤트 짝 (버린 슬롯) 을 끊는다
+		}
 		if (otherName != null) {
-			nav.setOther(otherName, otherData, otherCol, nav.neighbourListener());
+			nav.setOther(otherName, otherData, otherCol, nav.neighbourListener(), keptOther, neighbourTweaks(otherData));
 			Resident left = resident(arrival, otherName);
 			if (left != null) { // 이음: 떠나온 레벨 = 다른 슬롯 그대로 (생성 스크립트 결과보다 넘긴 상태가 우선)
 				otherHidden.clear();
 				otherHidden.addAll(left.hidden());
-				nav.neighbourPlatforms().restore(left.anims());
+				nav.restoreNeighbourPlatforms(left.anims()); // + 이웃 R1/R2 오브젝트 (열린 해치·창살은 끝난 것으로)
 				if (System.getProperty("gow.debug") != null) {
 					System.out.println("다른 슬롯 상태 넘겨받음 " + otherName + ": 숨김 " + left.hidden().size() + ", 애니 " + left.anims());
 				}
@@ -665,11 +704,26 @@ public final class GameScene implements Scene {
 		if (boss != null) {
 			boss.attach(arena());
 		}
-		world.start();
+		world.start(); // 넘겨 쓴 세계면 이미 돌았으므로 그대로 (ScriptWorld.start 는 한 번)
+		if (keptWorld != null) {
+			world.recreate(); // 상자·세이브 포인트·살아 있는 적을 이 씬에 다시
+		}
+		if (keptOther != null && nav.neighbour() == keptOther) {
+			keptOther.recreate(); // 이웃 리스너: 적 (이웃 스폰 규칙) · 세이브 포인트 Creator · Vis 상태 (상자 Creator 는 아직 무시)
+		}
+		if (keptWorld == null) {
+			applyArriveState(world, levelName);
+		}
+		if (keptOther == null && nav.neighbour() != null) {
+			applyArriveState(nav.neighbour(), otherName);
+		}
+		rememberResidentWorlds();
 		ph = devple.gow.engine.core.PerfMonitor.phase(". script start", ph);
 		// Warp 도 이미 서 있는 볼륨은 "안" 으로: 원작 영웅 볼륨 판정은 이전 위치 → 지금 위치 선분 (0x1A7FFC, 콜백 0x1A8508) 인데 순간이동
 		// (0x1E0A18 → 0x1B3030 → 0x29D90C) 프레임은 선분을 건너뛰고 이전 위치 = 도착점 — 도착점을 덮는 Warp 볼륨이 곧바로 되돌리지 않는다 (43 §13.9)
-		world.placePlayer(spawn.x, spawn.y, spawn.z, seamless || warped);
+		if (keptWorld == null) { // 넘겨 쓴 세계는 영웅 볼륨 기록이 이어진다 (다음 틱의 들어감·나감은 그대로 발동)
+			world.placePlayer(spawn.x, spawn.y, spawn.z, seamless || warped);
+		}
 		if (warped && loadPos == null) {
 			// Warp_Jump 끝 0x1A9C18: 도착 Start 의 대상 발동 (PAND04AA WarpFrmCore → 엘리베이터 AnimLiftUp 등, 43 §13.10) [확실]
 			world.fireStart(world.warpTarget(arrival.from()));
@@ -966,6 +1020,35 @@ public final class GameScene implements Scene {
 	/** LoadForWarp 로 다른 슬롯에 꺼진 채 올라간 레벨 (Warp 대상, 스크립트·충돌·CMV·렌더 없음). null = 없음. */
 	private String warpSlot;
 
+	/**
+	 * 검증 하네스 -Dgow.arrive.state=레벨:상태;레벨:상태 (엔진 전용, {@link ScriptWorld#presetState}) — --arrive 로 구간 중간에서 시작할 때 앞 구간이
+	 * 남긴 스크립트 상태 (예 ATHN04A 사이클롭스 결투 끝) 를 새로 만든 세계에 둔다. 넘겨 쓴 세계에는 걸지 않는다.
+	 */
+	private static void applyArriveState(ScriptWorld w, String level) {
+		String s = System.getProperty("gow.arrive.state");
+		if (s == null || w == null || level == null) {
+			return;
+		}
+		for (String part : s.split(";")) {
+			int c = part.indexOf(':');
+			if (c > 0 && part.substring(0, c).trim().equalsIgnoreCase(level)) {
+				w.presetState(part.substring(c + 1));
+				System.out.println("도착 상태 (" + level + "): " + part.substring(c + 1));
+			}
+		}
+	}
+
+	/** 지금 두 슬롯의 스크립트 세계 (다음 이음 씬이 넘겨 쓴다, GameSession.residentWorlds). */
+	private void rememberResidentWorlds() {
+		session.residentWorlds.clear();
+		if (world != null) {
+			session.residentWorlds.put(levelName.toUpperCase(java.util.Locale.ROOT), world);
+		}
+		if (nav != null && nav.neighbour() != null && otherName != null) {
+			session.residentWorlds.put(otherName.toUpperCase(java.util.Locale.ROOT), nav.neighbour());
+		}
+	}
+
 	/** 다른 슬롯 비우기 — 그 슬롯에 꺼진 레벨 (LoadForWarp) 이 들어온다. 렌더 장면은 캐시로 (같은 레벨을 다시 LoadWad 하면 재사용). */
 	private void unloadOther() {
 		if (otherName == null) {
@@ -982,6 +1065,7 @@ public final class GameScene implements Scene {
 		otherScenePending = true;
 		if (nav != null) {
 			nav.clearOther();
+			rememberResidentWorlds();
 		}
 		if (cameraRig != null) {
 			cameraRig.setOther(null);
@@ -1028,12 +1112,24 @@ public final class GameScene implements Scene {
 		}
 		loadNeighbourKinds(otherData); // 이웃 스크립트가 처음부터 (SpawnAtStart) 낼 수 있으니 스크립트 세계보다 먼저
 		if (nav != null) {
-			nav.setOther(wad, otherData, otherCol, nav.neighbourListener());
+			nav.setOther(wad, otherData, otherCol, nav.neighbourListener(), null, neighbourTweaks(otherData));
+			rememberResidentWorlds(); // 다른 슬롯이 새 레벨로 — 예전 슬롯 세계는 버린다 (0x1BC110)
 		}
 		if (cameraRig != null) {
 			cameraRig.setOther(otherData);
 		}
 		devple.gow.engine.core.PerfMonitor.loadTime("other " + wad, t0);
+	}
+
+	/** 다른 슬롯 레벨 TWK (영구 + 레벨) — 이웃 R1/R2 오브젝트 템플릿 (SceneNav.setOther). */
+	private Tweaks neighbourTweaks(LevelData d) {
+		if (d == null) {
+			return null;
+		}
+		Tweaks t = new Tweaks();
+		t.load(session.permk);
+		t.load(d.wad);
+		return t;
 	}
 
 	/** 현재 + 다른 슬롯 레벨 바닥 + 움직이는 발판 중 높은 것 (NaN = 없음). */
@@ -1090,6 +1186,24 @@ public final class GameScene implements Scene {
 					screenFade.fadeOut(r, g, b, seconds);
 				} else {
 					screenFade.fadeIn(seconds);
+				}
+			}
+
+			@Override
+			public void neighbourIdle(boolean idle) {
+				scriptIdle = idle; // 원작 전역 정지 0x29DB58 은 하나 (현재 레벨 리스너의 0xC 와 같음)
+				devple.gow.engine.combat.AiTargets.globalHold = globalIdle();
+			}
+
+			@Override
+			public void neighbourCreate(ScriptEntity source, Object name) {
+				// 이웃 레벨 Creator "savepoint" (원작 두 슬롯 GO 상주): 자리·빛기둥을 이 씬에 — R2 저장 (0x1DC678 은 슬롯 구분 없이 가장 가까운 것).
+				// 이웃 상자 ("chest") 는 아직 현재 레벨 것만 [근사]
+				if ("savepoint".equals(name) && source.owner != null) {
+					float[] gp = source.owner.instance().pos();
+					savePoints.add(new Vector3f(gp[0], gp[1], gp[2]));
+					boolean body = spawnSavePoint(source.owner.instance().matrix());
+					System.out.printf("세이브 포인트 생성 (이웃 %s, %.0f, %.0f, %.0f)%s%n", otherName, gp[0], gp[1], gp[2], body ? " + 빛기둥 savepoint" : "");
 				}
 			}
 
@@ -1227,7 +1341,7 @@ public final class GameScene implements Scene {
 					}
 				}
 				if (values.length > 3 && values[3] != 0 && nav != null) {
-					nav.setSolid(objects, values[3] == 1); // Attr11_0: 충돌 on/off ("collisionOFF", "DoorCollOff") [추정: 데이터 용례]
+					nav.setSolid(objects, values[3] == 1); // Attr11_0: 충돌 on/off ("collisionOFF", "DoorCollOff") [추정: 데이터 용례] + R2 잡기 대상
 				}
 				if (values.length > 4 && values[4] != 0) {
 					if (System.getProperty("gow.trace.vis") != null) {
@@ -1633,6 +1747,8 @@ public final class GameScene implements Scene {
 				} else if (ev.type() == 48) {
 					// CONCUSSION (0x20704C → 0x204690, 0x2 비트라 무적 검사 없음): 자기 피해 idx — 해골 머리치기 222 @0.05 idx 400 → 즉사 → 227 MAISKB06 마무리
 					ef.selfHp(ev.index());
+				} else if (ev.type() == 8 && ev.hash() == SCR_FIRST_TIME_MSG) {
+					firstTimeHint(ev.index()); // 0x19CD20: 적 기술의 첫 안내 (R_SKB 방패 막기 M70 SKBBLOCK idx 19 → 8 번째에 519 "마법 방패는 …")
 				} else if (ev.type() == 8 && ev.hash() == SCR_EXPLODE_DEATH && ef.hp > 0) {
 					// SCR_ExplodeDeath: 사망 (△ 찢기 224 @0.80, 마무리 227 @0.80; 피격 착지의 것은 조건 6 = 이미 죽었을 때만) [근사: 터지는 연출 없음]
 					ef.selfHp(ef.hp);
@@ -1771,6 +1887,10 @@ public final class GameScene implements Scene {
 		questionChoices = choices.size();
 		questionChoice = def;
 		v.set("PS2_Menu_Choice", questionChoice);
+		// 0x1B9F34: Done(+0x27C) = 0 [확실] — 앞 메뉴 (세이브 질문 등) 가 남긴 PS2_Done 1 이면 ○ 의 1 이 변화로 들어오지 않아
+		// 질문이 닫히지 않았다 (ATHN04A 저장 뒤 해치 열쇠 질문 1007, 43 문서 §18)
+		v.set("PS2_Done", 0);
+		hideMinigameIcon();
 		v.event("PS2_MenuTemplate_Event", q.frame());
 		session.sound.play("SND_IG_POPUP");
 		System.out.println("질문 " + id + ": " + String.join(" / ", lines) + " → " + choices);
@@ -1847,7 +1967,105 @@ public final class GameScene implements Scene {
 		return text == null || text.isEmpty() ? "Unknown zone" : text.split("\n", -1)[0].trim();
 	}
 
+	/** 아이템 카드 (HUD PickUpInfoMenu) 가 열려 있음 — 게임 멈춤, ○ 로 닫힘 (FLP PS2_Done). */
+	private boolean pickupOpen;
+	/** 카드로 띄운 메시지 번호 (닫힐 때 1040), 없으면 −1. */
+	private int pickupMessage = -1;
+
+	/**
+	 * 아이템 카드 (원작 메시지 큐 0x21E728 → HUD 0x21E520 / 0x1B96D0) [확실]: PS2_PickUpInfo_Event = 종류 (3 고르곤의 눈, 4 불사조 깃털, 8 그림 메시지
+	 * "GenericPickUp"), PS2_MeterBarGrow = 레벨 업 (1 HP / 2 MP / 0), 그림 메시지는 줄을 PS2_MessageTemplate_Line1..3 에 (+0x88/+0x8C/+0x90) 두고
+	 * GenericPickUp 메시 텍스처를 그 그림으로 갈아 끼운다 (0x1B8178). 카드 동안 게임은 멈추고 (0x1B9F60), ○ 로 닫히면 메시지면 1040 (0x1B8EC0).
+	 */
+	private void showPickupCard(int kind, int grow, int msgId, java.util.function.Supplier<devple.gow.engine.render.Texture> picture) {
+		UiVariables v = hud.variables();
+		if (msgId >= 0) {
+			String text = session.messages != null ? session.messages.get(msgId) : null;
+			String[] lines = text == null ? new String[0] : text.replace("----", "\n").split("\n");
+			for (int i = 1; i <= 3; i++) {
+				v.set("PS2_MessageTemplate_Line" + i, i <= lines.length ? lines[i - 1].trim() : "");
+			}
+		}
+		hud.renderer().swapTexture(hud.renderer().clipTexture("GenericPickUp"), picture);
+		v.set("PS2_MeterBarGrow", grow);
+		v.set("PS2_Done", 0); // 닫힘 (FLP ClosePickUpMenu → 1) 을 변화로 받도록
+		hideMinigameIcon();
+		v.event("PS2_PickUpInfo_Event", kind);
+		pickupOpen = true;
+		pickupMessage = msgId;
+		System.out.printf("아이템 카드: 종류 %d, 레벨 업 %d, 메시지 %d%s%n", kind, grow, msgId, picture != null ? " + 그림" : "");
+	}
+
+	/**
+	 * 아이템 상자의 아이템 (원작 0x21602C → 0x1D9700) [확실]: 15 = HP 가득 (Entity_SetHP 최대), 16 = MP 가득, 그 밖 = 지금 개수 &lt; 최대면
+	 * AddItem(아이템, 1) (0x1D8CF0) — 고르곤의 눈 (10) / 불사조 깃털 (11) 은 카드 0x21DA08 (종류 3 / 4, 6 개째에 레벨이 오르면 1 HP / 2 MP).
+	 * 예전엔 상자가 열리기만 하고 아무것도 주지 않았다 (ATHN04A Chest5 MagicShard, 영상 5953–5956).
+	 */
+	private void chestItem(devple.gow.engine.nav.Interactables.Item it) {
+		PlayerState p = hero.player;
+		switch (it.chestItem) {
+			case 15 -> p.hp = p.maxHp();
+			case 16 -> p.mp = p.maxMp();
+			default -> {
+				if (it.chestItem == 10 && p.gorgonEyes >= GameRules.MAX_SHARDS || it.chestItem == 11 && p.phoenixFeathers >= GameRules.MAX_SHARDS) {
+					return;
+				}
+				int hp0 = p.hpLevel, mp0 = p.mpLevel;
+				p.addItem(it.chestItem, 1);
+				System.out.printf("상자 아이템 %d: %s → 고르곤의 눈 %d, 불사조 깃털 %d%n", it.chestItem, it.owner, p.gorgonEyes, p.phoenixFeathers);
+				if (it.chestItem == 10 || it.chestItem == 11) {
+					hudBinding.update(p, hud.variables()); // 카드가 읽을 개수 (PS2_*Shard_Count) 먼저
+					showPickupCard(it.chestItem == 10 ? 3 : 4, p.hpLevel > hp0 ? 1 : p.mpLevel > mp0 ? 2 : 0, -1, null);
+				}
+			}
+		}
+	}
+
+	private void closePickupCard() {
+		pickupOpen = false;
+		hud.variables().set("PS2_Done", 0); // 다음 메뉴 (질문 1014 …) 의 Done 1 이 변화로 들어오게 — 남겨 두면 열쇠 질문에 답하지 못했다
+		if (pickupMessage >= 0) {
+			world.postEvent(1040, pickupMessage, 0, 0, world.player()); // 메시지 끝 (ATHN04A SuicideSparkle-EvtMsgDone 125 → 카메라·Idle 풀기)
+		}
+		System.out.println("아이템 카드 닫힘 (메시지 " + pickupMessage + ")");
+		pickupMessage = -1;
+	}
+
+	/**
+	 * 메시지 그림 (원작 0x1B1228: "MAT_FLASHMAT%d" 를 부른 레벨 슬롯 자원에서 찾음 → 0x21D980 요청의 그림) [확실]: 지금 레벨, 없으면 다른 슬롯 레벨의
+	 * MAT_FlashMat&lt;번호&gt; 텍스처. 전 WAD 19 레벨 (ATHN04A 125 열쇠, ATHN02D 141 메두사의 시선, PAND01BB 257 …). 없으면 null.
+	 */
+	private java.util.function.Supplier<devple.gow.engine.render.Texture> flashPicture(int id) {
+		String name = "MAT_FlashMat" + id;
+		for (int side = 0; side < 2; side++) {
+			devple.gow.tools.level.LevelData d = side == 0 ? level.data() : otherData;
+			if (d == null || d.wad == null) {
+				continue;
+			}
+			for (devple.gow.tools.wad.WadTag t : d.wad.resources()) {
+				if (t.name().equalsIgnoreCase(name)) {
+					String mat = t.name();
+					if (side == 0) {
+						String txr = level.assets().materialTexture(mat);
+						return txr == null ? null : () -> level.assets().texture(txr);
+					}
+					return () -> {
+						LevelScene o = otherScene;
+						String txr = o != null ? o.assets().materialTexture(mat) : null;
+						return txr == null ? null : o.assets().texture(txr);
+					};
+				}
+			}
+		}
+		return null;
+	}
+
 	private void showMessage(int id, float seconds) {
+		java.util.function.Supplier<devple.gow.engine.render.Texture> pic = flashPicture(id);
+		if (pic != null) {
+			showPickupCard(8, 0, id, pic); // 그림 메시지 = PickUpInfoMenu 8 "GenericPickUp" (0x1B9954), 시간과 무관하게 ○ 까지
+			return;
+		}
 		String text = session.messages != null ? session.messages.get(id) : null;
 		messageId = id;
 		messageWait = false;
@@ -2128,6 +2346,21 @@ public final class GameScene implements Scene {
 	private static final int SCR_NO_SHADOW = 0xBFC016FE, SCR_EXPLODE_DEATH = 0xBA76AD70;
 	/** SCR_ArcherShoot (Hash127Upper, 등록 0x18DB88 → 처리 0x18DAA8) — 궁수 SHOOT 의 SCRIPT 이벤트. */
 	static final int SCR_ARCHER_SHOOT = 0x63F805BF;
+	/** Hash127Upper("SCR_FirstTimeMsg") — 기술 SCRIPT 이벤트, idx = 첫 안내 번호 (0x19CD20 → 0x1DBEB0). */
+	static final int SCR_FIRST_TIME_MSG = 0x42077801;
+
+	/** 첫 안내 (0x1DBEB0): 비트·누적·플레이 2 초 규칙을 지나면 메시지 500 + id (있을 때만, 0x1B9528) — 버튼 대기 메시지, 버튼은 2.5 초 뒤 (0x1B8EF8). */
+	private void firstTimeHint(int id) {
+		if (hero == null || !hero.player.firstTimeHint(id, session.playTime)) {
+			return;
+		}
+		int msg = 500 + id;
+		boolean has = session.messages != null && session.messages.get(msg) != null;
+		System.out.println("첫 안내 " + id + (has ? " → 메시지 " + msg : " (메시지 없음)"));
+		if (has) {
+			showMessage(msg, 0);
+		}
+	}
 
 	/** 스크립트 Idle(true) (Internal 0xC) 동안 조작 잠금. */
 	private boolean scriptIdle, hudHidden;
@@ -2232,15 +2465,43 @@ public final class GameScene implements Scene {
 				? devple.gow.engine.ui.MinigameIcon.BUTTON_PRESS : devple.gow.engine.ui.MinigameIcon.NONE;
 	}
 
+	/**
+	 * 저장 질문 열기 — 원작 0x21D8B0 (상태 11 → 15): 0x29F47C = 1, HUD SaveGame_Event(+0x268) = 1, Menu_Choice(+0x278) = 0,
+	 * Done(+0x27C) = 0 [확실]. Done 을 0 으로 되돌려야 FLP 가 ○ 에서 쓰는 PS2_Done = 1 이 다시 "바뀜" 으로 들어온다
+	 * (두 번째 세이브 포인트에서 질문이 안 닫히던 문제 — 43 문서 §18).
+	 */
 	private void askSave() {
 		paused = saveAsk = true;
+		saveReask = false;
+		saveCloseTimer = 0;
+		hud.variables().set("PS2_Menu_Choice", 0).set("PS2_Done", 0);
+		hideMinigameIcon(); // 0x21D8B0 → 0x2207F8 → 0x1BA150
 		hud.variables().event("PS2_SaveGame_Event", 1);
+	}
+
+	/**
+	 * HUD 메뉴·메시지 리셋 0x1BA150 은 끝에서 늘 0x1BA338(−1) 로 미니게임 아이콘을 뗀다 [확실] — 저장 질문 (0x21D8B0 → 0x2207F8),
+	 * 질문 메뉴 (0x1B9F14), 메시지·아이템 카드 (0x1B96D0) 가 부른다. 아이콘을 다시 고르는 0x21E908 은 놀이 상태 11 (0x21FF90) 에서만,
+	 * 그것도 메시지·질문 (+0x1528/+0x152C/+0x1530) 이 없을 때만 돈다 → 메뉴가 닫힐 때까지 숨김. 예전엔 세이브 포인트 "R2" 가 저장 질문·
+	 * 메모리카드 화면 위에 남았다 (영상 6452–6456 에는 없음, 43 문서 §18) [근사: 멈추지 않는 메시지 동안의 숨김은 아직 안 함].
+	 */
+	private void hideMinigameIcon() {
+		minigameIcon.show(hud.player(), devple.gow.engine.ui.MinigameIcon.NONE);
+	}
+
+	/**
+	 * 세이브 메뉴 닫기 예약 (원작 상태 18 0x220740): 0x29F478 가 서 있으면 첫 프레임에 MemoryCard_Event = 0, 그다음 10 프레임 뒤
+	 * SaveGame_Event = 0 → 상태 11. "아니오" (상태 15 0x220524) 는 곧바로 상태 18 로 (1 + 10 프레임), 저장 끝 (상태 17 0x220680) 은
+	 * 10 프레임 기다린 뒤 상태 18 로 (10 + 1 + 10 프레임) [확실: 프레임 수 / 근사: 60 Hz 로 초 환산, 0x21FD00 카드 확인 대기 생략].
+	 */
+	private void closeSaveMenu(float frames) {
+		saveCloseTimer = frames / 60f;
 	}
 
 	private void onSaveAnswered(boolean yes) {
 		saveAsk = false;
 		if (!yes) {
-			paused = false;
+			closeSaveMenu(11); // FLP 가 ○ 에서 SaveGameMenu "Off" (질문만 숨김) — Ω 배경은 SaveGame_Event 0 까지 남는다
 			return;
 		}
 		Vector3f p = new Vector3f(hero.ctl.position);
@@ -2257,11 +2518,14 @@ public final class GameScene implements Scene {
 				checkpoint.set(hero.ctl.position);
 				System.out.println("저장 완료: " + MemoryCardFlow.file(SaveGame.dir(), saveFlow.fileIndex()));
 				saveFlow = null;
-				paused = false;
+				closeSaveMenu(21); // 상태 17: MemoryCard_Event 0 (흐름이 이미 보냄) → 10 프레임 → 상태 18 (1 + 10 프레임) → SaveGame_Event 0
 			}
 			case CANCELLED -> {
+				// 카드 선택에서 △: 쓰기 흐름 0x230A98 이 -1 (0x2A2730 ≠ 1, 0x230D80) → 상태 17 이 10 프레임 뒤 SaveGame_Event = 0x29F47C (1),
+				// Menu_Choice·Done = 0, 상태 15 — 저장 질문으로 돌아간다 [확실]
 				saveFlow = null;
-				paused = false;
+				saveReask = true;
+				closeSaveMenu(10);
 			}
 			default -> {
 			}
@@ -2471,11 +2735,12 @@ public final class GameScene implements Scene {
 			hudBinding.meter(hero.player, hud.variables(), hero.combat.active(), real);
 			hitCounterHud();
 		}
-		if (debugInput != null && (questionId >= 0 || powerUp)) {
-			debugInput.advance(dt); // 질문·업그레이드 메뉴 중에는 게임 틱이 멈추므로 스크립트 입력을 여기서 진행해 HUD 로 (검증용, 43 §17)
+		if (debugInput != null && (questionId >= 0 || powerUp || pickupOpen)) {
+			debugInput.advance(dt); // 질문·업그레이드 메뉴·아이템 카드 중에는 게임 틱이 멈추므로 스크립트 입력을 여기서 진행해 HUD 로 (검증용, 43 §17)
 			hud.update(debugInput);
-		} else if (auto != null && questionId >= 0) {
-			hud.update(auto.menu(dt)); // 자동 플레이: 질문 메뉴는 × 로 첫 선택지
+		} else if (auto != null && (questionId >= 0 || pickupOpen || saveAsk || saveFlow != null)) {
+			// 자동 플레이: 질문·카드·세이브 질문·메모리카드 화면은 ○ 로 기본 선택지, 메모리카드 예/아니오 (기본 아니오) 는 ↑ 뒤 ○ (검증용)
+			hud.update(auto.menu(dt, saveFlow != null && saveFlow.yesNoScreen()));
 		} else {
 			hud.update(e);
 		}
@@ -2512,6 +2777,15 @@ public final class GameScene implements Scene {
 		if (saveFlow != null) {
 			updateSaveFlow(dt);
 		}
+		if (saveCloseTimer > 0 && (saveCloseTimer -= dt) <= 0) {
+			saveCloseTimer = 0;
+			if (saveReask) {
+				askSave();
+			} else {
+				hud.variables().event("PS2_SaveGame_Event", 0); // FLP: SaveGameMenu Animate_Off, Pause_Check 10 → 0
+				paused = false;
+			}
+		}
 		if (deadMenu > 0) {
 			updateDeadMenu(dt);
 		}
@@ -2529,8 +2803,8 @@ public final class GameScene implements Scene {
 			askSave();
 			return;
 		}
-		if (questionId >= 0) {
-			return; // 질문 메뉴가 열려 있는 동안 게임은 멈춘다 (원작 HUD Pause_Check 5, 입력은 HUD FLP 가 받음)
+		if (questionId >= 0 || pickupOpen) {
+			return; // 질문 메뉴·아이템 카드가 열려 있는 동안 게임은 멈춘다 (원작 HUD Pause_Check 5 / 8, 입력은 HUD FLP 가 받음)
 		}
 		// 전투 대기 IDLECOMBAT (M80, ANY_INPUT → 끝) 은 막지 않는다 — 원작 0x1DC3F8 은 전투 기술을 보지 않고 (전역 정지·+0x10·0x29DC70 만),
 		// 엔진은 R2 가 같은 틱에 M80 을 끝내기 전에 여기를 지나 싸운 뒤에는 R2 가 먹지 않았다 (ATHN02A 아테나 석상) [근사: 공격 중은 여전히 막음]
@@ -3403,7 +3677,12 @@ public final class GameScene implements Scene {
 			nav.navWorld.blockMove(hero.ctl.prevPosition, p, devple.gow.engine.nav.HeroNavigator.FOOT, mx);
 		}
 		// 다른 슬롯 레벨 바닥만 밟고 있으면 그 레벨로 (원작은 두 레벨이 같이 상주, 예 SEWR01 → SEWR02)
-		if (otherCol != null && !otherName.equals(hostLevel) && c0.grounded && Float.isNaN(col.groundHeight(p.x, p.y + STEP, p.z, 64))
+		// 스크립트 Idle 중에는 넘기지 않는다 [근사: 엔진 구조]: 엔진의 전환은 씬 (카메라 관리자·스크립트 요청 카메라) 을 새로 만든다. ATHN04A
+		// LedgeJumpCams (이웃 슬롯) 가 Idle + SuicideCam 을 켜고 10.5 초 뒤 푸는데, 난간 이음에서 바로 넘어가면 크레인 카메라가 끊기고 (예전엔 세계까지 새로
+		// 만들어 푸는 지연도 사라져 영웅이 멈춘 채 남았다). 원작은 LoadCheck 가 현재 레벨 이름만 바꾸고 카메라·두 슬롯 세계가 그대로 돈다 (43 §18).
+		if (scriptIdle) {
+			otherFloorTime = 0;
+		} else if (otherCol != null && !otherName.equals(hostLevel) && c0.grounded && Float.isNaN(col.groundHeight(p.x, p.y + STEP, p.z, 64))
 				&& !Float.isNaN(otherCol.groundHeight(p.x, p.y + STEP, p.z, 64))) {
 			if ((otherFloorTime += dt) > 0.25f) { // 이음매에서 오가며 바뀌지 않도록 잠깐 머문 뒤
 				goToLevel(otherName, new Arrival(LevelLink.Kind.WALK, levelName, new float[]{p.x, p.y, p.z}, hero.ctl.yaw));

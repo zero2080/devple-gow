@@ -78,6 +78,20 @@ public final class SceneNav {
 		/** 이웃 레벨 스크립트의 FadeOut/FadeIn — 원작 페이드 상태 0x303D50 은 전역 하나라 슬롯 구분이 없다 (43 §16). */
 		default void neighbourFade(float r, float g, float b, float seconds, boolean out) {
 		}
+
+		/**
+		 * 이웃 레벨 스크립트의 Idle(bool) (Internal 0xC) — 원작 0x1BF080 → 전역 정지 0x29DB58 하나라 이웃 슬롯 스크립트도 영웅을 세운다
+		 * (예 ATHN04A LedgeJumpCams-TriggerVol: ATHN04B 가 현재인 채 난간에 들어서면 Idle + SuicideCam 10.5 초, 43 §18).
+		 */
+		default void neighbourIdle(boolean idle) {
+		}
+
+		/**
+		 * 이웃 레벨 스크립트의 Creator (타입 11, name = 슬롯 0 Name0) — 원작은 두 슬롯 GO 가 모두 살아 있어 이웃 레벨이 만든 세이브 포인트도 R2 로
+		 * 저장된다: ATHN04A 의 SaveGameZone (1249, −81, 1442) 은 해치로 떨어진 ATHN04C 아래층 (현재 = 04C) 에서 쓰인다 (영상 6450–6456, 43 §18).
+		 */
+		default void neighbourCreate(ScriptEntity source, Object name) {
+		}
 	}
 
 	private final LevelData level;
@@ -96,6 +110,15 @@ public final class SceneNav {
 	 * 레벨의 열린 문도 그대로 남는다 (43 §13.8). 렌더 자세만 (충돌은 이웃 정적 충돌 그대로 [근사]).
 	 */
 	private Platforms neighbourPlatforms = new Platforms();
+	/**
+	 * 이웃 레벨의 R1/R2 오브젝트 (레버·크랭크·TAndF 문·CSM·밀기 상자). 원작 잡기 질의 0x1C3F18 은 슬롯 구분 없는 충돌 세계 구 질의라 이웃 레벨
+	 * 오브젝트도 잡힌다 — ATHN04C (해치 아래층, LoadCheck4CEntity 로 현재 = 04C) 에서 ATHN04A 의 창살 LiftDoor13 을 들어 올린다 (영상 6460–6462).
+	 * 예전엔 이웃 레벨 행동 GO 가 몸 (Platforms) 에도 빠져 ({@link Platforms#staticOwner}) 닫힌 창살을 걸어서 지나갔다 (43 §18).
+	 * 이벤트 (1023·1048·1049) 는 공유 큐 ({@link ScriptWorld#linkEvents}) 로 이웃 센서에 간다.
+	 */
+	private Interactables neighbourItems = new Interactables();
+	/** 시작 중인 이웃 세계 (setOther 안 nw.start 동안 — 생성 통지 Creator 의 슬롯을 읽을 세계). */
+	private ScriptWorld neighbourStarting;
 	private final ScriptHost mainHost;
 
 	public SceneNav(LevelData level, LevelCollision col, HeroRig hero, ScriptWorld world, ScriptHost mainHost, Tweaks levelTweaks, Host host) {
@@ -143,7 +166,7 @@ public final class SceneNav {
 
 			@Override
 			public void pushMoved(Interactables.Item it, Vector3f d) {
-				world.moveOwnerBy(it.owner, d.x, d.y, d.z);
+				(neighbour != null && neighbourItems.items().contains(it) ? neighbour : world).moveOwnerBy(it.owner, d.x, d.y, d.z);
 			}
 
 			@Override
@@ -215,6 +238,16 @@ public final class SceneNav {
 
 	/** 다른 슬롯 레벨이 바뀜: 충돌 + 스크립트. */
 	public void setOther(String name, LevelData data, LevelCollision otherCol, ScriptListener neighbourListener) {
+		setOther(name, data, otherCol, neighbourListener, null);
+	}
+
+	/** kept = 그 레벨이 슬롯에 그대로 있던 세계 (넘겨 씀, 없으면 null = 새로). */
+	public void setOther(String name, LevelData data, LevelCollision otherCol, ScriptListener neighbourListener, ScriptWorld kept) {
+		setOther(name, data, otherCol, neighbourListener, kept, null);
+	}
+
+	/** otherTweaks = 그 레벨 TWK (영구 + 레벨) — 이웃 R1/R2 오브젝트 템플릿용, null 이면 이 레벨 것. */
+	public void setOther(String name, LevelData data, LevelCollision otherCol, ScriptListener neighbourListener, ScriptWorld kept, Tweaks otherTweaks) {
 		navWorld.setOther(otherCol);
 		if (name == null || name.equals(neighbourName)) {
 			return;
@@ -223,22 +256,35 @@ public final class SceneNav {
 		neighbour = null;
 		neighbourPlatforms = new Platforms();
 		navWorld.setNeighbourPlatforms(neighbourPlatforms);
+		setNeighbourItems(new Interactables());
 		world.linkEvents(null);
 		if (data == null) {
 			return;
 		}
 		try {
-			ScriptWorld nw = new ScriptWorld(data, ScriptHost.neighbour(mainHost), neighbourListener);
+			// 두 슬롯에 그대로 있던 레벨 (이음으로 떠나온 레벨) 은 그 세계를 넘겨 쓴다 — 시작 큐를 다시 돌리지 않는다 (GameSession.residentWorlds, 43 §18)
+			ScriptWorld nw = kept != null ? kept : new ScriptWorld(data, ScriptHost.neighbour(mainHost), neighbourListener);
+			if (kept != null) {
+				nw.rebind(neighbourListener);
+			}
+			Interactables ni = Interactables.of(data, otherTweaks != null ? otherTweaks : tweaks);
 			Set<String> owners = animatorOwners(nw);
-			neighbourPlatforms = Platforms.of(data, owners, owners);
+			Set<String> posed = new HashSet<>(owners);
+			posed.addAll(posedOwners(ni)); // 이웃 R1/R2 오브젝트도 자세·충돌을 갖는 몸으로 (닫힌 창살이 막는다)
+			neighbourPlatforms = Platforms.of(data, owners, posed);
 			registerMaterialAnimators(nw, neighbourPlatforms);
 			navWorld.setNeighbourPlatforms(neighbourPlatforms); // 이웃 문·발판 충돌도 자세대로 (43 §13.8 [근사] 해소)
-			nw.start();
-			Vector3f p = world.player() != null ? new Vector3f(world.player().pos[0], world.player().pos[1], world.player().pos[2]) : new Vector3f();
-			nw.placePlayer(p.x, p.y, p.z, true); // 이미 서 있는 볼륨은 "안" 으로 (들어올 때 발동하지 않음)
+			setNeighbourItems(ni);
+			if (kept == null) {
+				neighbourStarting = nw;
+				nw.start();
+				neighbourStarting = null;
+				Vector3f p = world.player() != null ? new Vector3f(world.player().pos[0], world.player().pos[1], world.player().pos[2]) : new Vector3f();
+				nw.placePlayer(p.x, p.y, p.z, true); // 이미 서 있는 볼륨은 "안" 으로 (들어올 때 발동하지 않음)
+			}
 			neighbour = nw;
 			world.linkEvents(nw); // 전역 이벤트 큐 공유 (원작 0x303DB8)
-			System.out.println("이웃 레벨 스크립트: " + name + " (엔티티 " + nw.entities().size() + ")");
+			System.out.println("이웃 레벨 스크립트: " + name + " (엔티티 " + nw.entities().size() + (kept != null ? ", 넘겨 씀" : "") + ")");
 		} catch (RuntimeException ex) {
 			System.out.println("이웃 레벨 스크립트 실패 " + name + ": " + ex);
 		}
@@ -251,7 +297,19 @@ public final class SceneNav {
 		neighbour = null;
 		neighbourPlatforms = new Platforms();
 		navWorld.setNeighbourPlatforms(neighbourPlatforms);
+		setNeighbourItems(new Interactables());
 		world.linkEvents(null);
+	}
+
+	/** 이웃 레벨 R1/R2 오브젝트 (없으면 빈 것). */
+	public Interactables neighbourItems() {
+		return neighbourItems;
+	}
+
+	private void setNeighbourItems(Interactables ni) {
+		neighbourItems = ni;
+		navigator.setNeighbourItems(ni);
+		grabbed = null; // 붙잡는 오브젝트 몸 제외 목록을 다시
 	}
 
 	public ScriptWorld neighbour() {
@@ -311,6 +369,10 @@ public final class SceneNav {
 					Object a = args.get(0);
 					host.neighbourCamera(null, a instanceof Number n ? n.floatValue() != 0 : !(a instanceof Boolean b) || b, null, false);
 				}
+				if (func == 0xC && !args.isEmpty()) {
+					Object a = args.get(0);
+					host.neighbourIdle(a instanceof Number n ? n.floatValue() != 0 : !(a instanceof Boolean b) || b);
+				}
 			}
 
 			@Override
@@ -322,11 +384,30 @@ public final class SceneNav {
 					host.neighbourVisible(objects, values[0] == 1);
 				}
 				applyCollision(neighbourPlatforms, objects, values); // 이웃 문 "EndDoor-DoorCDOff" 등
+				for (String o : objects) { // 이웃 R1/R2 오브젝트: 숨김 (Visible 2) · 충돌 끔 (Attr11_0 2) 이면 잡히지 않는다
+					Interactables.Item it = neighbourItems.byOwner(o);
+					if (it != null) {
+						if (values.length > 0 && (values[0] == 1 || values[0] == 2)) {
+							it.hidden = values[0] == 2;
+						}
+						if (values.length > 3 && values[3] != 0) {
+							it.noCollision = values[3] == 2;
+						}
+					}
+				}
 				if (values.length > 4 && values[4] != 0) {
 					if (System.getProperty("gow.trace.vis") != null) {
 						System.out.println("VIS(이웃) " + source.name() + " CMV " + (values[4] == 1 ? "ON " : "OFF ") + objects);
 					}
 					host.neighbourCamera(null, null, objects, values[4] == 1);
+				}
+			}
+
+			@Override
+			public void create(ScriptEntity source) {
+				ScriptWorld w = neighbourStarting != null ? neighbourStarting : neighbour;
+				if (w != null) {
+					host.neighbourCreate(source, w.slot(source, "Name0"));
 				}
 			}
 
@@ -465,6 +546,15 @@ public final class SceneNav {
 			}
 			Platforms.Body b = ps.body(it.owner);
 			float t = it.task().time;
+			if (it.kind == Interactables.Kind.LIFT && b != null && physicalLift(it, ps)) {
+				// 문 ANM 에 템플릿 act 가 없는 TAndF (ATHN04A 창살 LiftDoor13): 원작 0x214058 은 잡은 동안 문 Y = 영웅 붙잡기 관절 높이, 0x214180 은
+				// 끝나면 처음 Y + 높이 (템플릿 ×16) 까지 올려 멈춘다 → 진행 위치 × 높이, 끝 = 높이 [근사: 영웅 관절 높이 대신 진행 비율]
+				float dy = it.done ? it.liftHeight : it.liftHeight * Math.max(0f, Math.min(1f, t));
+				if (ps.lift(it.owner, dy)) {
+					world.poseOwner(b.owner, b.joints());
+				}
+				continue;
+			}
 			if (it.kind == Interactables.Kind.LIFT && it.openObjectAnim != null && b != null) {
 				// 0x213B28 / 0x214BC0: 연타 중 = TandF 애니 (길이 × 위치 — HydraHatchDoor trapDoorTandF 는 길이 0 → 뚜껑 정지),
 				// 완료 = trapOpen 을 속도 1 로 (영웅 trapDoorOpen 0.6 초와 함께)
@@ -486,11 +576,19 @@ public final class SceneNav {
 		}
 	}
 
+	/** 문 ANM 에 TAndF 템플릿 act (연타 #d7f2bea8 · 완료 #c5b0169f) 가 없고 들어 올림 높이가 있는 문 — 높이로만 움직인다 ({@link Platforms#lift}). */
+	static boolean physicalLift(Interactables.Item it, Platforms ps) {
+		return it.liftHeight > 0 && !ps.hasAct(it.owner, it.liftObjectAnim) && !ps.hasAct(it.owner, it.openObjectAnim);
+	}
+
 	/** 한 틱: 발판 애니 → Marker 위치, 이웃 스크립트. */
 	public void update(float dt, Vector3f hero) {
 		navWorld.platforms().update(dt);
 		neighbourPlatforms.update(dt);
 		poseItems(items, navWorld.platforms(), world, dt);
+		if (neighbour != null) {
+			poseItems(neighbourItems, neighbourPlatforms, neighbour, dt); // 이웃 TAndF 창살·해치 자세 = 진행 (렌더는 다른 슬롯 자세로)
+		}
 		for (Platforms.Body b : navWorld.platforms().bodies()) {
 			if (b.playing() || b.followMoved()) { // 부모 링크로 따라 움직인 몸 (ATHN02A 정박한 배) 의 Marker 도
 				world.poseOwner(b.owner, b.joints());
@@ -552,6 +650,35 @@ public final class SceneNav {
 	/** 이음으로 넘겨받은 이 레벨 Animator 오브젝트 상태 (GameScene.Resident). */
 	public void restorePlatforms(List<Platforms.State> states) {
 		navWorld.platforms().restore(states);
+		restoreItems(items, states);
+	}
+
+	/** 이음으로 넘겨받은 다른 슬롯 레벨 오브젝트 상태 (GameScene.Resident) — 몸 자세 + 이웃 R1/R2 오브젝트. */
+	public void restoreNeighbourPlatforms(List<Platforms.State> states) {
+		neighbourPlatforms.restore(states);
+		restoreItems(neighbourItems, states);
+	}
+
+	/**
+	 * 넘겨받은 몸 상태 → R1/R2 오브젝트: 충돌이 꺼진 몸은 잡히지 않고 (넘겨 쓴 세계는 생성 스크립트 해치 CDsOff 가 다시 돌지 않는다), 열린 자세
+	 * (TAndF 완료 애니 trapOpen 등) 로 남은 TAndF 는 끝난 것으로 — 씬마다 새로 만든 오브젝트가 열린 해치·창살을 다시 잡아 닫던 것을 막는다 [근사: 엔진 구조].
+	 */
+	static void restoreItems(Interactables items, List<Platforms.State> states) {
+		for (Platforms.State s : states) {
+			Interactables.Item it = items.byOwner(s.owner());
+			if (it == null) {
+				continue;
+			}
+			if (!s.solid()) {
+				it.noCollision = true;
+			}
+			if (it.kind == Interactables.Kind.LIFT && (it.openObjectAnim != null && it.openObjectAnim.equalsIgnoreCase(s.anim())
+					|| it.liftHeight > 0 && s.lift() >= it.liftHeight - 0.5f)) {
+				it.done = true;
+				it.progress = 1f;
+				it.openTime = s.time();
+			}
+		}
 	}
 
 	/** 검증용: 이 레벨 오브젝트 애니 재생 ({@link Platforms#play(String, String, int, float, float)}). */
@@ -576,19 +703,28 @@ public final class SceneNav {
 	public boolean collideBodies(Vector3f c, float r, long exclude) {
 		if (grabbed == null) {
 			grabbed = new java.util.HashSet<>();
-			for (Interactables.Item it : items.items()) {
-				if (it.kind == Interactables.Kind.LEVER || it.kind == Interactables.Kind.PUSH) {
-					grabbed.add(it.owner);
+			for (Interactables x : List.of(items, neighbourItems)) {
+				for (Interactables.Item it : x.items()) {
+					if (it.kind == Interactables.Kind.LEVER || it.kind == Interactables.Kind.PUSH) {
+						grabbed.add(it.owner);
+					}
 				}
 			}
 		}
 		return navWorld.collideBodies(c, r, grabbed, exclude); // 이 레벨 + 다른 슬롯 레벨 문·발판 (이웃 Animator 자세)
 	}
 
-	/** 스크립트 Vis Attr11_0 → 충돌 켜고 끄기. */
+	/**
+	 * 스크립트 Vis Attr11_0 → 충돌 켜고 끄기. 꺼진 오브젝트는 R2 잡기 대상에서도 빠진다 ({@link Interactables.Item#noCollision}: 원작 잡기
+	 * 질의 0x1C3F18 은 충돌 세계 질의).
+	 */
 	public void setSolid(List<String> owners, boolean on) {
 		for (String o : owners) {
 			navWorld.platforms().setSolid(o, on);
+			Interactables.Item it = items.byOwner(o);
+			if (it != null) {
+				it.noCollision = !on;
+			}
 		}
 	}
 

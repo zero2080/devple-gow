@@ -63,6 +63,8 @@ public final class Platforms {
 		public boolean scripted = true;
 		/** 충돌 켜짐 — 스크립트 Vis Attr11_0 (1 켬 / 2 끔: "collisionOFF", "DoorCollOff") [추정: 슬롯 이름은 미확정, 데이터 용례로]. */
 		public boolean solid = true;
+		/** TAndF 물리 들어 올림 높이 (처음 자리 위로, {@link Platforms#lift}). */
+		float lift;
 
 		/** 인스턴스 월드 행렬 (행벡터, {@code GoInstance.matrix()}) — Animator 이펙트 기준 (GameScene.startAnimatorEffects). */
 		public float[] instanceMatrix() {
@@ -132,6 +134,28 @@ public final class Platforms {
 				return;
 			}
 			follow = nearIdentity(f) ? null : f;
+			float[][] old = joints;
+			if (anim != null) {
+				pose();
+			} else {
+				float[][] w = new float[baseJoints.length][];
+				for (int i = 0; i < w.length; i++) {
+					w[i] = follow != null ? Mat4.mul(baseJoints[i], follow) : baseJoints[i];
+				}
+				joints = w;
+			}
+			prev = old;
+			followMoved = true;
+		}
+
+		/** 들어 올림 → 관절 월드 (이동 행렬을 follow 로 — 렌더·충돌·Marker 가 그대로 따른다, 부모 링크 없는 몸만). */
+		void applyLift() {
+			float[] f = null;
+			if (lift != 0) {
+				f = Mat4.identity();
+				f[13] = lift; // 행벡터: 이동 = 12..14
+			}
+			follow = f;
 			float[][] old = joints;
 			if (anim != null) {
 				pose();
@@ -526,19 +550,19 @@ public final class Platforms {
 	}
 
 	/** 오브젝트 애니 상태 (이음 넘기기: 떠나온 레벨은 원작에서 다른 슬롯에 그대로 남는다, 43 §13.8). */
-	public record State(String owner, String anim, float time, float rate, boolean playing, boolean loop, boolean pingPong, boolean solid) {
+	public record State(String owner, String anim, float time, float rate, boolean playing, boolean loop, boolean pingPong, boolean solid, float lift) {
 	}
 
 	/** 애니가 한 번이라도 걸렸거나 충돌이 꺼진 (스크립트 Vis Attr11_0 "DoorCDOff" 등) 오브젝트의 상태. */
 	public List<State> states() {
 		List<State> out = new ArrayList<>();
 		for (Body b : bodies) {
-			if (b.anim != null || !b.solid) {
-				out.add(new State(b.owner, b.anim != null ? b.anim.name : null, b.time, b.rate, b.playing, b.loop, b.pingPong, b.solid));
+			if (b.anim != null || !b.solid || b.lift != 0) {
+				out.add(new State(b.owner, b.anim != null ? b.anim.name : null, b.time, b.rate, b.playing, b.loop, b.pingPong, b.solid, b.lift));
 			}
 		}
 		for (MatClock c : matClocks) { // 재질 애니 = anim "$MAT_…"
-			out.add(new State(c.owner, "$" + c.material, c.time, c.rate, c.playing, c.loop, c.pingPong, true));
+			out.add(new State(c.owner, "$" + c.material, c.time, c.rate, c.playing, c.loop, c.pingPong, true, 0));
 		}
 		return out;
 	}
@@ -562,6 +586,10 @@ public final class Platforms {
 				continue;
 			}
 			b.solid = s.solid();
+			if (s.lift() != 0 && b.parent == null) {
+				b.lift = s.lift(); // 들어 올린 TAndF 문 (열린 창살) 그대로
+				b.applyLift();
+			}
 			if (b.anims == null || s.anim() == null) {
 				continue;
 			}
@@ -586,6 +614,29 @@ public final class Platforms {
 			}
 		}
 		return null;
+	}
+
+	/** 몸 owner 의 ANM 에 그 이름의 act 가 있는가 (대소문자 무시). */
+	public boolean hasAct(String owner, String act) {
+		Body b = body(owner);
+		return b != null && b.anims != null && act != null && b.anims.find(act) != null;
+	}
+
+	/**
+	 * TAndF 들어 올리는 문의 물리 높이 (원작 0x214058: 잡고 있는 동안 문 Y = 영웅 붙잡기 관절 (영웅 클래스 +0xEA) 높이, 0x214180: 끝 (+0x1E4 = 2)
+	 * 이면 중력 /GlobGame/Gravity 50 × 16 으로 처음 Y (+0x1E8) + 템플릿 +0x11C (#8743c048) × 16 까지 올라가 멈추고, 놓으면 같은 중력으로 처음 Y 까지
+	 * 내려온다) [확실: 코드]. 문 ANM 에 템플릿 act (liftdoor2/liftdoor3) 가 없는 문 (ATHN04A LiftDoor13 "LiftDoor13" 길이 0 하나) 은 이것으로만 움직인다.
+	 *
+	 * @return 높이가 바뀌었으면 true
+	 */
+	public boolean lift(String owner, float dy) {
+		Body b = body(owner);
+		if (b == null || b.parent != null || Math.abs(b.lift - dy) < 1e-3f) {
+			return false;
+		}
+		b.lift = dy;
+		b.applyLift();
+		return true;
 	}
 
 	/** 몸 owner 의 이름이 joint 인 관절의 지금 월드 행렬 (행벡터, 대소문자 무시). 없으면 null. */

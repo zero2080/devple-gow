@@ -205,11 +205,15 @@ public final class CameraRig {
 
 	public CameraRig(LevelData data) {
 		this.data = data;
-		bindAnimations();
+		bindAnimations(data);
 	}
 
-	/** 카메라를 가진 오브젝트에 ANM 이 있으면 그 카메라는 관절 애니를 따른다 (LevelData 와 같은 관절 규칙). */
-	private void bindAnimations() {
+	/**
+	 * 카메라를 가진 오브젝트에 ANM 이 있으면 그 카메라는 관절 애니를 따른다 (LevelData 와 같은 관절 규칙). 다른 슬롯 레벨 것도 묶는다
+	 * ({@link #setOther}) — 원작 카메라 노드는 슬롯과 무관하게 자기 GO 관절을 따른다 (ATHN04B 가 현재인 채 ATHN04A 이웃 스크립트가 부르는
+	 * SuicideCam / gojumppan JumpPan, 43 §18).
+	 */
+	private void bindAnimations(LevelData data) {
 		if (data.wad == null) {
 			return;
 		}
@@ -387,9 +391,13 @@ public final class CameraRig {
 	public void setOther(LevelData other) {
 		LevelData old = this.other;
 		this.other = other == data ? null : other;
+		if (this.other != null && this.other != old) {
+			bindAnimations(this.other);
+		}
 		if (old == null || old == this.other) {
 			return;
 		}
+		anims.keySet().removeIf(c -> old.placedCameras.contains(c));
 		// 레벨 내리기 (Hero_LoadWads → 0x1EE240): 현재 카메라가 내려가는 레벨 것이면 0x1EDF48(0) — 상태 링을 템플릿으로, 볼륨 선택을 전환 0 으로,
 		// CMV 질의 켬 (§7.1). 내려간 레벨 카메라는 활성 목록에서도 빠진다 (GO 가 없어짐).
 		active.removeIf(c -> old.placedCameras.contains(c));
@@ -942,13 +950,19 @@ public final class CameraRig {
 		float[] f = s.cam.forward();
 		Vector3f fwd = new Vector3f(f[0], f[1], f[2]);
 		if ((cp.flags() & CameraDef.F_TRACK) == 0) {
-			Vector3f at = new Vector3f(t);
+			Vector3f at;
 			if ((cp.flags() & CameraDef.F_FIXED_LOOK) != 0) {
 				// 고정 주시: 카메라 행렬 × (0xC0..0xC8 ×16) — 대개 (0,0,-80): 정면 고정
 				float[] o = new float[3];
 				float[] off = cp.lookOffset();
 				Mat4.transformPoint(w, off[0], off[1], off[2], o);
-				at.set(o[0], o[1], o[2]);
+				at = new Vector3f(o[0], o[1], o[2]);
+			} else {
+				// 0x100·0x40000 둘 다 없음: 원작 0x1F3768 은 0x100 이 없으면 0x40000 과 무관하게 카메라 노드 월드 행렬 (관절 애니 포함, +0x70) 을
+				// 상태 행렬로 복사하고 0x1F11A0 으로 각을 뽑는다 (0x1F3904..0x1F3960) — 영웅을 보지 않는다 (0x40000 은 대상 T 만 정함) [확실].
+				// 예: ATHN04A SuicideCam (0x14FE, ANM JumpPan 11 초) 은 난간에서 떨어진 여자 몸 위로 내려가 내려다본다 (영상 5929–5935).
+				// 예전엔 영웅을 봐서 그 크레인 샷이 난간 위 크레토스 등이 됐다 (전 WAD 2916 카메라 중 28 개, 43 §18).
+				at = new Vector3f(-w[8], -w[9], -w[10]).normalize(80).add(camPos);
 			}
 			p.look(camPos, at);
 			return;

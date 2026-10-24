@@ -26,6 +26,8 @@ public final class SaveGame {
 	/** 마법 재생 MP/초 (PlayerProgress +0x64 = 0x3044A4, 스크립트 Internal 0x12). */
 	public float mpRegen;
 	public int redOrbs, hpLevel, mpLevel, gorgonEyes, phoenixFeathers, deaths, itemFlags;
+	/** 첫 안내 비트·누적 (PlayerProgress +0x50 / +0x54 / +0x55, {@link PlayerState#firstTimeHint}). */
+	public int hintMask, hintCount1, hintCount19;
 	public String selectedMagic;
 	/** 누적 플레이 시간 (초, 원작 슬롯 디렉터리 f32 playTime — 11 문서 §5.1). */
 	public float playTime;
@@ -59,6 +61,9 @@ public final class SaveGame {
 		g.phoenixFeathers = p.phoenixFeathers;
 		g.deaths = p.deaths;
 		g.itemFlags = p.itemFlags;
+		g.hintMask = p.hintMask;
+		g.hintCount1 = p.hintCount1;
+		g.hintCount19 = p.hintCount19;
 		g.selectedMagic = p.selectedMagic != null ? p.selectedMagic.name() : "";
 		g.playTime = s.playTime;
 		for (Weapon w : Weapon.values()) {
@@ -82,6 +87,9 @@ public final class SaveGame {
 		p.phoenixFeathers = phoenixFeathers;
 		p.deaths = 0;
 		p.itemFlags = itemFlags;
+		p.hintMask = hintMask;
+		p.hintCount1 = hintCount1;
+		p.hintCount19 = hintCount19;
 		p.selectedMagic = selectedMagic == null || selectedMagic.isEmpty() ? null : Weapon.valueOf(selectedMagic);
 		weapons.forEach((w, v) -> {
 			p.level.put(w, v[0]);
@@ -111,6 +119,7 @@ public final class SaveGame {
 		pr.setProperty("phoenixFeathers", Integer.toString(phoenixFeathers));
 		pr.setProperty("deaths", Integer.toString(deaths));
 		pr.setProperty("itemFlags", Integer.toString(itemFlags));
+		pr.setProperty("hints", hintMask + "," + hintCount1 + "," + hintCount19);
 		pr.setProperty("selectedMagic", selectedMagic);
 		pr.setProperty("playTime", Float.toString(playTime));
 		weapons.forEach((w, v) -> pr.setProperty("weapon." + w.name(), v[0] + "," + v[1]));
@@ -145,6 +154,10 @@ public final class SaveGame {
 		g.phoenixFeathers = Integer.parseInt(pr.getProperty("phoenixFeathers"));
 		g.deaths = Integer.parseInt(pr.getProperty("deaths"));
 		g.itemFlags = Integer.parseInt(pr.getProperty("itemFlags"));
+		String[] hs = pr.getProperty("hints", "0,0,0").split(",");
+		g.hintMask = Integer.parseInt(hs[0]);
+		g.hintCount1 = hs.length > 1 ? Integer.parseInt(hs[1]) : 0;
+		g.hintCount19 = hs.length > 2 ? Integer.parseInt(hs[2]) : 0;
 		g.selectedMagic = pr.getProperty("selectedMagic", "");
 		g.playTime = Float.parseFloat(pr.getProperty("playTime", "0"));
 		for (Weapon w : Weapon.values()) {

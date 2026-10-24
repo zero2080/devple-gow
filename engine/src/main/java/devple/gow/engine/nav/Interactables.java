@@ -35,10 +35,12 @@ public final class Interactables {
 	 */
 	public static final int CSM_HOLD_FLAG = 0xfb908478;
 	/** CSM "Chest Type" (+0x9E), 종류 순환 주기 (+0xA4), 종류별 OrbEmitter (+0x90/+0x94/+0x98) — 생성자 0x215010 [확실: 해시·오프셋]. */
-	public static final int CHEST_TYPE = 0x0c67f4f9, CHEST_CYCLE = 0x70f23994;
+	public static final int CHEST_TYPE = 0x0c67f4f9, CHEST_CYCLE = 0x70f23994, CHEST_ITEM = 0xcb865a1c, CHEST_ITEM_DELAY = 0x56e66a5f;
 	static final int[] CHEST_ORBS = {0xb9a0d2ad, 0x4d7975bf, 0x4d7975c0};
 	/** TAndF 영웅 애니 (ANITandF1 잡기 liftdoor1 / ANITandF2 들기 liftdoor2 / ANITandF3 끝) 키 해시 (0x2136D4/0x2136F0/0x21370C). */
 	public static final int TANDF_GRAB_ANIM = 0xff5f5921, TANDF_LIFT_ANIM = 0xdc77f412, TANDF_END_ANIM = 0x4e2b8035;
+	/** TAndF 템플릿 들어 올림 높이 (m, +0x11C, 로더 0x213840) — {@link Item#liftHeight}. */
+	public static final int TANDF_LIFT_HEIGHT = 0x8743c048;
 	/** Push/TAndF 템플릿 속도 키: 최대 (+0x38 / +0x20), 최대 되감기 (+0x3C / +0x24), Push 되감기 가속 (+0x34). Acc/Dec 는 이름 키. */
 	public static final int SPEED_MAX = 0xfe467fe6, SPEED_MAX_BACK = 0xb503fbe4, PUSH_REWIND_ACC = 0xb6ba95a3;
 	/** Push 템플릿 +0x108 비트 4 (양방향 크랭크), +0x40 멈춤 자리 허용 (생성자 0x216370 / 기본값 0x216788) [확실]. */
@@ -67,6 +69,18 @@ public final class Interactables {
 		/** 스크립트 Vis 로 숨겨짐 (Visible 2) — 잡을 수 없다 (예 PAND00C 엘리베이터 레버는 고리 퍼즐 205 뒤 LeverOn). */
 		public boolean hidden;
 		/**
+		 * 스크립트 Vis Attr11_0 = 2 로 충돌이 꺼짐 — 잡을 수 없다. 원작 잡기 질의 0x1C3F18 은 충돌 세계 구 질의 (0x11E8D0, 반경 32,
+		 * 종류 마스크 0x631800, 콜백 0x1C3918) 이고, Vis 이펙터 0x1ABAA8 → 0x1B1398(타입 0x11, 하위 0) 은 그 충돌 부품을 끄고 켠다 (값 1 켬 vtable +0x30,
+		 * 2 끔 +0x40) [확실: 코드 경로 / 근사: 꺼진 부품이 질의에서 빠진다는 점은 추론]. ATHN04A 해치 trapDoor2: 생성 CDsOff → 열쇠 질문 1007
+		 * "예" (MenuYes) → CDsOn (Delay 2 초) 뒤에야 R2 로 잡힌다 — 전에는 R2 한 번에 해치를 잡고 질문이 함께 떴다 (43 문서 §18).
+		 */
+		public boolean noCollision;
+
+		/** R2 로 잡을 수 있는 상태 (숨김·충돌 끔 아님). */
+		public boolean usable() {
+			return !hidden && !noCollision;
+		}
+		/**
 		 * "Show R2" (#ca686863, 값의 bit 0): 가까이 서면 R2 안내 (슬롯 0, 0x1DC3F8 → 0x21DA50(0, 14)), TAndF 를 잡은 동안 R2 연타 안내
 		 * (슬롯 2, 0x1E17F0 → 0xB). 로더 PushPull 0x216738 (+0x108 &amp; 8) · TAndF 0x2138C0 (+0x158 &amp; 2) · CSM 0x215238 (+0xB8 &amp; 4).
 		 */
@@ -84,6 +98,13 @@ public final class Interactables {
 		public int chestType, chestShown;
 		public float chestCycle;
 		public final int[] chestOrbs = {-1, -1, -1};
+		/**
+		 * 상자 아이템 (CSM 템플릿 +0x9C s16 = #cb865a1c 하위 16 비트: 10 고르곤의 눈 "HealthShard", 11 불사조 깃털 "MagicShard", 15 HP 가득, 16 MP 가득) 과
+		 * 열림 애니 끝에서 줄 때까지 초 (+0xA0 = #56e66a5f). 원작 0x215F34–0x21602C: chestOpen 이 끝나면 타이머 = −지연, 0 을 넘으면 지금 개수 &lt; 최대일 때
+		 * 0x1D9700 → AddItem(아이템, 1) → 카드 0x21DA08 [확실]. 0 이면 없음.
+		 */
+		public int chestItem;
+		public float chestItemDelay;
 
 		/** 완료 때 방출할 OrbEmitter 템플릿 번호 (없으면 −1). */
 		public int chestOrb() {
@@ -95,6 +116,11 @@ public final class Interactables {
 		/** LIFT 오브젝트 애니 (0x213B28): 연타 중 = #d7f2bea8 (trapDoorTandF, 길이 × 위치), 완료 = #c5b0169f (trapOpen, 속도 1). openTime = 완료 뒤 경과. */
 		public String liftObjectAnim, openObjectAnim;
 		public float openTime;
+		/**
+		 * TAndF 물리 들어 올림 높이 (단위): 템플릿 #8743c048 (+0x11C) × 16 — 끝나면 문이 처음 Y + 이만큼까지 올라간다 (0x214180) [확실].
+		 * 예 ATHN04A LiftDoor13 "Athens3ALiftGat" (TAndF 400) 5.0 → 80. 0 = 없음.
+		 */
+		public float liftHeight;
 		/** 오브젝트 애니 길이 (초): 과제 진행률의 분모 (원작 0x215928 f13). 애니를 못 찾으면 1 초 [근사]. */
 		public float length = 1f;
 		private TaskProgress task;
@@ -287,6 +313,7 @@ public final class Interactables {
 					it.startAnim = tw != null ? tw.sHash(node, TANDF_GRAB_ANIM, null) : null;
 					it.liftObjectAnim = tw != null ? tw.sHash(node, 0xd7f2bea8, null) : null;
 					it.openObjectAnim = tw != null ? tw.sHash(node, 0xc5b0169f, null) : null;
+					it.liftHeight = tw != null ? Math.max(0f, Float.intBitsToFloat(tw.rawHash(node, TANDF_LIFT_HEIGHT).orElse(0)) * 16f) : 0f;
 					it.length = animLength(lv, anm, null, 0);
 					if (it.length < 0.05f) {
 						// 문 ANM 은 길이 0 (오브젝트 트랙만) → TAndF #fe467fe6 (1.5) 를 들어 올리는 시간으로 [추정]
@@ -398,7 +425,7 @@ public final class Interactables {
 		float bd = Float.MAX_VALUE;
 		float px = feet.x + fwd.x * GRAB_FWD, py = feet.y + GRAB_UP, pz = feet.z + fwd.z * GRAB_FWD;
 		for (Item it : items) {
-			if (it.done && it.kind != Kind.PUSH || it.hidden) {
+			if (it.done && it.kind != Kind.PUSH || !it.usable()) {
 				continue;
 			}
 			if (it.handles.isEmpty()) {
@@ -469,6 +496,8 @@ public final class Interactables {
 				it.chestOrbs[i] = tw.rawHash(node, CHEST_ORBS[i]).orElse(-1);
 			}
 			it.chestCycle = f(tw, node, CHEST_CYCLE, 0f);
+			it.chestItem = Math.max(0, (short) tw.rawHash(node, CHEST_ITEM).orElse(0)); // s16 (−65536 = 0, −65525 = 11)
+			it.chestItemDelay = f(tw, node, CHEST_ITEM_DELAY, 0f);
 		}
 		it.chestShown = it.chestType;
 		return add(it);
@@ -479,7 +508,7 @@ public final class Interactables {
 		Item best = null;
 		float bd = Float.MAX_VALUE;
 		for (Item it : items) {
-			if (it.done && it.kind != Kind.PUSH || it.hidden) {
+			if (it.done && it.kind != Kind.PUSH || !it.usable()) {
 				continue;
 			}
 			float d = (float) Math.hypot(it.pos.x - p.x, it.pos.z - p.z) - it.radius;

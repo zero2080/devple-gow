@@ -40,6 +40,9 @@ public final class ChestProps {
 		final Skeleton skeleton;
 		float cycleTimer;
 		int shownApplied = Integer.MIN_VALUE;
+		/** 아이템 상자: chestOpen 이 끝난 뒤 남은 지연 (NaN = 아직), 준 뒤 참. */
+		float itemTimer = Float.NaN;
+		boolean itemGiven;
 
 		Prop(Interactables.Item item, EffectSystem.Effect effect, Skeleton skeleton) {
 			this.item = item;
@@ -49,6 +52,11 @@ public final class ChestProps {
 	}
 
 	private final List<Prop> props = new ArrayList<>();
+	/**
+	 * 아이템 상자 (CSM +0x9C &gt; 0) 의 아이템을 줄 때 (원작 0x215F34–0x21602C: 상자 오브젝트 chestOpen 이 끝난 프레임에 타이머 = −(+0xA0),
+	 * 1/60 씩 올라 0 을 넘으면 0x1D9700) [확실]. 게임 씬이 개수·카드를 처리한다.
+	 */
+	public java.util.function.Consumer<Interactables.Item> onItem = it -> { };
 
 	public List<Prop> props() {
 		return props;
@@ -170,6 +178,16 @@ public final class ChestProps {
 					e.setAct(it.finishAnim != null && e.def.act(it.finishAnim) != null ? it.finishAnim : "chestOpen");
 				}
 				e.hold = false;
+				if (it.chestItem > 0 && !p.itemGiven && e.actTime() >= e.actDuration()) {
+					if (Float.isNaN(p.itemTimer)) {
+						p.itemTimer = it.chestItemDelay;
+					}
+					p.itemTimer -= dt;
+					if (p.itemTimer < 0) {
+						p.itemGiven = true;
+						onItem.accept(it);
+					}
+				}
 			} else if (started) {
 				e.setAct(it.heroAnim != null && e.def.act(it.heroAnim) != null ? it.heroAnim : "chestGrab");
 				e.hold = true;

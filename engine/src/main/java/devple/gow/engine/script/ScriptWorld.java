@@ -50,7 +50,17 @@ public final class ScriptWorld {
 
 	public final LevelData level;
 	private final ScriptHost host;
-	private final ScriptListener listener;
+	/** 게임 쪽 리스너 — 두 슬롯 세계를 넘겨 쓸 때 새 씬 것으로 바뀐다 ({@link #rebind}). */
+	private ScriptListener listener;
+	/** 발동한 Creator (타입 11) — 넘겨 쓴 세계를 새 씬에 붙일 때 그 오브젝트 (상자·세이브 포인트) 를 다시 만든다 ({@link #recreate}). */
+	private final List<ScriptEntity> createdObjects = new ArrayList<>();
+	/**
+	 * Vis 이펙터가 오브젝트마다 마지막으로 남긴 켬/끔 값 (슬롯 0..7 · Attr17 · JointVisibility, 0 = 그대로 — FadeTime 은 빼고) 과 그 Vis.
+	 * 넘겨 쓴 세계를 새 씬에 붙일 때 다시 보낸다 ({@link #recreate}) — 엔진 씬은 렌더 인스턴스·R2 오브젝트·충돌·CMV 를 씬마다 새로 만들므로,
+	 * 생성 스크립트 (해치 trapDoor2-main-CDsOff 충돌 끔, MedusaHeadCam CMV 끔 …) 가 다시 돌지 않는 세계는 그 상태를 잃었다 (43 §18).
+	 */
+	private final Map<String, int[]> visState = new LinkedHashMap<>();
+	private final Map<String, ScriptEntity> visSource = new HashMap<>();
 	private final EscVm vm;
 	private final List<ScriptEntity> entities = new ArrayList<>();
 	private final Map<Integer, ScriptEntity> byId = new HashMap<>();
@@ -160,6 +170,93 @@ public final class ScriptWorld {
 
 	public ScriptHost host() {
 		return host;
+	}
+
+	/** 시작 큐를 이미 돌렸는지 (넘겨 쓴 세계). */
+	public boolean started() {
+		return started;
+	}
+
+	/**
+	 * 검증 하네스 (-Dgow.arrive.state, 엔진 전용): 앞 구간에서 이미 지난 상태를 미리 둔다 — "Ln=값" LevelData n, "G이름=값" GlobalData,
+	 * "F=엔티티 이름" 그 엔티티를 이미 발동한 것으로 (재발동 대기 −1 이면 다시 안 탐). 예 ATHN04A 광장 사이클롭스 결투 끝 =
+	 * "L0=3,F=DMCsqr-DMC-TriggerVol0-PlayerEntry", ATHN04B 두 번째 = "GDoorKey=true" (43 §18).
+	 */
+	public void presetState(String spec) {
+		for (String p : spec.split(",")) {
+			int eq = p.indexOf('=');
+			if (eq <= 0) {
+				continue;
+			}
+			String k = p.substring(0, eq).trim(), v = p.substring(eq + 1).trim();
+			Object val = v.equals("true") || v.equals("false") ? (Object) Boolean.parseBoolean(v)
+					: v.matches("-?\\d+") ? (Object) Integer.parseInt(v) : v.matches("-?\\d*\\.\\d+") ? (Object) Float.parseFloat(v) : v;
+			if (k.equals("F")) {
+				ScriptEntity e = find(v);
+				if (e != null) {
+					e.lastTrigger = time;
+				}
+			} else if (k.startsWith("G")) {
+				host.globalData().put(GameScriptHost.globalKey(k.substring(1)), val); // GlobalData 이름 (예 GDoorKey=true)
+			} else if (k.startsWith("L")) {
+				host.levelData().put(Integer.parseInt(k.substring(1)), val);
+			}
+		}
+	}
+
+	/**
+	 * 두 슬롯 세계를 다음 씬에 넘겨 쓸 때 (원작은 LoadCheck 가 현재 레벨 이름만 바꾸고 두 슬롯 스크립트가 그대로 돈다, 0x1BCA10 / 36 문서 §2):
+	 * 리스너만 새 씬 것으로 바꾼다 — LevelData·발동 기록·지연·액터는 그대로 [근사: 엔진 구조, 43 §18].
+	 */
+	public void rebind(ScriptListener l) {
+		this.listener = l != null ? l : new ScriptListener() {
+		};
+		host.listener = this.listener;
+		host.world = this;
+	}
+
+	/**
+	 * 넘겨 쓴 세계를 새 씬에 붙임: 이미 발동한 Creator 의 오브젝트 (상자·세이브 포인트) 를 새 리스너로 다시 만들고, 살아 있는 SpawnEnemy 액터의
+	 * 적을 마지막 자리에 다시 낸다 (엔진 씬은 적·상자 객체를 씬마다 새로 만든다). 생성 통지 (CreationSensor) 는 다시 보내지 않고, 대신 Vis 가
+	 * 오브젝트에 남긴 켬/끔 값을 다시 보낸다 ({@link #visState}). [근사: 다시 낸 적은 체력이 처음 값, 열린 상자는 닫힌 채 — 43 §18]
+	 */
+	public void recreate() {
+		for (ScriptEntity e : new ArrayList<>(createdObjects)) {
+			listener.create(e);
+		}
+		for (Map.Entry<String, int[]> v : new ArrayList<>(visState.entrySet())) {
+			listener.vis(visSource.get(v.getKey()), List.of(v.getKey()), v.getValue().clone());
+		}
+		for (ScriptActor a : new ArrayList<>(actors)) {
+			if (a.spawner == null || a.destroyed || a == player || markers.containsValue(a)) {
+				continue;
+			}
+			float[] m = a.spawner.world.clone();
+			m[12] = a.pos[0];
+			m[13] = a.pos[1];
+			m[14] = a.pos[2];
+			listener.spawnEnemy(new ScriptListener.SpawnRequest(a.spawner, a, intSlot(a.spawner, "TemplateId"),
+					String.valueOf(slot(a.spawner, "Patrol")), m, -1));
+		}
+	}
+
+	/** Vis 값을 오브젝트별로 쌓는다 (0 이 아닌 슬롯만 덮어씀, FadeTime 슬롯 8 은 다시 보낼 때 0 = 바로). */
+	private void rememberVis(ScriptEntity e, List<String> objects, int[] v) {
+		for (String o : objects) {
+			int[] s = visState.computeIfAbsent(o, k -> new int[v.length]);
+			for (int i = 0; i < v.length; i++) {
+				if (i != 8 && v[i] != 0) {
+					s[i] = v[i];
+				}
+			}
+			visSource.put(o, e);
+		}
+	}
+
+	/** 오브젝트에 쌓인 Vis 값 (없으면 null) — 시험용. */
+	public int[] visState(String object) {
+		int[] s = visState.get(object);
+		return s != null ? s.clone() : null;
 	}
 
 	/** 첫 Start 엔티티 (플레이어 이름 / 그룹 / 시작 위치). */
@@ -674,11 +771,16 @@ public final class ScriptWorld {
 				v[8] = Math.round(EscVm.f(slot(e, 8)) * 1000);
 				v[9] = intSlot(e, "Attr17");
 				v[10] = intSlot(e, "JointVisibility");
-				listener.vis(e, objects(e, sender), v);
+				List<String> objs = objects(e, sender);
+				listener.vis(e, objs, v);
+				rememberVis(e, objs, v);
 			}
 			case 8 -> transmit(e, sender);
 			case 10 -> spawn(e);
-			case 11 -> listener.create(e);
+			case 11 -> {
+				createdObjects.add(e);
+				listener.create(e);
+			}
 			case 15 -> listener.sound(e, e.group(), intSlot(e, "Op"));
 			default -> {
 			}

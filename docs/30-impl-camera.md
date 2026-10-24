@@ -203,6 +203,15 @@ CAM 로컬 (회전 행 × 관절 스케일 역수, 위치 = 관절 로컬) × �
   `WarpArrivalTest.athn02aShipDocksWithShipTransAnimJoint`. ATHN01E 처음 70 초 카메라 전환 40 개는 HEAD 와 같음.
   봇 검증 속성: `-Dgow.auto.novol` (볼륨 방문 없이 목표로), `-Dgow.auto.wait=초` (시작 연출 동안 입력 없음).
 
+### 6.7 0x100 · 0x40000 둘 다 없는 카메라 = 노드 행렬 그대로 (ATHN04A SuicideCam, 43 §18) [확실: 코드]
+- 원작 0x1F3768: 0x100 (영웅 추적) 이 없으면 0x40000 과 무관하게 카메라 노드 월드 행렬 (관절 애니 포함, 노드 +0x70) 을 상태 행렬로 복사하고
+  (0x1F3904..0x1F3960) 0x1F11A0 으로 각을 뽑는다 — 0x40000 은 주시점을 행렬 × 0xC0 으로 정할 뿐이다 (§6.6). 엔진은 0x40000 이 없으면 주시점 = 영웅이었다.
+- 전 WAD 2916 카메라 중 28 개가 둘 다 없다. ATHN04A **SuicideCam** (플래그 0x14FE, ANM JumpPan 11 초 — ATHN04B 가 현재인 채 ATHN04A LedgeJumpCams 가 부름):
+  4 초에 눈 y ≈ 3 (떨어진 여자 몸 높이) 까지 내려가 내려다보고 (피치 −68°, 영웅은 등 뒤), 11 초에 난간 위 (y 394) 로 올라와 크레토스를 본다 — 영상 5929–5935
+  "위에서 본 원형 바닥, 피 웅덩이의 보라 옷" 과 같다. 예전엔 같은 크레인 경로에서 영웅 (난간) 을 봐 몸이 화면에 없었다.
+- 다른 슬롯 레벨 카메라의 관절 애니도 묶는다 (`CameraRig.setOther` → `bindAnimations(other)`, 떠난 레벨 것은 뺌) — 이웃 스크립트가 부르는 SuicideCam·JumpPan 은 ATHN04A 것.
+- 시험 `AthensInteriorTest.suicideCamLooksDownAtTheFallenBody`.
+
 ## 7. 레벨 시작·도착 카메라 (43 문서 §7)
 
 ### 7.1 원작 순서 [확실: 코드]

@@ -294,7 +294,9 @@ public final class AutoPlay {
 				if (routeTime < 0.25f) {
 					return bot.hold(null, hero, f, null, camYaw, 0.2f); // 몸만 돌리기 (스틱 작게 — 손잡이 앞을 벗어나지 않게)
 				}
-				if (routeTime < 0.35f) {
+				if (routeTime < 0.35f && !usePressed) {
+					// 한 번만 (세이브 질문·메뉴로 게임이 멈춘 사이 이 단계가 이어지면 R2 를 다시 눌러 세이브 질문이 또 열렸다)
+					usePressed = true;
 					return bot.press(PadButton.USE);
 				}
 				return routeNext(routeTime > 0.6f, bot.press(null));
@@ -353,10 +355,14 @@ public final class AutoPlay {
 				: new float[]{Float.parseFloat(q[0]), hero.y, Float.parseFloat(q[1])};
 	}
 
+	/** 이 "use" 단계에서 R2 를 이미 눌렀는지. */
+	private boolean usePressed;
+
 	private BotInput routeNext(boolean done, BotInput in) {
 		if (done) {
 			routeIdx++;
 			routeTime = 0;
+			usePressed = false;
 			if (routeIdx == route.size()) {
 				log(String.format(Locale.ROOT, "t=%.2f 경로 끝", time));
 			}
@@ -501,11 +507,35 @@ public final class AutoPlay {
 
 	private float menuClock;
 
-	/** 질문 메뉴 입력: 0.5 초마다 × (게임 틱이 멈춰 있으므로 steer 대신). */
+	/**
+	 * 질문 메뉴 입력: 0.5 초마다 ○ (게임 틱이 멈춰 있으므로 steer 대신). HUD FLP 메뉴의 선택 버튼은 ○ (패드 비트 0x20, UiPad — 한국판 화면
+	 * "○ = 선택") 라 예전의 × 로는 질문 (ATHN04A 열쇠 1014, 세이브 제단) 에 답하지 못하고 멈췄다 [엔진 전용].
+	 */
 	public BotInput menu(float dt) {
-		menuClock += dt;
-		return bot.press(menuClock % 0.5f < 0.05f ? PadButton.CROSS : null);
+		return menu(dt, false);
 	}
+
+	/**
+	 * yesNo = 메모리카드 예/아니오 화면 (기본 선택이 아니오 — MemoryCardFlow 15/16): 1 초 뒤 ↑ 로 "예" 를 고르고 ○.
+	 */
+	public BotInput menu(float dt, boolean yesNo) {
+		if (menuSeen < time - 0.1f || yesNo != menuYesNo) {
+			menuClock = 0; // 새 메뉴·카드: 1 초 읽고 (증거 화면이 남게) 누른다
+		}
+		menuYesNo = yesNo;
+		menuSeen = time;
+		menuClock += dt;
+		if (yesNo && menuClock > 1f && menuClock < 1.05f) {
+			return bot.press(PadButton.UP);
+		}
+		float t = yesNo ? menuClock - 0.3f : menuClock;
+		return bot.press(t > 1f && t % 0.5f < 0.05f ? PadButton.CIRCLE : null);
+	}
+
+	private boolean menuYesNo;
+
+	/** 마지막으로 메뉴 입력을 준 자동 플레이 시각. */
+	private float menuSeen = -1;
 
 	public void died(Vector3f at) {
 		deaths++;

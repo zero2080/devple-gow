@@ -94,6 +94,18 @@ BallHull 수정: 평면 수를 헤더 0x38 이 아니라 hull 별 평면 수의 
   바닥이 없으면 높이를 유지해 떠 있었다 (죽지 않음 → 그 Respawn·단계 카운터 정지, 38 §19 남은 것) → `EnemyNav` 가 바닥 없을 때도 중력 낙하,
   바다 판 (`ENV_DeathZone1..5`, y ≈ −290, 1029) 에 들어가면 원작처럼 데스존 사망, 바닥 없이 3000 넘게 떨어지면 `GameScene` 이 사망 처리 [근사] → 메시지 6 이 센다.
 
+## 8. 두 슬롯 세계 넘겨 쓰기 (43 §18) [확실: 원작 흐름 / 근사: 엔진 구조]
+- 원작: LoadWad 대상이 이미 슬롯에 있으면 다시 읽지 않고 (0x1BC110 → 1), LoadCheck 는 현재 레벨 이름만 바꾼다 (0x1BCA10) — 두 슬롯 스크립트·GO 가 그대로 돈다.
+- 엔진은 씬을 이음마다 새로 만들므로 `GameSession.residentWorlds` 에 두 슬롯 `ScriptWorld` 를 두고 다음 씬이 넘겨 쓴다: `rebind` (새 씬 리스너, 시작 큐 안 돌림),
+  `recreate` (발동한 Creator 오브젝트 · 살아 있는 SpawnEnemy 적 · Vis 가 남긴 켬/끔 상태를 새 씬에). 예전엔 ATHN04B 에서 광장으로 돌아오면 광장 세계가 새로 시작해
+  시민 · 키클롭스 결투 · 동영상이 다시 돌았다. 다른 슬롯으로 새 레벨이 올라오면 (LoadWad) 그 슬롯의 옛 세계는 버린다.
+- Vis 상태 (`ScriptWorld.visState`): 오브젝트마다 슬롯 0..7 · Attr17 · JointVisibility 의 마지막 0 아닌 값 (FadeTime 슬롯 8 은 빼고 다시 보낼 때 0 = 바로) —
+  생성 스크립트 상태 (ATHN04A 해치 CDsOff, RbblCams CMV 끔, SuicideBody 숨김 …) 를 넘겨 쓴 세계에서 잃던 것.
+- 이웃 슬롯 Idle (Internal 0xC) 도 전역 정지 하나 (0x1BF080 → 0x29DB58): `SceneNav.Host.neighbourIdle` — ATHN04B 가 현재인 채 ATHN04A LedgeJumpCams 가 영웅을 세우고
+  SuicideCam 을 켠다. 스크립트 Idle 동안에는 걷기 이음 (다른 슬롯 바닥) 도 하지 않는다 (`GameScene` 의 `otherFloorTime`).
+- 하네스 `-Dgow.arrive.state=레벨:L0=3,F=엔티티,G이름=값;…` (`ScriptWorld.presetState`: LevelData · 이미 발동 · GlobalData 이름) [엔진 전용].
+- 시험 `AthensInteriorTest.recreateReplaysVisAndCreators`.
+
 ## Vis 의 Visible (표시/숨김)
 Vis 엔티티 슬롯 0 `Visible`: 1 = 보임, 2 = 숨김, 0 = 그대로 (`Attr11_0/1` 은 충돌·카메라 볼륨). 이전에는 카메라 볼륨만 반영하고 표시 상태는 무시해
 스크립트가 숨긴 오브젝트가 계속 그려지고 R1 로 잡혔다. 이제 `GameScene` 이 대상 오브젝트(소유 GO 인스턴스)를 렌더에서 빼고/되살리고, 숨긴 상호작용

@@ -168,3 +168,20 @@ UI·영웅 시험 씬은 예전처럼 첫 갱신에 띄우고 둔다. 시험 `Hu
 - `PS2_MessageTemplate_Event` 값 = **줄 수** (스크립트가 MessageTemplates 를 GotoFrame2(값+1), 프레임 n = 줄 1..n). 1 로 보내면 첫 줄만 보인다 (튜토리얼 269 둘째 줄 "[△] 강한 공격").
 - 히트 카운터 (0x1DB608 → Hud_SetHitCounter 0x1BA070, 매 프레임 바뀐 값만): `PS2_HitCounter_Event` 1 + `PS2_HitCounter_Value` = 히트 수 (1 타는 안 보냄, 0 이면 숨김), 2 = 마일스톤 (HitCounterShake·ComboMilestone·ComboEXP, `PS2_Combo_Message` = 보너스 템플릿 메시지, `PS2_Combo_Amount` = 붉은 오브), 0 = 메뉴·메시지 쪽 리셋 (0x1BA150).
 - 아이콘 슬롯 8 개 (0x21DA50, 표시 0x21E908 = 번호 큰 것): 0 = R2 로 잡힐 가까운 오브젝트의 "Show R2" (#ca686863 bit 0, 0x1DC3F8 → 14 R2ButtonStatic — ATHN01A 바닥문 TAndF 051 HydraHatchDoor), 1 = 버튼 안내 센서, 2 = 잡은 TAndF 연타 (0xB R2ButtonPress, 0x1E17F0) / 크랭크 (0xD).
+
+## 아이템 카드 · 메시지 그림 · 첫 안내 · 메뉴 동안 미니게임 아이콘 (43 §18)
+- **PickUpInfoMenu** (FLP_HUDK): `PS2_PickUpInfo_Event` 3 = 고르곤의 눈, 4 = 불사조 깃털, 8 = GenericPickUp (그림), `PS2_MeterBarGrow` 1 HP / 2 MP (6 개째 레벨 업),
+  Pause_Check 8 동안 게임 멈춤, ○ = ClosePickUpMenu → `PS2_Done` 1 [확실: FLP]. 엔진은 열 때·닫을 때 PS2_Done 0 (다음 메뉴의 1 이 변화로 들어오게).
+- **상자 아이템**: CSM 템플릿 +0x9C (#cb865a1c 하위 16 비트) = 아이템, +0xA0 (#56e66a5f) = 지연 → chestOpen 끝 + 지연 → AddItem 0x1D8CF0 → 카드 0x21DA08
+  (0x215F34–0x21602C) [확실]. ATHN04A Chest4·Chest5 = 템플릿 11 (불사조 깃털, 0.1 초), Chest6 = 10 (고르곤의 눈) (`ChestProps.onItem`, `GameScene.chestItem`).
+- **메시지 그림**: 메시지 n 을 띄울 때 부른 레벨 슬롯 자원에 "MAT_FlashMat<n>" (0x1B1228) 이 있으면 카드 8 — GenericPickUp 메시 텍스처를 그 그림으로 (0x1B8178 슬롯 교체,
+  0x1B80F8 이 이름으로 찾음) [확실]. 전 WAD 19 레벨 (ATHN04A 125 열쇠 "열쇠를 획득했습니다" — 영상 5965, ATHN02D 141 메두사의 시선, PAND01BB 257 …).
+  `FlpRenderer.swapTexture` / `clipTexture`, `GameScene.flashPicture` / `showPickupCard`. 닫으면 1040 (메시지 끝 — SuicideSparkle-EvtMsgDone 이 카메라·Idle 을 푼다).
+- **첫 안내** FirstTimeHint 0x1DBEB0: 플레이 2 초 전 · 비트 (+0x50) 있으면 아니오, 안내 1 은 3 번째 (+0x54), 0x13 은 8 번째 (+0x55) — 메시지 500 + id 가 있으면
+  버튼 대기 메시지. 부르는 곳: 기술 SCRIPT 이벤트 SCR_FirstTimeMsg (Hash127Upper 0x42077801, 0x19CD20 → idx) — R_SKB 방패 막기 M70 SKBBLOCK idx 19 → 519
+  "마법 방패는 …" (영상 6026), 영웅 MAIMEWGRAB 1 → 501 …; 붉은 오브 + 블레이드 투자 ≥ 1500 이고 무기·마법 레벨이 모두 0 → 18 (SND_LEVELUPCARD, 0x1DBE10).
+  `PlayerState.firstTimeHint` (세이브 "hints"). 고르곤 시선 21 (0x1964A4) 은 아직 [미구현].
+- **메뉴 동안 미니게임 아이콘**: 메뉴·메시지 리셋 0x1BA150 은 끝에서 늘 0x1BA338(−1) 로 아이콘을 뗀다 — 저장 질문 (0x2207F8), 질문 메뉴 (0x1B9F14), 메시지
+  (0x1B96D0). 다시 고르는 0x21E908 은 놀이 상태 11 (0x21FF90) 에서, 메시지·질문 플래그 (+0x1528 / +0x152C / +0x1530) 가 없을 때만 [확실]. 엔진은 저장 질문 · 질문 메뉴 ·
+  아이템 카드에서 뗀다 (`GameScene.hideMinigameIcon`) — 예전엔 세이브 포인트 "R2" 가 Ω 화면 위에 남았다 [근사: 멈추지 않는 메시지 동안은 아직].
+- **질문 메뉴 Done**: 0x1B9F34 가 Done (+0x27C) = 0 — 엔진 `openQuestion` 도 PS2_Done 0 (앞 메뉴가 남긴 1 때문에 ○ 가 변화로 안 들어와 해치 열쇠 질문 1007 이 안 닫히던 것).

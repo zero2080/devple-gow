@@ -750,3 +750,41 @@ ATHN01B 에도 선체 천장 (−44 ~ −64, 법선 −0.94 ~ −1) 과 빗면 �
 - 전: 발 −138 → 정점 뒤 (1609, −79) 에서 밑면 −64 를 턱으로 잡고 매달림 (`@1640,-70,1696` 도착은 밑면 −64 위에 서 있다가 2단 점프로 갑판 0 착지).
 - 후: 발 −138 → −99.2 (머리 −64) 에서 ≈ 0.2 초 붙어 있다가 (수직 속도 164 → 0) 떨어져 −140.2 착지. 승강구 구멍 밑 (1619, 1636) 2단 점프는 정점 −69 (갑판 0 에 못 닿음 — 전후 같음).
 - 시험 `nav/HoldCeilingTest`: 합성 천장 (머리 맞춤·여유·위 보는 면·GeneralGuide), ATHN01B + ATHN01A 데이터 (밑면은 바닥·턱 윗면이 아님, 2단 점프 정점 = −64 − 35.2, 선창 바닥으로 착지).
+
+## 23. 잡기 질의는 충돌 세계 · 이웃 슬롯 R1/R2 오브젝트 · TAndF 물리 들어 올림 (43 §18)
+
+### 23.1 충돌이 꺼진 오브젝트는 잡히지 않는다 [확실: 코드 / 근사: 꺼진 부품이 질의에서 빠지는 것은 추론]
+- 0x1DC3F8 → 0x1C3F18: 충돌 세계 (0x29C978) 구 질의 0x11E8D0 (반경 32, 종류 마스크 0x631800, 콜백 0x1C3918) — 찾은 GO 의 클래스 비트로
+  PushPull (0x31800: +0x260 → +0x108 & 8) · TAndF (0x200000: +0x1C0 → +0x158 & 2) · CSM (0x400000: +0xB8 & 4).
+- Vis 이펙터 0x1ABAA8 → 0x1B1398(대상, 값, 타입, 하위): 슬롯 2 = 0x27 (그림자), 3 = 0x11 하위 0 (Attr11_0), 4 = 0x11/1 (CMV), 5 = 0x11/3, 6 = 0x11/2,
+  7 = 0x1A … — GO 부품 중 그 타입 (0x11 은 하위 번호까지 vtable 로 확인) 을 값 1 이면 켜고 (관리자 vtable +0x30) 2 면 끈다 (+0x40).
+- 엔진: `Interactables.Item.noCollision` · `usable()` (`grabbable` · `nearest` · R2 안내), `SceneNav.setSolid` 가 몸 충돌과 함께 (`restorePlatforms` 도).
+  데이터: 생성 때 끄고 퍼즐 뒤 켜는 짝 17 개 — ATHN04A trapDoor2 CDsOff/CDsOn, PAND00C UWSkullDoor·skullDoor·EyeDoor·ring3Door, PAND04EE 밀기 상자 다섯
+  (크랭크 LevelData1), PAND02D caveLever04DD, PAND03F NewCSM, PAND00B NewBook, PAND01BB/03H ArtSonMain, ATHN01E XFCcaptainCSM (그 R2 는 스크립트 1024 볼륨) …
+  모두 "충돌 끔 = 아직 못 씀" 으로 읽힌다 (Visible 2 를 함께 쓰는 짝은 예전에도 hidden 으로 막혔다).
+- ATHN04A 해치: R2 → UseWorldWithKey (GlobalData DoorKey 참, LevelData8 거짓) → 1 초 뒤 질문 1007 "열쇠를 사용하시겠습니까?" → 예 (MenuYes) →
+  LockFlipOpen 애니 + CDsOn (Delay 2: Idle 풀기 · CMV 질의 켬) → 그 뒤 R2 로 잡기 (HatchAttach 1048, TnFcam) → R2 연타 → 100 % → EvtHatchOpen.
+  예전엔 첫 R2 에 해치를 잡고 1 초 뒤 질문이 겹쳐 떴다.
+
+### 23.2 이웃 슬롯 오브젝트 [확실: 질의 / 근사: 엔진 구조]
+- 원작은 두 슬롯 GO 가 같은 충돌 세계에 있어 "현재 레벨" 과 무관하게 이웃 레벨의 레버·문도 잡힌다. ATHN04A 해치로 떨어진 아래층은 ATHN04C
+  LoadCheck4CEntity 볼륨 (z 1224–1336) 이라 창살 앞은 현재 = 04C 인데, 창살 LiftDoor13 (TAndF 400) 과 세이브 포인트 SaveGameZone 은 ATHN04A 것이다
+  (영상 6450–6462). 엔진 (예전): R1/R2 오브젝트·Creator 는 현재 레벨 것만, 이웃 레벨 행동 GO 는 몸에서도 빠져 (`Platforms.staticOwner`) 닫힌 창살을
+  걸어서 지나가고 R2 도 먹지 않았다.
+- 엔진: `SceneNav.setOther` 가 이웃 `Interactables` (그 레벨 TWK = 영구 + 레벨, `GameScene.neighbourTweaks`) 를 만들고 그 몸을 이웃 `Platforms` 에
+  (자세·충돌), `HeroNavigator.setNeighbourItems` — 현재 레벨 것이 손에 없을 때 이웃 것을 잡는다. 이벤트 (1023 · 1048 · 1049) 는 공유 큐로 이웃 센서에,
+  밀기 이동은 이웃 세계 (`moveOwnerBy`), 자세는 `poseItems(이웃 것, 이웃 몸, 이웃 세계)`, 이웃 Vis 의 Visible · Attr11_0 → 그 오브젝트 hidden · noCollision.
+  붙잡는 레버·밀기 상자는 두 슬롯 모두 영웅 몸 충돌에서 뺀다 (`NavWorld.collideBodies`).
+- 이웃 Creator "savepoint" 도 이 씬에 만든다 (`SceneNav.Host.neighbourCreate` → 자리 + 빛기둥, R2 저장). 이웃 상자 ("chest") 는 아직 현재 레벨 것만 [근사].
+- 이음 상태: `restoreNeighbourPlatforms` / `restorePlatforms` → 충돌 꺼진 몸 = noCollision, 열린 자세·높이의 TAndF = 끝남 (`SceneNav.restoreItems`).
+
+### 23.3 TAndF 물리 들어 올림 (0x214058 / 0x214180) [확실: 코드 / 근사: 영웅 관절 높이 대신 진행 비율]
+- 0x213B28: 상태 0/1/2 마다 템플릿 +0xD4 / +0xEC / +0x104 이름 (#d7f2bea8 연타 · #c5b0169f 완료 …) 의 act 를 문 GO 애니에서 찾아 (0x116AC8) 튼다 — 없으면 (−1)
+  틀지 않는다. 0x214400 은 그 애니 시간 = (0x100BF0: 재생 중 act 길이 최댓값) × 위치 (+0x1E4).
+- 문 ANM 에 그 act 가 없으면 (ATHN04A LiftDoor13 "LiftDoor13" · ATHN01C LiftDoor1 "LiftDoor1" — 길이 0 act 하나) 애니로는 안 움직이고: 잡은 동안 0x214058 이
+  문 Y = 영웅 붙잡기 관절 (영웅 클래스 +0xEA) 의 월드 Y, 끝 (+0x1E4 = 2) 이면 0x214180 이 중력 (/GlobGame/Gravity 50 × 16, 속도 +0xE0) 으로 처음 Y (+0x1E8) +
+  템플릿 +0x11C (#8743c048, 로더 0x213840) × 16 까지 올려 멈추고 (+0x1EC |= 0x40), 놓으면 같은 중력으로 처음 Y 까지 내린다 (|= 0x20).
+- 엔진: `Interactables.Item.liftHeight` (TAndF 400 "Athens3ALiftGat" 5.0 → 80), `Platforms.lift` (몸 follow = 위로 이동 → 렌더·충돌·Marker), `SceneNav.physicalLift`
+  → 높이 = 위치 × liftHeight, 끝 = liftHeight, `Platforms.State.lift` 로 이음에 넘김. 해치 trapDoor2 (trapOpen 0.6 초 act 있음) 는 예전처럼 애니.
+- 검증: r12 (ATHN04C 에서 04A 창살) 연타에 따라 창살이 올라가고 크레토스가 지나간다 (영상 6460–6464). 시험 `AthensInteriorTest.liftGateRisesByTheTemplateHeight` ·
+  `hatchIsNotGrabbableUntilTheKeyTurnsCollisionOn`.
