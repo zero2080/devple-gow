@@ -1909,19 +1909,26 @@ public final class HeroNavigator {
 		switch (it.kind) {
 			case PUSH -> {
 				state = NavState.PUSH;
-				// 상자 축 = 영웅→상자 방향의 주축 (x 또는 z) [근사: 상자 로컬 축 미사용]
-				if (Math.abs(to.x) > Math.abs(to.z)) {
-					pushAxis.set(Math.signum(to.x), 0, 0);
-				} else {
-					pushAxis.set(0, 0, Math.signum(to.z));
-				}
-				body.setYaw(yawOf(pushAxis));
 				charging = false;
 				kickAnimTime = -1;
-				// 영웅 = 붙잡기 관절에서 정면 반 깊이 뒤 (0x1C4638) [근사: 관절 대신 상자 경계구 반지름]
-				float gap = it.radius + BODY;
-				p.x = it.pos.x - pushAxis.x * gap;
-				p.z = it.pos.z - pushAxis.z * gap;
+				if (handle != null && Math.abs(handle[3]) + Math.abs(handle[4]) > 1e-3f) {
+					// 잡은 손잡이 관절 (handle1/2, 0x1C3918) 을 향해 서고 그 축이 상자 국소 축 — 영웅 = 손잡이에서 몸 반 깊이 바깥 (0x1C4638: 붙잡기 관절
+					// − 위 × 반 키 + 정면 × 반 깊이) [확실: 코드 / 근사: 반 깊이 = 몸 반 너비]. 판 위에서 돌아간 발리스타도 그 옆면 축으로 민다
+					pushAxis.set(-handle[3], 0, -handle[4]).normalize();
+					p.x = handle[0] + handle[3] * BODY;
+					p.z = handle[2] + handle[4] * BODY;
+				} else {
+					// 손잡이 관절이 없는 상자: 영웅→상자 방향의 주축 (x 또는 z), 상자 경계구 반지름 + 몸 반 너비 뒤 [근사]
+					if (Math.abs(to.x) > Math.abs(to.z)) {
+						pushAxis.set(Math.signum(to.x), 0, 0);
+					} else {
+						pushAxis.set(0, 0, Math.signum(to.z));
+					}
+					float gap = it.radius + BODY;
+					p.x = it.pos.x - pushAxis.x * gap;
+					p.z = it.pos.z - pushAxis.z * gap;
+				}
+				body.setYaw(yawOf(pushAxis));
 				listener.pushAttach(it);
 				body.play(anims.get("ANIPushI"), true);
 			}
@@ -2309,33 +2316,52 @@ public final class HeroNavigator {
 			kickAnimTime = 0;
 			body.play(kick, true);
 		}
-		// 상자 축 성분 × 스틱 크기 (원작은 영웅 국소 x/z 성분 그대로 [근사: 축 방향만])
-		float along = stickMag(in) > 0.2f ? stickDir(in, camYaw).dot(pushAxis) * stickMag(in) : 0;
-		float target = 0;
-		if (Math.abs(along) > 0.2f) {
-			target = Math.signum(along) * Math.max(pushSpeedMin(it.weight), Math.min(pushSpeedMax(it.weight), Math.abs(along) * pushSpeedMax(it.weight)));
+		// 영웅 국소 속도 = 스틱의 옆·정면 성분 그대로 × Sold+0x188[무게], 길이는 최소 +0x17C[무게] (0x1C448C – 0x1C4630) — 축 방향만이 아니라 옆으로도
+		// 간다. 붙은 상자는 영웅 이동량 (영웅 +0x100 의 xz) 을 그대로 따르고 속도는 0 (0x212398 → 0x2119A8, +0x174 0x8000) [확실: 코드] — 그래서
+		// 상자 옆 손잡이 (handle1/2, 로컬 ±x) 에 붙은 채 옆걸음으로 밀어 ATHN05B 발리스타를 복도 끝에서 북쪽 홀로 옮긴다 (영상 7738 – 7752).
+		// 예전 엔진은 손잡이 축 성분만 써서 발리스타가 홀로 못 나갔다 (43 §22).
+		float mag = stickMag(in);
+		Vector3f v = new Vector3f();
+		if (mag > 0.2f) {
+			float sp = Math.max(pushSpeedMin(it.weight), Math.min(pushSpeedMax(it.weight), mag * pushSpeedMax(it.weight)));
+			v.set(stickDir(in, camYaw)).mul(sp);
 		}
 		boolean kicking = kickAnimTime >= 0 && (kickAnimTime += dt) < clip(kick, 0);
-		if (target != 0 && !kicking) {
-			it.vel.set(pushAxis).mul(target);
-			clampBox(it);
+		boolean attachedMove = v.lengthSquared() > 0 && !kicking;
+		if (attachedMove) {
+			it.vel.set(v);
 		} else {
-			boxFriction(it, dt);
+			boxFriction(it, dt); // 찬 상자 (상태 2) 만 제 속도로 미끄러진다 (0x211A10)
 		}
 		Vector3f moved = moveBox(it, dt);
+		if (attachedMove) {
+			it.vel.zero(); // 붙은 동안 상자 속도 0 (0x2119F8) — 놓아도 미끄러지지 않는다
+		}
 		follow(moved);
 		if (!kicking) {
 			kickAnimTime = -1;
 			String a = anims.get("ANIPushI");
-			if (target != 0 && moved.lengthSquared() > 0) {
-				a = anims.get(target > 0 ? "ANIPushF" : "ANIPushB");
+			if (attachedMove && moved.lengthSquared() > 0) {
+				// 정면 / 뒤 / 옆 (오른쪽 = (−f.z, f.x)) 중 큰 성분 — Push / Pull / PullL / PullR (애니 슬롯 0x4F – 0x52) [추정: 고르는 규칙]
+				float fw = v.x * pushAxis.x + v.z * pushAxis.z, rt = -v.x * pushAxis.z + v.z * pushAxis.x;
+				a = Math.abs(fw) >= Math.abs(rt) ? anims.get(fw > 0 ? "ANIPushF" : "ANIPushB") : anims.get(rt > 0 ? "ANIPushR" : "ANIPushL");
 			}
 			body.play(a, false);
 		}
 	}
 
+	/**
+	 * 영웅이 상자 이동량만큼 따라간다. 밀기 중에도 원작 영웅은 중력 (0x1C47B0–0x1C47DC: +0xE0.y −= 50·16·dt) 과 바닥 탐침 (0x1C4DE0 → 0x1EA5F0
+	 * → 0x1E3298) 을 거쳐 바닥에 붙는다 [확실: 코드 / 근사: 엔진은 발밑 바닥 높이로 바로 맞춤]. 예전 엔진은 높이를 두지 않아 ATHN05B 발리스타 복도
+	 * 내리막 (x −450 → −220, 480 → 444) 에서 영웅이 발리스타 위 허공에 떠 있다가 놓는 순간 34 를 떨어졌다 (43 §22).
+	 */
 	private void follow(Vector3f moved) {
-		body.position().add(moved.x, 0, moved.z);
+		Vector3f p = body.position();
+		p.add(moved.x, 0, moved.z);
+		NavWorld.Floor f = world.floor(p.x, p.y + 16, p.z, 32);
+		if (f != null) {
+			p.y = f.y();
+		}
 	}
 
 	private void detachPush(Interactables.Item it) {
@@ -2366,22 +2392,50 @@ public final class HeroNavigator {
 		}
 	}
 
-	/** 상자를 속도만큼 옮긴다 (밑에 바닥, 앞쪽 벽 = 상자 반지름 구가 밀리면 막힘 [근사: 원작 상자 모서리 질의 0x210DC8]). @return 옮긴 양 */
+	/** 상자 둘레 점 벽 판정 구 반경 (유닛) [근사]. */
+	static final float BOX_PROBE_R = 6f;
+
+	/**
+	 * 상자를 속도만큼 옮긴다 (밑에 바닥, 앞쪽 벽이면 막힘). 원작 상자 벽 판정 0x210DC8 → 0x210AE8 은 상자 몸 (Push 템플릿 Radius·16 반 너비,
+	 * {@link Interactables.Item#boxHalf}) 둘레 — 모서리 넷·변 가운데 넷 — 에서 벽 질의 0x1E1F28 을 한다 [확실: 코드 / 근사: 엔진은 그 점들의 작은 구가
+	 * 벽에 닿으면 막음 (원작은 밀어냄)]. 예전 엔진은 CDV 경계 구 0.8·r (ATHN05B 발리스타 44) 하나라 폭 84 인 방 문 (x −480) 에 걸려 영상 7731 처럼
+	 * 복도로 밀고 나가지 못했다 (반 너비 28.2, 43 §22). 템플릿이 없으면 예전 구.
+	 * @return 옮긴 양
+	 */
 	private Vector3f moveBox(Interactables.Item it, float dt) {
 		Vector3f delta = new Vector3f(it.vel.x, 0, it.vel.z).mul(dt);
 		if (delta.lengthSquared() < 1e-10f) {
 			return delta.zero();
 		}
 		Vector3f cand = new Vector3f(it.pos).add(delta);
-		NavWorld.Floor f = world.floor(cand.x, it.pos.y + 16, cand.z, 32);
-		Vector3f c = new Vector3f(cand).add(0, it.radius * 0.5f, 0);
-		Vector3f probe = new Vector3f(c);
-		boolean blocked = world.collideSphere(probe, it.radius * 0.8f) && probe.distance(c) > 0.5f;
+		java.util.Set<String> self = world.family(it.owner);
+		NavWorld.Floor f = world.floor(cand.x, it.pos.y + 16, cand.z, 32, self);
+		NavWorld.Floor f0 = world.floor(it.pos.x, it.pos.y + 16, it.pos.z, 32, self);
+		boolean blocked;
+		if (it.boxHalf > 0) {
+			blocked = false;
+			float h = it.boxHalf, py = cand.y + Math.max(BOX_PROBE_R + 2f, it.boxHeight * 0.5f);
+			for (int sx = -1; sx <= 1 && !blocked; sx++) {
+				for (int sz = -1; sz <= 1 && !blocked; sz++) {
+					if (sx == 0 && sz == 0) {
+						continue;
+					}
+					Vector3f c = new Vector3f(cand.x + sx * h, py, cand.z + sz * h);
+					Vector3f probe = new Vector3f(c);
+					blocked = world.collideSphere(probe, BOX_PROBE_R) && probe.distance(c) > 0.5f;
+				}
+			}
+		} else {
+			Vector3f c = new Vector3f(cand).add(0, it.radius * 0.5f, 0);
+			Vector3f probe = new Vector3f(c);
+			blocked = world.collideSphere(probe, it.radius * 0.8f) && probe.distance(c) > 0.5f;
+		}
 		if (f == null || blocked) {
 			it.vel.zero();
 			return delta.zero();
 		}
-		delta.y = f.y() - it.pos.y;
+		// 바닥 높이 변화만큼 (상자 위치 = 루트 관절 — 발리스타는 바닥 480 아래 474.5: 예전처럼 바닥 높이로 맞추면 첫 밀기에 5.5 떠올랐다)
+		delta.y = f0 != null ? f.y() - f0.y() : f.y() - it.pos.y;
 		it.pos.add(delta);
 		listener.pushMoved(it, delta);
 		return delta;

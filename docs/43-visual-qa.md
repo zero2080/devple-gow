@@ -1102,7 +1102,7 @@ ATHN03A/03C RSRCS · R_MEW 템플릿 60), `RopeGrabEventTest` (줄 잡기 통지
 ### 18.4 남은 것 · 미확인
 - 여자 컷신 (5902–5911) 은 `--skip-movies` 로 건너뛰어 대조하지 않았다. 받침대 상자 (6228–6244) · 밤 안뜰 사다리 (6260–6300) 는 경로로 몰지 않았다 (r10 봇 스폰만).
 - 6416–6430 오른쪽 아래 금 투구 아이콘: FLP_HUDK 의 "Loading" 클립 (650, 545) 은 붉은 글자 PS2_4085 라 아니다 — 출처 못 찾음 [미확인].
-- **DoorHandleZone (5971) 미수정**: ENV_DoorHandleZone 은 y −74 부터 (바닥 −80, 엔진 r14 에서 영역 한가운데 (1249, −80, 1178) 에 서도 안 됨) — 원작은 영웅 스크립트
+- ~~**DoorHandleZone (5971) 미수정**~~ → **해결 (§22.2-2)**: 영웅 접촉 관절 = 메시 [0] +0x34 = pelvis. ENV_DoorHandleZone 은 y −74 부터 (바닥 −80, 엔진 r14 에서 영역 한가운데 (1249, −80, 1178) 에 서도 안 됨) — 원작은 영웅 스크립트
   레코드의 점 = 영웅 GO 관절 [레코드 +0x28] 월드 × 로컬 [+0x10] (0x1A6308, 레코드 초기화 0x1A5E18 ← 0x1ADD74: 관절 = 부품 +0x34 또는 오브젝트 +0x86) 로 판정한다
   [확실: 경로 / 미확인: 영웅 관절 번호]. 엔진은 발 위치라 바닥보다 위에서 시작하는 볼륨 (영웅 거름 센서 1144 개 중 ≈ 70 개가 +3 이상 — 대부분 큰 구, LoadCheck 다섯 (ATHN05A/05C LoadCheckB +5/+9, PAND01B LoadCheckC +6, PAND02B AA +10, PAND02D DD +12) 포함) 에
   못 들어가고, 반대로 꼭대기가 바닥 +10 아래인 얇은 볼륨 (ATHN01C LoadB · PAND03A CheckPointGroup …) 도 있어 고정 높이 하나로는 둘 다 맞지 않는다 → 관절을 찾기 전엔 바꾸지 않음.
@@ -1406,6 +1406,88 @@ a06Mp04 (무덤 파는 노인) → graveDig AOXDI (템플릿 309) · R2 대화 3
 `01_elevator_descending_e3_36s` · `02_elevator_fade_e3_40.5s` · `03_athn04a_arrival_hall_o2_6s` · `04_zone_title_plaza_beam_o2_16.5s` (영상 8416 과 같은 자리) ·
 `05_water_06a_pool_w4_3s` · `06_water_05d_dark_w3_1s` · `07_athn06a_terrace_chests_h1_0s` · `08_athn06a_title_h1_24s` · `09_athn04d_cliff_fight_d1_10s` ·
 `10_gravedigger_npc_h1_242s`, 고치기 전 `before_elevator_stands_on_plate_e1_50s` · `before_water_spikes_06a_h1_57s` · `before_water_pale_05d_w2_6s`.
+
+## 22. QA vs PS2 영상 — ATHN05B 발리스타 복도 · ATHN05BB 감옥 홀 · 제우스 석상 (영상 7351–8066 초, 2026-10-24)
+
+§19 지붕 싸움 (–7351) 뒤: ATHN05B 실내 · 세이브 → 발리스타 첫 등장 (7486) → ATHN05BB 감옥 홀 리프트 문 (R2 연타) · 해골 다섯 (7506–7576) → 사다리 ·
+둥근 판 방 · 초록 상자 (7586–7696) → **발리스타 퍼즐** (7716–7858: 복도 → 홀로 밀기, 둥근 판 레버로 두 번 돌리기, 크랭크 → 볼트 → 홀 끝 나무문) →
+부서진 아치문 계단 (7864) → 제우스 석상 방 (7876–7942: MAtBolt 동영상 · 아이템 268 · 안내 598 · 얼굴 문) → 제우스의 분노 첫 사용 · 세이브 · 안내 (7956–8056) →
+바닥 레버 (8066, ATHN05C idiotR2). 엔진 = origin/main 9403d31 (§20) 위, 녹화 lockstep 1/2 초. 퍼즐·연출은 쉬움으로 몰았고 (영상은 보통) 싸움은 `-Dgow.auto.route.nofight`
+로 뺐다 — 싸움 대조는 하지 않았다 [미대조].
+- r15 (발리스타 전 과정, 230 초): `--game ATHN05B --arrive ATHN05BB@-720,480,4307,90`, 경로 `-712,480,4307!;use:-650,4307;hold:34:-121,4300;hold:24:-121,4735;
+  hold:5:-27,4735;wait:0.5;195,424,4729!;use:223,4729;wait:5;21,432,4670!;21,432,4687,2;hold:6:-73,4687;wait:0.5;195,424,4729!;use:223,4729;wait:5;-73,428,4670!;
+  -73,428,4687,2;hold:6:21,4687;wait:0.5;195,424,4729!;use:223,4729;wait:5;70,432,4721!;56,432,4721,2;hold:6:-39,4721;wait:0.5;-80,428,4660!;-80,428,4677,2;btn:R2;
+  hold:10:-80,4728;wait:10` (판 사이 오가기는 순간이동 — 봇이 발리스타 몸·레일 턱을 돌아가지 못한다 [하네스]).
+- r6 (리프트 문): `--game ATHN05BB --arrive ATHN05B@20,440,4728,-90`, `wait:1;40,440,4728,8;use:61,4728;wait:1.5;use:61,4728;mash:6;wait:20`.
+- r4 (제우스 석상, 보통): `--game ATHN05B --arrive ATHN05BB@-862,480,4960,180`, `-862,480,4880,10;-862,480,4600,20;-862,480,4472,6;wait:40`.
+- r5 (바닥 레버): `--game ATHN05C --arrive ATHN05B@-1450,864,2850,180`, `-1450,864,2850!;wait:1;-1450,864,2830,10;use:-1450,2700;wait:30`.
+
+### 22.1 장면 대응 [확실: 스크립트·데이터 / 영상 대조는 섬네일 (1–5 초 간격)]
+레벨: ATHN05B (발코니 · 실내 · 세이브 · 발리스타 복도 x −700 → −290 · 작은 방 · **홀** (충돌은 05B, z 4420 – 5050) · 제우스 방) / ATHN05BB (홀의 감옥 리프트 문 넷 ·
+홀 끝 BrkbDoor · 보물 방 · 복도) — 홀 안에서는 늘 05B 가 현재 슬롯이고 05BB 물체는 이웃 슬롯이다 (LoadCheckBB2 는 바닥이 05B 라 전환하지 않음).
+| 영상 | 원작 (스크립트·데이터) | 엔진 (게임 시각, 녹화) |
+|---|---|---|
+| 7486 | 발리스타 (goballistapushpull, Push 025 "BallistaPlatfor", 부모 링크로 크랭크 gobiggun1crank · 팔 gobiggun1anim) 복도 서쪽 끝, R2 안내 | r15 0 초 (`R2`) |
+| 7506–7516 | 05BB PresLiftDoor1 (TAndF 332): R2 잡기 → 연타 → 손잡이를 따라 오르는 ENV 공 (반지름 44.8) 안에서 1023 → LevelData0 | r6 1.38 초 잡기 → 6.72 초 1023 (100) — 수정 전 42 % 에서 멈춤 (§22.2-2) (`03`) |
+| 7526–7576 | LiftDoor3Enem: LevelData0 == 100 → R_SKC 템플릿 22 다섯 (지연 0 / 0.25 / 0.5 / 0.75 / 1 초) + 음악 Ath5C2 | r6 6.73 – 7.73 초 다섯 · 음악 (7.3 초 걷기 전환 뒤 이웃 슬롯 적으로 이어짐). 싸움 [미대조] |
+| 7716–7736 | 서쪽 손잡이 (handle2) 에 붙어 동쪽으로 — 복도 내리막 (480 → 444), KickMessage (Marker555 → 메시지 183 차기 안내) | r15 0.6 – 34 초, 13 초 183 — 수정 전 문 x −480 에 걸리고 (§22.2-4) 영웅이 내리막 위 허공에 떴다 (§22.2-6) |
+| 7738–7752 | 작은 방에서 손잡이에 붙은 채 옆걸음으로 북쪽 홀로 (볼트는 옆을 향한 채), ClunkZone · CDHullZone (Marker555 → LevelData9, 문간 PushPullCD 켬) | r15 34 – 58 초 (40.7 · 41.2 초) (`01`) — 수정 전 손잡이 축으로만 밀려 홀로 못 나감 (§22.2-7) |
+| 7786–7840 | 둥근 판 (goladder 관절 15) 에 올리고 사슬 레일 끝 레버 (lever4Ladder 602) → 30 % 에서 ladder-AnimDown (모드 8) · 사슬 재질 → 판 90°, 내려놓고 빈 판을 되돌리고 (AnimUp 모드 9) 다시 올려 한 번 더 → 앞이 홀 끝 문 | r15 64.4 / 76.8 / 89.1 초 레버, 65.5 / 77.9 / 90.2 초 판 (`02`) — 수정 전 판만 돌고 발리스타는 그대로 (§22.2-8) |
+| 7852–7858 | 홀 가운데에서 뒤 크랭크 R2 (Push 202 AthnGun 601) → 활 팔 당겨짐 → 7857 볼트 → 7858 TestCamera: 나무문 부서져 판자가 계단에 | r15 107.5 초 크랭크 → 111.86 초 발사 (−80, 459, 4673) → 112.41 초 BrkbDoor (05BB) 파괴 · DestructionSensor (Filter 600) · TestCamera (`05`) — 수정 전 볼트가 남쪽 벽에 (§22.2-8 · 9) |
+| 7876–7942 | 제우스 방: toMagicDoor → playMA360 (동영상 MAtBolt) → 얼굴 문 (MAmagicDoor) → 아이템 268 → 안내 598 → 얼굴 애니 · VO → ZEUSdoor 내려감 | r4 0.58 / 5.37 / 6.58 / 6.70 / 8.73 / 16.73 초 (`04`) — 수정 전 얼굴이 문 밖에 (§22.2-1) |
+| 7956–8056 | 제우스의 분노 첫 사용 · 세이브 · 벽 문장 · 안내 상자 | [미대조] (경로로 몰지 않음) |
+| 8066 | ATHN05C 바닥 레버 병사 (idiotR2: R2 → idiotCineON → forceMove) | r5 1.52 – 20.03 초 연출 |
+
+### 22.2 엔진 결함과 수정
+1. **제우스 얼굴이 없었다** (7924–7942): MAmagicDoor_0 은 관절 31 + 혼합 노드 32 (메시 +0x2C, 표 단어 수 +0x30, 20 바이트 레코드 뒤 {n, (관절, 가중) × n}) —
+   jointMap 의 번호 관절 수 + i 가 노드 i = Σ 가중 × 관절 행렬이다 [확실: 데이터 — 전 메시 6288 중 12 개, 모두 단어 수·가중 합 1 일치]. 엔진은 범위 밖 번호를 짝
+   관절로 읽고, 얼굴 파트 (부착 2 head, vuOr 0x50) 를 관절 로컬로 옮겨 머리 바인드만큼 한 번 더 밀어 문 밖 (z 4316…4454) 에 그렸다. vuOr 비트 0x40 = 혼합
+   스키닝 VU 프로그램 (0x165998: (VU 플래그 &amp; +0x14) | +0x10) 인 오브젝트는 모델 공간 [확실: 데이터 / 추정: VU1 코드 미해독] → `GowMesh.blendJoints` ·
+   `SkinnedModel.Part.palette/skinProgram` · `AnimatedModel` · `PlacedMesh` (04 §3.5, 05 열린 항목 해결).
+2. **스크립트 볼륨 접촉점이 발이었다**: 원작 영웅 스크립트 레코드 점 = 메시 [0] +0x34 관절 (0x1ADD74 → 0x1A5E18, 매 프레임 0x1A6308) = hero_0 의 1 "pelvis"
+   (바인드 21.65) [확실: 코드 · 데이터]. 05BB PresLiftDoor 의 ENV 공은 손잡이를 따라 올라가 발이 42 % 에서 빠지고 1023 (100) 을 못 받아 해골이 나오지 않았다 →
+   `HeroRig.contactPoint` → `ScriptWorld.tick` · 이웃 슬롯 (28 §6). §18.4 ATHN04A DoorHandleZone (+6) 도 같은 원인.
+3. **한 틱에 얇은 볼륨을 건너뛰면 센서가 안 섰다**: 원작은 지난 점 → 지금 점 선분 질의 (0x1A7FFC → 0x11E190, 콜백 0x1A8508: 접촉 목록에 없는 볼륨에 진입 2 다음 이탈 4)
+   도 한다 [확실] → `ScriptWorld.sweep` (96 이하, 순간이동은 건너뜀) [근사: 지난·지금 점이 안이면 뺌].
+4. **발리스타가 방 문 (x −480, 폭 84) 에 걸렸다**: 원작 상자 몸 = Push 템플릿 Radius 1.76 × 16 = 반 너비 28.16 · #044ed4a7 2 × 16 = 높이 32 (0x20F9F8 → 몸 +0x120),
+   벽 판정 = 몸 둘레 8 점 (0x210DC8 → 0x210AE8 → 0x1E1F28) [확실]. 엔진은 CDV 경계구 0.8 × 55 = 44 구 하나였다 → `Interactables.Item.boxHalf/boxHeight`,
+   `HeroNavigator.moveBox` 둘레 8 점 [근사: 작은 구가 벽에 닿으면 그 틱 막음].
+5. **밀린 상자가 제자리에 그려졌다**: 상자 위치 (Item.pos) 와 Marker 만 옮겨 렌더·CDV·자식 GO 는 처음 자리 → 밀기 상자도 발판 몸으로 (`SceneNav.bodyOwners`),
+   `Platforms.Body.place` (처음 · 이동 · 실림) · `Platforms.shift`, 손잡이 다시 읽기 (`refreshHandles`), 상자 높이는 바닥 높이 변화만큼 (예전엔 첫 밀기에 5.5 떠올랐다).
+6. **밀기 중 영웅이 내리막에서 떴다**: 원작 영웅은 붙어 있어도 중력 (0x1C47B0) 과 바닥 탐침 (0x1C4DE0 → 0x1EA5F0 → 0x1E3298) 을 거친다 [확실] → `HeroNavigator.follow`
+   가 발밑 바닥으로 높이를 맞춘다 (놓는 순간 34 를 떨어지던 것).
+7. **발리스타를 홀로 밀지 못했다**: 원작 영웅 국소 속도 = 스틱의 옆·정면 성분 그대로 × Sold+0x188[무게] (0x1C448C – 0x1C4630), 붙은 상자는 영웅 이동량 (+0x100 xz)
+   을 그대로 따르고 속도 0 (0x212398 → 0x2119A8) [확실] — 손잡이 (handle1/2, 로컬 ±x) 에 붙은 채 옆걸음으로 북쪽 홀로 간다. 엔진은 손잡이 축 성분만 썼다 →
+   `HeroNavigator.push` (스틱 그대로, 놓아도 미끄러지지 않음, 애니 Push / Pull / PullL / PullR [추정: 고르는 규칙]), 붙잡기 = 잡은 손잡이에서 몸 반 너비 바깥, 그 축이
+   상자 국소 축 (0x1C3918 · 0x1C4638) [근사: 반 깊이 = 반 너비].
+8. **둥근 판이 발리스타를 돌리지 않았다**: 판 = goladder (사다리 장치, fl 0) 관절 15 group2920 — act "ladder" 3.67 초에 yaw 0 → 90° (같은 act 가 사다리를 124 내림),
+   레버 lever4Ladder (newLeever Type 5, 602) 30 % 에서 LevelData5 (LadderUp/DownZone, Marker99) 에 따라 AnimDown (모드 8) / AnimUp (모드 9) [확실: 스크립트·데이터].
+   원작 상자 갱신은 매 틱 0x1E6248 로 지면 GO 관절 (바닥 탐침이 적은 +0x24C / +0x250) 의 움직임을 yaw 만 남겨 몸에 곱한다 [확실: 코드] → `SceneNav.rideBoxes` ·
+   `Platforms.ride` (자식 GO 같은 틱). 처음 볼트 = 남쪽 (Aim Joint arrowjoint 행 2, 0x222B24) → 한 번 = 서쪽 → 두 번 = 북쪽 문 (r15 111.86 초 (0, 0, 1)).
+9. **볼트가 다른 슬롯 문을 지나쳤다**: BrkbDoor 는 05BB (이웃 슬롯) — 화살·공격이 현재 슬롯 Breakables 만 봤다. 원작은 두 슬롯 GO 가 한 세계 [확실] →
+   `GameScene.otherBreakables`, `ArrowShots.Targets.otherBreakables/otherWorld/otherOnBreak`, `onBreakOther` (이웃 렌더 숨김 · 충돌 끔 · 그 WAD 이펙트로 파괴 연출,
+   `MagicFx.addWad(Path)`) (41 §2).
+10. 다른 슬롯 레벨 FXC 이미터 파티클도 그린다 (`LevelScene.renderNeighbourEffects` → `LevelFx.renderNeighbourParticles`) [근사: 진행은 렌더 간격] — 단 이 구간의
+    횃불 불꽃은 두 슬롯 모두 안 보여 (§22.4) 영상 대조는 못 했다.
+11. 하네스 [엔진 전용]: `-Dgow.auto.route.nofight` (경로 중 싸움 안 함), `-Dgow.debug.events` (게임 → 스크립트 이벤트 출력), `-Dgow.debug.hudvars` HUD 패드 출력.
+
+### 22.3 테스트
+`AthensCatapultTest` (제우스 얼굴 혼합 노드 · vuOr 0x40 파트 모델 공간, 혼합 팔레트 R_MIN 55/56, hero_0 접촉 관절 1 pelvis, HandleSeenGroup 은 pelvis 로만,
+toMagicDoor 한 틱 건너뛰기 → LevelData8, 발리스타 몸 28.16 / 32, 판 두 번 = 북쪽 + 자식 GO 이동, 05BB BrkbDoor 를 05B 볼트가 부숨 → LevelData5 · TestCamera),
+`HeroNavigatorTest.attachedPushFollowsTheStickSideways`. 엔진 테스트 611 개 통과.
+
+### 22.4 남은 것 · 확인 못 한 것
+- 싸움 (해골 다섯 7526–7576, 군단병 7862) 은 보통 난이도로 대조하지 않았다 [미대조]. 7956–8056 (제우스의 분노 첫 사용 · 세이브 · 안내) 은 경로로 몰지 않았다.
+- 횃불 불꽃 (FXC_TFfireemit*, 서브타입 1, rate 45) 이 영상 (7740 · 7852 · 7858) 처럼 보이지 않는다 — 엔진 이미터 자리 = FXC 로컬 · 관절 0 · 인스턴스 인데
+  05BB gocellroom 문 옆 둘 (TF29/30, 로컬 x −298 / −24) 이 바닥 아래·문 뒤 (y 363, z 5284) 에 놓인다 [미확인: 이미터 기준 노드].
+- 상자 몸 둘레 판정은 정적 충돌만 (움직이는 몸·다른 상자와는 안 함), 놓인 상자의 `place` 는 이음 상태 (`Platforms.State`) 로 넘기지 않는다 [근사].
+- 판 위에 선 영웅은 자리만 실리고 방향은 안 돈다 (원작 0x1E6248 은 영웅도 yaw) [근사]. 원작 크랭크 손잡이 잡기 · 밀기 애니 선택 규칙은 미해독.
+- 혼합 노드의 VU1 계산 코드는 못 찾았다 (데이터 일관성만) [추정]. 05BB → 05B 걷기 전환 (r6 7.3 초) 은 엔진 구조 [근사].
+- 다른 슬롯 물체를 처음 부술 때 그 WAD 를 다시 해석한다 (지연) [근사].
+
+### 22.5 증거 (`work/verify/athn05_catapult_zeus/`, 커밋 안 함)
+`01_strafe_into_hall_video_vs_engine` (7744 / 7748 / 7752 ↔ r15 40 / 45 / 50 초) · `02_turntable_video_vs_engine` (7792 / 7818 / 7836 / 7840 ↔ r15 63 / 66 / 90 / 95 초) ·
+`03_presliftdoor_skeletons_engine` (r6) · `04_zeus_face_item_engine` (r4) · `05_crank_bolt_door_video_vs_engine` (7852 / 7855 / 7858 ↔ r15 107 / 110 / 113 초).
 
 ## 시연 녹화 (-Dgow.record, -Dgow.bot) [엔진 전용]
 

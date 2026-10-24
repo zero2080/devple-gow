@@ -144,7 +144,7 @@ public final class AutoPlay {
 		if (time > timeout && !done) {
 			finish("TIMEOUT", hero);
 		}
-		if (enemy != null && (bossActive || enemy.distance(hero) < FIGHT && !giveUp(enemy, hero, dt))) { // 보스전은 포기하지 않음
+		if (enemy != null && !(ROUTE_NO_FIGHT && routing()) && (bossActive || enemy.distance(hero) < FIGHT && !giveUp(enemy, hero, dt))) { // 보스전은 포기하지 않음
 			if (bossActive && unstick && bossStuck(hero, enemy, dt)) {
 				// 보스전에서 대상에 못 다가간 채 갇힘 (닻이 떨어진 상자·머리 사이 틈, ATHN01E) — 대상 쪽 같은 높이 점으로 순간이동 (기록)
 				float dx = hero.x - enemy.x, dz = hero.z - enemy.z, l = Math.max(1f, (float) Math.hypot(dx, dz));
@@ -262,6 +262,11 @@ public final class AutoPlay {
 	private final List<String> route = parseRoute(System.getProperty("gow.auto.route"));
 	/** gow.auto.route.after=초: 그 전에는 경로 대신 보통 자동 플레이 (보스전·볼륨 방문으로 앞 구간을 진행, 예: 메두사 여왕·미노타우로스 방 → 126 초 문, 43 §14.6). */
 	static final float ROUTE_AFTER = Float.parseFloat(System.getProperty("gow.auto.route.after", "0"));
+	/**
+	 * gow.auto.route.nofight: 경로 단계가 남아 있는 동안 적과 싸우지 않는다 — 장치 연출 대조용 (ATHN05C 레버 병사 aoXR5 는 다리 건너편 적이라
+	 * 봇이 그쪽으로만 붙어 경로 R2 를 못 눌렀다, 43 §20) [엔진 전용].
+	 */
+	static final boolean ROUTE_NO_FIGHT = System.getProperty("gow.auto.route.nofight") != null;
 	private int routeIdx;
 	private float routeTime;
 

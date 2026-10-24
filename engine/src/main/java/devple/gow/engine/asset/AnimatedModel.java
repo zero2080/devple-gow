@@ -29,8 +29,10 @@ public final class AnimatedModel implements AutoCloseable {
 	public static final int MAX_JOINTS = 128;
 
 	/** @param litColor 동적 라이트 경로의 머티리얼 색 (MAT 헤더 색 × 레이어 rgb, VU qw 76 — {@link WadAssets#litColor}) */
+	/** @param src 원본 스킨 파트 — 혼합 노드 팔레트 ({@link SkinnedModel.Part#palette}, 05 문서 "범위 밖 슬롯") */
 	private record Part(SkinnedMesh mesh, Texture texture, RenderModel.Blend blend, float[] tint, boolean lit,
-						boolean jointLocal, devple.gow.tools.fx.MaterialAnim.Anim matAnim, int[] joints, float[] litColor, boolean late) {
+						boolean jointLocal, devple.gow.tools.fx.MaterialAnim.Anim matAnim, int[] joints, float[] litColor, boolean late,
+						SkinnedModel.Part src) {
 
 		/** 파트가 쓰는 관절이 모두 숨김이면 그리지 않는다 (ANM u8 가시성, 41 문서 §2). */
 		boolean hiddenBy(boolean[] hidden) {
@@ -159,18 +161,19 @@ public final class AnimatedModel implements AutoCloseable {
 				for (int k = 0; k < 4; k++) {
 					v[o + 8 + k] = Math.min(c[k] / 128f, 2f);
 				}
-				// 스켈레톤 범위 밖 슬롯은 짝 관절로 대체 (05 문서 미해결 항목)
-				int ja = j[0] < skeleton.size() ? j[0] : j[1];
-				int jb = j[1] < skeleton.size() ? j[1] : ja;
-				v[o + 12] = ja < skeleton.size() ? ja : 0;
-				v[o + 13] = jb < skeleton.size() ? jb : 0;
+				// 관절 수 이상 슬롯 = 메시 혼합 노드 (GowMesh.blendJoints, 팔레트 뒤쪽) — 표가 없는 범위 밖 번호만 짝 관절로 대체
+				int lim = palSize(p);
+				int ja = j[0] < lim ? j[0] : j[1];
+				int jb = j[1] < lim ? j[1] : ja;
+				v[o + 12] = ja < lim ? ja : 0;
+				v[o + 13] = jb < lim ? jb : 0;
 				v[o + 14] = p.weights.get(i);
 			}
 			java.util.TreeSet<Integer> used = new java.util.TreeSet<>();
 			for (int i = 0; i < n; i++) {
-				used.add((int) v[i * SkinnedMesh.STRIDE + 12]);
+				usedJoints(p, (int) v[i * SkinnedMesh.STRIDE + 12], used);
 				if (v[i * SkinnedMesh.STRIDE + 14] < 1f) {
-					used.add((int) v[i * SkinnedMesh.STRIDE + 13]);
+					usedJoints(p, (int) v[i * SkinnedMesh.STRIDE + 13], used);
 				}
 			}
 			int[] idx = new int[p.tris.size() * 3];
@@ -195,7 +198,25 @@ public final class AnimatedModel implements AutoCloseable {
 				tint = l.rgba();
 			}
 			parts.add(new Part(new SkinnedMesh(v, idx), tex, blend, tint, p.hasNormal, p.jointLocal(skeleton), assets.materialAnim(p.material),
-					used.stream().mapToInt(Integer::intValue).toArray(), litColor, late));
+					used.stream().mapToInt(Integer::intValue).toArray(), litColor, late, p));
+		}
+	}
+
+	/** 파트 정점이 가리킬 수 있는 팔레트 크기: 관절 수, 혼합 노드가 있으면 그 뒤까지 (셰이더 uJoints 128 안). */
+	private int palSize(SkinnedModel.Part p) {
+		int n = p.hasBlend() ? Math.max(skeleton.size(), p.blendBase + p.blendJoints.length) : skeleton.size();
+		return Math.min(n, MAX_JOINTS);
+	}
+
+	/** 숨김 판정용 실제 관절: 혼합 노드는 그것을 이루는 관절들. */
+	private void usedJoints(SkinnedModel.Part p, int slot, java.util.Set<Integer> out) {
+		int b = slot - p.blendBase;
+		if (p.hasBlend() && slot >= p.blendBase && b < p.blendJoints.length) {
+			for (int j : p.blendJoints[b]) {
+				out.add(j);
+			}
+		} else {
+			out.add(slot);
 		}
 	}
 
@@ -266,6 +287,7 @@ public final class AnimatedModel implements AutoCloseable {
 		// 패스 0 = OPAQUE + CUTOUT(알파 ≥ 0.75, 깊이 쓰기), 패스 1 = CUTOUT 가장자리 + ALPHA/ADD/SUB (깊이 쓰기 끔) — Renderer.draw 와 동일
 		for (int pass = 0; pass < 2; pass++) {
 			Boolean lastLocal = null;
+			int[][] lastBlend = null;
 			for (Part p : parts) {
 				RenderModel.Blend b = p.blend();
 				boolean solid = b == RenderModel.Blend.OPAQUE || b == RenderModel.Blend.CUTOUT;
@@ -273,9 +295,11 @@ public final class AnimatedModel implements AutoCloseable {
 						|| !layer3 && devple.gow.engine.render.DrawStage.skip(p.late())) {
 					continue;
 				}
-				if (lastLocal == null || lastLocal != p.jointLocal()) {
-					upload(p.jointLocal() ? w : skin);
+				if (lastLocal == null || lastLocal != p.jointLocal() || lastBlend != p.src().blendJoints) {
+					float[][] pal = p.src().palette(p.jointLocal() ? w : skin); // 관절 뒤에 혼합 노드 (GowMesh.blendJoints)
+					upload(pal.length > MAX_JOINTS ? java.util.Arrays.copyOf(pal, MAX_JOINTS) : pal);
 					lastLocal = p.jointLocal();
+					lastBlend = p.src().blendJoints;
 				}
 				RenderModel.Blend mode = b;
 				if (b == RenderModel.Blend.CUTOUT) {

@@ -142,6 +142,11 @@ public final class GameScene implements Scene {
 	private LevelScene otherScene;
 	/** 부서지는 물체 (Breakable / Brkb, 41 문서). */
 	private Breakables breakables;
+	/**
+	 * 다른 슬롯 레벨의 부서지는 물체 — 원작은 두 슬롯 GO 가 한 세계에 있어 화살·공격이 다른 슬롯 물체도 맞힌다 (ATHN05B 발리스타 볼트 → ATHN05BB
+	 * BrkbDoor, 43 §22) [확실: 두 슬롯 상주 / 근사: 엔진은 다른 슬롯 이펙트 GO 를 처음 부술 때 그 WAD 를 이펙트 라이브러리에 올린다].
+	 */
+	private Breakables otherBreakables;
 	/** 떨어지는 중인 적의 수직 속도. */
 	private final java.util.Map<EnemyFighter, Float> enemyFall = new java.util.IdentityHashMap<>();
 	private boolean otherScenePending;
@@ -690,6 +695,7 @@ public final class GameScene implements Scene {
 		}
 		if (otherName != null) {
 			nav.setOther(otherName, otherData, otherCol, nav.neighbourListener(), keptOther, neighbourTweaks(otherData));
+			otherBreakables = otherData != null ? new Breakables(otherData, neighbourTweaks(otherData)) : null;
 			Resident left = resident(arrival, otherName);
 			if (left != null) { // 이음: 떠나온 레벨 = 다른 슬롯 그대로 (생성 스크립트 결과보다 넘긴 상태가 우선)
 				otherHidden.clear();
@@ -739,7 +745,8 @@ public final class GameScene implements Scene {
 		// Warp 도 이미 서 있는 볼륨은 "안" 으로: 원작 영웅 볼륨 판정은 이전 위치 → 지금 위치 선분 (0x1A7FFC, 콜백 0x1A8508) 인데 순간이동
 		// (0x1E0A18 → 0x1B3030 → 0x29D90C) 프레임은 선분을 건너뛰고 이전 위치 = 도착점 — 도착점을 덮는 Warp 볼륨이 곧바로 되돌리지 않는다 (43 §13.9)
 		if (keptWorld == null) { // 넘겨 쓴 세계는 영웅 볼륨 기록이 이어진다 (다음 틱의 들어감·나감은 그대로 발동)
-			world.placePlayer(spawn.x, spawn.y, spawn.z, seamless || warped);
+			Vector3f cp = hero.contactPointAt(spawn, new Vector3f()); // 접촉점 = pelvis (첫 틱 전이라 바인드 높이)
+			world.placePlayer(cp.x, cp.y, cp.z, seamless || warped);
 		}
 		if (warped && loadPos == null) {
 			// Warp_Jump 끝 0x1A9C18: 도착 Start 의 대상 발동 (PAND04AA WarpFrmCore → 엘리베이터 AnimLiftUp 등, 43 §13.10) [확실]
@@ -1082,6 +1089,7 @@ public final class GameScene implements Scene {
 		otherName = null;
 		otherCol = null;
 		otherData = null;
+		otherBreakables = null;
 		otherHidden.clear();
 		otherPosed.clear();
 		otherScenePending = true;
@@ -1137,6 +1145,7 @@ public final class GameScene implements Scene {
 			nav.setOther(wad, otherData, otherCol, nav.neighbourListener(), null, neighbourTweaks(otherData));
 			rememberResidentWorlds(); // 다른 슬롯이 새 레벨로 — 예전 슬롯 세계는 버린다 (0x1BC110)
 		}
+		otherBreakables = otherData != null ? new Breakables(otherData, neighbourTweaks(otherData)) : null;
 		if (cameraRig != null) {
 			cameraRig.setOther(otherData);
 		}
@@ -3136,7 +3145,8 @@ public final class GameScene implements Scene {
 			session.sound.play("SND_ICON");
 		}
 		Vector3f p = hero.ctl.position;
-		nav.update(dt, p);
+		Vector3f contact = hero.contactPoint(new Vector3f()); // 스크립트 볼륨 접촉점 = 영웅 pelvis (HeroRig.contactJoint, 0x1ADD74)
+		nav.update(dt, p, contact);
 		for (Enemy en : enemies) { // 디딘 동적 발판에 실려 감 (원작 생물 +0x24C = 바닥 질의가 맞은 발판 객체, 32 문서, 30 §6.6) — ATHN02A 부두로 들어오는 배 위 아테나 석상
 			EnemyFighter ef = en.fighter();
 			if (!ef.dead() && ef.nav() != null && ef.nav().mode() == devple.gow.engine.combat.EnemyNav.Mode.GROUND) {
@@ -3160,13 +3170,16 @@ public final class GameScene implements Scene {
 		level.setMaterialTimes(nav.navWorld.platforms().materialTimes()); // 스크립트 재질 애니 ("$", Platforms.MatClock)
 		otherMaterialTimes = nav.neighbourPlatforms().materialTimes();
 		breakables.update(hero.combat, world, this::onBreak);
+		if (otherBreakables != null && nav.neighbour() != null) {
+			otherBreakables.update(hero.combat, nav.neighbour(), this::onBreakOther);
+		}
 		if (!archerAims.isEmpty()) {
 			updateArcherAims(dt);
 		}
 		if (!arrows.shots().isEmpty()) {
 			arrows.update(dt, new ArrowShots.Targets(breakables, world, this::onBreak, enemies.stream().map(Enemy::fighter).toList(), hero.combat,
 					col, otherCol, nav.navWorld.platforms(), nav.neighbourPlatforms(), magicFx != null ? magicFx.effects() : null,
-					hero.hittable(), this::enemyArrowHit));
+					hero.hittable(), this::enemyArrowHit, otherBreakables, nav.neighbour(), this::onBreakOther));
 		}
 		combatCameraTick();
 		cameraRig.setHeroState(heroStateBits(), enemies.stream().anyMatch(en -> !en.fighter().dead() && en.fighter().brain() != null
@@ -3184,7 +3197,7 @@ public final class GameScene implements Scene {
 		}
 		shake.update(dt, cam);
 		session.sound.setUnderwater(cameraRig.underwater()); // 수중 카메라 → 소리 수중 처리 (29 문서 §10)
-		world.tick(dt, p.x, p.y, p.z);
+		world.tick(dt, contact.x, contact.y, contact.z);
 		orbPickups.update(dt, p, hero.player.hp > 0, orbSink);
 		hero.tickBlades(dt); // 블레이드 사슬 (0x1FDB18): 이번 틱 자세가 정해진 뒤, 블레이드 GO 앵커보다 먼저
 		magicFx.update(hero.magic, p, hero.ctl.yaw, enemies.stream().map(Enemy::fighter).toList(), dt, cam.eye);
@@ -3729,6 +3742,27 @@ public final class GameScene implements Scene {
 		System.out.println("파괴: " + owner + " 오브 " + orbs);
 	}
 
+	/**
+	 * 다른 슬롯 레벨 물체가 부서짐 ({@link #otherBreakables}): 그 슬롯 렌더에서 숨기고 (otherHidden) 충돌을 끄고, 파괴 이펙트 (GO 첫 act · FXC ·
+	 * SEM, {@link #onBreak} 와 같음) 를 그 WAD 에서 재생한다. Marker 파괴 (DestructionSensor) 는 그 슬롯 스크립트 세계로 갔다.
+	 */
+	private void onBreakOther(String owner) {
+		otherHidden.add(owner.toLowerCase());
+		if (nav != null) {
+			nav.neighbourPlatforms().setSolid(owner, false);
+		}
+		Breakables.Item it = otherBreakables != null ? otherBreakables.item(owner) : null;
+		if (it == null) {
+			return;
+		}
+		if (it.matrix != null && magicFx != null && otherName != null) {
+			magicFx.addWad(Stages.wad(session.rom, otherName)); // 다른 슬롯 WAD 의 이펙트 GO (처음 한 번 해석)
+			magicFx.breakObject(owner, new org.joml.Matrix4f().set(it.matrix), it.fadeDelay, it.fadeTime, it.debrisPhysics);
+		}
+		int orbs = emitOrbs(it.orbNode(), it.matrix != null ? new Vector3f(it.matrix[12], it.matrix[13], it.matrix[14]) : hero.ctl.position);
+		System.out.println("파괴 (다른 슬롯): " + owner + " 오브 " + orbs);
+	}
+
 	private int surfaceFx(Vector3f p) {
 		LevelCollision.Floor f = col.floorAt(p.x, p.y + 4, p.z, 8);
 		return f != null && f.tri().info() != null ? f.tri().info().sheetFx() : 0;
@@ -3976,6 +4010,10 @@ public final class GameScene implements Scene {
 		hero.drawChains(cam, e.window().aspect(), alpha, magicFx.godBladesOn()); // 사슬·궤적 (45 문서 §3)
 		if (System.getProperty("gow.nofx") == null) {
 			level.renderEffects(e, cam); // 비·파티클·물은 캐릭터 뒤에 (--no-fx 로 끔: 스크린샷용)
+			LevelScene o = otherScene;
+			if (o != null) {
+				o.renderNeighbourEffects(e, cam); // 다른 슬롯 레벨 이미터 (횃불·불) — 두 슬롯 상주
+			}
 		}
 		magicFx.render(cam, e.window().aspect(), e.renderer().white());
 		renderCameraFilter();

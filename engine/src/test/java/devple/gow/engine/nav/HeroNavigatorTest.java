@@ -1019,6 +1019,47 @@ class HeroNavigatorTest {
 		assertEquals(NavState.GROUND, nav.state());
 	}
 
+	/**
+	 * 원작 0x1C448C – 0x1C4630: 붙은 영웅 국소 속도 = 스틱의 옆·정면 성분 그대로 (옆걸음 포함) × Sold+0x188[w], 붙은 상자는 영웅 이동량을 그대로 따르고
+	 * 속도 0 (0x2119A8) — 옆으로 밀어도 상자가 같이 가고, 놓아도 미끄러지지 않는다 (ATHN05B 발리스타를 복도 끝에서 북쪽 홀로, 43 §22).
+	 */
+	@Test
+	void attachedPushFollowsTheStickSideways() {
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -400, -400, 400, 400, 0, SurfaceAttr.GROUND);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		Body b = new Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		Interactables items = new Interactables();
+		Interactables.Item box = items.add(new Interactables.Item(Interactables.Kind.PUSH, "gopbox", v(0, 0, -40), 225, 503, "pushIdle", null,
+				"Pandora's Box", 16));
+		nav.setItems(items);
+		Pad in = new Pad();
+		in.down.add(PadButton.USE);
+		tick(nav, b, w, in);
+		assertEquals(NavState.PUSH, nav.state());
+		float hx = b.pos.x, hz = b.pos.z;
+		for (int i = 0; i < 60; i++) {
+			in.lx = 1; // 카메라 0: 스틱 오른쪽 = +x (상자 축 −z 에 수직)
+			in.ly = 0;
+			in.down.add(PadButton.USE);
+			tick(nav, b, w, in);
+		}
+		assertEquals(30.4f, box.pos.x, 0.5f, "무게 0 = 1.9 m/s 옆으로 1 초");
+		assertEquals(-40f, box.pos.z, 1e-3f, "축 방향으로는 그대로");
+		assertEquals(box.pos.x, b.pos.x - hx, 1e-3f, "영웅이 같이 옆걸음");
+		assertEquals(hz, b.pos.z, 1e-3f);
+		assertEquals(0f, box.vel.length(), 1e-6f, "붙은 동안 상자 속도 0");
+		in.lx = 0;
+		in.down.clear();
+		tick(nav, b, w, in); // 놓기
+		float x = box.pos.x;
+		for (int i = 0; i < 30; i++) {
+			tick(nav, b, w, in);
+		}
+		assertEquals(x, box.pos.x, 1e-4f, "놓아도 미끄러지지 않는다");
+	}
+
 	@Test
 	void pushBlockedByWall() {
 		List<LevelCollision.Tri> t = new ArrayList<>();

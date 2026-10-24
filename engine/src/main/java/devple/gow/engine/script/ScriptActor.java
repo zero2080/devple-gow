@@ -13,6 +13,8 @@ public final class ScriptActor {
 	public final String name;
 	public final int group;
 	public final float[] pos = new float[3];
+	/** 지난 틱 위치 (선분 통과 판정용, NaN = 없음 — {@code ScriptWorld.contacts}). */
+	final float[] prev = {Float.NaN, Float.NaN, Float.NaN};
 	/** 만든 SpawnEnemy (없으면 null). "부모 == 소유자" 판정(원작 +0x2C → +0x54)에 쓴다. */
 	public final ScriptEntity spawner;
 	/** 안에 있는 (볼륨, 영역) — 영역 -1 = 볼륨 전체 (영역이 맞지 않는 엔티티용). */

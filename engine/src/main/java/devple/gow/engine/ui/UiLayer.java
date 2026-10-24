@@ -78,6 +78,9 @@ public final class UiLayer implements AutoCloseable {
 		return renderer;
 	}
 
+	private static final boolean DEBUG_PAD = System.getProperty("gow.debug.hudvars") != null;
+	private int lastPadMask;
+
 	/** 고정 틱: 패드 → FLP 마스크, 한 프레임 진행. */
 	public void update(Engine e) {
 		update(e.input());
@@ -85,7 +88,12 @@ public final class UiLayer implements AutoCloseable {
 
 	/** 입력 소스를 지정해 진행 (디버그 스크립트 입력 재생). */
 	public void update(devple.gow.engine.input.Input in) {
-		player.pad(acceptInput ? UiPad.mask(in) : 0);
+		int m = acceptInput ? UiPad.mask(in) : 0;
+		if (DEBUG_PAD && m != lastPadMask) {
+			System.out.printf("HUD 패드 %x → %x (%s)%n", lastPadMask, m, in.getClass().getSimpleName());
+		}
+		lastPadMask = m;
+		player.pad(m);
 		player.tick();
 	}
 

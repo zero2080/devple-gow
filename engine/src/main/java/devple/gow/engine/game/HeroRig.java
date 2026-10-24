@@ -69,6 +69,35 @@ public final class HeroRig implements AutoCloseable {
 	private final AnimationSet animSet;
 	private final CombatData combatData;
 	private final Hittable hittable;
+	/**
+	 * 스크립트 볼륨 접촉 관절 — 원작 영웅 스크립트 레코드 (0x1AC1F8 → 0x1AD978 → 0x1A5E18) 의 관절은 모델 부품 (0x330514) +0xE4 → 메시 [0] +0x34
+	 * (0x1ADD74), 매 프레임 점 = 그 관절 월드 위치 (0x1A6308: [+0x104 +0x8C] + 관절·64 × 로컬 0) 로 ENV 점 질의 (0x1A7E78 → 0x11E5E8) 와
+	 * 이전 점 → 지금 점 선분 (0x1A7FFC → 0x11E190) 을 한다 [확실: 코드]. hero_0 메시 +0x34 = 1 = "pelvis" (바인드 높이 21.65) [확실: 데이터].
+	 * 예전 엔진은 발 위치라 바닥 위에서 시작하는 볼륨 (ATHN04A DoorHandleZone +6, 43 §18.4) 에 못 들어가고, 손잡이를 따라 올라가는 ATHN05BB
+	 * PresLiftDoor 공 (r 44.8) 에서 진행 42 % 에 빠져 1023 (100) 을 못 받아 해골 다섯이 나오지 않았다 (43 §22).
+	 */
+	public final int contactJoint;
+
+	/** 스크립트 볼륨 접촉점 = {@link #contactJoint} 의 지금 월드 위치 (영웅 행렬 × 자세). 관절이 없으면 발 위치. */
+	public Vector3f contactPoint(Vector3f out) {
+		if (contactJoint <= 0) {
+			return out.set(ctl.position);
+		}
+		var sk = ctl.animator().skeleton();
+		float[] m = ctl.animator().pose().world(sk)[contactJoint];
+		Matrix4f w = ctl.world(new Matrix4f(), 1f);
+		return w.transformPosition(m[12], m[13], m[14], out);
+	}
+
+	/** 자세를 모를 때 (도착 첫 틱 전) 의 접촉점: 발 + 접촉 관절의 바인드 높이. */
+	public Vector3f contactPointAt(Vector3f feet, Vector3f out) {
+		if (contactJoint <= 0) {
+			return out.set(feet);
+		}
+		var sk = ctl.animator().skeleton();
+		float[][] bw = sk.bindWorld();
+		return out.set(feet.x, feet.y + bw[contactJoint][13], feet.z);
+	}
 
 	public HeroRig(Path rom, WadFile permk, int costume) throws IOException {
 		this(rom, permk, costume, null);
@@ -84,7 +113,10 @@ public final class HeroRig implements AutoCloseable {
 		Skeleton sk = Skeleton.loadAll(assets.wad()).stream().filter(s -> s.name.equals("hero")).findFirst().orElseThrow();
 		AnimationSet set = AnimationSet.load(assets.wad(), "ANM_hero");
 		shader = new Shader("skinned.vert", "basic.frag");
-		model = new AnimatedModel(assets, assets.requireModel("MDL_hero"), sk, shader);
+		devple.gow.tools.model.GowModel heroModel = assets.requireModel("MDL_hero");
+		model = new AnimatedModel(assets, heroModel, sk, shader);
+		int cj = heroModel.meshes.isEmpty() ? 0 : heroModel.meshes.getFirst().contactJoint;
+		contactJoint = cj > 0 && cj < sk.size() ? cj : 0;
 		Animator animator = new Animator(sk, set, tweaks, "/Animation/goHero/");
 		ctl = new HeroController(animator);
 		godMode = new GodMode(tweaks);

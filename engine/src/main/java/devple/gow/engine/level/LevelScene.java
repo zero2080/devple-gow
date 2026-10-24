@@ -80,6 +80,16 @@ public final class LevelScene implements Scene {
 		lensFlares.render(c, e.window().aspect());
 	}
 
+	/** 다른 슬롯 레벨로 그릴 때의 이펙트 패스 — 그 레벨 이미터 파티클 ({@link LevelFx#renderNeighbourParticles}). */
+	public void renderNeighbourEffects(Engine e, Camera c) {
+		if (fx == null) {
+			return;
+		}
+		e.renderer().begin3d(c);
+		fx.renderNeighbourParticles(e, c);
+		FxEnvironment.disableFog(e.renderer().basic());
+	}
+
 	/** SCR_LensFlare (46 문서): 캐릭터·이펙트 뒤 (깊이 버퍼 완성 후). */
 	private devple.gow.engine.fx.LensFlares lensFlares;
 

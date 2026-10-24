@@ -42,11 +42,70 @@ public final class SkinnedModel {
 		public final java.util.Set<String> tagKinds = new java.util.TreeSet<>();
 		/** 메시 파트의 jointRefs[0] (부착 관절). 0 이 아니면 정점이 관절 로컬 공간. */
 		public final int attachJoint;
+		/**
+		 * 오브젝트 vuOr (+0x10) 비트 0x40 — VU 프로그램 선택 (0x165998: 프로그램 = (VU 플래그 &amp; +0x14) | +0x10) 이 혼합 스키닝 쪽. 이 비트가 있는
+		 * 오브젝트는 정점이 모델 공간이다 [확실: 데이터 — 부착 ≠ 0 인 전 WAD 파트에서 지금 규칙과 갈리는 곳은 말하는 머리 2 개뿐이고, 그 정점은
+		 * 머리 관절 바인드 위치 (z −80…−104) 둘레에 있다 / 추정: VU1 프로그램 자체는 미해독]. ATHN05B 제우스 얼굴 MAmagicDoor p0 (부착 2 head,
+		 * vuOr 0x50) 을 관절 로컬로 옮겨 머리 바인드만큼 한 번 더 밀어 문 밖 (z 4316…4454) 에 그렸다 — 영상 7924–7937 의 얼굴이 없었다.
+		 */
+		public final boolean skinProgram;
+		/** 이 파트 메시의 혼합 노드 ({@link GowMesh#blendJoints}) 와 첫 노드 번호 (= 메시 관절 수). */
+		public final int[][] blendJoints;
+		public final float[][] blendWeights;
+		public final int blendBase;
 
 		Part(String name, String material, int attachJoint) {
+			this(name, material, attachJoint, false, new int[0][], new float[0][], 0);
+		}
+
+		Part(String name, String material, int attachJoint, boolean skinProgram, int[][] blendJoints, float[][] blendWeights, int blendBase) {
 			this.name = name;
 			this.material = material;
 			this.attachJoint = attachJoint;
+			this.skinProgram = skinProgram;
+			this.blendJoints = blendJoints;
+			this.blendWeights = blendWeights;
+			this.blendBase = blendBase;
+		}
+
+		/** 혼합 노드가 있는가. */
+		public boolean hasBlend() {
+			return blendJoints.length > 0;
+		}
+
+		/**
+		 * 정점이 가리킬 수 있는 행렬 팔레트: 관절 행렬 mats (0..관절 수−1) 뒤에 혼합 노드 i = Σ 가중 × mats[관절] ({@link GowMesh#blendJoints}).
+		 * 혼합 노드가 없으면 mats 그대로. 행벡터 4×4 (16 float) 를 성분별로 더한다 (선형 혼합 스키닝).
+		 */
+		public float[][] palette(float[][] mats) {
+			if (blendJoints.length == 0 || mats == null) {
+				return mats;
+			}
+			int base = blendBase; // jointMap 번호 = 메시 관절 수 + 노드 (스켈레톤 길이와 다르면 관절 쪽 남는 칸은 관절 0)
+			float[][] out = java.util.Arrays.copyOf(mats, Math.max(mats.length, base + blendJoints.length));
+			for (int i = mats.length; i < base; i++) {
+				out[i] = mats.length > 0 ? mats[0] : identity();
+			}
+			for (int i = 0; i < blendJoints.length; i++) {
+				float[] m = new float[16];
+				for (int k = 0; k < blendJoints[i].length; k++) {
+					int j = blendJoints[i][k];
+					float[] s = j < mats.length ? mats[j] : null;
+					if (s == null) {
+						continue;
+					}
+					float w = blendWeights[i][k];
+					for (int c = 0; c < 16; c++) {
+						m[c] += s[c] * w;
+					}
+				}
+				out[base + i] = m;
+			}
+			return out;
+		}
+
+		private static float[] identity() {
+			return new float[]{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
 		}
 
 		/**
@@ -68,8 +127,8 @@ public final class SkinnedModel {
 		 * (도시 위 거대한 아레스, 키클롭스 R_CY2/CY3/CYW 의 노란·분홍 큰 삼각형) [추정: 원작 VU1 팔레트 미해독, 데이터 일치].
 		 */
 		public boolean jointLocal(Skeleton sk) {
-			if (attachJoint == 0) {
-				return false;
+			if (attachJoint == 0 || skinProgram) {
+				return false; // vuOr 0x40 = 혼합 스키닝 프로그램 → 모델 공간 ({@link #skinProgram})
 			}
 			return sk == null || attachJoint >= sk.size() || sk.joints.get(attachJoint).hasInverseBind();
 		}
@@ -120,7 +179,8 @@ public final class SkinnedModel {
 							continue;
 						}
 						int attach = part.jointRefs().length > 0 ? part.jointRefs()[0] : 0;
-						Part sp = new Part(String.format("%s_p%d_o%d_i%d", mesh.name, p, k, inst), mat, attach);
+						Part sp = new Part(String.format("%s_p%d_o%d_i%d", mesh.name, p, k, inst), mat, attach, (o.vuOr & 0x40) != 0,
+								mesh.blendJoints, mesh.blendWeights, mesh.jointCount);
 						for (VertexBatch vb : o.batches) {
 							addBatch(sp, vb, o.jointMaps[inst], o.offset);
 						}
@@ -232,7 +292,7 @@ public final class SkinnedModel {
 		float[] b = new float[3];
 		for (Part p : parts) {
 			TriMesh.Sub s = new TriMesh.Sub(p.name, p.material);
-			float[][] skin = (sk != null ? p.jointLocal(sk) : p.jointLocal()) ? world : skinMats;
+			float[][] skin = p.palette((sk != null ? p.jointLocal(sk) : p.jointLocal()) ? world : skinMats);
 			s.hasNormal = false;
 			for (int i = 0; i < p.pos.size(); i++) {
 				float[] v = p.pos.get(i);

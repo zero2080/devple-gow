@@ -242,6 +242,28 @@ public final class LevelFx implements AutoCloseable {
 		env.setBackground(e.renderer().basic(), sky, e.window().height());
 	}
 
+	private long lastNeighbourNanos;
+
+	/**
+	 * 다른 슬롯 레벨로 그릴 때 ({@code LevelScene.renderNeighbourEffects}): 그 레벨 GO 의 FXC 이미터 파티클만 렌더 간격으로 진행하고 그린다 — 안개·FarClip·
+	 * 재질 시간은 현재 레벨 것 그대로. 원작은 두 슬롯 GO 가 한 세계에서 돈다 (ATHN05B 에서 본 05BB 홀 끝 횃불 불꽃, 43 §22) [확실: 두 슬롯 상주].
+	 */
+	public void renderNeighbourParticles(Engine e, Camera cam) {
+		long now = System.nanoTime();
+		float dt = lastNeighbourNanos == 0 ? 0 : Engine.LOCKSTEP ? Engine.TICK : Math.min(0.1f, (now - lastNeighbourNanos) / 1e9f);
+		lastNeighbourNanos = now;
+		if (!prewarmed) {
+			particles.prewarm(2f, cam.eye);
+			prewarmed = true;
+		}
+		particles.update(dt, cam.eye);
+		if (env.enabled()) {
+			particles.setForward(new Vector3f(cam.target).sub(cam.eye));
+			particles.render(cam, e.window().aspect());
+			e.renderer().basic().use();
+		}
+	}
+
 	/** 반투명 효과 패스 (물, 비, 파티클). */
 	public void renderEffects(Engine e, Camera cam) {
 		particles.setForward(new Vector3f(cam.target).sub(cam.eye));

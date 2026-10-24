@@ -234,15 +234,25 @@ public final class ArrowShots {
 		void hit(Shot shot, Vector3f at);
 	}
 
-	/** 맞을 수 있는 것들 (없는 것은 null). hero/onHero = 적이 쏜 화살의 대상 (영웅 몸 구). */
+	/**
+	 * 맞을 수 있는 것들 (없는 것은 null). hero/onHero = 적이 쏜 화살의 대상 (영웅 몸 구). otherBreakables / otherWorld / otherOnBreak = 다른 슬롯
+	 * 레벨의 부서지는 물체 — 원작은 두 슬롯 GO 가 한 세계에 있다 (ATHN05B 발리스타 볼트 → ATHN05BB BrkbDoor, 43 §22).
+	 */
 	public record Targets(Breakables breakables, ScriptWorld world, Consumer<String> onBreak, List<? extends EnemyFighter> enemies,
 						  Combatant attacker, LevelCollision col, LevelCollision otherCol, Platforms bodies, Platforms otherBodies,
-						  EffectSystem fx, Hittable hero, HeroHit onHero) {
+						  EffectSystem fx, Hittable hero, HeroHit onHero, Breakables otherBreakables, ScriptWorld otherWorld,
+						  Consumer<String> otherOnBreak) {
 
 		public Targets(Breakables breakables, ScriptWorld world, Consumer<String> onBreak, List<? extends EnemyFighter> enemies,
 					   Combatant attacker, LevelCollision col, LevelCollision otherCol, Platforms bodies, Platforms otherBodies,
 					   EffectSystem fx) {
 			this(breakables, world, onBreak, enemies, attacker, col, otherCol, bodies, otherBodies, fx, null, null);
+		}
+
+		public Targets(Breakables breakables, ScriptWorld world, Consumer<String> onBreak, List<? extends EnemyFighter> enemies,
+					   Combatant attacker, LevelCollision col, LevelCollision otherCol, Platforms bodies, Platforms otherBodies,
+					   EffectSystem fx, Hittable hero, HeroHit onHero) {
+			this(breakables, world, onBreak, enemies, attacker, col, otherCol, bodies, otherBodies, fx, hero, onHero, null, null, null);
 		}
 	}
 
@@ -275,6 +285,7 @@ public final class ArrowShots {
 		Vector3f dir = new Vector3f(d).div(len);
 		float bestT = Float.MAX_VALUE;
 		Breakables.Item bestBreak = null;
+		boolean bestOther = false;
 		EnemyFighter bestEnemy = null;
 		String why = null;
 		if (s.owner != null) { // 적이 쏜 화살: 영웅 몸 구 · 벽만
@@ -282,8 +293,11 @@ public final class ArrowShots {
 			heroStep(s, t, dir, len);
 			return;
 		}
-		if (t.breakables() != null) {
-			for (Breakables.Item it : t.breakables().items()) {
+		for (Breakables br : new Breakables[]{t.breakables(), t.otherBreakables()}) {
+			if (br == null) {
+				continue;
+			}
+			for (Breakables.Item it : br.items()) {
 				if (it.broken()) {
 					continue;
 				}
@@ -291,6 +305,7 @@ public final class ArrowShots {
 				if (u < bestT) {
 					bestT = u;
 					bestBreak = it;
+					bestOther = br == t.otherBreakables();
 					why = it.owner;
 				}
 			}
@@ -344,8 +359,10 @@ public final class ArrowShots {
 		}
 		Vector3f at = new Vector3f(s.prev).fma(bestT, dir);
 		if (bestBreak != null) {
-			if (t.breakables().damage(bestBreak, s.damage, t.world(), t.onBreak())) {
-				System.out.println("화살이 부숨: " + bestBreak.owner);
+			boolean broke = bestOther ? t.otherBreakables().damage(bestBreak, s.damage, t.otherWorld(), t.otherOnBreak())
+					: t.breakables().damage(bestBreak, s.damage, t.world(), t.onBreak());
+			if (broke) {
+				System.out.println("화살이 부숨: " + bestBreak.owner + (bestOther ? " (다른 슬롯)" : ""));
 			}
 		} else if (bestEnemy != null) {
 			Vector3f knock = new Vector3f(dir.x, 0, dir.z);

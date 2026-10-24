@@ -37,6 +37,7 @@ public final class ScriptWorld {
 	/** 스폰 재생성 최소 지연 (원작 0x29D93C 플래그 → max(delay, 0.25)). */
 	static final float RESPAWN_MIN_DELAY = 0.25f;
 	static final boolean TRACE = System.getProperty("gow.debug.script") != null;
+	static final boolean TRACE_EVENTS = System.getProperty("gow.debug.events") != null;
 
 	private record Pending(float time, long seq, ScriptEntity entity, ScriptActor sender) {
 	}
@@ -304,6 +305,7 @@ public final class ScriptWorld {
 			return;
 		}
 		player.moveTo(x, y, z);
+		System.arraycopy(player.pos, 0, player.prev, 0, 3); // 도착 틱은 선분 없음 (원작 0x1B3030 → 0x29D90C, 이전 점 = 도착점)
 		player.inside.clear();
 		if (seamless) {
 			for (Map.Entry<LevelData.PlacedVolume, List<ScriptEntity>> m : byVolume.entrySet()) {
@@ -692,6 +694,52 @@ public final class ScriptWorld {
 					}
 				}
 			}
+			if (a == player) {
+				sweep(a, v, m.getValue(), now);
+			}
+		}
+		System.arraycopy(a.pos, 0, a.prev, 0, 3);
+	}
+
+	/** 선분 통과 판정의 최대 이동 (한 틱, 유닛) — 이보다 멀면 순간이동으로 보고 건너뛴다 (원작 0x1B3030 → 0x29D90C 한 번 건너뜀) [근사: 거리 기준]. */
+	static final float SWEEP_MAX = 96f;
+	/** 선분 표본 간격 (유닛) — 데이터의 가장 얇은 센서 판 8 (LoadCheck 벽 · DeathZones 판) 보다 작게 [근사: 원작은 볼록 껍질 선분 교차 0x11E190]. */
+	static final float SWEEP_STEP = 2f;
+
+	/**
+	 * 영웅 선분 질의 (원작 0x1A7FEC: 점 질의 뒤 이전 점 → 지금 점 선분 0x11E190, 콜백 0x1A8508 = 접촉 목록에 없는 (GO, 영역) 엔티티에 진입 2 다음 곧바로
+	 * 이탈 4) [확실: 코드]: 한 틱에 얇은 판 (LoadCheck 벽 8 · DeathZones 판) 을 지나쳐도 진입·이탈 센서가 돈다. 엔진은 지난 점도 지금 점도 밖인데
+	 * 사이가 안을 지나는 경우만 본다 [근사: 이전 점이 안이던 볼륨을 다시 진입·이탈로 치는지는 0x11E190 의 껍질 판정 미해독이라 뺐다].
+	 */
+	private void sweep(ScriptActor a, LevelData.PlacedVolume v, List<ScriptEntity> ents, Set<Integer> now) {
+		float dx = a.pos[0] - a.prev[0], dy = a.pos[1] - a.prev[1], dz = a.pos[2] - a.prev[2];
+		if (Float.isNaN(dx)) {
+			return;
+		}
+		float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
+		if (len < 1e-2f || len > SWEEP_MAX) {
+			return;
+		}
+		if (!v.regions(a.prev[0], a.prev[1], a.prev[2]).isEmpty() || !now.isEmpty()) {
+			return;
+		}
+		int n = (int) Math.ceil(len / SWEEP_STEP);
+		Set<Integer> crossed = new java.util.HashSet<>();
+		for (int i = 1; i < n; i++) {
+			float t = (float) i / n;
+			crossed.addAll(v.regions(a.prev[0] + dx * t, a.prev[1] + dy * t, a.prev[2] + dz * t));
+		}
+		if (crossed.isEmpty()) {
+			return;
+		}
+		for (int pass = 0; pass <= 1; pass++) { // 진입 2 → 이탈 4 (0x1A8508)
+			for (ScriptEntity e : ents) {
+				int r = regionOf(e);
+				boolean hit = r == NO_REGION ? false : r < 0 ? true : crossed.contains(r);
+				if (hit && e.type() == pass && passes(e, a)) {
+					trigger(e, a);
+				}
+			}
 		}
 	}
 
@@ -742,6 +790,9 @@ public final class ScriptWorld {
 	/** 게임 → 스크립트 이벤트 (예: 501 동영상 끝 (인자 0 = 이름), 1048 붙잡기). 다음 틱에 처리. 이벤트 짝 월드가 있으면 거기에도. */
 	public void postEvent(int id, Object a0, Object a1, Object a2, ScriptActor sender) {
 		Event e = new Event(id, a0 == null ? 0 : a0, a1 == null ? 0 : a1, a2 == null ? 0 : a2, sender);
+		if (TRACE_EVENTS) { // -Dgow.debug.events: 게임 → 스크립트 이벤트와 인자 [엔진 전용 QA]
+			System.out.printf(java.util.Locale.ROOT, "[이벤트 %.2f] %d (%s, %s, %s)%n", time, id, e.a0(), e.a1(), e.a2());
+		}
 		events.add(e);
 		if (eventPeer != null) {
 			eventPeer.events.add(e);

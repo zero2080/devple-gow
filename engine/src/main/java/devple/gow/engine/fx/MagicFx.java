@@ -173,6 +173,15 @@ public final class MagicFx implements AutoCloseable {
 		}
 	}
 
+	/** WAD 파일 (다른 슬롯 레벨) 의 이펙트 GO 를 등록 — 이미 올린 경로면 아무것도 안 한다 (자산은 이펙트 시스템이 소유하고 닫는다). */
+	public void addWad(java.nio.file.Path wad) {
+		if (wad != null && addedPaths.add(wad.toAbsolutePath().normalize())) {
+			fx.add(wad);
+		}
+	}
+
+	private final java.util.Set<java.nio.file.Path> addedPaths = new java.util.HashSet<>();
+
 	/** 이펙트 SEM 소리 출력 (SoundManager). Sink 로 막 낸 같은 이름은 건너뛴다 (MedusaGaze 의 SND_MEDUSA_RAY_SHOT 등). */
 	public void setSounds(EffectSystem.Sounds out) {
 		fx.sounds = out == null ? null : new EffectSystem.Sounds() {

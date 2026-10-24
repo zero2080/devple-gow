@@ -76,6 +76,10 @@ ANM **타입 5** (원소 크기 1, 05 문서 §2.8 — 예전 문서의 "타입 
 - u8 가시성 (§1.3): `Animation.hiddenJoints(sk, t)` → `AnimatedModel.hiddenJoints` (파트가 쓰는 관절이 모두 숨김이면 그 파트를 그리지 않음), `EffectSystem.Effect.jointVisibility` (부서지는 물체만 켬). `AnimViewerScene` 도 적용.
 - 파편 물리 (§1.4): `fx/BreakDebris` — `Item.debrisPhysics` 면 `Effect.debris` 가 tick 마다 애니 관절 월드를 받아 조각 관절 행렬을 바꾼다. 충돌 = `MagicFx.Surface.cast` (레벨 충돌), dt = 프레임 (원작 1/60).
 - 오브: Brkb +0x28 OrbEmitter 번호 → `OrbDrops.rollNode("/TweakTemplates/OrbEmitter/900/")` → 즉시 획득 (다른 오브 드롭과 같은 근사). 900: Normal Weapon Prob 1, Weapon Template 50.
+- **다른 슬롯 레벨 물체** (2026-10-24, 43 §22): 원작은 두 슬롯 GO 가 한 세계에 있어 화살·공격이 이웃 슬롯 물체도 맞힌다 [확실: 두 슬롯 상주] →
+  `GameScene.otherBreakables` (이웃 LevelData · 이웃 튜닝) 를 영웅 공격 (`update`) 과 화살 (`ArrowShots.Targets.otherBreakables/otherWorld/otherOnBreak`) 에 같이 넣고,
+  부서지면 그 슬롯 스크립트 세계의 Marker 를 파괴 (DestructionSensor), 이웃 렌더에서 숨김 (`otherHidden`) · 충돌 끔, 파괴 연출은 그 WAD 를 처음 부술 때
+  이펙트 라이브러리에 올려 재생 (`MagicFx.addWad(Path)`) [근사: 처음 한 번 해석 지연]. ATHN05B 에서 쏜 발리스타 볼트가 ATHN05BB 홀 끝 BrkbDoor 를 부순다.
 - [미구현] Bonus 템플릿, 마법·발차기·물체 충돌 판정, Type 2/3, 지연 시점의 0x1D9700(#cb865a1c), 0x1DE6B8 의 정확한 렌더 모드.
 - 검증 `BreakDebrisTest`: 통·양동이·나무문 가시성 표 (몸 숨김·조각 보임·트랙 뒤 유지), 항아리 조각 9+ 개 — 루트 높이 바닥에서는 애니 그대로, 10 아래 바닥에서는 물리로 떨어져 바닥 위에 멈춤.
   스크린샷: `--anim gow-rom/ATHN03A.WAD MDL_breakBarrel2 breakbarrel2 ANM_breakbarrel2` 50 프레임 = 몸 사라지고 널빤지만, ARENA06 항아리 □ 2회 = 바닥 조각.

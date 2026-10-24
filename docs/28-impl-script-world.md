@@ -33,7 +33,8 @@ w.find("Start"); w.entity(id); w.slot(entity, "Delay");
 | 항목 | 결정 | 근거 |
 |------|------|------|
 | 볼륨 바인딩 | ESC 를 refs 에 가진 오브젝트의 첫 배치 = 소유 GO, 그 GO 의 ENV(kind 2) 볼륨 | 전 레벨 다중 배치 0, ENV ≤ 1 (`script:survey`) |
-| 진입 판정 | 매 틱 액터 위치가 `PlacedVolume.contains` 인지 이전 틱과 비교 | 원작 접촉 목록 비교(0x1A6030 / 0x1A60C8) 대체 |
+| 진입 판정 | 매 틱 액터 위치가 `PlacedVolume.contains` 인지 이전 틱과 비교 + 영웅은 지난 점 → 지금 점 선분이 건너뛴 볼륨에 진입·이탈 (`ScriptWorld.sweep`) | 원작 접촉 목록 비교(0x1A6030 / 0x1A60C8) · 선분 질의 0x1A7FFC → 0x11E190 (콜백 0x1A8508) |
+| 영웅 접촉점 | 영웅 모델 메시 [0] +0x34 관절 (hero_0 = 1 pelvis) 의 월드 위치 (`HeroRig.contactPoint`) | 0x1ADD74 / 0x1A6308 [확실] (2026-10-24, 43 §22) |
 | 슬롯 평가 | 핸들러가 있으면 매번 VM, 결과를 슬롯 타입으로 변환 | 원작 상수 접기와 결과 동일 |
 | 지연 큐 | (시각, 순번) 우선순위 큐. 같은 틱에 만기된 연쇄 발동은 같은 틱에 처리 | 0x303DB0 정렬 삽입 |
 | DestructionSensor 모드 3 | Filter 를 적용 | 데이터(DesSkel Filter 8 ↔ TauntEnemy 그룹 8). 원작 핸들러엔 검사 없음 → 통지 쪽에서 거른다고 추정 |
@@ -59,7 +60,14 @@ w.find("Start"); w.entity(id); w.slot(entity, "Delay");
 BallHull 수정: 평면 수를 헤더 0x38 이 아니라 hull 별 평면 수의 합으로 읽는다 (ENV_LoadCheckB 는 0x38 = 0 인데 평면 6개 → 이전엔 판정 불가).
 
 ## 6. 남은 일
-- 원작 접촉 판정 (0x1A7A78 → 0x11E5E8, 종류 0xFF9CE00F, 콜백 0x1A8410) 도 점이다: 오브젝트 관절 하나의 월드 위치 (0x1A6308 — 관절 = 모델 인스턴스 +0x86 ← 정의 +0x3C, 부품 슬롯이 있으면 그쪽 +0x34). 여기서는 발 위치 — 영웅이 어느 관절인지 미확인 (ATHN01F 출구 영역은 계단 위 +28 부터, 43 문서 자동 플레이)
+- ~~원작 접촉 판정 (0x1A7A78 → 0x11E5E8, 종류 0xFF9CE00F, 콜백 0x1A8410) 도 점이다: 오브젝트 관절 하나의 월드 위치 (0x1A6308 — 관절 = 모델 인스턴스 +0x86 ← 정의 +0x3C, 부품 슬롯이 있으면 그쪽 +0x34). 여기서는 발 위치 — 영웅이 어느 관절인지 미확인 (ATHN01F 출구 영역은 계단 위 +28 부터, 43 문서 자동 플레이)~~
+  → **해결 (2026-10-24, 43 §22)** [확실: 코드 · 데이터]: 영웅 스크립트 레코드 (0x1AC1F8 → 0x1AD978 → 0x1A5E18) 의 관절은 모델 부품 (0x330514) +0xE4 →
+  메시 [0] +0x34 (0x1ADD74) = hero_0 의 1 "pelvis" (바인드 높이 21.65). 매 프레임 점 = 그 관절 월드 위치 (0x1A6308) 로 점 질의 (0x1A7E78 → 0x11E5E8,
+  콜백 0x1A8410, 접촉 목록 0x1A6030 / 0x1A60C8) 와 지난 점 → 지금 점 선분 질의 (0x1A7FFC → 0x11E190, 콜백 0x1A8508: 접촉 목록에 없는 볼륨에 진입 2
+  다음 이탈 4) 를 한다. 순간이동 (0x1B3030 → 0x29D90C) 은 선분을 건너뛰고, 레코드 플래그 0x20 은 게임 시작 (0x21FD48 → 0x1AC348) 에서 끈다.
+  엔진: `HeroRig.contactPoint` → `ScriptWorld.tick` (이 레벨 · 이웃 슬롯), `ScriptWorld.sweep` (길이 96 이하, 지난 점·지금 점이 안이 아닌 볼륨만 [근사]).
+  바닥 위에서 시작하는 볼륨 (ATHN04A DoorHandleZone +6, ATHN05B HandleSeenGroup 494.75 – , MusicAth5E1Start) 과 손잡이를 따라 올라가는
+  ATHN05BB PresLiftDoor 공 (진행 42 % 에서 발이 빠졌다) 이 이것으로 맞는다.
 - Vis/Animator/Creator 효과를 실제 오브젝트에 적용 (GameScene 통합), 적 템플릿 대응
 - EventSensor 버튼 안내(PromptOnEnter), 세이브(메시지 7/8 발동 시각 저장)
 

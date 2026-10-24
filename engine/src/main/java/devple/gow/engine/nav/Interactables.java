@@ -59,6 +59,8 @@ public final class Interactables {
 	static final int PUSH_KEEP_AT_END = 0x4FF66D39, PUSH_RESET_SNAP = 0x5529319F;
 	/** Push 템플릿 +0x28 상자 최대 속도 (#95b8bfb6, 0x216470) [확실]. */
 	public static final int PUSH_SLIDE_MAX = 0x95B8BFB6;
+	/** Push 템플릿 +0x20 상자 몸 높이 (m, #044ed4a7, 0x216430 → 0x20F9F8) [확실]. */
+	public static final int PUSH_BODY_HEIGHT = 0x044ED4A7;
 
 	public static final class Item {
 		public final Kind kind;
@@ -157,6 +159,12 @@ public final class Interactables {
 		 */
 		public int weight;
 		public float slideMax = 5f;
+		/**
+		 * 밀기 상자 몸 반 너비 / 높이 (유닛) — Push 템플릿 +0x1C "Radius" × 16 / +0x20 (#044ed4a7) × 16 (0x20F9F8 → 몸 +0x120 = (2R, H, 2R)·16).
+		 * 원작 상자 벽 판정 0x210AE8 은 이 상자 둘레 (모서리·변 가운데) 의 점마다 벽 질의 0x1E1F28 을 한다 [확실: 코드 / 근사: 엔진은 점 구 막기].
+		 * 0 = 템플릿 없음 (예전 구 반경 0.8·r). ATHN05B 발리스타 BallistaPlatfor (Push 025) 1.76 → 28.2.
+		 */
+		public float boxHalf, boxHeight;
 		public final Vector3f vel = new Vector3f();
 		public boolean twoWay;
 		public float detentTol = 0.03f;
@@ -332,6 +340,10 @@ public final class Interactables {
 					if (!lever && tw != null) {
 						it.weight = tw.raw(node, "Weight").isPresent() ? tw.raw(node, "Weight").getAsInt() & 0xffff : 0;
 						it.slideMax = Float.intBitsToFloat(tw.rawHash(node, PUSH_SLIDE_MAX).orElse(Float.floatToIntBits(5f)));
+						// 상자 몸 크기 (0x20F9F8: +0x120 = (Radius·16·2, #044ed4a7·16, Radius·16·2), 0x210AE8 가 그 ½ 로 둘레 점을 잡는다) [확실: 코드]
+						float rad = tw.f(node, "Radius", 0f);
+						it.boxHalf = rad > 0 ? rad * NavTuning.UNITS_PER_METER : 0f;
+						it.boxHeight = Float.intBitsToFloat(tw.rawHash(node, PUSH_BODY_HEIGHT).orElse(Float.floatToIntBits(2f))) * NavTuning.UNITS_PER_METER;
 					}
 					if (lever) {
 						float len = animLength(lv, anm, null, -1);

@@ -65,6 +65,11 @@ public final class Platforms {
 		public boolean solid = true;
 		/** TAndF 물리 들어 올림 높이 (처음 자리 위로, {@link Platforms#lift}). */
 		float lift;
+		/**
+		 * 밀린·실려 간 상자의 처음 자리에서의 변환 (행벡터 4×4, 관절 월드 = 처음 · place) — 영웅이 민 이동 ({@link Platforms#shift}, 원작 0x211A10 이
+		 * GO 위치를 옮김) 과 발판 관절에 실린 yaw 회전·이동 ({@link Platforms#ride}, 원작 0x1E6248).
+		 */
+		float[] place = Mat4.identity();
 
 		/** 인스턴스 월드 행렬 (행벡터, {@code GoInstance.matrix()}) — Animator 이펙트 기준 (GameScene.startAnimatorEffects). */
 		public float[] instanceMatrix() {
@@ -152,8 +157,8 @@ public final class Platforms {
 		void applyLift() {
 			// 0 으로 내려와도 단위 이동을 남긴다 — 렌더 자세 (LevelScene.poseInstance) 는 덮어쓸 때까지 남으므로 follows() 로 다시 준다
 			// (1015 리셋·놓음으로 떨어진 게이트가 들린 자세로 그려지던 것, 43 문서 §19)
-			float[] f = Mat4.identity();
-			f[13] = lift; // 행벡터: 이동 = 12..14
+			float[] f = place.clone();
+			f[13] += lift; // 행벡터: 이동 = 12..14
 			follow = f;
 			float[][] old = joints;
 			if (anim != null) {
@@ -169,7 +174,7 @@ public final class Platforms {
 			followMoved = true;
 		}
 
-		private static boolean nearIdentity(float[] m) {
+		static boolean nearIdentity(float[] m) {
 			for (int i = 0; i < 16; i++) {
 				if (Math.abs(m[i] - (i % 5 == 0 ? 1 : 0)) > 1e-4f) {
 					return false;
@@ -638,6 +643,83 @@ public final class Platforms {
 		return true;
 	}
 
+	/**
+	 * 영웅이 민 상자 (PushPull Type 0, 원작 0x211A10 이 GO 위치를 옮김) 를 (dx, dy, dz) 만큼 — 렌더 자세·CDV 충돌·Marker·자식 GO (부모 링크) 가 같이 간다.
+	 * ATHN05B 발리스타 BallistaPlatfor 의 크랭크 gobiggun1crank · 팔 gobiggun1anim 은 부모 링크 (0x58) 로 붙어 있다 [확실: 데이터]. 예전 엔진은 상자
+	 * 위치 (Interactables.Item.pos) 와 Marker 만 옮겨 상자가 제자리에 그려졌다 (43 문서 §22).
+	 *
+	 * @return 몸이 있으면 true
+	 */
+	public boolean shift(String owner, float dx, float dy, float dz) {
+		Body b = body(owner);
+		if (b == null || b.parent != null || dx == 0 && dy == 0 && dz == 0) {
+			return false;
+		}
+		b.place[12] += dx;
+		b.place[13] += dy;
+		b.place[14] += dz;
+		b.applyLift();
+		return true;
+	}
+
+	/**
+	 * 발판 관절에 실린 몸 (밀기 상자) 을 그 관절의 이번 틱 움직임 d (행벡터, 월드 → 월드) 만큼 — 렌더·CDV·자식 GO 가 같이 간다 ({@link #ride(Support, Vector3f)}
+	 * 이 만든 yaw 만 남긴 변환). 자식 몸 (부모 링크) 은 같은 틱에 다시 따라가게 한다.
+	 *
+	 * @return 몸이 있으면 true
+	 */
+	public boolean ride(String owner, float[] d) {
+		Body b = body(owner);
+		if (b == null || b.parent != null) {
+			return false;
+		}
+		b.place = Mat4.mul(b.place, d);
+		b.applyLift();
+		for (Body c : bodies) {
+			if (c.parent == b) {
+				c.updateFollow(); // 크랭크·팔 (gobiggun1crank / gobiggun1anim) 이 같은 틱에 따라옴
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * 받침 s 의 관절이 이번 틱 움직였으면 그 위에 실린 점 pivot 을 옮기는 변환 (행벡터) — 원작 0x1E6248 [확실: 코드]: 지면 GO (+0x24C) 관절 (+0x250) 의
+	 * 지금 행렬 × 지난 행렬⁻¹ (+0x1C0, 0x185048) 에서 위 = (0, 1, 0) 로 다시 직교화해 yaw 만 남기고 (0x1E6424 – 0x1E64A4), 몸의 회전 행 (+0x50…) 과
+	 * 위치를 그 변환으로 돌리고 옮긴다. 상자 갱신 0x212398 (Type 0/7/8, 0x21252C) 과 영웅 0x1EBD78 이 매 틱 부른다. 여기서는 받침 관절의 전체
+	 * 변환으로 pivot 의 새 자리를 구하고 회전은 yaw 만 쓴다.
+	 *
+	 * @return 변환 (움직이지 않았으면 null)
+	 */
+	public static float[] ride(Support s, Vector3f pivot) {
+		if (s == null || s.body.prev == s.body.joints || s.joint >= s.body.prev.length) {
+			return null;
+		}
+		float[] d = Mat4.mul(Mat4.invertAffine(s.body.prev[s.joint]), s.body.joints[s.joint]);
+		if (Body.nearIdentity(d)) {
+			return null;
+		}
+		float a = d[8], c = d[10], n = (float) Math.sqrt(a * a + c * c);
+		if (n < 1e-6f) {
+			return null;
+		}
+		a /= n;
+		c /= n;
+		float[] r = Mat4.identity(); // 행 0 = 위 × 행 2, 행 1 = (0, 1, 0), 행 2 = (a, 0, c)
+		r[0] = c;
+		r[2] = -a;
+		r[8] = a;
+		r[10] = c;
+		float[] to = new float[3];
+		Mat4.transformPoint(d, pivot.x, pivot.y, pivot.z, to);
+		float[] rot = new float[3];
+		Mat4.transformPoint(r, pivot.x, pivot.y, pivot.z, rot);
+		r[12] = to[0] - rot[0];
+		r[13] = to[1] - rot[1];
+		r[14] = to[2] - rot[2];
+		return r;
+	}
+
 	/** 몸 owner 의 이름이 joint 인 관절의 지금 월드 행렬 (행벡터, 대소문자 무시). 없으면 null. */
 	public float[] jointWorld(String owner, String joint) {
 		Body b = body(owner);
@@ -976,10 +1058,18 @@ public final class Platforms {
 
 	/** 가장 높은 발판 윗면 (없으면 null). */
 	public Support floor(float x, float y, float z, float drop) {
+		return floor(x, y, z, drop, java.util.Set.of());
+	}
+
+	/** 가장 높은 발판 윗면 — skip 몸 (밀기 상자 자신과 그 자식) 은 빼고 (없으면 null). */
+	public Support floor(float x, float y, float z, float drop, Collection<String> skip) {
 		Support best = null;
 		int[] j = new int[1];
 		long[] at = new long[1];
 		for (Body b : bodies) {
+			if (!skip.isEmpty() && skip.contains(b.owner)) {
+				continue;
+			}
 			float t = b.top(x, y, z, drop, j, at);
 			if (!Float.isNaN(t) && (best == null || t > best.y)) {
 				best = new Support(t, b, j[0], at[0]);

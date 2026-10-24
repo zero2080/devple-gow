@@ -149,7 +149,7 @@ public final class SceneNav {
 		navWorld = new NavWorld(col);
 		navWorld.ropes().addAll(NavRope.of(level));
 		items = Interactables.of(level, levelTweaks);
-		navWorld.setPlatforms(Platforms.of(level, animatorOwners(world), posedOwners(items)));
+		navWorld.setPlatforms(Platforms.of(level, animatorOwners(world), bodyOwners(items)));
 		registerMaterialAnimators(world, navWorld.platforms());
 		navigator = new HeroNavigator(hero.ctl, navWorld, new NavAnims(hero.tweaks));
 		navigator.setItems(items);
@@ -185,7 +185,13 @@ public final class SceneNav {
 
 			@Override
 			public void pushMoved(Interactables.Item it, Vector3f d) {
-				(neighbour != null && neighbourItems.items().contains(it) ? neighbour : world).moveOwnerBy(it.owner, d.x, d.y, d.z);
+				boolean other = neighbour != null && neighbourItems.items().contains(it);
+				(other ? neighbour : world).moveOwnerBy(it.owner, d.x, d.y, d.z);
+				Platforms ps = other ? neighbourPlatforms : navWorld.platforms();
+				if (ps.shift(it.owner, d.x, d.y, d.z)) { // 상자 몸·자식 GO 도 (렌더·충돌)
+					Platforms.Body b = ps.body(it.owner);
+					Interactables.refreshHandles(it, b.skeleton(), b.joints()); // 손잡이 (handle1/2) 도 같이 — 다시 잡을 수 있게
+				}
 			}
 
 			@Override
@@ -299,7 +305,7 @@ public final class SceneNav {
 			Interactables ni = Interactables.of(data, otherTweaks != null ? otherTweaks : tweaks);
 			Set<String> owners = animatorOwners(nw);
 			Set<String> posed = new HashSet<>(owners);
-			posed.addAll(posedOwners(ni)); // 이웃 R1/R2 오브젝트도 자세·충돌을 갖는 몸으로 (닫힌 창살이 막는다)
+			posed.addAll(bodyOwners(ni)); // 이웃 R1/R2 오브젝트 (밀기 상자 포함) 도 자세·충돌을 갖는 몸으로 (닫힌 창살이 막는다)
 			neighbourPlatforms = Platforms.of(data, owners, posed);
 			registerMaterialAnimators(nw, neighbourPlatforms);
 			navWorld.setNeighbourPlatforms(neighbourPlatforms); // 이웃 문·발판 충돌도 자세대로 (43 §13.8 [근사] 해소)
@@ -599,6 +605,20 @@ public final class SceneNav {
 		return b != null;
 	}
 
+	/**
+	 * 발판 몸 ({@link Platforms}) 으로 만들 R1/R2 오브젝트: {@link #posedOwners} + 밀기 상자 (PushPull Type 0) — 밀린 상자는 몸을 옮겨
+	 * ({@link Platforms#shift}) 렌더·CDV·자식 GO 가 따라가게 한다 (원작 0x211A10 은 GO 위치 자체를 옮긴다).
+	 */
+	public static java.util.Set<String> bodyOwners(Interactables items) {
+		java.util.Set<String> out = posedOwners(items);
+		for (Interactables.Item it : items.items()) {
+			if (it.kind == Interactables.Kind.PUSH) {
+				out.add(it.owner);
+			}
+		}
+		return out;
+	}
+
 	/** 진행 시간으로 자세를 갖는 R1 오브젝트 (레버·크랭크·CSM 문·TAndF): 오브젝트 애니 = 과제 진행 시간. 밀기 상자는 위치로 움직인다. */
 	public static java.util.Set<String> posedOwners(Interactables items) {
 		java.util.Set<String> out = new java.util.HashSet<>();
@@ -684,10 +704,22 @@ public final class SceneNav {
 		return it.kind == Interactables.Kind.LIFT && it.slide && it.liftHeight > 0;
 	}
 
-	/** 한 틱: 발판 애니 → Marker 위치, 이웃 스크립트. */
+	/** 한 틱: 발판 애니 → Marker 위치, 이웃 스크립트 (영웅 볼륨 접촉점 = 발). */
 	public void update(float dt, Vector3f hero) {
+		update(dt, hero, hero);
+	}
+
+	/**
+	 * 한 틱: 발판 애니 → Marker 위치, 이웃 스크립트.
+	 * @param contact 스크립트 볼륨 접촉점 (영웅 pelvis — {@code HeroRig.contactPoint}, 원작 0x1ADD74 / 0x1A6308)
+	 */
+	public void update(float dt, Vector3f hero, Vector3f contact) {
 		navWorld.platforms().update(dt);
 		neighbourPlatforms.update(dt);
+		rideBoxes(items, navWorld.platforms(), world);
+		if (neighbour != null) {
+			rideBoxes(neighbourItems, neighbourPlatforms, neighbour);
+		}
 		poseItems(items, navWorld.platforms(), world, dt);
 		if (neighbour != null) {
 			poseItems(neighbourItems, neighbourPlatforms, neighbour, dt); // 이웃 TAndF 창살·해치 자세 = 진행 (렌더는 다른 슬롯 자세로)
@@ -709,7 +741,7 @@ public final class SceneNav {
 		}
 		if (neighbour != null) {
 			try {
-				neighbour.tick(dt, hero.x, hero.y, hero.z);
+				neighbour.tick(dt, contact.x, contact.y, contact.z);
 			} catch (RuntimeException ex) {
 				System.out.println("이웃 레벨 스크립트 오류: " + ex);
 				neighbour = null;
@@ -717,6 +749,37 @@ public final class SceneNav {
 			}
 		}
 	}
+
+	/**
+	 * 발판 관절 위의 밀기 상자를 그 관절과 같이 돌리고 옮긴다 — 원작 상자 갱신 0x212398 (Type 0/7/8) 이 매 틱 0x1E6248 로 지면 GO 관절 (바닥 탐침
+	 * 0x1E3298 이 +0x24C / +0x250 에 적음) 의 움직임을 yaw 만 남겨 몸에 곱한다 [확실: 코드]. ATHN05B 홀의 둥근 판 = goladder 관절 15 group2920
+	 * (레버 lever4Ladder 602 → ladder-AnimDown/AnimUp, act "ladder" 3.67 초에 yaw 0 → 90°) 위에 발리스타 BallistaPlatfor 를 올리고 레버를 당기면
+	 * 90° 돌아간다 (영상 7836–7840, 두 번 돌려 처음 남쪽 → 북쪽 문). 예전 엔진은 상자가 발판을 따라가지 않아 볼트가 남쪽 벽에만 날아가
+	 * BrkbDoor 를 깰 수 없었다 (43 §22).
+	 */
+	public static void rideBoxes(Interactables its, Platforms ps, ScriptWorld w) {
+		if (its == null || ps == null) {
+			return;
+		}
+		for (Interactables.Item it : its.items()) {
+			if (it.kind != Interactables.Kind.PUSH) {
+				continue;
+			}
+			Set<String> self = ps.family(it.owner);
+			Platforms.Support s = ps.floor(it.pos.x, it.pos.y + 16, it.pos.z, 32, self);
+			float[] d = Platforms.ride(s, it.pos);
+			if (d == null || !ps.ride(it.owner, d)) {
+				continue;
+			}
+			float[] to = new float[3];
+			devple.gow.tools.anim.Mat4.transformPoint(d, it.pos.x, it.pos.y, it.pos.z, to);
+			if (w != null) {
+				w.moveOwnerBy(it.owner, to[0] - it.pos.x, to[1] - it.pos.y, to[2] - it.pos.z);
+			}
+			it.pos.set(to[0], to[1], to[2]);
+		}
+	}
+
 
 	/** 몸마다 마지막으로 볼륨·Marker 에 반영한 관절 배열 (Body.pose 는 틱마다 새 배열 — 같은 배열이면 자세 그대로). */
 	private final java.util.Map<Platforms.Body, float[][]> volumePosed = new java.util.IdentityHashMap<>();

@@ -95,6 +95,11 @@ public final class NavWorld {
 
 	/** 가장 높은 바닥 (정적 + 발판). 없으면 null. 정적 면은 GeneralGuide 를 뺀다 (0x1E3298 의 0x1010042) [확실]. */
 	public Floor floor(float x, float y, float z, float drop) {
+		return floor(x, y, z, drop, java.util.Set.of());
+	}
+
+	/** {@link #floor(float, float, float, float)} 에서 skip 몸 (밀기 상자 자신과 그 자식 GO 의 CDV) 은 빼고 — 상자가 제 몸 윗면에 올라서지 않게. */
+	public Floor floor(float x, float y, float z, float drop, java.util.Collection<String> skip) {
 		Floor best = null;
 		for (LevelCollision c : statics) {
 			LevelCollision.Floor f = c.floorAt(x, y, z, drop, t -> (t.attrs() & FLOOR_EXCLUDE_STATIC) == 0);
@@ -103,7 +108,7 @@ public final class NavWorld {
 			}
 		}
 		for (Platforms ps : new Platforms[]{platforms, neighbour}) {
-			Platforms.Support s = ps.floor(x, y, z, drop);
+			Platforms.Support s = ps.floor(x, y, z, drop, skip);
 			if (s != null && (best == null || s.y() > best.y)) {
 				best = new Floor(s.y(), s.attrs(), s); // 윗면 평면 재질의 표면 속성 (CDV 재질 엔트리 = 시트 표면 레코드) // 윗면 평면 재질의 표면 속성 (CDV 재질 엔트리 = 시트 표면 레코드)
 			}
@@ -124,6 +129,13 @@ public final class NavWorld {
 			}
 		}
 		return best;
+	}
+
+	/** owner 몸과 부모·자식 링크로 묶인 몸 이름 (두 슬롯, {@link Platforms#family}). */
+	public java.util.Set<String> family(String owner) {
+		java.util.Set<String> out = new java.util.HashSet<>(platforms.family(owner));
+		out.addAll(neighbour.family(owner));
+		return out;
 	}
 
 	public float groundHeight(float x, float y, float z, float drop) {
