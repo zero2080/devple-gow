@@ -166,31 +166,58 @@ public final class BallHull {
 
 	/** 로컬 좌표 p 가 볼륨 안인지 (ball 또는 hull). */
 	public boolean contains(float x, float y, float z) {
-		for (float[] b : balls) {
-			float dx = x - b[0], dy = y - b[1], dz = z - b[2];
-			if (dx * dx + dy * dy + dz * dz <= b[3] * b[3]) {
+		float[] p = {x, y, z};
+		return contains(j -> p);
+	}
+
+	/**
+	 * 조각마다 그 조각 관절 공간의 점 ({@code local.apply(관절)}) 으로 — 관절 0 이 아닌 조각이 있는 볼륨 ({@link LevelData.PlacedVolume#partInverse}).
+	 */
+	public boolean contains(java.util.function.IntFunction<float[]> local) {
+		for (int i = 0; i < balls.size(); i++) {
+			if (inBall(i, local.apply(jointOfBall(i)))) {
 				return true;
 			}
 		}
-		return find(x, y, z) >= 0;
+		return find(local) >= 0;
 	}
 
 	/** 로컬 좌표 p 를 포함하는 ball/hull 의 영역 번호들 (밖이면 빈 집합). */
 	public java.util.Set<Integer> regionsAt(float x, float y, float z) {
+		float[] p = {x, y, z};
+		return regionsAt(j -> p);
+	}
+
+	/** {@link #regionsAt(float, float, float)} 의 조각 관절별 점 판. */
+	public java.util.Set<Integer> regionsAt(java.util.function.IntFunction<float[]> local) {
 		java.util.Set<Integer> out = new java.util.TreeSet<>();
 		for (int i = 0; i < balls.size(); i++) {
-			float[] b = balls.get(i);
-			float dx = x - b[0], dy = y - b[1], dz = z - b[2];
-			if (dx * dx + dy * dy + dz * dz <= b[3] * b[3]) {
+			if (inBall(i, local.apply(jointOfBall(i)))) {
 				out.add(ballRegion[i]);
 			}
 		}
 		for (int h = 0; h < hulls.size(); h++) {
-			if (insideHull(h, x, y, z)) {
+			float[] p = local.apply(jointOfHull(h));
+			if (insideHull(h, p[0], p[1], p[2])) {
 				out.add(hullRegion[h]);
 			}
 		}
 		return out;
+	}
+
+	private boolean inBall(int i, float[] p) {
+		float[] b = balls.get(i);
+		float dx = p[0] - b[0], dy = p[1] - b[1], dz = p[2] - b[2];
+		return dx * dx + dy * dy + dz * dz <= b[3] * b[3];
+	}
+
+	/** 조각이 붙은 관절 (off[6], 없으면 0). */
+	public int jointOfHull(int h) {
+		return h < hullJoint.length ? Math.max(0, hullJoint[h]) : 0;
+	}
+
+	public int jointOfBall(int b) {
+		return b < ballJoint.length ? Math.max(0, ballJoint[b]) : 0;
 	}
 
 	/** 서로 다른 영역 ID 개수. */
@@ -222,25 +249,26 @@ public final class BallHull {
 
 	/** 로컬 좌표 p 가 영역 region 의 ball/hull 안인지. */
 	public boolean contains(float x, float y, float z, int region) {
+		float[] p = {x, y, z};
+		return contains(j -> p, region);
+	}
+
+	/**
+	 * {@link #contains(float, float, float, int)} 의 조각 관절별 점 판. 평면 1 개 hull 은 구 ({@link #insideHull}) — 예전 영역 판정은 그 값을 평면으로
+	 * 읽어 반공간이 되었다 (영역 질의만, regionsAt 은 이미 구).
+	 */
+	public boolean contains(java.util.function.IntFunction<float[]> local, int region) {
 		for (int i = 0; i < balls.size(); i++) {
-			float[] b = balls.get(i);
-			float dx = x - b[0], dy = y - b[1], dz = z - b[2];
-			if (ballRegion[i] == region && dx * dx + dy * dy + dz * dz <= b[3] * b[3]) {
+			if (ballRegion[i] == region && inBall(i, local.apply(jointOfBall(i)))) {
 				return true;
 			}
 		}
 		for (int h = 0; h < hulls.size(); h++) {
-			if (hullRegion[h] != region || hulls.get(h).planes.isEmpty()) {
+			if (hullRegion[h] != region) {
 				continue;
 			}
-			boolean in = true;
-			for (float[] p : hulls.get(h).planes) {
-				if (p[0] * x + p[1] * y + p[2] * z + p[3] > 0) {
-					in = false;
-					break;
-				}
-			}
-			if (in) {
+			float[] p = local.apply(jointOfHull(h));
+			if (insideHull(h, p[0], p[1], p[2])) {
 				return true;
 			}
 		}
@@ -249,8 +277,15 @@ public final class BallHull {
 
 	/** 로컬 좌표 p 를 포함하는 첫 hull 번호, 없으면 -1. */
 	public int find(float x, float y, float z) {
+		float[] p = {x, y, z};
+		return find(j -> p);
+	}
+
+	/** {@link #find(float, float, float)} 의 조각 관절별 점 판. */
+	public int find(java.util.function.IntFunction<float[]> local) {
 		for (int h = 0; h < hulls.size(); h++) {
-			if (insideHull(h, x, y, z)) {
+			float[] p = local.apply(jointOfHull(h));
+			if (insideHull(h, p[0], p[1], p[2])) {
 				return h;
 			}
 		}

@@ -34,6 +34,15 @@ public final class SaveGame {
 	public final Map<Weapon, int[]> weapons = new TreeMap<>();
 	/** ESC GlobalData 변수 (id → 값 문자열 "타입:값"). */
 	public final Map<Integer, String> globalData = new TreeMap<>();
+	/**
+	 * 레벨 기억 표 (원작 World_Serialize 0x1B3E48 끝: 표 칸마다 이름 10 바이트 + 덩어리) — 칸 순서, 레벨별 LevelData ("타입:값") · 만들어 둔 Creator
+	 * ({@link GameSession#levelMemory}, 43 §21).
+	 */
+	public final java.util.List<String> levelTable = new java.util.ArrayList<>();
+	public final Map<String, Map<Integer, String>> levelData = new TreeMap<>();
+	public final Map<String, java.util.List<String>> levelCreated = new TreeMap<>();
+	/** 레벨별 오브젝트 → "Vis 엔티티|값,값,…" ({@link devple.gow.engine.script.ScriptWorld.Memory#vis}). */
+	public final Map<String, Map<String, String>> levelVis = new TreeMap<>();
 
 	public static Path dir() {
 		return Path.of(System.getProperty("user.home"), "Library", "Application Support", "devple-gow");
@@ -70,6 +79,22 @@ public final class SaveGame {
 			g.weapons.put(w, new int[]{p.level.get(w), p.invested.get(w)});
 		}
 		s.scriptHost.globalData().forEach((k, v) -> g.globalData.put(k, encode(v)));
+		g.levelTable.addAll(s.levelTable());
+		s.levelMemory.forEach((lv, m) -> {
+			Map<Integer, String> d = new TreeMap<>();
+			m.levelData().forEach((k, v) -> d.put(k, encode(v)));
+			g.levelData.put(lv, d);
+			g.levelCreated.put(lv, new java.util.ArrayList<>(m.created()));
+			Map<String, String> vis = new TreeMap<>();
+			m.vis().forEach((o, v) -> {
+				StringBuilder sb = new StringBuilder(m.visBy().getOrDefault(o, "")).append('|');
+				for (int i = 0; i < v.length; i++) {
+					sb.append(i > 0 ? "," : "").append(v[i]);
+				}
+				vis.put(o, sb.toString());
+			});
+			g.levelVis.put(lv, vis);
+		});
 		return g;
 	}
 
@@ -100,6 +125,32 @@ public final class SaveGame {
 		s.costume = costume;
 		s.playTime = playTime;
 		globalData.forEach((k, v) -> s.scriptHost.globalData().put(k, decode(v)));
+		Map<String, devple.gow.engine.script.ScriptWorld.Memory> mem = new java.util.LinkedHashMap<>();
+		for (String lv : levelTable) {
+			Map<Integer, String> d = levelData.get(lv);
+			if (d == null) {
+				continue;
+			}
+			Map<Integer, Object> vals = new java.util.HashMap<>();
+			d.forEach((k, v) -> vals.put(k, decode(v)));
+			Map<String, int[]> vis = new java.util.LinkedHashMap<>();
+			Map<String, String> by = new java.util.HashMap<>();
+			levelVis.getOrDefault(lv, Map.of()).forEach((o, enc) -> {
+				int bar = enc.indexOf('|');
+				String[] q = enc.substring(bar + 1).split(",");
+				int[] v = new int[q.length];
+				for (int i = 0; i < q.length; i++) {
+					v[i] = Integer.parseInt(q[i]);
+				}
+				vis.put(o, v);
+				if (bar > 0) {
+					by.put(o, enc.substring(0, bar));
+				}
+			});
+			mem.put(lv, new devple.gow.engine.script.ScriptWorld.Memory(vals,
+					new java.util.LinkedHashSet<>(levelCreated.getOrDefault(lv, java.util.List.of())), vis, by));
+		}
+		s.restoreLevelTable(levelTable, mem);
 	}
 
 	public void write(Path file) throws IOException {
@@ -124,6 +175,10 @@ public final class SaveGame {
 		pr.setProperty("playTime", Float.toString(playTime));
 		weapons.forEach((w, v) -> pr.setProperty("weapon." + w.name(), v[0] + "," + v[1]));
 		globalData.forEach((k, v) -> pr.setProperty("global." + k, v));
+		pr.setProperty("levelTable", String.join(",", levelTable));
+		levelData.forEach((lv, d) -> d.forEach((k, v) -> pr.setProperty("level." + lv + "." + k, v)));
+		levelCreated.forEach((lv, c) -> pr.setProperty("levelCreated." + lv, String.join(",", c)));
+		levelVis.forEach((lv, m) -> m.forEach((o, v) -> pr.setProperty("levelVis." + lv + "." + o, v)));
 		Files.createDirectories(file.getParent());
 		try (Writer wr = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
 			pr.store(wr, "devple-gow save");
@@ -170,7 +225,21 @@ public final class SaveGame {
 		for (String k : pr.stringPropertyNames()) {
 			if (k.startsWith("global.")) {
 				g.globalData.put(Integer.parseInt(k.substring(7)), pr.getProperty(k));
+			} else if (k.startsWith("level.")) {
+				int dot = k.lastIndexOf('.');
+				g.levelData.computeIfAbsent(k.substring(6, dot), x -> new TreeMap<>()).put(Integer.parseInt(k.substring(dot + 1)), pr.getProperty(k));
+			} else if (k.startsWith("levelVis.")) {
+				String rest = k.substring(9);
+				int dot = rest.indexOf('.');
+				g.levelVis.computeIfAbsent(rest.substring(0, dot), x -> new TreeMap<>()).put(rest.substring(dot + 1), pr.getProperty(k));
+			} else if (k.startsWith("levelCreated.")) {
+				String v = pr.getProperty(k);
+				g.levelCreated.put(k.substring(13), v.isEmpty() ? new java.util.ArrayList<>() : new java.util.ArrayList<>(java.util.List.of(v.split(","))));
 			}
+		}
+		String lt = pr.getProperty("levelTable", "");
+		if (!lt.isEmpty()) {
+			g.levelTable.addAll(java.util.List.of(lt.split(",")));
 		}
 		return g;
 	}

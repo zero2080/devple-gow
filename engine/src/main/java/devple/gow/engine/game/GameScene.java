@@ -667,6 +667,11 @@ public final class GameScene implements Scene {
 			// 넘겨 쓰는 이웃 세계가 세션 호스트를 쓰고 있으면 (떠나온 레벨이 그 호스트로 만든 현재 세계) 새 호스트 — LevelData 가 섞이지 않게
 			boolean hostBusy = keptOther != null && keptOther.host() == session.scriptHost;
 			world = new ScriptWorld(level.data(), hostBusy ? devple.gow.engine.script.ScriptHost.neighbour(session.scriptHost) : session.scriptHost, listener());
+			ScriptWorld.Memory mem = session.enterLevel(levelName); // 레벨 기억 (원작 0x1B38A8 → 0x1B4618, GameSession.levelMemory)
+			if (mem != null) {
+				world.restore(mem);
+				System.out.println("레벨 기억으로 되살림: " + levelName + " (LevelData " + mem.levelData().size() + ", Creator " + mem.created().size() + ")");
+			}
 		}
 		nav = new SceneNav(level.data(), col, hero, world, session.scriptHost, orbTweaks, navHost());
 		if (AutoPlay.ON) {
@@ -1261,6 +1266,16 @@ public final class GameScene implements Scene {
 			public void orbs(String emitter, Vector3f at) {
 				emitOrbs(orbTweaks.findTemplate("/TweakTemplates/OrbEmitter/", emitter), at);
 			}
+
+			@Override
+			public ScriptWorld.Memory levelMemory(String level) {
+				return session.enterLevel(level);
+			}
+
+			@Override
+			public void levelLeft(String level, ScriptWorld w) {
+				session.rememberLevel(level, w);
+			}
 		};
 	}
 
@@ -1670,12 +1685,21 @@ public final class GameScene implements Scene {
 		return o instanceof Number n ? n.floatValue() : 0f;
 	}
 
+	/** 씬을 떠난다: 두 슬롯 세계를 레벨 기억에 (이음으로 넘겨 쓰는 세계는 그대로 이어지고, 버려지는 세계는 다시 읽을 때 되살아난다 — GameSession.levelMemory). */
+	private void rememberLevels() {
+		session.rememberLevel(levelName, world);
+		if (nav != null && nav.neighbour() != null && otherName != null) {
+			session.rememberLevel(otherName, nav.neighbour());
+		}
+	}
+
 	private void goToLevel(String wad, String entryName) {
 		session.warpLeft = null; // LoadWad: 다른 슬롯이 새 레벨로 바뀐다
 		if (leaving) {
 			return;
 		}
 		leaving = true;
+		rememberLevels();
 		System.out.println("레벨 전환 → " + wad + (entryName != null ? " (" + entryName + ")" : ""));
 		pendingEngine.scenes().transitionTo(new GameScene(session, wad, entryName, 0));
 	}
@@ -1720,6 +1744,7 @@ public final class GameScene implements Scene {
 			session.autoCarry = auto; // 경로 중 이음 전환: 새 씬이 이어 받음
 		}
 		leaving = true;
+		rememberLevels();
 		System.out.println("레벨 전환 → " + wad + " (" + a.kind() + ", " + a.from() + " 에서)");
 		if (a.kind() != LevelLink.Kind.WARP && a.camera() == null && cameraRig != null) {
 			a = new Arrival(a.kind(), a.from(), a.pos(), a.yaw(), cameraRig.handoff(), // 이음: 카메라 상태 유지 (30 문서 §7)
@@ -1928,9 +1953,9 @@ public final class GameScene implements Scene {
 	private devple.gow.engine.boss.CombatScriptBridge neighbourBridge;
 	private ScriptWorld neighbourBridgeWorld;
 
-	/** 이웃 스크립트 세계의 전투 다리 (이웃이 바뀌면 새로). */
+	/** 이웃 스크립트 세계의 전투 다리 (이웃이 바뀌면 새로). 시작 큐 스폰 (SpawnAtStart) 이면 아직 이웃 자리에 오르기 전 세계 ({@link SceneNav#spawningNeighbour}). */
 	private devple.gow.engine.boss.CombatScriptBridge neighbourBridge() {
-		ScriptWorld nw = nav != null ? nav.neighbour() : null;
+		ScriptWorld nw = nav != null ? nav.spawningNeighbour() : null;
 		if (neighbourBridge == null || neighbourBridgeWorld != nw) {
 			neighbourBridge = new devple.gow.engine.boss.CombatScriptBridge(nw);
 			neighbourBridgeWorld = nw;
@@ -2627,6 +2652,8 @@ public final class GameScene implements Scene {
 		}
 		Vector3f p = new Vector3f(hero.ctl.position);
 		float yaw = hero.ctl.yaw;
+		// 원작 World_Serialize 0x1B3E48: 올라 있는 두 슬롯도 0x1B4080(…, 0) 으로 표 칸에 쓴 뒤 표 전체를 쓴다 → 지금 레벨 상태도 세이브에 (43 §21)
+		rememberLevels();
 		saveFlow = MemoryCardFlow.save(hud.variables(), session.messages, SaveGame.dir(),
 				() -> SaveGame.capture(session, levelName, new float[]{p.x, p.y, p.z}, yaw));
 		saveFlow.start();

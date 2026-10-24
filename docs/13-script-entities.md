@@ -175,6 +175,11 @@ LoadCheck 는 bool 을 반환하지만 데이터에서는 EntrySensor 의 Action
 
 ## 7. 변수 (GlobalData / LevelData)
 - 메시지 0 에서 이름과 타입을 등록(`0x1AF2C0`, `"Too many LevelData variables!"`), 원본 0x4A = 변수 번호 시작, 0x4C = 개수.
+- LevelData 값은 전역 풀 0x301548 (0x500 칸 × 8 바이트) — 슬롯 문맥 +0x18 = 풀 기준, +0x1C = 개수 (0x1AF2C0 은 +0x1C 가 0 일 때만 기준을 잡는다). 풀은 새 게임
+  (0x1AF258) 에만 비우고 레벨 상태 표가 슬롯 문맥을 되살리므로 **다시 읽은 레벨의 LevelData 가 이어진다** [확실] (11 §5.4).
+- 시작 메시지 (msg 1) 의 첫 적재 관문 0x1A9F30 → 0x1B3C58 (슬롯 +0x8 의 플레이어 번호 비트, 처음일 때만 참): GlobalData Init 0x1AE848 · LevelData Init 0x1AE9E8 ·
+  SpawnEnemy SpawnAtStart 0x1AC630 · Creator CreateAtStart 0x1ACA70 · CreationSensor 모드 1 0x1AA5C0 — 거짓이면 SpawnEnemy·Creator 는 0x1A6C70 으로 기록된
+  오브젝트를 되살린다. CreationSensor 모드 5 는 관문 없이 매번 [확실].
 - 메시지 1 에서 Init1..N 실행 → 초기값. GlobalData 는 게임 전체에서 한 번 (`"%s re-inited with different value"`, `GlobalData_Set` 0x1AEE90).
 - **GlobalData 는 이름으로 전역** [확실: 0x1AE848 → 0x1AEC88 / 0x1AEDE8, 2026-10-24]: 등록 때 전역 표 0x30063C (0x1C 바이트: +0 값, +8 이름 16, +0x18 타입, +0x19 초기화됨, 최대 128
   "Too many GlobalData variables!") 에서 이름을 strcmp 로 찾거나 붙이고, 레벨 슬롯 번호표 (0x2FFE3C + 2·(슬롯 0x303DE8 +0x10 + 번호)) 에 칸 번호를 적는다. 스크립트의

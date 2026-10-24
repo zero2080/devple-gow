@@ -107,6 +107,17 @@ BallHull 수정: 평면 수를 헤더 0x38 이 아니라 hull 별 평면 수의 
   `Host.neighbourZoneReport` — ATHN04C 가 현재인 채 계단 위 ATHN05A ZoneReportGroup 이 "아테네의 지붕" 을 띄운다 (43 §19, 예전엔 버려짐).
 - 하네스 `-Dgow.arrive.state=레벨:L0=3,F=엔티티,G이름=값;…` (`ScriptWorld.presetState`: LevelData · 이미 발동 · GlobalData 이름) [엔진 전용].
 - 시험 `AthensInteriorTest.recreateReplaysVisAndCreators`.
+- 이웃 세계 시작 큐 (SpawnAtStart) 가 낸 적은 그 세계의 전투 다리로 (`SceneNav.spawningNeighbour` — 시작 중엔 `neighbour()` 가 아직 비어 있다): 예전엔 제거가 현재 레벨
+  세계로 가 Respawn 이 이웃 템플릿을 현재 레벨 첫 적 종류 대역으로 냈다 (ATHN05D 의 ATHN05C 하피, 43 §21.2-3).
+
+## 9. 레벨 기억 — 슬롯에서 내려간 레벨의 상태 (43 §21.2-5) [확실: 원작 흐름 / 근사: 담는 것]
+- 원작: 레벨 상태 표 0x336B28 (이름 칸 120). 슬롯을 비울 때 0x1B3CD0 → 0x1B4080 이 덩어리 (첫 적재 비트 · LevelData 풀 기준 · 오브젝트·GO 기록 · 미뤄 둔 발동) 로
+  쓰고, 같은 레벨을 다시 읽으면 0x1B38A8 → 0x1B4618 이 되살린다. LevelData 값은 풀 0x301548 에 남아 이어진다. 첫 적재 관문 0x1A9F30 이 거짓이면 Init (GlobalData ·
+  LevelData) · SpawnAtStart · CreateAtStart · CreationSensor 모드 1 을 건너뛰고 (Creator·SpawnEnemy 는 0x1A6C70 으로 기록된 오브젝트), 모드 5 는 매번.
+- 엔진: `GameSession.levelMemory` (이름 → `ScriptWorld.Memory` = LevelData · 만들어 둔 Creator · 오브젝트별 마지막 Vis), `enterLevel` (새 세계를 만들 때: 칸이 있으면 기억,
+  판도라 입구 "Pand00A" → "Pand00B" 면 표 비우기 0x1B3A10), `rememberLevel` (씬을 떠날 때 두 슬롯 · 다른 슬롯이 바뀌거나 LoadForWarp 로 비울 때 · 세이브 직전),
+  `ScriptWorld.restore` (start 전). 넘겨 쓰는 이음 세계 (`residentWorlds`) 는 그대로 이어지고, 버려졌다 다시 읽는 레벨만 되살린다. 세이브에 표를 같이 쓴다.
+- [근사] 적 기록 (살아 있던 적) · Animator 자세 · 미뤄 둔 발동 · 열린 상자 · 센서 한 번 발동 기록은 담지 않는다. 시험 `LevelMemoryTest`.
 
 ## Vis 의 Visible (표시/숨김)
 Vis 엔티티 슬롯 0 `Visible`: 1 = 보임, 2 = 숨김, 0 = 그대로 (`Attr11_0/1` 은 충돌·카메라 볼륨). 이전에는 카메라 볼륨만 반영하고 표시 상태는 무시해

@@ -1311,6 +1311,102 @@ r11 보통 (해치 → 아래층 저장 → 창살) 도 같다. 처치 시간·�
 ### 20.7 증거 (`work/verify/anm_layout/`, 커밋 안 함)
 `hold_hydra_ps2_272-342` · `hold_hydra_engine_new` · `hold_hydra_engine_old_lift` · `pand00b_elevator_loop` · `ska_aswipe_new` / `ska_aswipe_old` · `anim_layout_diff.txt` (전 act 차이 목록).
 
+## 21. QA vs PS2 영상 — 제우스의 분노 뒤: ATHN05C 다리 → ATHN05D 복도·물 방·엘리베이터 → ATHN04A 광장 재방문 → ATHN04D 절벽 → ATHN06A 오라클의 사원 (영상 8066–8806 초, 2026-10-24)
+
+레벨 연결 [확실: 스크립트]: ATHN05C 바닥 레버 "idiot" 다리 (8066, 다른 작업) ─ 걷기·LoadCheck ─ ATHN05D 복도 (FirstSetEnemies R_SKD 셋) · 물 방
+(golocatorwater) · 둘째 복도 (SecondSetEnemies 넷) · 엘리베이터 방 WarpElevator5D (발판 PlayerEntryAtTop → LoadForWarp Athn04A · AnimDown → Marker599 가
+DownVol2 → Warp) ─ ATHN04A WarpFrom5D (엘리베이터 위 홀) ─ OracleMovie (FadeOut → a04Mp01 → FadeIn · IdleOff · Reload4D · SaveGameZone2) · 들보 위
+ZoneReportGroup2 → 구역 4 "아테네 도시 광장" · RubbleLadder · SaveGameZone2 ─ LoadCheck04D ─ ATHN04D 절벽 길 (Skellys R_SKC 세 스폰, 최대 4 씩) ─ LoadCheck6A ─
+ATHN06A 테라스 (Chest3 CSM 002 마법 · Chest4 CSM 004 체력, ZoneReportGroup → 구역 6 "오라클의 사원") · 날개 석상 · movie1orcle (a06Mp01 → CheckPoint ·
+AIArenaGoto camCenR1 · 하피 R_HA2 셋 (Respawn, 최대 5/6/5) · DMC 결계 · 다섯 처치 뒤 메두사 R_MEW 둘 · 18 처치 = LevelData7) → camDoorOff → GraveSpot →
+a06Mp04 (무덤 파는 노인) → graveDig AOXDI (템플릿 309) · R2 대화 335/336.
+엔진 = origin/main 0efbe1a 위, 녹화 lockstep 1/4–1/2 초. 경로·스크립트 대조는 쉬움, 전투가 걸린 절벽 (d1) · 하피 마당 (h1) · 엘리베이터 (e2/e3) 는 보통.
+- e3 (엘리베이터): `--game ATHN05D --arrive ATHN05C@-940,864,1600,180`, `-Dgow.arrive.state=ATHN05D:GZoneArea=5`, 경로 `-940,864,1450;-944,864,1250;-944,864,1100,12;wait:20`.
+- o2 (04A 도착 → 동영상 → 들보 제목): `--game ATHN04A --arrive ATHN05D --skip-movies`, `GZoneArea=5,GcameFromA5C=true`, 경로 `wait:2;600,140,450;600,140,700;
+  900,140,710;1119,144,704;wait:6;1250,140,704;…`. o1 = 같은 도착 동영상 재생 (lockstep 은 오디오 시계라 느리게 보임 [엔진 전용]).
+- d1 (절벽): `--game ATHN04D --arrive ATHN04A@2208,352,850,90`, 봇 보통 200 초. h1 (사원): `--game ATHN06A --arrive ATHN04D@3600,658,1280,90`, `GZoneArea=4`,
+  경로 `3700,658,1280;4300,690,1280;4832,697,1283`, 봇 보통 300 초. r2 (05D 전체): `--arrive ATHN05C@-1440,864,2400,180`, 쉬움.
+
+### 21.1 장면 대응 [확실: 스크립트·데이터 / 영상 대조는 섬네일 (2–10 초 간격)]
+| 영상 | 원작 (스크립트·데이터) | 엔진 (게임 시각, 녹화) |
+|---|---|---|
+| 8070–8076 | 다리 카메라 (BridgeCam): 연기 낭떠러지 위 비계 → 다리 · 횃불 둘 문 · 바닥 홈 레버 | r2 4–12 초 (레버 · 비계 · 다리 시점) |
+| 8082–8110 | 항아리 방 · 바닥 레버 · 상자 → 깃털 카드 "1 개를 더" | r2 순간이동으로 건너뜀 [미대조] |
+| 8120–8142 | 횃불 복도 · 언데드 (FirstSetEnemies DiveLevel1AI ×3, R_SKD 37) | r2 14–52 초 |
+| 8136 | 좁은 수직 통로 오르기 | 찾지 못함 [미대조] |
+| 8190–8202 | 물 방 (어두운 반사 물) 싸움 | w3 0–8 초 (고친 뒤 어두운 물, `06`) — 고치기 전 희뿌연 판 (`before_water_pale_05d`) (§21.2-4) |
+| 8210–8224 | "YOU ARE DEAD" → 기둥 방에서 다시 → 깃털 카드가 또 (체크포인트가 상자 앞) | 엔진 재시작은 체크포인트로 옮기기만 해 세계를 되돌리지 않는다 [미구현, §21.3] |
+| 8232–8358 | 둘째 복도 (SecondSetEnemies ×4) · 업그레이드 메뉴 (8286) · 엘리베이터 방 | r2 64–95 초 |
+| 8366–8378 | 둥근 발판에 서면 내려감 → 어둠 → Warp | e3 34.5 초 PlayerEntryAtTop → 36.5 MarkerEntry → 39.9 beginFade (FadeOut 0.6) → 41.5 Warp (`01` `02`) — 고치기 전 발판에 서도 그대로 (`before_elevator_stands_on_plate_e1`) (§21.2-1·2) |
+| 8378–8390 | 04A 도착 밝은 홀 → 기둥 복도 → 동영상 | o2 0–9 초 (`03`), 9.1 FadeOut → 10.1 PlayMovie |
+| 8390–8412 | a04Mp01 (오라클 · 하피 · "크레토스! 도착했군요!") | o1 10 초부터 (`--skip-movies` 면 10.27 MovieFinish → FadeIn 2 · SaveGameZone2) |
+| 8416–8420 | 들보 위 구 장식 옆 "아테네 도시 광장" | o2 16.38 초 ZoneReportGroup2 → 구역 4 (`04`) — 같은 자리 |
+| 8426–8458 | 사다리로 광장 · 분수 옆 달림 · 다시 들보 — 산 시민 없음, 시신 (SuicideBody, ShesDeadJim) | 처음부터 시작한 04A 는 SectionZone 에서 시민 8 명 (o2 24 초) → 레벨 기억 (§21.2-5) |
+| 8462–8470 | 들보 끝 세이브 빛기둥 (SaveGameZone2) → Ω · 메모리카드 | SaveGameZone2 (1690, 137, 705) 생성 (o2 10.27 초) |
+| 8476–8584 | 횃불 절벽 계단 · 절벽 길 해골 (R_SKC 22) 싸움 ≈ 100 초 | d1 10–115 초 (봇, 보통, 115 초 사망) (`09`) |
+| 8590–8598 | 테라스 파랑·초록 상자 · "오라클의 사원" · 흰 흐름 = 파란 상자 오브가 크레토스로 · 초록 오브 | h1 0 초 상자 둘 (`07`), 21.3 초 제목 (`08`, 봇이 되돌아와 볼륨에 다시 들어갈 때 — 도착점이 볼륨 안이라 [엔진 전용]) |
+| 8602–8610 | 난간 길 · 날개 석상 · 검정 (movie1orcle FadeOut 0.7) | h1 3–9 초, 53.2 초 FadeOut |
+| 8616–8634 | a06Mp01 → 팔각 마당 (AIArenaGoto camCenR1) | h1 53.9 MovieDone → FadeIn 1.3 · CheckPoint · 하피 셋 · DMC 결계 |
+| 8636–8736 | 팔각 마당 하피 · 메두사 (8686 초록 광선 = 메두사의 시선) | h1 54–237 초 (봇, 보통 — 사람보다 느림), 5 처치 뒤 R_MEW, 18 처치에서 결계 dogOut — 고치기 전 연못 물이 흰 뾰족한 산 (`before_water_spikes_06a`) (§21.2-4) |
+| 8740–8806 | camDoorOff → a06Mp04 (노인 "누구요?…", "무덤?", "파야 할 무덤이 너무 많아", "그 때는 내가 도움을 주겠네") → 노인 곁을 떠남 | h1 237.1 camDoorOff → 239.1 FadeOut → 239.7 a06Mp04 → GraveSpot · graveDig 스폰 (5148, 654, 1012) (`10`) |
+
+### 21.2 엔진 결함과 수정
+1. **엘리베이터가 내려가지 않았다 — 볼륨 조각이 관절 0 에만 붙었다.** BallHull off[6] 은 조각마다 관절 번호 (CDV 는 38 §4 에서 이미 [확실]) 인데 ENV/CMV/SEV 판정
+   (`LevelData.PlacedVolume`) 은 모든 조각을 관절 0 공간으로 봤다. ATHN05D ENV_WarpElevator5D 조각 0 (영역 0 PlayerVolume0) 은 관절 2 pressPlate 의 r 32 구
+   (로컬 y 17.55) — 관절 0 (승강로 바닥 713.6) 으로 두면 구 중심 731 이라 발판 윗면 870 에 선 영웅이 영영 들지 않았다. 원작 영웅 볼륨 판정 0x1A7FFC →
+   0x11E190 은 CDV 와 같은 충돌 월드 0x29C978 를 질의한다 [확실: 흐름 · 데이터 (발판 구는 관절 2 가 아니면 쓸 수 없다)] → `PlacedVolume.partInverse` (관절
+   0 이 아닌 조각의 관절 역행렬) + `BallHull` 조각별 관절 점 판정, 몸 자세가 바뀌면 (애니·부모 링크·도착 자세) `PlacedVolume.pose` (`SceneNav.poseBody`).
+   전 레벨 21 볼륨 (ENV 15 · CMV 4 · SEV 2: PAND00C Ring1Crank 725 · HDES01E ElevanthPost 2266 · PAND01B 톱날 · PAND02H 칼날 …). 평면 1 개 hull (= 구) 을
+   영역 판정에서 평면으로 읽던 것도 구로 (`BallHull.contains(…, region)`, 36 §5). CMV 의 조각별 관절은 카메라 질의 (`CameraRig`) 에 아직 [미적용].
+2. **엘리베이터가 내려가도 Warp 가 없었다 — 끝 자세 Marker.** `Platforms.update` 는 한 번 재생 act 의 마지막 틱에 playing 을 먼저 거짓으로 두고 끝 자세를
+   매기는데 `SceneNav` 는 playing 일 때만 Marker 를 옮겨, Marker599 가 끝 바로 앞 틱 (y 676.9) 에 남아 DownVol2 (668.6–676.6, 끝 676.2) 에 들지 않았다
+   [확실: 엔진 / 데이터 여유 0.4] → 관절 배열이 바뀐 틱마다 (`SceneNav.poseBody`).
+3. **이웃 슬롯 시작 스폰 적이 현재 레벨 적으로 되살아났다.** 이웃 세계 시작 큐 (SpawnAtStart) 동안 `SceneNav.neighbour` 가 아직 비어 전투 다리 세계가 null
+   이었고 → 제거가 현재 레벨 세계로 가 Respawn 이 현재 리스너로 템플릿 70 (하피)·50 (미노타우로스) 을 첫 적 종류 R_SKD 대역으로 3 초마다 냈다 (ATHN05D 에서
+   ATHN05C 지붕 위치) [확실: 엔진] → `SceneNav.spawningNeighbour` (시작 중 세계).
+4. **물 (SCR_Water) 이 밀리고 산처럼 솟고 희뿌옜다** (16 §1.6) [확실]:
+   (a) 격자 원점 = 소유 GO 위치 = **최소 모서리** (감쇠 중심 = 위치 + (nx·cell·8, nz·cell·8) 0x219E24 VADD, 충격 칸 = (점 − 위치)/(cell·16) 0x21A608 VSUB) —
+   엔진은 한가운데로 두어 크기 절반만큼 밀렸다 (06A 팔각 연못 −160, −96 · 05D 물 방 −128, −192). 06A gowaternode (4848, 1184) + 20 × 12 → 가운데 z 1280 = 연못 축.
+   (b) 물방울 = 위치 + (난수[0,1)·크기 + 오프셋) × 16 (0x21A09C), (c) 충격 = 세기 s 를 네 칸 쌍선형으로 **이전** 높이 배열에 (0x21A608 → +0x18) — 엔진은 현재
+   배열에서 4s + 2s×4 를 빼 12 배 (06A 60 초 최대 |h| 72.8 → 9.6), (d) 머티리얼 "MAT_REFLENVM" 은 원작 자원 조회 0x17A7B8 → 0x1759F0 이 대문자 해시
+   (0x175938) 라 MAT_reflenvm 을 찾는데 엔진은 대소문자를 가려 흰 텍스처로 그렸다 (`WadAssets.materialTexture`), (e) 물 메시는 정점 색을 쓰지 않고 (0x21A1D0 ·
+   0x21A888: 위치·UV 만) GO 색 +0xB0 의 w = 거리 감쇠 a (0x219F54) → 색·알파 = 텍스처 (어두운 반사, 알파 ≈ 0.62) × a. → `WaterSim` · `WaterSurface`.
+5. **다시 들어간 레벨이 늘 처음부터였다 — 레벨 기억.** 원작은 레벨 상태 표 0x336B28 (이름 칸 120, 개수 0x29D9E8) 을 둔다 [확실: 코드]: 슬롯을 비울 때
+   0x1B3CD0 → 0x1B4080(슬롯, 칸, 1) 이 슬롯 문맥 (0x303DE8 + 0x6C·슬롯) 의 +0x8 첫 적재 비트 · +0x10..+0x1C (LevelData 풀 기준 +0x18 · 개수 +0x1C) · 기록 목록
+   (+0x20 엔티티별 오브젝트, +0x28..+0x58 GO 상태, +0x38 미뤄 둔 발동) 을 덩어리로 쓰고, 같은 레벨을 읽으면 0x1B38A8 이 이름으로 칸을 찾아 0x1B4618 로 되살린다.
+   LevelData 값은 전역 풀 0x301548 (0x500 칸, 새 게임 0x1AF258 전엔 비우지 않음) 에 있고 되살린 슬롯은 +0x1C ≠ 0 이라 0x1AF2C0 이 기준을 다시 잡지 않는다 →
+   **LevelData 가 이어진다**. 첫 적재 관문 0x1A9F30 → 0x1B3C58 (슬롯 +0x8 의 플레이어 번호 비트) 을 GlobalData/LevelData Init (0x1AE848 · 0x1AE9E8), SpawnEnemy 시작
+   생성 (0x1AC630), Creator 시작 생성 (0x1ACA70), CreationSensor 모드 1 (0x1AA5C0) 이 거치고, 거짓이면 SpawnEnemy·Creator 는 0x1A6C70 으로 기록된 오브젝트를
+   되살린다; 모드 5 생성 센서는 관문 없이 매번 (ATHN04A SuicideBody-SpecialCreationSensor 가 GlobalData ShesDeadJim 으로 시신을 다시 켜는 까닭). 판도라 신전
+   입구 (0x1B3A10): 새 칸 "Pand00B" 바로 앞이 "Pand00A" 면 표를 둘만 남기고 비운다. 세이브 (World_Serialize 0x1B3E48) 는 올라 있는 슬롯도 칸에 쓴 뒤 표 전체를 쓴다.
+   엔진은 매번 처음부터라 05D 엘리베이터로 돌아온 광장에 첫 방문의 시민 (SecTP 조건 LevelData0 (키클롭스 처치) &lt; LevelData4) 이 나왔다 (영상 8426–8458 엔
+   없음) → `GameSession.levelMemory` · `enterLevel` · `rememberLevel`, `ScriptWorld.Memory` · `restore` (LevelData + 첫 적재 메시지 건너뜀 + 만들어 둔 Creator +
+   오브젝트별 마지막 Vis 값) · `SaveGame` (levelTable · level.* · levelCreated.* · levelVis.*) [근사: 적 기록 · Animator 자세 · 미뤄 둔 발동 · 열린 상자 상태 ·
+   센서 한 번 발동 기록은 담지 않는다 — 원작 기록 목록의 엔티티 발동 상태는 미확인].
+
+### 21.3 남은 것 · 미확인
+- 8210–8224: 원작 체크포인트 재시작은 메모리 세이브 (0x22D418) 를 되읽어 레벨을 다시 올린다 (11 §5.3) — 상자 (깃털) 가 닫힌 채로 돌아가 다시 줍는다. 엔진은 영웅만
+  체크포인트로 옮겨 세계가 그대로라 깃털 카드가 다시 나오지 않는다 [미구현: 스냅숏 되읽기].
+- 8136 수직 통로 오르기 · 8082–8110 항아리 방은 경로로 몰지 않았다 [미대조]. 05D 복도에서 봇의 띄우기에 적이 서쪽 벽 (x −1000) 너머로 밀려 아래 ATHN05C
+  웅덩이 바닥 (y 453) 에 떨어진 적이 있다 (r2 105–155 초) [미해결: 적 넉백 벽 충돌].
+- 동영상 a04Mp01 · a06Mp01 · a06Mp04 는 원작 PSS 그대로라 대조하지 않았다 (`--skip-movies` 와 o1 재생으로 앞뒤 스크립트만).
+- 06A 구역 제목: 하네스 도착점이 ZoneReportGroup 볼륨 안이라 처음엔 뜨지 않는다 (이음 도착은 "이미 안", 원작은 04D 계단을 걸어 들어오며 뜬다) [엔진 전용].
+- 하피 마당 처치 시간은 봇 (183 초) 과 영상 (≈ 100 초, 메두사의 시선 사용) 이 달라 대조하지 않았다. 무덤 파는 노인 (AOXDI: Ignore Hits · Target Weight 0 ·
+  결정 트리 없음) 을 봇이 때린다 [엔진 전용: 봇이 NPC 를 적 목록에서 고름]. 노인 R2 대화 (335/336, camGraveD) 는 영상에 없다.
+- 레벨 기억이 센서의 한 번 발동 기록을 담지 않아 재방문 광장에서 북쪽 계단 DMC TriggerVol0 에 다시 들어가면 키클롭스 결투가 다시 시작된다 (LevelData0 이 3 에서
+  늘어 결계가 안 열림) — 원작이 같은지 미확인 (영상 경로는 그 볼륨에 가지 않는다) [미확인].
+
+### 21.4 시험
+`OracleApproachTest` (3: 발판 구 = 관절 2 pressPlate, 05D 엘리베이터 승강 → Warp 6.5–8 초 · 끝 Marker 676.2, 이웃 시작 스폰 하피의 제거는 그 세계로),
+`WaterSimTest` (4: 격자 모서리 = 소유 위치 (06A 연못 축 1280 · 05D 물 방), 쌍선형 충격 → −0.99·s, 머티리얼 대소문자, 60 초 최대 &lt; 12),
+`LevelMemoryTest` (3: 광장 재방문 LevelData0 = 3 · Init 건너뜀 · 상자 되살림 · 모드 5 시신 · SectionZone1 시민 없음 (처음이면 있음), 판도라 입구 표 비우기,
+세이브 왕복).
+
+### 21.5 증거 (`work/verify/athn06_oracle_approach/`, 커밋 안 함)
+`01_elevator_descending_e3_36s` · `02_elevator_fade_e3_40.5s` · `03_athn04a_arrival_hall_o2_6s` · `04_zone_title_plaza_beam_o2_16.5s` (영상 8416 과 같은 자리) ·
+`05_water_06a_pool_w4_3s` · `06_water_05d_dark_w3_1s` · `07_athn06a_terrace_chests_h1_0s` · `08_athn06a_title_h1_24s` · `09_athn04d_cliff_fight_d1_10s` ·
+`10_gravedigger_npc_h1_242s`, 고치기 전 `before_elevator_stands_on_plate_e1_50s` · `before_water_spikes_06a_h1_57s` · `before_water_pale_05d_w2_6s`.
+
 ## 시연 녹화 (-Dgow.record, -Dgow.bot) [엔진 전용]
 
 - `-Dgow.record=DIR` 로직 틱 `gow.record.every`(기본 2 = 30fps) 번마다 `DIR/f000000.jpg` 저장, `gow.record.secs` 초 뒤 종료. 녹화 중에는 lockstep (프레임당 틱 하나) 이라 렌더 속도와 무관하게 영상 시간이 게임 시간과 같다.

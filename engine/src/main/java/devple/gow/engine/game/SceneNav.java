@@ -100,6 +100,15 @@ public final class SceneNav {
 		 */
 		default void neighbourCreate(ScriptEntity source, Object name) {
 		}
+
+		/** 다른 슬롯에 레벨을 새로 읽는다: 레벨 기억 (없으면 null = 처음, GameSession.enterLevel). */
+		default ScriptWorld.Memory levelMemory(String level) {
+			return null;
+		}
+
+		/** 다른 슬롯의 레벨이 내려간다 (다른 레벨로 바뀜 · LoadForWarp 로 비움): 그 세계를 레벨 기억에 (GameSession.rememberLevel). */
+		default void levelLeft(String level, ScriptWorld w) {
+		}
 	}
 
 	private final LevelData level;
@@ -113,6 +122,8 @@ public final class SceneNav {
 	/** 이웃 레벨 (다른 슬롯) 스크립트 — 원작은 두 레벨 엔티티가 같이 돈다 (36 문서 §6 한계 → 38 문서 §4). */
 	private String neighbourName;
 	private ScriptWorld neighbour;
+	/** 이웃 레벨 데이터 (볼륨 자세 {@link #poseBody}). */
+	private LevelData neighbourData;
 	/**
 	 * 이웃 레벨 Animator 오브젝트 (문·발판) — 원작은 두 슬롯이 같이 살아 있어 이웃 스크립트의 Animator 도 그 레벨 오브젝트를 움직이고, 이음으로 떠나온
 	 * 레벨의 열린 문도 그대로 남는다 (43 §13.8). 렌더 자세만 (충돌은 이웃 정적 충돌 그대로 [근사]).
@@ -260,8 +271,12 @@ public final class SceneNav {
 		if (name == null || name.equals(neighbourName)) {
 			return;
 		}
+		if (neighbour != null && neighbourName != null) {
+			host.levelLeft(neighbourName, neighbour); // 바뀌는 다른 슬롯 레벨 → 레벨 기억 (0x1BC110 → 0x1B3CD0)
+		}
 		neighbourName = name;
 		neighbour = null;
+		neighbourData = data;
 		neighbourPlatforms = new Platforms();
 		navWorld.setNeighbourPlatforms(neighbourPlatforms);
 		setNeighbourItems(new Interactables());
@@ -274,6 +289,12 @@ public final class SceneNav {
 			ScriptWorld nw = kept != null ? kept : new ScriptWorld(data, ScriptHost.neighbour(mainHost), neighbourListener);
 			if (kept != null) {
 				nw.rebind(neighbourListener);
+			} else {
+				ScriptWorld.Memory mem = host.levelMemory(name); // 레벨 기억 (0x1B38A8 → 0x1B4618)
+				if (mem != null) {
+					nw.restore(mem);
+					System.out.println("이웃 레벨 기억으로 되살림: " + name);
+				}
 			}
 			Interactables ni = Interactables.of(data, otherTweaks != null ? otherTweaks : tweaks);
 			Set<String> owners = animatorOwners(nw);
@@ -301,8 +322,12 @@ public final class SceneNav {
 	/** 다른 슬롯 비움 (LoadForWarp 가 꺼진 레벨을 올림): 충돌·발판·스크립트·이벤트 큐 연결 없음. */
 	public void clearOther() {
 		navWorld.setOther(null);
+		if (neighbour != null && neighbourName != null) {
+			host.levelLeft(neighbourName, neighbour);
+		}
 		neighbourName = null;
 		neighbour = null;
+		neighbourData = null;
 		neighbourPlatforms = new Platforms();
 		navWorld.setNeighbourPlatforms(neighbourPlatforms);
 		setNeighbourItems(new Interactables());
@@ -322,6 +347,15 @@ public final class SceneNav {
 
 	public ScriptWorld neighbour() {
 		return neighbour;
+	}
+
+	/**
+	 * 이웃 스크립트가 지금 적을 낸 세계: 시작 큐를 도는 중이면 (SpawnAtStart, {@link #setOther} 안 — 아직 {@link #neighbour()} 가 비었다) 그 세계.
+	 * 예전에는 이 순간의 null 을 전투 다리 세계로 잡아, 시작 스폰 적의 제거·Respawn 이 현재 레벨 세계로 가서 현재 레벨 리스너가 이웃 템플릿을
+	 * 대역 (현재 레벨 첫 적 종류) 으로 다시 냈다 (ATHN05D 에서 ATHN05C 하피 · 미노타우로스가 R_SKD 로 3 초마다, 43 §21).
+	 */
+	public ScriptWorld spawningNeighbour() {
+		return neighbourStarting != null ? neighbourStarting : neighbour;
 	}
 
 	public String neighbourName() {
@@ -659,16 +693,18 @@ public final class SceneNav {
 			poseItems(neighbourItems, neighbourPlatforms, neighbour, dt); // 이웃 TAndF 창살·해치 자세 = 진행 (렌더는 다른 슬롯 자세로)
 		}
 		for (Platforms.Body b : navWorld.platforms().bodies()) {
-			if (b.playing() || b.followMoved()) { // 부모 링크로 따라 움직인 몸 (ATHN02A 정박한 배) 의 Marker 도
-				world.poseOwner(b.owner, b.joints());
-			}
+			poseBody(world, level, b, volumePosed);
 			if (b.followMoved()) {
 				world.followOwner(b.owner, b.joints());
-				followVolumes(b);
 				Interactables.Item it = items.byOwner(b.owner);
 				if (it != null && it.kind != Interactables.Kind.CHEST) {
 					Interactables.refreshHandles(it, b.skeleton(), b.joints()); // 회전판 위 발리스타 크랭크 손잡이
 				}
+			}
+		}
+		if (neighbourData != null) {
+			for (Platforms.Body b : neighbourPlatforms.bodies()) {
+				poseBody(null, neighbourData, b, volumePosed);
 			}
 		}
 		if (neighbour != null) {
@@ -682,28 +718,39 @@ public final class SceneNav {
 		}
 	}
 
-	/** 볼륨 (ENV/CMV, 소유 GO 관절 0) 의 처음 월드 행렬 — 부모 링크로 옮길 때 기준. */
-	private final java.util.Map<LevelData.PlacedVolume, float[]> volumeRest = new java.util.IdentityHashMap<>();
+	/** 몸마다 마지막으로 볼륨·Marker 에 반영한 관절 배열 (Body.pose 는 틱마다 새 배열 — 같은 배열이면 자세 그대로). */
+	private final java.util.Map<Platforms.Body, float[][]> volumePosed = new java.util.IdentityHashMap<>();
 
 	/**
-	 * 부모 링크로 옮겨진 몸의 볼륨 (스크립트 진입 센서·CMV) 도 같은 이동 (처음 월드 · follow) — ATHN02A 정박한 배의 아테나 석상 R2 볼륨
-	 * ENV_shipGroup (AthenaMime-volume-useWorld) [추정: 원작은 볼륨이 GO 관절 행렬을 그대로 쓴다].
+	 * 몸 자세 (Animator 애니 · 부모 링크 follow · 도착 자세 맞춤 · 이음 상태) → 그 GO 의 Marker (world, null = 이웃 슬롯은 볼륨만) 와 볼륨
+	 * (스크립트 진입 센서·CMV·소리) 조각 ({@link LevelData.PlacedVolume#pose}).
+	 * <ul>
+	 *   <li>볼륨: 원작 충돌 월드는 조각마다 GO 관절 행렬로 판정한다 (0x1A7FFC → 0x11E190, BallHull off[6]) [확실: 38 §4 · 데이터]. 예전에는 부모 링크
+	 *       이동만 관절 0 으로 따랐다 (ATHN02A 정박한 배 ENV_shipGroup) — ATHN05D 엘리베이터의 발판 구 PlayerVolume0 (관절 2 pressPlate) · 눌림 상자
+	 *       MarkerVolume1 (관절 1 elevatorRT) 은 제자리 관절 0 에 남아 발판에 서도 내려가지 않았다 (43 §21).</li>
+	 *   <li>Marker: 자세가 바뀐 틱 (관절 배열이 새것) 마다 — 한 번 재생 애니의 마지막 틱은 {@link Platforms#update} 가 playing 을 먼저 거짓으로 두고 끝
+	 *       자세를 매기므로 playing 만 보면 Marker 가 끝 바로 앞 틱 자리에 남는다: ATHN05D 엘리베이터 Marker599 는 끝 (act 7 초) 에서 y 676.2 로
+	 *       DownVol2 (668.6–676.6) 안인데 한 틱 앞 676.9 에 남아 Warp 볼륨에 영영 들지 않았다 (43 §21).</li>
+	 * </ul>
+	 *
+	 * @return 이번 틱 자세가 바뀌었는지 (처음 본 몸은 거짓)
 	 */
-	private void followVolumes(Platforms.Body b) {
-		// 같은 소유 GO 의 볼륨은 행렬 배열을 공유할 수 있다 (LevelData: 관절 0 월드 하나) — 처음 값을 모두 먼저 기억한 뒤 덮어쓴다
-		List<LevelData.PlacedVolume> own = new java.util.ArrayList<>();
-		for (LevelData.PlacedVolume v : level.volumes) {
-			if (v.owner().equalsIgnoreCase(b.owner)) {
-				own.add(v);
-				volumeRest.computeIfAbsent(v, k -> k.world().clone());
+	static boolean poseBody(ScriptWorld world, LevelData data, Platforms.Body b, java.util.Map<Platforms.Body, float[][]> posed) {
+		float[][] j = b.joints();
+		float[][] last = posed.get(b);
+		boolean moved = last != null && last != j;
+		if (world != null && (b.playing() || b.followMoved() || moved)) { // 부모 링크로 따라 움직인 몸 (ATHN02A 정박한 배) 의 Marker 도
+			world.poseOwner(b.owner, j);
+		}
+		if (j != null && last != j) {
+			posed.put(b, j);
+			for (LevelData.PlacedVolume v : data.volumes) {
+				if (v.owner().equalsIgnoreCase(b.owner)) {
+					v.pose(j);
+				}
 			}
 		}
-		for (LevelData.PlacedVolume v : own) {
-			float[] rest = volumeRest.get(v);
-			float[] w = b.follow() != null ? devple.gow.tools.anim.Mat4.mul(rest, b.follow()) : rest;
-			System.arraycopy(w, 0, v.world(), 0, 16);
-			System.arraycopy(devple.gow.tools.anim.Mat4.invertAffine(w), 0, v.inverse(), 0, 16);
-		}
+		return moved;
 	}
 
 	/** 스크립트 Animator 가 움직이는 발판·문 (렌더 자세용). */

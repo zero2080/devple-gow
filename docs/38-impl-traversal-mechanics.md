@@ -231,7 +231,10 @@ PAND05B `pBoxPand05B-Marker511` → `semoMovieHaveBox-…-semo08marker511` (Filt
 - ~~밟는 hull = 평면 재질 이름에 ground/floor~~ → **밟는 면 = 수직 선분이 들어가는 평면의 재질 (off[9] → 재질 엔트리 = 시트 표면 레코드, +0x18 bitfield0) 이
   영웅 질의 제외 마스크 (Water·Death·AIBlock·GeneralGuide·NoPlayerCollision·ClimbGuide·CombatGuide) 에 안 걸리는 것** [확실: 0x1E3298 / 0x1E2100 → 0x139218, 43 §13.10 6].
   바닥 속성 = 그 재질 (`NavWorld.Floor.attrs`). 이름 규칙에서 빠졌던 PAND04AA 엘리베이터 `SheetM`, PAND04F goelevator, PAND02C 우리 승강기 등 해결.
-- **BallHull off[6] = hull 별 관절 번호** [확실: 엘리베이터 hull 0 → 관절 2, hull 1 → 관절 1]. 이전에는 모든 볼륨을 관절 0 에 붙였다 (ENV/CMV 쪽은 그대로).
+- **BallHull off[6] = hull 별 관절 번호** [확실: 엘리베이터 hull 0 → 관절 2, hull 1 → 관절 1]. 이전에는 모든 볼륨을 관절 0 에 붙였다.
+  ENV/SEV (스크립트 센서·소리) 도 조각마다 그 관절 공간으로 판정하고 몸 자세 (애니·부모 링크·도착 자세) 를 따른다 (`LevelData.PlacedVolume.partInverse` · `pose`,
+  `SceneNav.poseBody`) — ATHN05D 엘리베이터 PlayerVolume0 (관절 2 pressPlate 의 r 32 구) 에 발판 위 영웅이 들어야 내려간다 (43 §21.2-1). CMV 카메라 질의는 아직 관절 0 [미적용].
+  한 번 재생 act 의 끝 틱 자세도 Marker 에 (끝에서 playing 이 먼저 거짓) — Marker599 가 DownVol2 끝 676.2 에 들어 Warp (43 §21.2-2).
 - **오브젝트 애니 관절 이동** [확실: 05 §2.8.1]: ATHN05D `WarpElevator5D` (세트 [0(p2 3), 11, 11]) 스트림 5/9 (관절 1/2 의 Y) 절대값 138.47 = 바인드 로컬 Y, 가산으로 −52.2 까지 → 발판 윗면 871 → **677 = Warp 도착점 WarpFrom4A 높이**.
   예전에는 "타입 11 (unk10 = 4) = 관절 이동 (타입 5 가 없는 세트만)" 규칙으로 읽었으나 그 자리는 실제로 타입 0 의 디스크립터 1 (이동) 이다 — 디스크립터 표가 항목 수가 아니라 Σ p2 개라
   [0(3), 11, 11] 의 둘째 디스크립터가 이동이 된다 (2026-10-24 정정, 규칙 `objectTranslation()` 은 없앰, 41 §2.1).

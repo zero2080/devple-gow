@@ -16,11 +16,73 @@ import java.util.Map;
  */
 public final class LevelData {
 
-	/** 배치된 볼륨: 볼륨 + 소유 오브젝트 관절 0 월드 행렬. */
-	public record PlacedVolume(BallHull hull, DebugWire wire, String owner, float[] world, float[] inverse) {
+	/**
+	 * 배치된 볼륨: 볼륨 + 소유 오브젝트 관절 0 월드 행렬 (world · inverse).
+	 * <p>ball/hull 조각은 저마다 소유 GO 의 관절에 붙는다 (BallHull off[6] = {@code hullJoint}, ball 은 {@code ballJoint}). 원작 충돌 월드 (0x29C978) 는
+	 * CDV·ENV·CMV 를 같은 조각 구조로 올리고 영웅 볼륨 판정 (0x1A7FFC → 0x11E190, 콜백 0x1A8508) 도 그 세계를 질의하므로 조각마다 GO 관절 행렬로 판정한다
+	 * (CDV 쪽은 38 §4 [확실]). 데이터가 같은 것을 요구한다: ATHN05D 엘리베이터 ENV 의 PlayerVolume0 은 관절 2 (pressPlate) 에 붙은 r 32 구라 관절 0
+	 * (승강로 바닥 y 713.6) 으로 두면 중심이 발판 윗면 (870) 보다 150 아래 (731) — 발판에 선 영웅이 영영 들지 않아 엘리베이터가 내려가지 않는다 (43 §21) [확실].
+	 * 전 레벨 21 볼륨 (ENV 15 · CMV 4 · SEV 2) 에 관절 0 이 아닌 조각이 있다.</p>
+	 * partInverse[j] = 관절 j 월드의 역 — 관절 0 이 아닌 조각이 쓰는 관절만 (없으면 null = 모든 조각이 관절 0 → {@link #inverse}).
+	 * 자세가 바뀌면 (애니·부모 링크) {@link #pose} 로 그 자리에서 고친다.
+	 */
+	public record PlacedVolume(BallHull hull, DebugWire wire, String owner, float[] world, float[] inverse, float[][] partInverse) {
+
+		public PlacedVolume(BallHull hull, DebugWire wire, String owner, float[] world, float[] inverse) {
+			this(hull, wire, owner, world, inverse, null);
+		}
+
+		/** 관절 월드 (배치 자세) → 관절 0 이 아닌 조각의 관절 역행렬 표 (그런 조각이 없으면 null). */
+		public static float[][] partInverses(BallHull h, float[][] jointWorld) {
+			float[][] out = null;
+			for (int pass = 0; pass < 2; pass++) {
+				int[] js = pass == 0 ? h.hullJoint : h.ballJoint;
+				int n = pass == 0 ? h.hulls.size() : h.balls.size();
+				for (int i = 0; i < n && i < js.length; i++) {
+					int j = js[i];
+					if (j <= 0 || j >= jointWorld.length) {
+						continue;
+					}
+					if (out == null) {
+						out = new float[jointWorld.length][];
+					}
+					if (out[j] == null) {
+						out[j] = Mat4.invertAffine(jointWorld[j]);
+					}
+				}
+			}
+			return out;
+		}
+
+		/** 소유 GO 자세가 바뀜 (Animator 애니·부모 링크): 관절 0 → world·inverse, 조각 관절 → partInverse (같은 배열을 고친다 — 스크립트 엔티티가 이 볼륨을 쥐고 있다). */
+		public void pose(float[][] jointWorld) {
+			if (jointWorld == null || jointWorld.length == 0) {
+				return;
+			}
+			System.arraycopy(jointWorld[0], 0, world, 0, 16);
+			System.arraycopy(Mat4.invertAffine(jointWorld[0]), 0, inverse, 0, 16);
+			if (partInverse != null) {
+				for (int j = 1; j < partInverse.length && j < jointWorld.length; j++) {
+					if (partInverse[j] != null) {
+						partInverse[j] = Mat4.invertAffine(jointWorld[j]);
+					}
+				}
+			}
+		}
+
+		/** 조각 관절 j 의 로컬 점. */
+		private float[] local(int j, float x, float y, float z) {
+			float[] m = partInverse != null && j > 0 && j < partInverse.length && partInverse[j] != null ? partInverse[j] : inverse;
+			float[] l = new float[3];
+			Mat4.transformPoint(m, x, y, z, l);
+			return l;
+		}
 
 		/** 월드 좌표 점이 볼륨(ball 또는 hull) 안인지. */
 		public boolean contains(float x, float y, float z) {
+			if (partInverse != null) {
+				return hull.contains(j -> local(j, x, y, z));
+			}
 			float[] l = new float[3];
 			Mat4.transformPoint(inverse, x, y, z, l);
 			return hull.contains(l[0], l[1], l[2]);
@@ -28,6 +90,9 @@ public final class LevelData {
 
 		/** 월드 좌표 점을 포함하는 ball/hull 의 영역 번호들. */
 		public java.util.Set<Integer> regions(float x, float y, float z) {
+			if (partInverse != null) {
+				return hull.regionsAt(j -> local(j, x, y, z));
+			}
 			float[] l = new float[3];
 			Mat4.transformPoint(inverse, x, y, z, l);
 			return hull.regionsAt(l[0], l[1], l[2]);
@@ -45,6 +110,9 @@ public final class LevelData {
 			if (!hull.hasRegion(region)) {
 				return hull.regionCount() < 2 && contains(x, y, z);
 			}
+			if (partInverse != null) {
+				return hull.contains(j -> local(j, x, y, z), region);
+			}
 			float[] l = new float[3];
 			Mat4.transformPoint(inverse, x, y, z, l);
 			return hull.contains(l[0], l[1], l[2], region);
@@ -52,6 +120,9 @@ public final class LevelData {
 
 		/** 월드 좌표 점을 포함하는 hull 번호 (-1 없음). */
 		public int find(float x, float y, float z) {
+			if (partInverse != null) {
+				return hull.find(j -> local(j, x, y, z));
+			}
 			float[] l = new float[3];
 			Mat4.transformPoint(inverse, x, y, z, l);
 			return hull.find(l[0], l[1], l[2]);
@@ -147,7 +218,8 @@ public final class LevelData {
 				BallHull h = hulls.get(r);
 				if (h != null) {
 					DebugWire dw = wires.get(r.substring(0, 2) + "Z" + r.substring(3));
-					volumes.add(new PlacedVolume(h, dw, p.instance().name(), w, Mat4.invertAffine(w)));
+					volumes.add(new PlacedVolume(h, dw, p.instance().name(), w.clone(), Mat4.invertAffine(w),
+							PlacedVolume.partInverses(h, p.jointWorld())));
 				}
 				CameraDef c = cameras.get(r);
 				if (c != null) {

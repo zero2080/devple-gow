@@ -72,6 +72,8 @@ public final class ScriptWorld {
 	private float time;
 	private boolean started;
 	private boolean zeroDelay, minDelay;
+	/** 레벨 기억으로 되살린 세계 ({@link #restore}) — 시작 큐의 "첫 적재 때만" 메시지를 건너뛴다. */
+	private Memory restored;
 	private ScriptActor player;
 	/** Marker 엔티티 → 오브젝트 (그룹 = Marker Id, 소유 GO 관절에 붙어 움직임). */
 	private final Map<ScriptEntity, ScriptActor> markers = new LinkedHashMap<>();
@@ -385,6 +387,83 @@ public final class ScriptWorld {
 		return f == 0 || a != null && a.group == f;
 	}
 
+	// ---- 레벨 기억 ----
+
+	/**
+	 * 레벨 기억 한 칸 — 원작 레벨 상태 표 0x336B28 (이름 16 바이트 + 덩어리 번호, 120 칸, 개수 0x29D9E8) 의 덩어리에 해당 [확실: 흐름].
+	 * <ul>
+	 *   <li>슬롯을 비울 때 0x1B3CD0 → 0x1B4080(슬롯, 표 칸, 1) 이 슬롯 문맥 (0x303DE8 + 0x6C·슬롯) 의 +0x8 첫 적재 비트 · +0x10..+0x1C (LevelData 풀 기준 +0x18 ·
+	 *       개수 +0x1C) · 오브젝트 기록 목록 (+0x20 엔티티별 오브젝트 · +0x28..+0x58 GO 상태 · +0x38 미뤄 둔 발동) 을 덩어리로 쓰고, 같은 레벨을 다시 읽으면
+	 *       0x1B38A8 이 이름으로 칸을 찾아 0x1B4618 로 되살린다.</li>
+	 *   <li>LevelData 값은 전역 풀 0x301548 (0x500 칸) 에 있고 풀은 새 게임 전엔 비우지 않는다 — 되살린 슬롯은 +0x1C ≠ 0 이라 0x1AF2C0 이 기준을 다시
+	 *       잡지 않으므로 <b>LevelData 가 그대로 이어진다</b>.</li>
+	 *   <li>첫 적재 관문 0x1A9F30 → 0x1B3C58: 슬롯 +0x8 의 (플레이어 번호) 비트를 세우며 처음일 때만 참 — GlobalData/LevelData Init (0x1AE848 ·
+	 *       0x1AE9E8), SpawnEnemy 시작 생성 (0x1AC630), Creator 시작 생성 (0x1ACA70), CreationSensor 모드 1 (0x1AA5C0) 이 이것을 거치고, 거짓이면
+	 *       SpawnEnemy·Creator 는 0x1A6C70 으로 기록된 오브젝트를 되살린다. CreationSensor 모드 5 는 관문 없이 매번 (ATHN04A SuicideBody-SpecialCreationSensor
+	 *       가 GlobalData ShesDeadJim 으로 시신을 다시 켜는 까닭).</li>
+	 * </ul>
+	 * 엔진 근사: 기억 = LevelData 값 + 만들어 둔 Creator (상자·세이브 포인트, 열린 상태는 모름) + 오브젝트별 마지막 Vis 값 (GO 상태 기록 +0x48..+0x58 의
+	 * 근사 — 첫 적재에만 도는 모드 1 생성 센서 "VisOff" 를 건너뛰어도 숨은 오브젝트가 숨은 채) — 적 기록·Animator 자세·미뤄 둔 발동은 담지 않는다 (살아 있던
+	 * 시작 생성 적은 다시 나오지 않는다) [근사]. 센서의 한 번 발동 기록도 담지 않는다 (원작 기록 목록에 엔티티 발동 상태가 있는지 미확인) [미확인].
+	 *
+	 * @param levelData LevelData 번호 → 값
+	 * @param created   만들어 둔 Creator 엔티티 이름
+	 * @param vis       오브젝트 → 마지막 Vis 값 ({@link #visState(String)})
+	 * @param visBy     오브젝트 → 그 값을 남긴 Vis 엔티티 이름
+	 */
+	public record Memory(Map<Integer, Object> levelData, java.util.Set<String> created, Map<String, int[]> vis, Map<String, String> visBy) {
+		public Memory(Map<Integer, Object> levelData, java.util.Set<String> created) {
+			this(levelData, created, Map.of(), Map.of());
+		}
+	}
+
+	/** 지금 세계의 레벨 기억 (슬롯을 비울 때 — {@link Memory}). */
+	public Memory memory() {
+		java.util.Set<String> made = new java.util.LinkedHashSet<>();
+		for (ScriptEntity e : createdObjects) {
+			made.add(e.name());
+		}
+		Map<String, int[]> vis = new LinkedHashMap<>();
+		Map<String, String> by = new HashMap<>();
+		visState.forEach((o, v) -> {
+			vis.put(o, v.clone());
+			ScriptEntity src = visSource.get(o);
+			if (src != null) {
+				by.put(o, src.name());
+			}
+		});
+		return new Memory(new HashMap<>(host.levelData()), made, vis, by);
+	}
+
+	/** {@link #start} 전에: 레벨 기억으로 되살린다 — LevelData 를 그 값으로, 시작 큐의 첫 적재 전용 메시지는 건너뛴다. */
+	public void restore(Memory m) {
+		if (started || m == null) {
+			return;
+		}
+		restored = m;
+		host.levelData().clear();
+		host.levelData().putAll(m.levelData());
+	}
+
+	/** 되살린 세계: 기억한 오브젝트 Vis 값을 다시 보낸다 (시작 큐 뒤 — 모드 5 생성 센서가 그 위에 다시 켤 수 있게 먼저). */
+	private void restoreVis() {
+		for (Map.Entry<String, int[]> v : restored.vis().entrySet()) {
+			String by = restored.visBy().get(v.getKey());
+			ScriptEntity src = by != null ? find(by) : null;
+			if (src == null) {
+				continue;
+			}
+			int[] values = v.getValue().clone();
+			listener.vis(src, List.of(v.getKey()), values);
+			rememberVis(src, List.of(v.getKey()), values);
+		}
+	}
+
+	/** 레벨 기억으로 되살린 세계인지. */
+	public boolean restored() {
+		return restored != null;
+	}
+
 	// ---- 시작 ----
 
 	/** 엔티티 등록(메시지 0) 후 시작 큐(메시지 1)를 우선순위 오름차순으로 처리 (원작 0x1A95E8 / 0x303DA0). */
@@ -416,6 +495,9 @@ public final class ScriptWorld {
 			}
 		}
 		queue.sort(Comparator.comparingInt(prio::get));
+		if (restored != null) {
+			restoreVis();
+		}
 		for (ScriptEntity e : queue) {
 			startMessage(e);
 		}
@@ -489,27 +571,40 @@ public final class ScriptWorld {
 	}
 
 	private void startMessage(ScriptEntity e) {
+		boolean first = restored == null; // 첫 적재 관문 0x1A9F30 (되살린 레벨이면 거짓, {@link Memory})
 		switch (e.type()) {
 			case 12 -> {
-				if (host.initedGlobals.add(e.script + "/" + e.name())) {
+				if (first && host.initedGlobals.add(e.script + "/" + e.name())) {
 					runInits(e);
 				}
 			}
-			case 13 -> runInits(e);
+			case 13 -> {
+				if (first) {
+					runInits(e);
+				}
+			}
 			case 2 -> {
-				// 모드 1: 소유 GO 가 있으면, 모드 5: 무조건 (보낸 쪽 없음)
-				if (e.mode() == 1 && e.owner != null || e.mode() == 5) {
+				// 모드 1: 소유 GO 가 있으면 (첫 적재만), 모드 5: 무조건 (보낸 쪽 없음, 관문 없음 — 0x1AA780)
+				if (first && e.mode() == 1 && e.owner != null || e.mode() == 5) {
 					trigger(e, null);
 				}
 			}
 			case 10 -> {
-				if (e.owner != null && boolSlot(e, "SpawnAtStart", false)) {
+				if (first && e.owner != null && boolSlot(e, "SpawnAtStart", false)) {
 					zeroDelay = true;
 					trigger(e, null);
 					zeroDelay = false;
 				}
 			}
 			case 11 -> {
+				if (!first) {
+					// 되살린 레벨: 0x1ACA70 은 관문이 거짓이면 0x1A6C70 으로 기록된 오브젝트를 다시 만든다 — 만들어 둔 Creator 를 그대로 [근사: 열린 상자 상태 없음]
+					if (restored.created().contains(e.name())) {
+						createdObjects.add(e);
+						listener.create(e);
+					}
+					return;
+				}
 				// Creator 슬롯 8 = 시작 시 생성 [강한 추정]: 상자 335 개·세이브 포인트 42 개 대부분이 이 값만 true 이고 다른 발동 경로가 없다 (36 문서 §5)
 				if (e.owner != null && boolSlot(e, "CreateAtStart", false)) {
 					zeroDelay = true;

@@ -16,7 +16,7 @@ GOW_FX=off ./gradlew :engine:run --args="--level gow-rom/ATHN01A.WAD --cam 0" # 
 | `ParticleSystem` / `ParticleDef` | CPU 시뮬레이션 + 동적 VBO 사각형 (빌보드 / 속도 줄기), 상자·원뿔 생성, LOD |
 | `Weather` | SCR_Weather → 카메라 앞 셀 정육면체 감싸기 이미터 (비/눈/불씨) |
 | `LevelEmitters` | 오브젝트 그룹의 FXC_ + PTC_ → 이미터 (횃불, 화톳불, 불꽃) |
-| `WaterSurface` | SCR_Water 파문 높이장 (파동 방정식 + 물방울 + 환경맵) |
+| `WaterSurface` · `WaterSim` | SCR_Water 파문 높이장 (파동 방정식 + 물방울 + 환경맵). 격자 원점 = 소유 GO 위치 (최소 모서리), 충격 = 쌍선형 s → 이전 배열, 색 = 텍스처 × 거리 감쇠 (16 §1.6, 43 §21.2-4) |
 | `MaterialFx` | 파트별 플립북 프레임, 머티리얼 ANM (UV 스크롤, 불투명도), 2·3번째 레이어 |
 
 ## 2. 렌더 훅 (LevelScene, 추가만)

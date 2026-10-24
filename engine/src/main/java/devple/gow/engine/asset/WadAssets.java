@@ -370,6 +370,11 @@ public final class WadAssets implements AutoCloseable {
 	/** 머티리얼의 첫 레이어 텍스처 이름 (없으면 null). */
 	public String materialTexture(String matName) {
 		MaterialResource m = materials.get(matName);
+		if (m == null && matName != null) {
+			// 원작 자원 조회 0x17A7B8 → 0x1759F0 은 이름을 대문자로 (0x175938, 24 자) 해시 (Hash127) 해 찾는다 [확실] — SCR_Water "REFLENVM" →
+			// "MAT_REFLENVM" 이 WAD 의 MAT_reflenvm 을 찾는다. 예전엔 못 찾아 흰 텍스처로 그려 ATHN05D·06A 물이 희뿌옜다 (43 §21)
+			m = materials.entrySet().stream().filter(e -> e.getKey().equalsIgnoreCase(matName)).map(Map.Entry::getValue).findFirst().orElse(null);
+		}
 		return m == null || m.layers().isEmpty() ? null : m.layers().getFirst().texture();
 	}
 

@@ -56,6 +56,74 @@ public final class GameSession {
 	 * ATHN04A 세계가 새로 시작해 사이클롭스 결투 (DMC1 = 0) 와 시민이 다시 나왔다. Warp·Load·다른 레벨 LoadWad 로 슬롯이 바뀌면 버린다.
 	 */
 	public final java.util.Map<String, devple.gow.engine.script.ScriptWorld> residentWorlds = new java.util.HashMap<>();
+	/**
+	 * 레벨 기억 (원작 레벨 상태 표 0x336B28 — 이름별 칸 120, {@link devple.gow.engine.script.ScriptWorld.Memory}): 슬롯에서 내려간 레벨의 LevelData ·
+	 * 만들어 둔 Creator. 같은 레벨을 다시 읽으면 그 세계를 되살린다 (첫 적재 관문 0x1A9F30 이 거짓). 예전 엔진은 다시 들어간 레벨을 늘 처음부터 시작해
+	 * ATHN05D 엘리베이터로 돌아온 ATHN04A 광장에 첫 방문의 시민 (SecTP: 키클롭스 처치 LevelData0 &lt; 3 일 때) 이 다시 나왔다 (영상 8426–8458 엔 없음, 43 §21).
+	 * 세이브에 같이 쓴다 (원작 World_Serialize 0x1B3E48 끝이 표 칸 덩어리를 쓴다).
+	 */
+	public final java.util.LinkedHashMap<String, devple.gow.engine.script.ScriptWorld.Memory> levelMemory = new java.util.LinkedHashMap<>();
+	/** 표에 칸을 연 순서 (처음 읽은 레벨, 0x1B38A8) — 판도라 신전 입구 비우기 규칙용. */
+	private final java.util.List<String> levelTable = new java.util.ArrayList<>();
+	/** 원작 표 칸 수 (0x1B4308 · 0x1B38A8 이 0x78 까지). */
+	static final int LEVEL_TABLE_SIZE = 120;
+
+	/** 레벨이 슬롯에서 내려간다 (이음으로 넘겨 쓰지 않는 세계를 버릴 때): 그 세계의 기억을 표에. */
+	public void rememberLevel(String level, devple.gow.engine.script.ScriptWorld w) {
+		if (level == null || w == null) {
+			return;
+		}
+		String k = level.toUpperCase(java.util.Locale.ROOT);
+		if (!levelTable.contains(k) && levelTable.size() >= LEVEL_TABLE_SIZE) {
+			return; // 표가 차면 칸이 없다 (0x1B38A8: 빈 칸을 못 찾음)
+		}
+		if (!levelTable.contains(k)) {
+			levelTable.add(k);
+		}
+		levelMemory.put(k, w.memory());
+	}
+
+	/**
+	 * 레벨을 읽는다 (새 세계를 만들기 전): 표에 칸이 있으면 그 기억, 없으면 새 칸 (null = 처음).
+	 * 판도라 신전 입구 규칙 0x1B38A8 → 0x1B3A10: 새 칸이 "Pand00B" 이고 바로 앞 칸이 "Pand00A" 면 표를 그 두 칸만 남기고 비운다 (두 칸의 덩어리도 비움) [확실].
+	 */
+	public devple.gow.engine.script.ScriptWorld.Memory enterLevel(String level) {
+		String k = level.toUpperCase(java.util.Locale.ROOT);
+		if (levelTable.contains(k)) {
+			return levelMemory.get(k);
+		}
+		if (k.equals("PAND00B") && !levelTable.isEmpty() && levelTable.getLast().equals("PAND00A")) {
+			levelTable.clear();
+			levelMemory.clear();
+			levelTable.add("PAND00A");
+		}
+		if (levelTable.size() < LEVEL_TABLE_SIZE) {
+			levelTable.add(k);
+		}
+		return null;
+	}
+
+	/** 표에 칸을 연 순서 (세이브용). */
+	public java.util.List<String> levelTable() {
+		return java.util.Collections.unmodifiableList(levelTable);
+	}
+
+	/** 세이브에서 표를 되살린다 (원작 0x1B4450 계열이 덩어리를 읽음). */
+	public void restoreLevelTable(java.util.List<String> order, java.util.Map<String, devple.gow.engine.script.ScriptWorld.Memory> memory) {
+		levelTable.clear();
+		levelMemory.clear();
+		for (String k : order) {
+			if (levelTable.size() < LEVEL_TABLE_SIZE && !levelTable.contains(k)) {
+				levelTable.add(k);
+			}
+		}
+		memory.forEach((k, m) -> {
+			if (levelTable.contains(k)) {
+				levelMemory.put(k, m);
+			}
+		});
+	}
+
 	/** -Dgow.auto 경로 (gow.auto.route) 중 이음 전환: 다음 레벨 씬이 같은 자동 플레이를 이어 받는다 (검증 하네스, 엔진 전용). */
 	public AutoPlay autoCarry;
 	/**
