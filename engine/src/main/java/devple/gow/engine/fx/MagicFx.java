@@ -1370,6 +1370,19 @@ public final class MagicFx implements AutoCloseable {
 		}
 	}
 
+	/**
+	 * 무기 WAD 를 바꾼 뒤 (업그레이드 메뉴 → Upgrade_LoadWad 0x1D7890): 붙어 있던 보통 블레이드 GO 를 지워 다음 {@link #normalBlades} 가
+	 * 새 WAD 의 goMAIblade 로 다시 만든다 — 레벨마다 불꽃·EG 이미터가 다르다 (R_WPN0_2 FXC_EGemit1·EGgrav1 등) [추정: 원작은 힙과 함께 GO 를 새로].
+	 */
+	public void reattachBlades() {
+		for (int i = 0; i < 2; i++) {
+			if (normalBlades[i] != null) {
+				normalBlades[i].stop();
+				normalBlades[i] = null;
+			}
+		}
+	}
+
 	/** 보통 블레이드 GO (테스트). */
 	public EffectSystem.Effect normalBlade(int side) {
 		return normalBlades[side];
@@ -1453,6 +1466,11 @@ public final class MagicFx implements AutoCloseable {
 			fx.particles().render(cam, aspect);
 		}
 		ps.render(cam, aspect);
+	}
+
+	/** 하늘 GO 이펙트의 파티클 (층 1) — 레벨 하늘 단계 ({@code LevelScene.skyEffects}) 에서. */
+	public void renderSky(Camera cam, float aspect) {
+		fx.renderSky(cam, aspect);
 	}
 
 	@Override

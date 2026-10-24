@@ -6,6 +6,7 @@ import devple.gow.engine.render.Shader;
 import devple.gow.engine.render.Texture;
 import devple.gow.tools.anim.Pose;
 import devple.gow.tools.anim.Skeleton;
+import devple.gow.tools.model.GowModel;
 import org.joml.Matrix4f;
 
 import java.io.IOException;
@@ -38,12 +39,29 @@ public final class BladeModels implements AutoCloseable {
 			return null;
 		}
 		WadAssets a = new WadAssets(p);
-		Skeleton sk = Skeleton.loadAll(a.wad()).stream().filter(s -> s.name.equalsIgnoreCase("maiblade")).findFirst().orElse(null);
-		if (sk == null || a.gowModel("MDL_MAIBlade") == null) {
+		Skeleton sk = bladeSkeleton(a);
+		GowModel mdl = bladeModel(a);
+		if (sk == null || mdl == null) {
 			a.close();
 			return null;
 		}
-		return new BladeModels(a, sk, new AnimatedModel(a, a.requireModel("MDL_MAIBlade"), sk, skinned));
+		return new BladeModels(a, sk, new AnimatedModel(a, mdl, sk, skinned));
+	}
+
+	/** 무기 WAD 의 블레이드 오브젝트 ({@code maiblade}, 대소문자 무시). 없으면 null. */
+	static Skeleton bladeSkeleton(WadAssets a) {
+		return Skeleton.loadAll(a.wad()).stream().filter(s -> s.name.equalsIgnoreCase("maiblade")).findFirst().orElse(null);
+	}
+
+	/**
+	 * 무기 WAD 의 블레이드 모델. 기본 코스튬 0 과 코스튬 5 의 레벨 1–5 (R_WPN0_1–5, R_WPN5_1–5 — 36 개 중 10 개) 는 {@code MDL_MAIblade}
+	 * (CDV·SHG·메시 MAIblade_0 도 같은 소문자 b), 나머지는 {@code MDL_MAIBlade} 라 대소문자를 가리지 않는다 [확실: 데이터 전수, 영상 5372 이후
+	 * 레벨 2 블레이드]. 원작 자원 조회가 대문자 해시이기 때문으로 본다 (머티리얼 0x17A7B8 과 같은 계열, 46 문서) [추정: 모델 조회 경로].
+	 * 예전 엔진은 정확히 같은 이름만 찾아 기본 코스튬 블레이드 레벨 ≥ 1 이면 load 가 null → 다음 레벨부터 블레이드·사슬·블레이드 라이트가
+	 * 사라졌다 (43 §17).
+	 */
+	static GowModel bladeModel(WadAssets a) {
+		return a.gowModelIgnoreCase("MDL_MAIBlade");
 	}
 
 	/**

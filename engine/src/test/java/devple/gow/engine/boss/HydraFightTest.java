@@ -154,7 +154,7 @@ class HydraFightTest {
 		assertEquals(0f, b.hp, "KILLWIN SELF_HP 1500");
 		// 812 끝 → 1047 → trigHydras-EventHydraDie → 컷신 a01Mp01 → 501 → Goto afterHydraDeath
 		assertTrue(until(r, 5, () -> "a01Mp01".equals(r.movie)), r.log.toString());
-		assertEquals(true, r.host.globalData().get(2), "GlobalData2 = 히드라 처치");
+		assertEquals(true, r.host.global("HydraDead"), "GlobalData2 (ATHN01E 의 HydraDead) = 히드라 처치");
 		r.movieDone();
 		r.run(1);
 		assertTrue(r.log.contains("level GOTO null afterHydraDeath"), r.log.toString());

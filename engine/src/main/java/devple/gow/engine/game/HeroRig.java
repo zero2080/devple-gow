@@ -48,8 +48,10 @@ public final class HeroRig implements AutoCloseable {
 	/** 기어오르기·줄·밀기 등 (38 문서). null 이면 기존 지상/공중 이동만. */
 	public devple.gow.engine.nav.HeroNavigator nav;
 	private final AnimatedModel model;
-	/** 혼돈의 블레이드 (lWeapOH/rWeapOH 부착, 34 문서). 없으면 null. */
-	private final devple.gow.engine.asset.BladeModels blades;
+	/** 혼돈의 블레이드 (lWeapOH/rWeapOH 부착, 34 문서). 없으면 null. 블레이드 레벨이 바뀌면 그 레벨 무기 WAD 로 바꾼다 ({@link #swapBlades}). */
+	private devple.gow.engine.asset.BladeModels blades;
+	/** 지금 블레이드 모델을 읽은 무기 WAD 의 레벨 (R_WPN&lt;코스튬&gt;_&lt;이 값&gt;). */
+	private int bladesLevelLoaded;
 	/** 참이면 보통 블레이드를 그리지 않는다 (신들의 분노 god 판 GO 가 대신, MagicFx.godBladesOn, 45 문서 §2). */
 	public java.util.function.BooleanSupplier hideBlades = () -> false;
 	/** 블레이드 사슬 (블레이드 행렬 따라가기 + 사슬 베지어, 45 문서 §3). */
@@ -98,6 +100,7 @@ public final class HeroRig implements AutoCloseable {
 		Path wpn = Content.file(rom, "R_WPN" + costume + "_" + Math.max(0, Math.min(5, bladeLevel())) + ".WAD");
 		combat.setHitVolumes(HitVolumes.forHero(assets.wad(), sk, java.nio.file.Files.exists(wpn) ? WadFile.load(wpn) : null));
 		blades = devple.gow.engine.asset.BladeModels.load(rom, costume, bladeLevel(), shader);
+		bladesLevelLoaded = bladeLevel();
 		chain = BladeChain.fromTweaks(tweaks);
 		// 그림자 (47 문서 §7): 영웅 = 모드 2 (+0x174 bit 31 = 플레이어, 0x1BF8F8), 블레이드 GO = 영웅의 자식 → 같은 방향·평면 (0x1BF994)
 		model.shadowMode = devple.gow.engine.light.ShadowVolume.MODE_GROUND;
@@ -554,6 +557,9 @@ public final class HeroRig implements AutoCloseable {
 				artemis.draw(cam, aspect, w, sk, pose.world(sk), white);
 			}
 		} else if (blades != null && !hideBlades.getAsBoolean()) {
+			if (bladeLevel() != bladesLevelLoaded) {
+				swapBlades(); // 업그레이드 메뉴에서 레벨이 올랐다 (렌더 스레드에서 — GL 자원)
+			}
 			if (chain.sides[0].valid() && chain.sides[1].valid()) {
 				// 블레이드 행렬 = 사슬이 따라간 행렬 (원작 0x1FBB50 → 블레이드 GO), 렌더 보간만 보정
 				Matrix4f fix = renderFix(alpha);
@@ -566,6 +572,40 @@ public final class HeroRig implements AutoCloseable {
 			}
 		}
 	}
+
+	/**
+	 * 블레이드 레벨이 바뀌면 그 레벨 무기 WAD (R_WPN&lt;코스튬&gt;_&lt;레벨&gt;) 로 블레이드 모델·사슬 머티리얼을 바꾼다 — 원작은 업그레이드 메뉴가 끝나면
+	 * Upgrade_LoadWad 0x1D7890 가 "Upgrade" 힙의 무기 WAD 를 그 레벨 것으로 갈아 끼운다 (11 문서 §6.3) [확실: 이름 형식 "%s%d_%d" 0x29DB00].
+	 * 레벨마다 블레이드 텍스처가 다르다 (R_WPN0_1 = Blade128·129·130, R_WPN0_2 = Stage3Btx, R_WPN0_3·4 = Stage…) — 예전 엔진은 다음 레벨 적재까지
+	 * 옛 블레이드를 그렸다 (43 §17). 블레이드 라이트·피격 구 (CDV_MAIBlade, 레벨 무관) 는 그대로 [근사: 라이트].
+	 */
+	private void swapBlades() {
+		int lv = bladeLevel();
+		bladesLevelLoaded = lv;
+		devple.gow.engine.asset.BladeModels next;
+		try {
+			next = devple.gow.engine.asset.BladeModels.load(rom, player.costume, lv, shader);
+		} catch (IOException ex) {
+			next = null;
+		}
+		if (next == null) {
+			return; // 그 레벨 WAD 가 없으면 옛 것 유지
+		}
+		next.setShadowParent(model);
+		blades.close();
+		blades = next;
+		if (chainRenderer != null) {
+			chainRenderer.close();
+			chainRenderer = null; // drawChains 가 새 무기 WAD 머티리얼로 다시 만든다
+		}
+		if (onBladesSwapped != null) {
+			onBladesSwapped.run(); // 블레이드 GO 이펙트 (goMAIblade / goMAIgodblade) 도 새 무기 WAD 것으로
+		}
+		System.out.println("블레이드 무기 WAD 교체: R_WPN" + player.costume + "_" + lv);
+	}
+
+	/** {@link #swapBlades} 뒤 (GameScene: 새 무기 WAD 의 블레이드 GO 이펙트 등록). */
+	public Runnable onBladesSwapped;
 
 	@Override
 	public void close() {

@@ -157,6 +157,8 @@ public final class GameScene implements Scene {
 	private SceneNav nav;
 	private float otherFloorTime;
 	private final Map<String, EnemyFactory.Kind> kinds = new HashMap<>();
+	/** 다른 슬롯 레벨에만 있는 적 리소스 ({@link #loadNeighbourKinds}, null = 전투 개체 아님). 이웃 스크립트 SpawnEnemy 전용. */
+	private final Map<String, EnemyFactory.Kind> neighbourKinds = new HashMap<>();
 	private final List<Enemy> enemies = new ArrayList<>();
 	/** 생물끼리 밀어내기 참여 몸 (영웅 + 적, 프레임마다 다시 채움 — 32 문서 §생물끼리 밀어내기). */
 	private final List<devple.gow.engine.combat.BodyPush.Body> bodies = new ArrayList<>();
@@ -468,6 +470,9 @@ public final class GameScene implements Scene {
 			ph = devple.gow.engine.core.PerfMonitor.phase(". sound", ph);
 			hero.combat.onSound((h, p) -> session.sound.play(h, p));
 			vars.addListener((name, value) -> {
+				if (System.getProperty("gow.debug.hudvars") != null && !name.startsWith("PS2_Sound")) {
+					System.out.println("HUD 변수 " + name + " = " + value);
+				}
 				if (name.regionMatches(true, 0, "PS2_Sound", 0, 9) && value != null && value.startsWith("SND_")) {
 					session.sound.play(value);
 				}
@@ -531,6 +536,9 @@ public final class GameScene implements Scene {
 			hero.player.mp = hero.player.maxMp();
 			hero.combat.godMeter = 100; // 신들의 분노 게이지 가득 (L3+R3)
 		}
+		if (System.getProperty("gow.redOrbs") != null) { // [엔진 전용] 업그레이드 메뉴 검증: 붉은 오브 지급 (43 §17)
+			hero.player.addRedOrbs(Integer.getInteger("gow.redOrbs", 0));
+		}
 		grab.onSound(n -> session.sound.play(n));
 		// 마법 (35 문서): 대상 = 살아있는 적 전체, 소리 → SoundManager, HUD 선택 마법 아이콘
 		hero.magic.setTargets(() -> enemies.stream().map(Enemy::fighter).filter(f -> !f.dead()).toList());
@@ -564,6 +572,10 @@ public final class GameScene implements Scene {
 			setGodBlades(magicFx, hero);
 		}
 		hero.hideBlades = magicFx::godBladesOn;
+		hero.onBladesSwapped = () -> { // 업그레이드로 무기 WAD 교체 (Upgrade_LoadWad 0x1D7890, 43 §17)
+			setGodBlades(magicFx, hero); // 새 R_WPN 의 goMAIblade / goMAIgodblade 가 뒤에 등록돼 이긴다
+			magicFx.reattachBlades();
+		};
 		ph = devple.gow.engine.core.PerfMonitor.phase(". magicFx", ph);
 		// 동적 라이트 (47 문서): 레벨 WAD 의 LGT_ + 무기 WAD 의 블레이드 라이트. -Dgow.nolights 면 예전 고정 조명 (비교용)
 		if (System.getProperty("gow.nolights") == null) {
@@ -748,6 +760,36 @@ public final class GameScene implements Scene {
 						}
 					}
 				}
+			}
+		}
+	}
+
+	/**
+	 * 다른 슬롯 레벨의 적 리소스 (43 문서 §17): 원작 Tag_Resources 0x1BB928 은 RSRCS 이름을 <b>읽는 슬롯</b> (0x3372D8) 의 구조 +0xA + 10·i 에
+	 * "R_%s" 로 둔다 (최대 4 개, 슬롯을 비우면 0x1BC028 이 지움) — 리소스는 슬롯마다라 이웃 레벨이 올라와 있으면 그 적 종류도 상주한다 [확실: 코드].
+	 * 그래서 이웃 스크립트의 SpawnEnemy 가 현재 레벨에 없는 종류도 낸다: ATHN03A 거리에 놓인 ATHN03C RoadSpawner2 → RoadEnemies2 고르곤
+	 * (템플릿 60 = R_MEW, ATHN03A RSRCS 는 R_SKA·R_MI2 뿐) — 영상 5130–5172 의 고르곤. 현재 레벨 종류 표 ({@link #kinds}) 와 따로 둔다
+	 * (보스·특수 템플릿 대역 고르기가 바뀌지 않게).
+	 */
+	private void loadNeighbourKinds(LevelData other) {
+		if (other == null) {
+			return;
+		}
+		for (String name : EnemyFactory.resourceWads(other.wad)) {
+			var path = Content.file(session.rom, name + ".WAD");
+			if (kinds.containsKey(name) || neighbourKinds.containsKey(name) || !Files.exists(path)) {
+				continue;
+			}
+			try {
+				EnemyFactory.Kind k = EnemyFactory.load(path, session.permk, -1);
+				k.anims().attachAll(other.wad); // 그 레벨의 적용 외부 애니 그룹 (loadEnemyKinds 와 같음)
+				orbTweaks.load(k.assets().wad());
+				session.sound.load(k.assets().wad());
+				hero.attachExternalAnims(k.assets().wad()); // 잡기·처형 영웅 애니 (MAIMEW …)
+				neighbourKinds.put(name, k);
+				System.out.println("이웃 슬롯 적 리소스: " + name + " (" + other.wad.name() + ")");
+			} catch (IOException | RuntimeException ex) {
+				neighbourKinds.put(name, null); // 전투 개체가 아닌 리소스 (사운드 뱅크 로더) — 이웃 스폰은 하지 않는다
 			}
 		}
 	}
@@ -984,6 +1026,7 @@ public final class GameScene implements Scene {
 		} catch (IOException | RuntimeException ex) {
 			System.out.println("이웃 레벨 충돌 로드 실패 " + wad + ": " + ex.getMessage());
 		}
+		loadNeighbourKinds(otherData); // 이웃 스크립트가 처음부터 (SpawnAtStart) 낼 수 있으니 스크립트 세계보다 먼저
 		if (nav != null) {
 			nav.setOther(wad, otherData, otherCol, nav.neighbourListener());
 		}
@@ -1520,8 +1563,8 @@ public final class GameScene implements Scene {
 	 * </ol>
 	 * 이전에는 2·3 도 첫 적 종류로 생성해 ATHN01B 등에 엉뚱한 해골 병사가 나왔다.
 	 *
-	 * @param neighbour 다른 슬롯 레벨 스크립트의 SpawnEnemy ({@link SceneNav.Host#neighbourSpawn}) — 이미 올린 적 종류의 템플릿만 (레벨 템플릿·대역 없음),
-	 *                  그 적의 스크립트 이벤트·제거는 이웃 스크립트 세계로 (43 문서 §14.5)
+	 * @param neighbour 다른 슬롯 레벨 스크립트의 SpawnEnemy ({@link SceneNav.Host#neighbourSpawn}) — 현재 레벨 적 종류 또는 그 슬롯의 RSRCS 종류
+	 *                  ({@link #loadNeighbourKinds}, 43 §17) 의 템플릿만 (레벨 템플릿·대역 없음), 그 적의 스크립트 이벤트·제거는 이웃 스크립트 세계로 (43 문서 §14.5)
 	 */
 	private void spawn(ScriptListener.SpawnRequest r, boolean neighbour) {
 		int tpl = r.templateId();
@@ -1533,6 +1576,9 @@ public final class GameScene implements Scene {
 		// 레벨 템플릿 종류(키 "레벨:오브젝트")는 레벨 WAD 의 모든 AI1 을 가지므로 1단계에서 뺀다
 		EnemyFactory.Kind kind = bossKind != null ? bossKind : kinds.entrySet().stream().filter(e -> !e.getKey().contains(":") && e.getValue() != null
 				&& e.getValue().hasTemplate(tpl)).map(Map.Entry::getValue).findFirst().orElse(null);
+		if (kind == null && neighbour) { // 다른 슬롯 레벨의 리소스 (loadNeighbourKinds — 슬롯마다 상주, 0x1BB928)
+			kind = neighbourKinds.values().stream().filter(k -> k != null && k.hasTemplate(tpl)).findFirst().orElse(null);
+		}
 		if (kind == null && neighbour) {
 			System.out.printf("이웃 스폰 생략: %s 템플릿 %d (올린 적 종류에 없음)%n", r.source().name(), tpl);
 			return;
@@ -1593,6 +1639,12 @@ public final class GameScene implements Scene {
 				} else if (ev.type() == 2) {
 					// ORB_EMIT (0x206030 → OrbEmitter_Emit 0x2258D8, idx = 적 WAD 의 OrbEmitter 템플릿) — 해골 머리치기 222 → 503 "SKS Decap", MAISKB06 504
 					emitOrbs(orbTweaks.findNode(String.format("/TweakTemplates/OrbEmitter/%03d/", ev.index())), ef.pos);
+				} else if (ev.type() == 8 && ev.hash() == SCR_ARCHER_SHOOT) {
+					// SCR_ArcherShoot (0x18DAA8 → 매 프레임 0x18D500): 겨눈 뒤 b 에서 ArrowEmitter idx 발사 — 궁수 SHOOT (20, 부정확·퍼짐 21–24, 폭발 33)
+					archerShoot(ef, ev.index(), ev.b());
+				} else if (ev.type() == 1) {
+					// TARGET_FX (0x206030 형식 1 → 0x206788): ArrowEmitter idx 를 대상에게 지금 — 궁수 ASHOOT3X 폭발 화살 33 ×3, 퍼짐 35
+					fireEnemyArrow(ef, ev.index());
 				}
 			});
 		}
@@ -1962,6 +2014,7 @@ public final class GameScene implements Scene {
 				e.hold = true;
 				e.setActTime(s.start() + level.fxTime());
 			}
+			e.sky = true; // 파티클은 하늘 단계에서 (세계보다 먼저 — 0x218848 이 파티클 부품도 층 1 로, 43 §17)
 			skyFx.add(e);
 			skyFxGo.add(s);
 			System.out.println("하늘 이펙트: " + s.name() + " 이미터 " + def.emitters().size() + (s.act() != null ? " act " + s.act().name : ""));
@@ -2073,6 +2126,8 @@ public final class GameScene implements Scene {
 	}
 
 	private static final int SCR_NO_SHADOW = 0xBFC016FE, SCR_EXPLODE_DEATH = 0xBA76AD70;
+	/** SCR_ArcherShoot (Hash127Upper, 등록 0x18DB88 → 처리 0x18DAA8) — 궁수 SHOOT 의 SCRIPT 이벤트. */
+	static final int SCR_ARCHER_SHOOT = 0x63F805BF;
 
 	/** 스크립트 Idle(true) (Internal 0xC) 동안 조작 잠금. */
 	private boolean scriptIdle, hudHidden;
@@ -2282,10 +2337,6 @@ public final class GameScene implements Scene {
 		restartAtCheckpoint();
 	}
 
-	/**
-	 * 원작 상태 13 PowerUpMenu 종료 (PSMDone): 메뉴가 바꾼 HUD 값을 진행도로 되돌려 쓴다 (0x1D7700 투자 오브 복사,
-	 * Upgrade_LoadWad 0x1D7890 레벨 복사). 무기 레벨이 바뀌면 원작은 R_WPN / 마법 WAD 를 교체한다 (여기서는 수치만).
-	 */
 	/** 게임 씬의 HUD 바인딩: 미터 자동 표시, 마지막으로 본 값은 세션 것 (레벨을 넘어 유지). */
 	private HudBinding newHudBinding() {
 		HudBinding b = new HudBinding();
@@ -2295,6 +2346,11 @@ public final class GameScene implements Scene {
 		return b;
 	}
 
+	/**
+	 * 원작 상태 13 PowerUpMenu 종료 (PSMDone): 메뉴가 바꾼 HUD 값을 진행도로 되돌려 쓴다 (0x1D7700 투자 오브 복사,
+	 * Upgrade_LoadWad 0x1D7890 레벨 복사). 블레이드 레벨이 바뀌면 HeroRig 가 다음 그리기에서 R_WPN 을 그 레벨 것으로 바꾼다
+	 * ({@code swapBlades}, 43 §17). 마법 WAD (R_LGHTN&lt;단계&gt; 등) 는 MagicFx 가 시전 때 그 단계 것을 등록한다 ({@code stage}).
+	 */
 	private void onPowerUpClosed() {
 		UiVariables v = hud.variables();
 		PlayerState ps = hero.player;
@@ -2415,8 +2471,8 @@ public final class GameScene implements Scene {
 			hudBinding.meter(hero.player, hud.variables(), hero.combat.active(), real);
 			hitCounterHud();
 		}
-		if (debugInput != null && questionId >= 0) {
-			debugInput.advance(dt); // 질문 메뉴 중에는 게임 틱이 멈추므로 스크립트 입력을 여기서 진행해 HUD 로 (검증용)
+		if (debugInput != null && (questionId >= 0 || powerUp)) {
+			debugInput.advance(dt); // 질문·업그레이드 메뉴 중에는 게임 틱이 멈추므로 스크립트 입력을 여기서 진행해 HUD 로 (검증용, 43 §17)
 			hud.update(debugInput);
 		} else if (auto != null && questionId >= 0) {
 			hud.update(auto.menu(dt)); // 자동 플레이: 질문 메뉴는 × 로 첫 선택지
@@ -2482,7 +2538,7 @@ public final class GameScene implements Scene {
 			world.postEvent(SceneNav.EVENT_USE, 0, 0, 0, world.player()); // 버튼 안내 센서 (mode 2 = 볼륨 안일 때만 반응)
 			promptCleared = true; // 0x1DC3F8: 1024 뒤 아이콘 슬롯 1 지움 — 다시 켜는 것은 볼륨 진입 (0x1AAC88) 뿐
 		}
-		if (e.input().pressed(PadButton.SELECT)) {
+		if (e.input().pressed(PadButton.SELECT) || debugInput != null && debugInput.pressed(PadButton.SELECT)) { // gow.script 도 (메뉴 검증, 43 §17)
 			paused = powerUp = true;
 			HudBinding.write(hero.player, hud.variables()); // Progress_ToHud
 			hud.variables().event("PS2_PSMMenu_Event", 1);
@@ -2654,9 +2710,13 @@ public final class GameScene implements Scene {
 		level.setMaterialTimes(nav.navWorld.platforms().materialTimes()); // 스크립트 재질 애니 ("$", Platforms.MatClock)
 		otherMaterialTimes = nav.neighbourPlatforms().materialTimes();
 		breakables.update(hero.combat, world, this::onBreak);
+		if (!archerAims.isEmpty()) {
+			updateArcherAims(dt);
+		}
 		if (!arrows.shots().isEmpty()) {
 			arrows.update(dt, new ArrowShots.Targets(breakables, world, this::onBreak, enemies.stream().map(Enemy::fighter).toList(), hero.combat,
-					col, otherCol, nav.navWorld.platforms(), nav.neighbourPlatforms(), magicFx != null ? magicFx.effects() : null));
+					col, otherCol, nav.navWorld.platforms(), nav.neighbourPlatforms(), magicFx != null ? magicFx.effects() : null,
+					hero.hittable(), this::enemyArrowHit));
 		}
 		combatCameraTick();
 		cameraRig.setHeroState(heroStateBits(), enemies.stream().anyMatch(en -> !en.fighter().dead() && en.fighter().brain() != null
@@ -3057,6 +3117,110 @@ public final class GameScene implements Scene {
 	public static final int EVENT_RESET = 1015, EVENT_ARROW = 1020;
 	/** GO 화살 이미터 발사체 (발리스타 goBigarrow). */
 	private final ArrowShots arrows = new ArrowShots();
+	/** 적 화살 퍼짐·부정확 무작위 (원작 0x13E600 난수, 결정적 녹화를 위해 고정 씨앗). */
+	private final java.util.Random arrowRnd = new java.util.Random(0x2223C8);
+
+	/** 겨누는 중인 SCR_ArcherShoot (궁수, 이미터, 남은 초, 이벤트 때 기술 id — 피격으로 기술이 바뀌면 취소). */
+	private record ArcherAim(EnemyFighter fighter, int emitter, float[] left, int move) {
+	}
+
+	private final List<ArcherAim> archerAims = new ArrayList<>();
+
+	/**
+	 * SCR_ArcherShoot 시작 (0x18DAA8: 겨눔 +0x2CC = 0, 당김 +0x2C8 = 0 → 매 프레임 0x18D500). 1 단계: 대상 수평 각 / 25° (0.43633) 를 [−1, 1] 로 자른
+	 * 겨눔 값까지 프레임당 0.02 씩 (닿는 프레임에 2 단계로), 그동안 당김 += 0.01 (0 을 넘으면 −1 → 첫 프레임 −0.99). 2 단계: 당김 += 0.05 / 프레임,
+	 * 이벤트 b (궁수 SHOOT 0.2, 폭발 화살 33 은 0) 이상이면 쏜다 (0x18D6B8 → 0x18D800 = 0x222710) [확실: 상수]. 바로 앞이면 25 프레임 ≈ 0.42 초,
+	 * 25° 옆이면 64 프레임. 겨누는 동안 궁수가 돌아서는 것은 반영하지 않는다 [근사].
+	 */
+	private void archerShoot(EnemyFighter f, int emitter, float b) {
+		Vector3f to = new Vector3f(hero.ctl.position).sub(f.pos);
+		float rel = (float) Math.atan2(-to.x, -to.z) - f.yaw;
+		rel = (float) Math.atan2(Math.sin(rel), Math.cos(rel));
+		archerAims.add(new ArcherAim(f, emitter, new float[]{archerShotDelay(rel, b)}, f.combat().active() ? f.combat().move().id() : -1));
+	}
+
+	/** {@link #archerShoot} 의 겨눔 + 당김 프레임 / 60 (초). rel = 대상까지 수평 각 (라디안). */
+	static float archerShotDelay(float rel, float b) {
+		float d = Math.max(-1f, Math.min(1f, rel / 0.43633f));
+		int n0 = Math.max(1, (int) Math.ceil(Math.abs(d) / 0.02f - 1e-4f));
+		float draw = -1f + 0.01f * n0;
+		int n1 = Math.max(1, (int) Math.ceil((b - draw) / 0.05f - 1e-4f));
+		return (n0 + n1) / 60f;
+	}
+
+	/** 겨누는 궁수 갱신: 시간이 되면 쏜다. 죽었거나 기술이 바뀌었으면 (맞아서 끊김) 취소 [추정]. */
+	private void updateArcherAims(float dt) {
+		for (java.util.Iterator<ArcherAim> it = archerAims.iterator(); it.hasNext(); ) {
+			ArcherAim a = it.next();
+			int move = a.fighter().combat().active() ? a.fighter().combat().move().id() : -1;
+			if (a.fighter().dead() || move != a.move() || !enemies.stream().anyMatch(en -> en.fighter() == a.fighter())) {
+				it.remove();
+				continue;
+			}
+			a.left()[0] -= dt;
+			if (a.left()[0] <= 0) {
+				it.remove();
+				fireEnemyArrow(a.fighter(), a.emitter());
+			}
+		}
+	}
+
+	/**
+	 * 적 ArrowEmitter 를 영웅에게 (0x222710 대상 있음): 시작 = 이미터 "Aim Joint" (궁수 rWrist), 대상점 = 발 + 몸 높이 ½ (0x18D708: vt+0xB8 × 0.5 × 16,
+	 * 크라토스 2.2 m [추정: vt+0xB8 = 몸 높이]), 대상 속도 = 이번 틱 이동 (대상 +0xE0) [근사].
+	 */
+	private void fireEnemyArrow(EnemyFighter f, int emitter) {
+		if (hero.player.hp <= 0) {
+			return;
+		}
+		String en = String.format(java.util.Locale.ROOT, "/TweakTemplates/ArrowEmitter/%03d/", emitter);
+		String joint = orbTweaks.s(en, "Aim Joint", null);
+		Vector3f origin = null;
+		if (joint != null) {
+			Matrix4f m = new Matrix4f();
+			if (devple.gow.engine.fx.MagicFx.joints(f).world(joint, m)) {
+				origin = m.getTranslation(new Vector3f());
+			}
+		}
+		if (origin == null) {
+			origin = new Vector3f(f.pos).add(0, f.bodyHeight() * 0.5f, 0);
+		}
+		Vector3f target = new Vector3f(hero.ctl.position).add(0, devple.gow.engine.nav.NavTuning.UNITS_PER_METER * 2.2f * 0.5f, 0);
+		Vector3f vel = new Vector3f(hero.ctl.position).sub(hero.ctl.prevPosition).mul(60f);
+		var shots = arrows.fireAt(orbTweaks, emitter, origin, target, vel, f.combat(), magicFx != null ? magicFx.effects() : null, arrowRnd);
+		if (!shots.isEmpty() && System.getProperty("gow.debug.combat") != null) {
+			System.out.printf(java.util.Locale.ROOT, "적 화살: 이미터 %d × %d (%.0f, %.0f, %.0f) → (%.0f, %.0f, %.0f)%n", emitter, shots.size(),
+					origin.x, origin.y, origin.z, target.x, target.y, target.z);
+		}
+	}
+
+	/**
+	 * 적 화살이 영웅에 맞음 (0x223920 → 0x2045B8 → 0x204690): 피해 = Arrow "Damage" × 쏜 적 배율 (AI Damage Mult) [근사: 배율 위치],
+	 * 밀기 = Ground/Air Impulse (Right, Up, Away), 막으면 "Block Sound" (Block Down) [근사], Concussion ≥ 0 이면 그 자리 범위 피해·이펙트
+	 * (폭발 화살 33 → Concussion 33 goSKAxplode, 0x2244D8 [추정]).
+	 */
+	private void enemyArrowHit(ArrowShots.Shot s, Vector3f at) {
+		String an = s.arrowNode;
+		devple.gow.engine.combat.Combatant owner = s.owner;
+		float dmg = s.damage() * (owner != null ? owner.damageScale() : 1f);
+		float[] imp = {orbTweaks.f(an, "Ground Impulse Right", 0f), orbTweaks.f(an, "Ground Impulse Up", 0f), orbTweaks.f(an, "Ground Impulse Away", 0f),
+				orbTweaks.f(an, "Air Impulse Right", 0f), orbTweaks.f(an, "Air Impulse Up", 0f), orbTweaks.f(an, "Air Impulse Away", 0f),
+				0f, 0f, orbTweaks.f(an, "Ground Impulse Away", 0f)};
+		int mfx = orbTweaks.i16(an, "MFX Template", -1);
+		var attack = new devple.gow.tools.combat.CombatFile.Attack(0, 0, imp, 0, 1, mfx, -1, Math.round(dmg), 0, 0, 0, 0);
+		var r = owner != null ? hero.hittable().receive(attack, owner, dmg, new Vector3f()) : devple.gow.engine.combat.Hittable.Result.IGNORED;
+		String snd = r == devple.gow.engine.combat.Hittable.Result.BLOCKED ? orbTweaks.s(an, "Block Sound", null) : orbTweaks.s(an, "Hit Sound 4", null);
+		if (snd != null && snd.startsWith("SND_")) {
+			session.sound.play(snd, at);
+		}
+		int conc = orbTweaks.i16(an, "Concussion", -1);
+		if (r != devple.gow.engine.combat.Hittable.Result.BLOCKED && conc > 0 && magicFx != null) {
+			magicFx.concussion(conc, null, at, owner);
+		}
+		if (System.getProperty("gow.debug.combat") != null) {
+			System.out.printf(java.util.Locale.ROOT, "적 화살 명중: %s 피해 %.1f %s%n", an, dmg, r);
+		}
+	}
 
 	/**
 	 * 1015 = PushPull 리셋 (0x266040 → 0x2100E0: 크랭크 되감기 → 다시 잡힘, 레버 −4), 1020 = 화살 이미터 (Creator 비헤이비어, 0x267698 → 0x222710)
@@ -3333,6 +3497,9 @@ public final class GameScene implements Scene {
 		int prevStage = devple.gow.engine.render.DrawStage.set(staged ? devple.gow.engine.render.DrawStage.EARLY : devple.gow.engine.render.DrawStage.ALL);
 		try {
 			level.skyNeighbour = otherScene; // 다른 슬롯 레벨의 하늘 GO 도 하늘 단계에 (두 슬롯 상주, 각자 가시 칸 — 43 §16)
+			if (level.skyEffects == null && magicFx != null) {
+				level.skyEffects = c -> magicFx.renderSky(c, e.window().aspect()); // 하늘 GO 파티클은 하늘 단계 (층 1, 43 §17)
+			}
 			level.render(e, alpha);
 			renderOtherSlot(e);
 			drawActors(e, alpha);
@@ -3573,6 +3740,7 @@ public final class GameScene implements Scene {
 		session.sound.stopAll();
 		session.sound.unload(level.data().wad.name());
 		kinds.values().stream().filter(k -> k != null).forEach(k -> session.sound.unload(k.assets().wad().name()));
+		neighbourKinds.values().stream().filter(k -> k != null).forEach(k -> session.sound.unload(k.assets().wad().name()));
 		soundOnly.forEach(session.sound::unload);
 		session.sound.trimFileCache();
 		enemies.forEach(en -> en.model().close());
@@ -3582,6 +3750,7 @@ public final class GameScene implements Scene {
 		// 종류 (보스 템플릿 여럿 = 레벨 WAD 하나) 는 한 번만
 		java.util.Set<WadAssets> kindAssets = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
 		kinds.values().stream().filter(k -> k != null).forEach(k -> kindAssets.add(k.assets()));
+		neighbourKinds.values().stream().filter(k -> k != null).forEach(k -> kindAssets.add(k.assets()));
 		if (boss != null) {
 			boss.kinds().values().stream().filter(k -> k != null).forEach(k -> kindAssets.add(k.assets()));
 		}

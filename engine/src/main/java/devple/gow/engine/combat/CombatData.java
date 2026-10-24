@@ -43,13 +43,38 @@ public final class CombatData {
 
 	private final AnimationSet animation;
 
-	/** 외부 애니 그룹(잡기 MAI* 등, 적 WAD 의 0x10003)을 붙인 뒤 다시 색인. */
+	/** ANM 그룹 플래그 0x20 = 블렌드 그룹 (궁수 "shoot" 0x80020, 아기 히드라 "BHAbabyBite" 0x40020, BMI 주먹 …). */
+	static final int GROUP_BLEND = 0x20;
+
+	/**
+	 * 외부 애니 그룹(잡기 MAI* 등, 적 WAD 의 0x10003)을 붙인 뒤 다시 색인.
+	 * 블렌드 그룹 (플래그 0x20) 은 그룹 이름으로도 찾는다 — 기술 애니가 그룹을 가리키는 것 (궁수 SHOOT = 그룹 "shoot" 의 Ashoot00/01/02,
+	 * 아기 히드라 물기·불기, BMI 주먹) 이 있다. 원작 0x1F6FC8 → 0x1006F8 → 0x107200 은 그룹 플래그 0x20 이면 그 그룹 act 를 모두 모아
+	 * (+0xCC 목록, +0xDC 개수) 겨눔 값으로 섞는다 [확실: 모으기 / 근사: 엔진은 가운데 act (블렌드 번호 (n−1)/2 — 3 개면 Center) 하나].
+	 * 전에는 찾지 못해 그 기술이 시작 프레임에 끝나 이벤트 (SCR_ArcherShoot · 소리) 가 하나도 나지 않았다 (43 §17).
+	 */
 	public void reindexAnimations() {
 		for (AnimationSet.Group g : animation.groups) {
 			for (Animation a : g.acts) {
 				animByHash.putIfAbsent(TweakFile.hashUpper(a.name), a);
 			}
 		}
+		for (AnimationSet.Group g : animation.groups) {
+			Animation c = blendCentre(g);
+			if (c != null && g.name != null && !g.name.isEmpty()) {
+				animByHash.putIfAbsent(TweakFile.hashUpper(g.name), c);
+			}
+		}
+	}
+
+	/** 블렌드 그룹의 가운데 act (블렌드 번호 (최대)/2, 없으면 첫 act). 블렌드 그룹이 아니면 null. */
+	static Animation blendCentre(AnimationSet.Group g) {
+		if ((g.flags & GROUP_BLEND) == 0 || g.acts.isEmpty()) {
+			return null;
+		}
+		int max = g.acts.stream().mapToInt(a -> a.blendIndex).max().orElse(0);
+		int want = Math.max(0, max) / 2;
+		return g.acts.stream().filter(a -> a.blendIndex == want).findFirst().orElse(g.acts.getFirst());
 	}
 
 	public static List<String> heroFiles() {

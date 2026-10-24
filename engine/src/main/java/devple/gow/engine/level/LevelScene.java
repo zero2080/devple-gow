@@ -790,6 +790,10 @@ public final class LevelScene implements Scene {
 		if (skyNeighbour != null && skyNeighbour != this) {
 			skyNeighbour.drawNeighbourSky(e, cam, fx.env().time());
 		}
+		if (skyEffects != null) {
+			skyEffects.accept(cam); // 하늘 GO 파티클 (층 1) — 세계가 덮는다 (43 §17)
+			e.renderer().basic().use();
+		}
 		glDepthMask(true);
 		devple.gow.engine.render.DrawStage.set(stage);
 		fx.beginWorld(e, cam, false);
@@ -1177,6 +1181,12 @@ public final class LevelScene implements Scene {
 	 * 걸어 들어가는 동안). 엔진은 현재 레벨 하늘만 그려 하늘이 검게 비었다 (43 §16) [확실: 가시 칸 데이터 / 근사: 두 슬롯 렌더 구조].
 	 */
 	public LevelScene skyNeighbour;
+
+	/**
+	 * 하늘 단계 끝에 그릴 하늘 GO 파티클 (게임 씬: {@code MagicFx.renderSky}). 원작 0x218848 은 하늘 GO 의 파티클 부품도 층 1 로 두어 세계 (층 2–4) 가
+	 * 덮는다 — 일반 파티클 패스에서 그리면 하늘 미니어처 거리 (~260) 보다 먼 세계 위에 불덩이가 떠 보였다 (ATHN03C 구덩이·절벽 길, 43 §17). null = 없음.
+	 */
+	public java.util.function.Consumer<Camera> skyEffects;
 
 	/** 하늘 GO (정적 + 애니) — 가시 칸으로 숨은 것 제외, 깊이 쓰기는 호출자가 끈 상태. time = 애니 하늘의 효과 시간. */
 	private void drawSkyObjects(Engine e, Camera cam, float time) {

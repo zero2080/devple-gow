@@ -135,7 +135,7 @@ M[j] = world[j]                 (그 밖: 정점이 관절 로컬 공간)
 |-------|------|------|
 | 0x00 | u32 | 그룹 번호 |
 | 0x04 | u32 | firstAct (세트 전체 act 번호) |
-| 0x08 | u32 | flags: 0x40 일반, 0x220/0x820/0x420 블렌드 그룹(`bwalk`, `balWalk`, `bClimb`), **0x20000 외부** |
+| 0x08 | u32 | flags: 0x40 일반, 0x220/0x820/0x420 블렌드 그룹(`bwalk`, `balWalk`, `bClimb`), **0x20000 외부**. 0x20 = 블렌드 그룹 — 전투 기술 애니 해시가 그룹 이름을 가리키기도 한다 (궁수 SHOOT → "shoot" 0x80020, 0x1F6FC8 → 0x107200 이 그룹 act 를 모음, 엔진 `CombatData.blendCentre`, 43 §17.2-2) |
 | 0x0C | u32 | actCount |
 | 0x10 | u32 | 0x0B |
 | 0x14 | char[24] | 이름 (`hero`, `bwalk`, `maiMin`, `Athn01A` …) |

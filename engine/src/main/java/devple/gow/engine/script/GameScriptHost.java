@@ -205,7 +205,7 @@ public class GameScriptHost implements EscHost {
 			}
 		}
 		Map<Integer, Object> m = scope == 2 ? globalData : scope == 3 ? levelData : null;
-		Object v = m == null ? null : m.get(id);
+		Object v = m == null ? null : m.get(scope == 2 ? globalKey(id) : id);
 		if (v != null) {
 			return v;
 		}
@@ -222,10 +222,31 @@ public class GameScriptHost implements EscHost {
 		if (scope == 1) {
 			setPlayerVar(id, value);
 		} else if (scope == 2) {
-			globalData.put(id, value);
+			globalData.put(globalKey(id), value);
 		} else if (scope == 3) {
 			levelData.put(id, value);
 		}
+	}
+
+	/**
+	 * 스크립트 GlobalData:n 의 저장 열쇠. 원작은 GlobalData 엔티티가 메시지 0 에서 변수 (이름, 타입) 를 등록할 때 (0x1AE848 → 0x1AEC88) 전역 표
+	 * 0x30063C (0x1C 바이트 × 최대 128, "Too many GlobalData variables!") 에서 <b>이름</b> 으로 (strcmp 0x28A4A4) 찾거나 붙이고, 레벨 슬롯의 번호표
+	 * (0x2FFE3C + 2·(슬롯 +0x10 + 번호)) 에 그 칸을 적는다 — 읽기·쓰기 (0x1AEDE8) 는 실행 중 엔티티 슬롯의 표로 찾는다 [확실]. 그래서 같은 변수의
+	 * 번호가 레벨마다 다르다 (ZoneArea: ATHN03A 0 · ATHN04A 2 · ATHN02A 1, HydraDead: ATHN01A 0 · 01B 1 · 01E 2 — 출시 데이터 이름 93 개 중 48 개).
+	 * 기본 = 번호 그대로 (이름을 모름), {@link ScriptHost} 가 그 레벨의 선언 이름으로 바꾼다 (43 문서 §17).
+	 */
+	protected int globalKey(int id) {
+		return id;
+	}
+
+	/** 변수 이름 → 저장 열쇠 (이름이 없는 번호 0..0xFFF 와 겹치지 않게 비트 30). */
+	public static int globalKey(String name) {
+		return 0x40000000 | (name.hashCode() & 0x3FFFFFFF);
+	}
+
+	/** 이름으로 GlobalData 값 (없으면 null). */
+	public Object global(String name) {
+		return globalData.get(globalKey(name));
 	}
 
 	public Map<Integer, Object> globalData() {

@@ -43,9 +43,12 @@ public final class ArrowShots {
 		final Set<String> skip;
 		public float age;
 		public boolean dead;
-		/** 멈춘 까닭 (기록·시험): 물체 이름, "적", "벽", "수명". */
+		/** 멈춘 까닭 (기록·시험): 물체 이름, "적", "영웅", "벽", "수명". */
 		public String hit;
-		EffectSystem.Effect fx;
+		EffectSystem.Effect fx, trail;
+		/** 적이 쏜 화살 ({@link #fireAt}): 쏜 전투원 (영웅만 맞는다), Arrow 템플릿 노드. 레벨 GO 화살이면 null. */
+		public Combatant owner;
+		public String arrowNode;
 
 		Shot(float damage, float life, float gravity, float impulse, String hitGo, Set<String> skip) {
 			this.damage = damage;
@@ -54,6 +57,11 @@ public final class ArrowShots {
 			this.impulse = impulse;
 			this.hitGo = hitGo;
 			this.skip = skip;
+		}
+
+		/** 적이 쏜 화살 피해 (Arrow "Damage" s16). */
+		public float damage() {
+			return damage;
 		}
 	}
 
@@ -106,10 +114,136 @@ public final class ArrowShots {
 		return s;
 	}
 
-	/** 맞을 수 있는 것들 (없는 것은 null). */
+	/** ArrowEmitter "#1bf49679" (이미터 +0x20): 대상점에 더하는 무작위 구 점의 반지름 (m) — 궁수 0.1, less_accurate 1.75, 폭발 화살 1.5 [확실: 0x2228E0]. */
+	static final int EMITTER_SCATTER = 0x1bf49679;
+	/** Arrow "#9fdb479c" (Arrow +0x2C): 0 이면 대상 속도로 앞질러 겨눈다 (0x222A30 → 0x222A44) [확실: 분기 / 추정: 0 이 아닌 쪽 = 퍼짐 각]. */
+	static final int ARROW_NO_LEAD = 0x9fdb479c;
+	/** Arrow 수명 키 (#117c872e, 초). */
+	static final int ARROW_LIFE = 0x117c872e;
+
+	/**
+	 * 적이 대상에게 쏘는 화살 (원작 0x222710 대상 있음: SCR_ArcherShoot 0x18D7F8 · TARGET_FX 0x206788) [확실: 흐름·상수 / 근사: 맞음 판정·피해].
+	 * 이미터 Count 발마다: 겨눌 점 = 대상점 (+ 대상 속도 × 거리 / (Velocity·16), Arrow #9fdb479c = 0 일 때) + 단위 구 무작위 점 × #1bf49679·16 →
+	 * 탄도 해 {@link #launch} (Velocity m/s, Gravity m/s² — Gravity Flag 일 때) 로 속도. 날아가는 GO = "GO Name", 꼬리 = "Trail Name" (goStdArrow = 붉은 줄).
+	 * 맞는 것은 영웅·벽뿐 (적끼리는 안 맞는다 [추정: 원작 충돌 마스크 미해석]).
+	 *
+	 * @param origin 이미터 "Aim Joint" 월드 위치 (없으면 쏜 적 몸 중심)
+	 * @param target 대상점 (영웅 몸 중심)
+	 */
+	public List<Shot> fireAt(Tweaks tw, int emitter, Vector3f origin, Vector3f target, Vector3f targetVel, Combatant owner, EffectSystem fx,
+							 java.util.Random rnd) {
+		List<Shot> out = new ArrayList<>();
+		String en = String.format(Locale.ROOT, "/TweakTemplates/ArrowEmitter/%03d/", emitter);
+		if (tw == null || tw.s(en, "Instance Name", null) == null || origin == null || target == null) {
+			return out;
+		}
+		int arrow = tw.i16(en, "Arrow Template", -1);
+		String an = String.format(Locale.ROOT, "/TweakTemplates/Arrow/%03d/", arrow);
+		if (tw.s(an, "Instance Name", null) == null) {
+			return out;
+		}
+		float speed = tw.f(an, "Velocity", 60f); // m/s
+		boolean grav = (tw.raw(an, "Gravity Flag").orElse(0) & 0xff) != 0;
+		float gravity = grav ? tw.f(an, "Gravity", 9.82f) : 0f; // m/s²
+		var lifeKey = tw.rawHash(an, ARROW_LIFE);
+		float life = lifeKey.isPresent() ? Float.intBitsToFloat(lifeKey.getAsInt()) : 10f;
+		boolean lead = tw.rawHash(an, ARROW_NO_LEAD).orElse(0) == 0;
+		var sc = tw.rawHash(en, EMITTER_SCATTER);
+		float scatter = (sc.isPresent() ? Float.intBitsToFloat(sc.getAsInt()) : 0f) * 16f;
+		int count = Math.max(1, tw.i(en, "Count", 1));
+		for (int k = 0; k < count; k++) {
+			Vector3f aim = new Vector3f(target);
+			if (lead && targetVel != null && speed > 0) {
+				float t = origin.distance(target) / (speed * 16f); // 0x222A6C: |대상 − 시작| / (Velocity·16)
+				aim.fma(t, targetVel);
+			}
+			if (scatter > 0 && rnd != null) { // 0x2228E0: z = 2u − 1, φ = 2πv, (√(1−z²) cos φ, √(1−z²) sin φ, z)
+				float z = 2f * rnd.nextFloat() - 1f, phi = (float) (2 * Math.PI) * rnd.nextFloat(), r = (float) Math.sqrt(1 - z * z);
+				aim.add(r * (float) Math.cos(phi) * scatter, r * (float) Math.sin(phi) * scatter, z * scatter);
+			}
+			Shot s = new Shot(tw.i16(an, "Damage", 0), life, gravity * 16f, tw.f(an, "Impulse", 0f) * 16f, null, null);
+			s.owner = owner;
+			s.arrowNode = an;
+			s.pos.set(origin);
+			s.prev.set(origin);
+			s.vel.set(launch(origin, aim, speed, gravity));
+			s.rot.set(lookAlong(s.vel));
+			String go = tw.s(an, "GO Name", null), trail = tw.s(an, "Trail Name", null);
+			if (fx != null) {
+				EffectSystem.Anchor follow = o -> {
+					o.set(s.rot).setTranslation(s.pos);
+					return !s.dead;
+				};
+				s.fx = go != null ? fx.play(go, follow) : null;
+				s.trail = trail != null ? fx.play(trail, follow) : null;
+			}
+			shots.add(s);
+			out.add(s);
+		}
+		return out;
+	}
+
+	/**
+	 * 탄도 해 (원작 0x2223C8): 미터 공간 (차이 / 16) 에서 발사각 θ 를 0 부터 π/4 걸음으로 8 번 반으로 줄이며 찾는다 — t = 수평 거리 / (v cos θ),
+	 * y(t) = v sin θ · t − g t² / 2 가 높이 차보다 크면 θ 를 줄이고 아니면 키운다 (θ &gt; π/4 이고 낮으면 도착 때 내려가는 중 (|v sin θ| &lt; g t) 일 때만 줄임)
+	 * [확실: 상수 0.7854 · 0.5 · 8 회]. 반환 = 단위/초 (×16).
+	 */
+	static Vector3f launch(Vector3f from, Vector3f to, float speed, float gravity) {
+		float dx = (to.x - from.x) / 16f, dy = (to.y - from.y) / 16f, dz = (to.z - from.z) / 16f;
+		float d = (float) Math.sqrt(dx * dx + dz * dz);
+		if (speed <= 0) {
+			return new Vector3f();
+		}
+		if (d < 1e-5f) {
+			return new Vector3f(0, Math.signum(dy == 0 ? 1 : dy) * speed * 16f, 0);
+		}
+		float theta = 0, step = 0.7854f, c = 1, s = 0;
+		for (int i = 0; i < 8; i++) {
+			c = (float) Math.cos(theta);
+			s = (float) Math.sin(theta);
+			float t = d / (c * speed);
+			float y = -gravity * 0.5f * t * t + s * speed * t;
+			if (theta <= 0.7854f) {
+				theta += dy < y ? -step : step;
+			} else if (dy < y) {
+				theta -= step;
+			} else {
+				theta += Math.abs(s * speed) < Math.abs(gravity * t) ? -step : step;
+			}
+			step *= 0.5f;
+		}
+		// 방향은 마지막으로 평가한 θ 의 cos·sin (0x222524: 반복 끝의 걸음 조정 뒤 다시 구하지 않는다)
+		return new Vector3f(dx / d * c, s, dz / d * c).mul(speed * 16f);
+	}
+
+	/** +Z = 진행 방향인 회전 (화살 GO 는 +Z 로 난다). */
+	static Matrix4f lookAlong(Vector3f v) {
+		Vector3f z = new Vector3f(v);
+		if (z.lengthSquared() < 1e-8f) {
+			z.set(0, 0, 1);
+		}
+		z.normalize();
+		Vector3f up = Math.abs(z.y) > 0.99f ? new Vector3f(1, 0, 0) : new Vector3f(0, 1, 0);
+		Vector3f x = new Vector3f(up).cross(z).normalize();
+		Vector3f y = new Vector3f(z).cross(x);
+		return new Matrix4f().set(x.x, x.y, x.z, 0, y.x, y.y, y.z, 0, z.x, z.y, z.z, 0, 0, 0, 0, 1);
+	}
+
+	/** 적 화살이 영웅에 맞음: (화살, 맞은 점). */
+	public interface HeroHit {
+		void hit(Shot shot, Vector3f at);
+	}
+
+	/** 맞을 수 있는 것들 (없는 것은 null). hero/onHero = 적이 쏜 화살의 대상 (영웅 몸 구). */
 	public record Targets(Breakables breakables, ScriptWorld world, Consumer<String> onBreak, List<? extends EnemyFighter> enemies,
 						  Combatant attacker, LevelCollision col, LevelCollision otherCol, Platforms bodies, Platforms otherBodies,
-						  EffectSystem fx) {
+						  EffectSystem fx, Hittable hero, HeroHit onHero) {
+
+		public Targets(Breakables breakables, ScriptWorld world, Consumer<String> onBreak, List<? extends EnemyFighter> enemies,
+					   Combatant attacker, LevelCollision col, LevelCollision otherCol, Platforms bodies, Platforms otherBodies,
+					   EffectSystem fx) {
+			this(breakables, world, onBreak, enemies, attacker, col, otherCol, bodies, otherBodies, fx, null, null);
+		}
 	}
 
 	/** 피격 기록 (반응 0). */
@@ -143,6 +277,11 @@ public final class ArrowShots {
 		Breakables.Item bestBreak = null;
 		EnemyFighter bestEnemy = null;
 		String why = null;
+		if (s.owner != null) { // 적이 쏜 화살: 영웅 몸 구 · 벽만
+			s.rot.set(lookAlong(s.vel)); // 탄도를 따라 기울어진다
+			heroStep(s, t, dir, len);
+			return;
+		}
 		if (t.breakables() != null) {
 			for (Breakables.Item it : t.breakables().items()) {
 				if (it.broken()) {
@@ -218,6 +357,54 @@ public final class ArrowShots {
 		stop(s, why, at, t);
 	}
 
+	/** 영웅 몸 구 폴백 (피격 볼륨을 모를 때): 중심 = 발 + 몸 높이 ½ (2.2 m × 0.5 × 16, 궁수가 겨누는 점과 같음), 반지름 1 m [근사]. */
+	static final float HERO_FALLBACK_CENTRE = 17.6f, HERO_FALLBACK_RADIUS = 16f;
+
+	/** 적 화살 한 틱: 이전→현재 선분이 정적 충돌 (두 슬롯) · 움직이는 몸 보다 먼저 영웅 몸 구에 닿으면 맞음 [근사: 원작 충돌 마스크]. */
+	private void heroStep(Shot s, Targets t, Vector3f dir, float len) {
+		float wallT = Float.MAX_VALUE;
+		for (LevelCollision c : new LevelCollision[]{t.col(), t.otherCol()}) {
+			if (c == null) {
+				continue;
+			}
+			LevelCollision.Hit h = c.raycast(s.prev, dir, len);
+			if (h != null && h.distance() < wallT) {
+				wallT = h.distance();
+			}
+		}
+		for (Platforms ps : new Platforms[]{t.bodies(), t.otherBodies()}) {
+			if (ps == null) {
+				continue;
+			}
+			NavWorld.Contact c = ps.segment(s.prev, s.pos, 0);
+			if (c != null && c.t() * len < wallT) {
+				wallT = c.t() * len;
+			}
+		}
+		float heroT = Float.MAX_VALUE;
+		Hittable hero = t.hero();
+		if (hero != null && !hero.invulnerable()) {
+			var hv = hero.hitVolumes();
+			List<float[]> spheres = hv != null ? hv.ownSpheres() : null; // 몸 구 (부착 무기 GO 의 구 제외)
+			if (spheres == null || spheres.isEmpty()) {
+				Vector3f p = hero.position();
+				spheres = List.of(new float[]{p.x, p.y + HERO_FALLBACK_CENTRE, p.z, HERO_FALLBACK_RADIUS});
+			}
+			for (float[] sp : spheres) {
+				heroT = Math.min(heroT, segSphere(s.prev, dir, len, new Vector3f(sp[0], sp[1], sp[2]), sp[3]));
+			}
+		}
+		if (heroT < wallT && heroT != Float.MAX_VALUE) {
+			Vector3f at = new Vector3f(s.prev).fma(heroT, dir);
+			if (t.onHero() != null) {
+				t.onHero().hit(s, at);
+			}
+			stop(s, "영웅", at, t);
+		} else if (wallT != Float.MAX_VALUE) {
+			stop(s, "벽", new Vector3f(s.prev).fma(wallT, dir), t);
+		}
+	}
+
 	/** 쏜 GO 의 몸은 뺀 CDV 선분 접촉 (가장 가까운 것). */
 	private static NavWorld.Contact segmentSkipping(Platforms ps, Vector3f from, Vector3f to, Set<String> skip) {
 		if (skip == null || skip.isEmpty()) {
@@ -247,6 +434,9 @@ public final class ArrowShots {
 		}
 		if (s.fx != null) {
 			s.fx.stop();
+		}
+		if (s.trail != null) {
+			s.trail.stop();
 		}
 		if (at != null && s.hitGo != null && t.fx() != null) {
 			t.fx().play(s.hitGo, EffectSystem.Anchor.of(new Matrix4f(s.rot).setTranslation(at)));

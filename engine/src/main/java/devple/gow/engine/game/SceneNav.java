@@ -135,6 +135,13 @@ public final class SceneNav {
 			}
 
 			@Override
+			public void ropeGrabbed(devple.gow.engine.nav.NavRope r) {
+				// 원작 0x1C4EF8 → 0x1C4FD0: sub_001A8C78(0x41B, 0, 0, 0, 영웅) — ATHN03C RopeAttachGroup-attachRope (모드 1 = 거르기만:
+				// 인자 0 == 0, 한 번) → ShowMessage(591) "줄을 앞뒤로 흔들려면 ◎을 누르고 있으십시오" (영상 5612)
+				world.postEvent(HeroNavigator.EVENT_ROPE_GRAB, 0, 0, 0, world.player());
+			}
+
+			@Override
 			public void pushMoved(Interactables.Item it, Vector3f d) {
 				world.moveOwnerBy(it.owner, d.x, d.y, d.z);
 			}

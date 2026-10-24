@@ -349,6 +349,15 @@ public final class WadAssets implements AutoCloseable {
 		return gowModels.stream().filter(m -> m.name.equals(mdlName)).findFirst().orElse(null);
 	}
 
+	/**
+	 * 같은 이름을 찾고, 없으면 대소문자 무시로. 출시 데이터는 섞여 있다: R_WPN0_0 은 {@code MDL_MAIBlade}, R_WPN0_1–5 는 {@code MDL_MAIblade}
+	 * (43 §17) [확실: 데이터]. 원작 자원 조회는 대문자 해시 계열 (머티리얼 0x17A7B8, 46 문서) [추정: 모델 조회 경로].
+	 */
+	public GowModel gowModelIgnoreCase(String mdlName) {
+		GowModel m = gowModel(mdlName);
+		return m != null ? m : gowModels.stream().filter(x -> x.name.equalsIgnoreCase(mdlName)).findFirst().orElse(null);
+	}
+
 	/** 반드시 있어야 하는 모델. */
 	public GowModel requireModel(String mdlName) {
 		GowModel m = gowModel(mdlName);

@@ -127,6 +127,8 @@ ATHN02B·PAND04AA·PAND04C 는 하늘 2개 (본 + FX). 이름에 sky 가 없는 
   **소유 GO** (+0x18) 를 옮기며 그 모델을 층 1 (0x218778 → 0x150738(모델, 1), 렌더 플래그 &= ~0x800 = 동적 조명 끔) 로 둔다. ATHN03A/03AA/03C 의 `goaresanimgroup1`
   (도시 위 거대한 아레스, 템플릿 MDL_AresAnimGroup1 에는 SCR_Sky 가 없다) 이 이 경우 — 엔진 `EnvParams.skyOwners`, `LevelScene.skyNames`. 애니가 있으면 하늘 단계에서
   매 프레임 스키닝 (관절 0 = 눈, 반복 시작 act = 레벨 시간), 이미터는 하늘 공간 (`GameScene.startSkyEffects`). SCR_AresSky (ATHN03D/03E, 0x2189A8 무작위 act 순환) 는 미구현.
+  0x218848 은 모델 부품 (0x330514) 과 **파티클 부품 (0x330524) 도** 층 1 로 둔다 [확실: 부품 목록 둘 / 추정: 0x330524 = 파티클] → 하늘 GO 파티클 (불덩이·재·화톳불) 은 세계보다
+  먼저 그려져 세계가 덮는다. 엔진: `EffectSystem.Effect.sky` → 일반 파티클 패스에서 빼고 하늘 단계 끝 (`LevelScene.skyEffects`) 에서 (43 §17.2-5).
 - **두 슬롯**: 하늘 GO 도 가시 칸 컨텍스트 (CXT_bvsky 등) 를 따르므로, 현재 레벨의 칸 밖으로 눈이 나가면 그 레벨 하늘은 숨고 다른 슬롯 레벨의 같은 하늘이 보인다
   (ATHN03AA 계단 위 → ATHN03A 원형 제단). 엔진은 다른 슬롯 장면의 하늘 GO 를 하늘 단계에서 함께 그린다 (`LevelScene.skyNeighbour`).
 

@@ -123,6 +123,8 @@ public final class EffectSystem implements AutoCloseable {
 		 * Animator 가 튼 레벨 GO (ATHN03A 불덩이) 와 하늘 GO 에 켠다 — 다른 이펙트는 예전처럼 GO 원점 + 로컬 이동, 예전 배치 채널 (05 문서 §2.8.1).
 		 */
 		public boolean jointEmitters;
+		/** 하늘 GO 이펙트: 이미터를 {@link ParticleSystem.Emitter#sky} 로 — 파티클은 하늘 단계에서만 그린다 (세계에 덮인다, 43 §17). */
+		public boolean sky;
 		private float[][] bindWorld;
 		private final List<ParticleSystem.Emitter> emitters = new ArrayList<>();
 		private final Matrix4f world = new Matrix4f();
@@ -257,6 +259,7 @@ public final class EffectSystem implements AutoCloseable {
 			for (int i = 0; i < emitters.size(); i++) {
 				EffectLibrary.EmitterDef ed = def.emitters().get(i);
 				ParticleSystem.Emitter e = emitters.get(i);
+				e.sky = sky;
 				FxResources.Emitter fx = ed.fxc();
 				float[] lt = fx.local();
 				int j = fx.header().length > 0 ? fx.header()[0] : -1;
@@ -477,6 +480,13 @@ public final class EffectSystem implements AutoCloseable {
 			e.draw(cam, aspect, white);
 		}
 		ps.render(cam, aspect);
+	}
+
+	/** 하늘 이펙트 ({@link Effect#sky}) 파티클만 — 레벨 하늘 단계에서 (세계보다 먼저, 깊이 쓰기 없이). */
+	public void renderSky(Camera cam, float aspect) {
+		if (ps != null) {
+			ps.renderSky(cam, aspect);
+		}
 	}
 
 	private AnimatedModel model(EffectLibrary.EffectDef d) {

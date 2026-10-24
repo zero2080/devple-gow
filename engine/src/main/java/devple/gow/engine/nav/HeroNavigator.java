@@ -50,6 +50,10 @@ public final class HeroNavigator {
 		default void boxKicked(Interactables.Item it) {
 		}
 
+		/** 영웅이 줄을 잡음 (원작 0x1C4EF8: 0x218200 · 0x2183B0 뒤 이벤트 0x41B = 1051, 인자 0, 보낸 이 = 영웅) [확실]. */
+		default void ropeGrabbed(NavRope r) {
+		}
+
 		/** CSM/상자/레버 완료. */
 		default void interactDone(Interactables.Item it) {
 		}
@@ -112,6 +116,8 @@ public final class HeroNavigator {
 	public static final float KICK_CHARGE = K.get(NavTuning.KICK_CHARGE);
 	/** 상자 차기 이벤트 0x41D (0x1C4980 → sub_001A8C78, 인자 0) [확실]. */
 	public static final int EVENT_KICK = 0x41D;
+	/** 줄 잡기 (0x1C4FC0: 0x41B, 인자 0) — ATHN03C RopeAttachGroup attachRope 가 받아 메시지 591 "줄을 앞뒤로 흔들려면 ◎…" 한 번. */
+	public static final int EVENT_ROPE_GRAB = 0x41B;
 	/** 좁은 길 지상 속도 배율 Sold+0x230 = 1 (0x1EAFB0) [확실: 값 / 추정: +0x2D8 비트 4 = 좁은 길]. */
 	public static final float BALANCE_SPEED = K.get(NavTuning.NARROW_SCALE);
 	/** 짚라인: 목표 Sold+0x160 20 → 320 으로 가속 +0x164 10 → 160 (0x1C6134, 기울기 무관), 끝 0.25 m 앞에서 속도 0 으로 놓음 (0x1C6B1C) [확실: 속도 / 추정: 끝 처리]. */
@@ -1259,6 +1265,7 @@ public final class HeroNavigator {
 		body.setGrounded(false);
 		body.launch().zero();
 		world.ropeGrabbed(); // 0x1C5D98: 0x29DBF8 = 0 (누가 잡든)
+		listener.ropeGrabbed(r); // 0x1C4FC0: 이벤트 1051 (인자 0) → 스크립트
 		Vector3f d = new Vector3f(r.end()).sub(r.top());
 		switch (r.type()) {
 			case ZIPLINE -> {

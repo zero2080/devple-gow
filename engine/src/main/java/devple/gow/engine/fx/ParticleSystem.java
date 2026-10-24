@@ -40,6 +40,12 @@ public final class ParticleSystem implements AutoCloseable {
 		public boolean active = true;
 		/** 레벨 배치 이미터의 소유 인스턴스 (소문자, 가시 칸 컨텍스트로 끈다 — {@link LevelFx#setContextHidden}). null = 없음. */
 		public String owner;
+		/**
+		 * 하늘 GO 의 이미터 (SCR_Sky 소유 GO — 도시 화톳불, 아레스의 불덩이·재): 0x218848 이 GO 의 모델 (0x330514) 과 파티클 (0x330524) 부품을
+		 * 모두 0x218778 → 0x150738(부품, 1) = 층 1 로 둔다 → 세계 (층 2–4) 보다 먼저 그려지고 세계가 덮는다 [확실: 부품 목록 둘 / 추정: 0x330524 = 파티클].
+		 * 일반 패스 ({@link #render}) 는 건너뛰고 하늘 단계 ({@link #renderSky}) 에서만 그린다.
+		 */
+		public boolean sky;
 		/** 원뿔 모드 방향 (월드, 정규화). */
 		public final Vector3f dir = new Vector3f(0, 1, 0);
 		/** LOD (FXC 0xDC/0xE0, ×16 월드): 생성률 × (far − d/16)/(far − near), near &lt; 0 = 끔. */
@@ -382,14 +388,37 @@ public final class ParticleSystem implements AutoCloseable {
 
 	/** 반투명 패스. 깊이 테스트 O, 쓰기 X. 이미터 정의별로 텍스처/블렌드를 바꿔 그린다. */
 	public void render(Camera cam, float aspect) {
+		renderPass(cam, aspect, false);
+	}
+
+	/** 하늘 이미터 ({@link Emitter#sky}) 의 파티클만 — 하늘 단계 (세계보다 먼저) 에서 부른다 (43 §17). */
+	public void renderSky(Camera cam, float aspect) {
+		renderPass(cam, aspect, true);
+	}
+
+	/** 지금 그리는 쪽 (하늘 단계 = true): {@link #bucket} 이 소유 이미터의 {@link Emitter#sky} 가 같은 파티클만 모은다. */
+	private boolean skyPass;
+
+	private void renderPass(Camera cam, float aspect, boolean sky) {
 		if (count == 0) {
 			return;
 		}
+		if (sky) {
+			boolean any = false;
+			for (int i = 0; i < count && !any; i++) {
+				any = owner[i].sky;
+			}
+			if (!any) {
+				return;
+			}
+		}
+		skyPass = sky;
 		long t0 = System.nanoTime();
 		try {
 			renderAll(cam, aspect);
 		} finally {
 			renderNanos += System.nanoTime() - t0;
+			skyPass = false;
 		}
 	}
 
@@ -550,6 +579,10 @@ public final class ParticleSystem implements AutoCloseable {
 		ParticleDef last = null;
 		int lastSlot = -1;
 		for (int i = 0; i < count; i++) {
+			if (owner[i].sky != skyPass) {
+				pslot[i] = -1; // 다른 단계 (하늘 / 세계) 의 파티클
+				continue;
+			}
 			ParticleDef d = owner[i].def;
 			if (d != last) {
 				Integer k = slotOf.get(d);
@@ -570,7 +603,9 @@ public final class ParticleSystem implements AutoCloseable {
 		}
 		java.util.Arrays.fill(slotFill, 0, nSlots, 0);
 		for (int i = 0; i < count; i++) {
-			slotFill[pslot[i]]++;
+			if (pslot[i] >= 0) {
+				slotFill[pslot[i]]++;
+			}
 		}
 		slotStart[0] = 0;
 		for (int k = 0; k < nSlots; k++) {
@@ -578,7 +613,9 @@ public final class ParticleSystem implements AutoCloseable {
 			slotFill[k] = slotStart[k];
 		}
 		for (int i = 0; i < count; i++) {
-			order[slotFill[pslot[i]]++] = i;
+			if (pslot[i] >= 0) {
+				order[slotFill[pslot[i]]++] = i;
+			}
 		}
 	}
 

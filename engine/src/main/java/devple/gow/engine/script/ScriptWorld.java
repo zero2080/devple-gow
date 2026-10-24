@@ -106,8 +106,21 @@ public final class ScriptWorld {
 				if (vol != null) {
 					byVolume.computeIfAbsent(vol, k -> new ArrayList<>()).add(se);
 				}
+				if (e.type() == 12) { // GlobalData: 0x4A 시작 번호 + k = 변수 표 k 의 이름 (0x1AE848 → 0x1AEC88)
+					for (int k = 0; k < e.variables().size(); k++) {
+						globalNames.putIfAbsent(e.baseId() + k, e.variables().get(k)[1]);
+					}
+				}
 			}
 		}
+	}
+
+	/** 이 레벨의 GlobalData 선언: 스크립트 번호 → 변수 이름 (레벨마다 번호가 달라도 이름이 같으면 같은 변수, 43 §17). */
+	private final Map<Integer, String> globalNames = new HashMap<>();
+
+	/** 이 레벨에서 GlobalData:n 의 변수 이름 (선언이 없으면 null). */
+	public String globalName(int id) {
+		return globalNames.get(id);
 	}
 
 	public List<ScriptEntity> entities() {

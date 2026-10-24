@@ -921,7 +921,7 @@ ATHN03AA 와 ATHN03A 는 같은 하늘 GO (gogroup2 · goaresanimgroup1, 컨텍�
 - 영상 재생: 녹화 lockstep 에서는 영상이 느리게 간다 (r12 210 초에도 오라클 대사 중) [엔진 전용, 녹화 한계]; 실시간 봇은 × 로 넘긴다 — 영상 자체 대조는 하지 않았다.
 - 두 슬롯 스크립트: 전환 때 현재 레벨 ScriptWorld 를 새로 만들어 이웃으로 이미 돈 일회성 (LevelData) 이 다시 돌 수 있다 — 순간이동 (r14) 으로 MoviePlay 띠 안에서 전환하면
   사망 뒤 MoviePlay 가 또 불렸다. 걸어 오면 띠 전에 전환되어 한 번 [근사: 엔진 구조]. 이웃 슬롯의 PlayMovie · Idle 은 받지 않는다.
-- SCR_AresSky (ATHN03D/03E 무작위 act) 미구현, 하늘 GO SEM 소리 끔, 하늘 파티클 깊이 [근사].
+- SCR_AresSky (ATHN03D/03E 무작위 act) 미구현, 하늘 GO SEM 소리 끔, 하늘 파티클 깊이 [근사] (→ 층 1 하늘 단계로, §17.2-5).
 - ANM 원작 배치의 전역 전환 (영웅·적·레벨 GO 자세, 루트 모션, 가시성) — 시험 7 개가 예전 배치 값 (05 §2.8.1).
 - [엔진 전용] 봇: 경로 끝 뒤 이어받은 AutoPlay 가 이전 레벨 (ATHN03AA) 볼륨 계획으로 돌아간다 (r15 140 초) — 경로 끝에 긴 wait 로 피함.
 
@@ -930,6 +930,103 @@ ATHN03AA 와 ATHN03A 는 같은 하늘 GO (gogroup2 · goaresanimgroup1, 컨텍�
 `06_ares_sky_after_movieplay_52.0s` · `07_desert_gates_zoom_64.0s` · `08_desert_gates_msg209_65.0s` · `09_cave_gate_approach_71.3s` · `10_gate_fireball_72.3s` ·
 `11_gate_fireball_trail_72.7s` · `12_mino_zoom_portcullis_77.3s` · `13_armored_minotaurs_87.3s`, 시트 `sheet_engine_r18` · `sheet_sparky_cine_r16` · `sheet_ps2_4784_4897` ·
 `sheet_ps2_4906_5068`, 수정 전 `before_sparky_black_sky_r15` · `before_static_fireball_cam_r14`.
+
+## 17. QA vs PS2 영상 — 아테네 거리 ATHN03A · ATHN03C → 광장 ATHN04A (영상 5136–5716 초, 2026-10-24)
+
+분홍 미노타우로스 홀 (ATHN03A) 뒤 거리부터 광장 키클롭스 싸움 (ATHN04A) 앞까지. 엔진 = origin/main dd06e6e (§16) 위, 쉬움, 녹화 lockstep (결정적).
+- r10 거리: `--game ATHN03A --arrive "ATHN03AA@-1340,1030,-370,0"`, 봇 + 경로 `-1300,1023,-600;-1450,1017,-720;-1650,1017,-820;-1760,1017,-1000;-1770,993,-1300;
+  -1780,953,-1550;-1850,929,-1780;-2000,913,-1830;-2200,913,-1850;-2400,913,-1720;-2500,913,-1550;wait:30` (§14.6), 1/3 초 간격 70 초.
+- r11 줄: `--game ATHN03C --arrive "ATHN03A@-3237,975,-1660,180"` (줄 위에서 떨어져 잡음), 8 초.
+- r12 업그레이드: `--game ATHN03C --arrive "ATHN03A@-3300,913,-2500,0"` (절벽 길), `-Dgow.redOrbs=6000`,
+  `-Dgow.script=SELECT:1.0:0.15,CIRCLE:3.0:6.0,CIRCLE:10.0:0.15,CIRCLE:12.0:6.0,CIRCLE:19.0:0.15,CIRCLE:21.0:0.15,TRIANGLE:23.0:0.15,SQUARE:24.5:0.1,…`, 27 초.
+- r9 광장: `--game ATHN04A --arrive ATHN03C` (Warp), 경로 `2050,-404,-690;1800,-404,-720;1620,-404,-600;1450,-404,-470;1440,-300,-250;1440,-150,0;1440,0,300;1450,49,560;wait:20`, 1/4 초 간격.
+
+### 17.1 장면 대응 [확실: 스크립트·데이터 / 영상 대조는 섬네일 (5 초·3 초 간격)]
+레벨 연결: ATHN03A ─(Sensor2 LoadCheck, 이음)→ ATHN03C ─(Athn04AWarp: LoadForWarp + EntryWarp (−3418, 914, −2564))→ ATHN04A `WarpFrmVista` (2212, −404, −624, 슬롯 0 "athn03c").
+| 영상 | 원작 (스크립트·데이터) | 엔진 (녹화, 게임 시각) |
+|---|---|---|
+| 5130–5172 | ATHN03A 거리 (RSRCS R_SKA·R_MI2) 에 **ATHN03C 스크립트** RoadSpawner2 (진입 볼륨 (−1768, 1017, −1049) r 794) → RoadEnemies2 MedusaLevel1 (템플릿 60 = R_MEW, ATHN03C 슬롯 리소스) 고르곤, 지붕 위 궁수 (ATHN03A ArcherLevel1 템플릿 31 셋, ATHN03C MinoAIGRPropes ArcherLevel1AI1·3·11·12·13) 의 붉은 화살 | r10: 화살 5 초부터 (`01`), 고르곤 스폰 14.4 초 (수정 전 "이웃 스폰 생략"), 고르곤 + 궁수 + 하늘의 아레스 51–62 초 (`02` `03`) |
+| 5133–5145 | 지붕 상자 (고르곤의 눈 6 개 → 체력 증가) | 주행 안 함 [미확인] |
+| 5148–5306 · 5376–5546 | 거리 싸움 (궁수 · 해골병 · ATHN03C MinotaurLevel2 둘 + 처형), 창살 창문 | r10 거리 (ATHN03A → 03C 전환) |
+| 5316 · 5366 | 업그레이드 메뉴: 블레이드 레벨 2 → 3, "혼돈의 블레이드 레벨 3 – 새로운 액션" | r12: SELECT 1 초 → ○ 유지 → 레벨업 · 새 기술 화면 18 초 (`05`) → 메뉴 19.3 초 (`06`) → △ 23 초 닫힘 → R_WPN0_2 (`07`) (§17.3) |
+| 5556–5606 | ATHN03C 비계 · 구덩이 (바닥 y 800) | — |
+| 5612–5646 | 줄: RopeAttachGroup-attachRope (EventSensor 모드 1, 1051 인자 0) → 메시지 591 "줄을 앞뒤로 흔들려면 ◎…", 올라감 | r11 잡자마자 (0.3 초) 591 (`08`) |
+| 5652–5656 | 절벽 길 + 하늘의 거대한 아레스 (goaresanimgroup1, 불붙은 바위·불덩이·재 = 하늘 GO 이미터 43) | r12 0–1 · 23–27 초 (불덩이가 건물 뒤 하늘에) |
+| 5657–5660 | Warp → ATHN04A `WarpFrmVista` (문 앞 굽은 길). 도착 볼륨 ZoneReportGroup1 (구역 3) 은 이미 안으로 둔다 | r9 0 초, 같은 구도 (`09`) |
+| 5664–5676 | 문 옆 출입구 · 길 | r9 0.5–3 초 (0.8–1.3 초 카메라 전환이 건물을 지남 [미확인: 영상 간격]) |
+| 5681–5686 | 분수 | r9 4–6 초 |
+| 5696–5706 | 계단 → ZoneReportGroup (중심 (1440, −312, −184)): ZoneArea ≠ 4 → ZoneReport(4) → 메시지 804 **"아테네 도시 광장"** | r9 7.37 초 계단 아래쪽에서 발동, 8–16 초 표시 (`10`) — 영상 5701 과 같은 자리 |
+| 5711–5716 | 광장 키클롭스 (DMCCyclops 셋 — 이미 검증) | — |
+
+### 17.2 엔진 결함과 수정
+1. **이웃 슬롯 적 리소스가 없어 고르곤이 안 나왔다.** 원작 Tag_Resources 0x1BB928 은 RSRCS 이름을 읽는 슬롯 (0x3372D8) 구조 +0xA + 10·i 에 "R_%s" 로 두고
+   (최대 4, 슬롯을 비우면 0x1BC028) — 리소스는 레벨 슬롯마다 상주한다 [확실: 코드]. 이웃 스크립트의 SpawnEnemy 는 현재 레벨 RSRCS 에 없는 종류도 낸다. 엔진은 현재 레벨
+   종류만 찾아 "이웃 스폰 생략" → `GameScene.loadNeighbourKinds` (이웃 레벨 RSRCS 를 따로 적재, 외부 애니·트윅·소리·영웅 잡기 애니) + `spawn` 의 이웃 요청 폴백 (11 §6.3).
+2. **궁수 SHOOT 가 시작 프레임에 끝났다.** 기술 1 의 애니 해시 = ANM 블렌드 그룹 "shoot" (그룹 플래그 0x20, Ashoot00/01/02 = 블렌드 번호 0·1·2) — 원작 0x1F6FC8 → 0x1006F8 →
+   0x107200 은 플래그 0x20 그룹의 act 를 모두 모아 (+0xCC, +0xDC 개수) 겨눔 값으로 섞는다 [확실: 모으기 / 근사: 엔진은 가운데 act 하나]. 엔진은 act 이름만 색인해 애니가 없어
+   SCR_ArcherShoot · SND_BOW_FIRE 등 이벤트가 하나도 나지 않았다 → `CombatData.reindexAnimations` 가 블렌드 그룹 이름 → `blendCentre` (아기 히드라 물기·BMI 주먹도 같은 꼴).
+3. **적 화살이 없었다** (10 §16, 17 §AI Mode 2):
+   (a) SCR_ArcherShoot (Hash127Upper 0x63F805BF, 이벤트 b = 0.2, 이미터 20) 0x18DAA8 → 매 프레임 0x18D500: 겨눔 값 = 수평 각 / 25° (0.43633) 를 [−1, 1] 로 자른 것까지 0.02 / 프레임,
+       그동안 당김 += 0.01 (첫 −0.99), 그다음 당김 += 0.05 / 프레임이 b 이상이면 0x18D800 → 0x222710 [확실: 상수] — 바로 앞 25 프레임, 25° 옆 64 프레임. 맞아서 기술이 바뀌면 취소 [추정].
+   (b) TARGET_FX (전투 이벤트 종류 1, 0x206788) = 그 인덱스 ArrowEmitter 를 대상에게 0x222710 [확실: 흐름] — ASHOOT3X 의 이미터 33 (폭발 화살) 세 번.
+   (c) 0x222710 (대상 있음): 시작 = 이미터 "Aim Joint" (rWrist), 대상점 = 발 + 몸 높이 ½ (0x18D708) [추정: 몸 높이 2.2 m], Count 발마다 대상 속도로 앞질러 (Arrow #9fdb479c = 0 일 때,
+       |대상 − 시작| / (Velocity·16)) + 단위 구 무작위 점 × #1bf49679 m (0x2228E0: 궁수 0.1, less_accurate 1.75, 폭발 1.5) → 탄도 해 0x2223C8 (θ 를 0 부터 π/4 걸음으로 8 번 반감,
+       마지막으로 평가한 각을 쓴다) [확실: 상수]. Arrow 020: 100 m/s, 중력 9.82 (Gravity Flag 1), 피해 2, 수명 #117c872e 10 초, GO/Trail = goStdArrow 붉은 꼬리.
+   (d) 맞음: 이전→현재 선분이 정적 충돌 (두 슬롯) · 움직이는 몸보다 먼저 영웅 몸 구 (CDV_hero, 무기 GO 제외) 에 닿으면 [근사: 원작 충돌 마스크 미해석] — 피해 = Damage × 쏜 적
+       AI 배율 [근사: 배율 위치], Ground/Air Impulse, 막으면 Block Sound, Concussion ≥ 0 이면 그 자리 범위 (폭발 화살 33) [추정]. 적끼리는 맞지 않는다 [추정].
+   `GameScene.archerShoot/fireEnemyArrow/enemyArrowHit`, `ArrowShots.fireAt/launch/heroStep`. r10: 70 초 동안 영웅 적중 14 회 (피해 2 × 쏜 적 배율 → 1.0, 쉬움).
+4. **줄 잡기 이벤트 1051 이 없어 줄 안내가 안 떴다.** 0x1C4EF8 → 0x1C4FD0: sub_001A8C78(0x41B, 0, 0, 0, 영웅) [확실] → ATHN03C RopeAttachGroup-attachRope (모드 1, 인자 0 == 0, 한 번)
+   → ShowMessage(591, 0) (영상 5612). `HeroNavigator.EVENT_ROPE_GRAB` · `Listener.ropeGrabbed` → `SceneNav` postEvent (38 §2).
+5. **하늘 GO 불덩이가 세계 위에 떠 있었다** (§16 의 하늘 이미터 뒤): 0x218848 은 하늘 GO 의 모델 (0x330514) 과 파티클 (0x330524) 부품을 모두 0x218778 → 0x150738(부품, 1) =
+   층 1 로 둔다 → 세계 (층 2–4) 보다 먼저 그려지고 세계가 덮는다 [확실: 부품 목록 둘 / 추정: 0x330524 = 파티클]. 엔진은 일반 파티클 패스에서 그려 하늘 미니어처 거리 (~260) 보다
+   먼 건물 위에 불덩이·재가 보였다 (ATHN03C 구덩이 · 절벽 길) → `EffectSystem.Effect.sky` → `ParticleSystem.Emitter.sky` 는 일반 패스에서 빼고 하늘 단계 끝
+   (`LevelScene.skyEffects` = `MagicFx.renderSky`) 에서만 (16 §1.4, 31).
+6. **업그레이드 뒤 무기 WAD 를 바꾸지 않았다.** 원작 Upgrade_LoadWad 0x1D7890 이 레벨이 바뀐 무기의 "Upgrade" 힙 WAD 를 교체 (`"%s%d_%d"` 0x29DB00) [확실] — 레벨마다 블레이드
+   텍스처·불꽃 이미터가 다르다 (R_WPN0_1 Blade128·129·130, R_WPN0_2 Stage3Btx + FXC_EGemit1·EGgrav1, R_WPN0_3 Stage4Btx, R_WPN0_5 athenaBtx). 엔진은 다음 레벨 적재까지 옛
+   블레이드 → `HeroRig.swapBlades` (메뉴가 닫힌 다음 그리기에서 모델·사슬 머티리얼) + `onBladesSwapped` → `setGodBlades` (새 WAD 의 goMAIblade / goMAIgodblade 가 뒤에 등록돼 이김)
+   + `MagicFx.reattachBlades` [추정: 원작은 힙과 함께 GO 를 새로 만듦]. 블레이드 라이트는 레벨 적재 때 것 [근사].
+7. **블레이드 레벨 ≥ 1 이면 다음 레벨부터 블레이드가 사라졌다.** 기본 코스튬 0 과 코스튬 5 의 R_WPN 레벨 1–5 (36 개 중 10 개) 는 모델 이름이 `MDL_MAIblade` (CDV·SHG·메시도 소문자 b),
+   나머지는 `MDL_MAIBlade` [확실: 데이터 전수]. `BladeModels.load` 가 정확한 이름만 찾아 null → 블레이드 메시·사슬·블레이드 라이트 없음 (피격 구는 대소문자 무시라 공격은 맞음).
+   → `WadAssets.gowModelIgnoreCase` (원작 자원 조회는 대문자 해시 계열 — 머티리얼 0x17A7B8, 46 문서 [추정: 모델 조회 경로]).
+8. **GlobalData 를 번호로 공유했다.** 원작 GlobalData 엔티티는 메시지 0 에서 변수 (이름, 타입) 를 등록할 때 (0x1AE848 → 0x1AEC88) 전역 표 0x30063C (0x1C 바이트 × 최대 128) 에서
+   이름 (strcmp 0x28A4A4) 으로 찾거나 붙이고, 그 레벨 슬롯의 번호표 (0x2FFE3C + 2·(슬롯 +0x10 + 번호)) 에 칸을 적는다. 읽기·쓰기 0x1AEDE8 은 실행 중 엔티티 슬롯의 표로 찾는다 [확실].
+   같은 변수의 번호가 레벨마다 다르다 — 이름 93 개 중 48 개 (ZoneArea: ATHN03A 0 · ATHN04A 2 · ATHN02A 1 · PAND00C 14 …, HydraDead: ATHN01A 0 · 01B 1 · 01E 2, DoorKey: ATHN04A 1 · 04B 0).
+   엔진은 번호를 열쇠로 써서 ATHN04A 의 cameFromA5C (0) 가 ATHN03A 의 ZoneArea 3 을 읽고, ZoneArea (2) 는 0 이라 구역 3 볼륨에 다시 들어가면 "아테네로 향한 도로" 가
+   또 떴다 (시험) → 레벨 선언 이름으로 (`ScriptWorld.globalName`, `ScriptHost.globalKey`, `GameScriptHost.global(이름)`, 13 §7).
+   Init 핸들러는 데이터 전체에 넷뿐이고 모두 false (기본값) 라 "한 번만 초기화" (0x1AEE90, +0x19) 는 예전처럼 엔티티 단위 [근사].
+   예전 세이브의 GlobalData (번호 열쇠) 는 이름 열쇠와 맞지 않아 무시된다 [엔진 전용].
+
+### 17.3 업그레이드 메뉴 (영상 5316 · 5366) [확실: FLP_HUDK 스크립트 · 엔진 실행]
+- SELECT → 상태 13 PowerUpMenu: `HudBinding.write` (Progress_ToHud) + `PS2_PSMMenu_Event` 1 → ○ 유지로 투자 (오브 6000: 1500 에 레벨 2, 다시 2250 에 레벨 3, 다음은 3750) → 레벨업 화면
+  ("혼돈의 블레이드 레벨 3 – 새로운 액션": 혼돈의 싸이클론 L1 + □ · 공중 · 헤라클레스의 기세 △△△ · 용맹 △△□ · 하데스의 복수) — 영상 5363 과 같은 문장·배치.
+- △ 뗌 → Animate_Off → `PS2_PSMDone` 1 → `GameScene.onPowerUpClosed`: 오브 2231 (3750 + 다음 레벨로 19), 블레이드 내부 0 → 2 (화면 레벨 3), `HeroRig.swapBlades` → R_WPN0_2
+  (r12 23 초, 로그 "블레이드 무기 WAD 교체").
+- `gow.script` 입력이 메뉴에도 가도록 (SELECT · HUD 갱신) [엔진 전용], `-Dgow.redOrbs` [엔진 전용], `-Dgow.debug.hudvars` (FLP 가 바꾼 HUD 변수 기록) [엔진 전용].
+
+### 17.4 광장 구역 제목 (영상 5701–5706)
+"아테네 도시 광장" 은 원작과 같은 자리 (계단 아래쪽, ZoneReportGroup) 에서 뜬다 — r9 도착 뒤 7.37 초 (경로 봇이 분수를 곧장 지남; 영상은 도착 ≈5659 → 출입구 · 분수를 돌아 5701).
+도착 볼륨 ZoneReportGroup1 (구역 3) 은 Warp 도착이 "이미 안" (`placePlayer` seamless) 이라 영상처럼 뜨지 않는다. 제목 렌더·지속은 §16 담당 (`GameScene.zoneReport`).
+
+### 17.5 시험
+`AthensStreetsTest` (궁수 당김 25 / 64 / 21 프레임, 탄도 해 낮은 탄도·오차, R_SKA 이미터 20 화살이 영웅 몸 구에 "영웅" 으로 멈춤, SHOOT = 블렌드 그룹 가운데 act + SCR_ArcherShoot 20,
+ATHN03A/03C RSRCS · R_MEW 템플릿 60), `RopeGrabEventTest` (줄 잡기 통지 한 번, ATHN03C 1051 → 591 한 번), `BladeWeaponWadTest` (R_WPN 36 개 모델·오브젝트, 소문자 b 10 개),
+`GlobalDataNamesTest` (ATHN03A ZoneArea → ATHN04A 구역 3 다시 안 뜸 · cameFromA5C false · 계단 구역 4, HydraDead 01E/01A/01D/01C 이웃 호스트). 바뀐 시험: `RoadToAthensScriptTest`,
+`HydraFightTest` (GlobalData 를 이름으로).
+
+### 17.6 남은 것 · 미확인
+- 화살 꼬리: 영상은 가는 붉은 선, 엔진은 틱 위치마다 뭉친 큰 점 (`04`) — FXC_stdemit 생성률 800/초를 한 점에서 낸다. 원작이 프레임 안 위치를 보간하는지·늘인 스프라이트인지 [미확인: PTC VU].
+- 궁수가 60–70 m 밖에서도 쏜다 (AI 결정 트리 거리) — 영상에서도 지붕 궁수가 멀리서 쏘지만 거리 상한은 대조 못 함 [미확인].
+- 이웃 슬롯의 레벨 템플릿 (ATHN03A·03C 각자의 시민 AOXY1 = 템플릿 313) 은 이웃 요청이면 내지 않는다 (레벨이 현재가 되면 그 스크립트가 다시 냄) [근사: 엔진 구조].
+- 새 기술 화면의 인라인 버튼: 영상은 L1 · R1 글자가 있는 배지 + 바탕 없는 △□ 기호, 엔진은 글자 없는 배지 + 둥근 바탕 (StaticTextL1 의 글자 출처 못 찾음) [미확인] (21).
+- 줄 안내 591: 영상은 글자가 차례로 써지는 중 (5612), 엔진은 0.5 초에 이미 전부 — FLP 진행 속도 (21 "30Hz 가능성") [미확인].
+- r9 0.8–1.3 초 카메라 전환이 건물 벽을 지난다 — 영상 간격 (4 초) 으로는 대조 못 함 [미확인].
+- 지붕 상자 (고르곤의 눈, 5133–5145), 비계 (5556), 미노타우로스 처형 (5426) 은 엔진으로 몰지 않았다.
+- 업그레이드 뒤 블레이드 라이트 (LeftBladeLight 등) 는 레벨 적재 때 WAD 것 [근사].
+
+### 17.7 증거 (`work/verify/athn03_streets/`, 커밋 안 함)
+`01_archer_arrows_hit_9.3s` · `02_gorgon_from_athn03c_slot_53.7s` · `03_gorgon_archers_ares_59.0s` · `04_archer_trail_dotted_69.7s` (r10) · `05_upgrade_new_moves_18.0s` ·
+`06_upgrade_blades_lv3_19.3s` · `07_after_upgrade_R_WPN0_2_24.7s` (r12) · `08_rope_grab_msg591_1.0s` (r11) · `09_athn04a_arrival_0.0s` · `10_plaza_zone_title_8.0s` (r9),
+시트 `sheet_streets_r10_35-70s` · `sheet_upgrade_r12` · `sheet_athn04a_r9`.
 
 ## 시연 녹화 (-Dgow.record, -Dgow.bot) [엔진 전용]
 

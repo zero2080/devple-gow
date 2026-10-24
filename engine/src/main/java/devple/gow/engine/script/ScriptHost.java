@@ -72,6 +72,13 @@ public class ScriptHost extends GameScriptHost {
 		return new ScriptHost(main);
 	}
 
+	/** GlobalData:n → 이 호스트가 돌리는 레벨의 n 번 선언 이름의 열쇠 (원작 슬롯별 번호표, {@link GameScriptHost#globalKey(int)}). */
+	@Override
+	protected int globalKey(int id) {
+		String n = world != null ? world.globalName(id) : null;
+		return n != null ? globalKey(n) : id;
+	}
+
 	public ScriptHost() {
 		this(null, null);
 	}

@@ -86,7 +86,7 @@ class RoadToAthensScriptTest {
 			}
 		}
 		assertEquals(List.of("zone [3]"), r.log.stream().filter(x -> x.startsWith("zone")).toList(), r.log.toString());
-		assertEquals(3, ((Number) host.globalData().get(0)).intValue(), "GlobalData:0 = 3");
+		assertEquals(3, ((Number) host.global("ZoneArea")).intValue(), "GlobalData:0 (ATHN03AA 의 ZoneArea) = 3");
 	}
 
 	/**

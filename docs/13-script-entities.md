@@ -176,6 +176,10 @@ LoadCheck 는 bool 을 반환하지만 데이터에서는 EntrySensor 의 Action
 ## 7. 변수 (GlobalData / LevelData)
 - 메시지 0 에서 이름과 타입을 등록(`0x1AF2C0`, `"Too many LevelData variables!"`), 원본 0x4A = 변수 번호 시작, 0x4C = 개수.
 - 메시지 1 에서 Init1..N 실행 → 초기값. GlobalData 는 게임 전체에서 한 번 (`"%s re-inited with different value"`, `GlobalData_Set` 0x1AEE90).
+- **GlobalData 는 이름으로 전역** [확실: 0x1AE848 → 0x1AEC88 / 0x1AEDE8, 2026-10-24]: 등록 때 전역 표 0x30063C (0x1C 바이트: +0 값, +8 이름 16, +0x18 타입, +0x19 초기화됨, 최대 128
+  "Too many GlobalData variables!") 에서 이름을 strcmp 로 찾거나 붙이고, 레벨 슬롯 번호표 (0x2FFE3C + 2·(슬롯 0x303DE8 +0x10 + 번호)) 에 칸 번호를 적는다. 스크립트의
+  `GlobalData:n` 은 **그 레벨의** n 번째 선언 (엔티티 0x4A 시작 + k) 이다 — 같은 변수가 레벨마다 번호가 다르다 (이름 93 개 중 48 개: ZoneArea ATHN03A 0 · ATHN04A 2,
+  HydraDead ATHN01A 0 · 01E 2, DoorKey ATHN04A 1 · 04B 0). 엔진: `ScriptWorld.globalName` → `ScriptHost.globalKey` (이름 열쇠), `GameScriptHost.global(이름)` (43 §17.2-8).
 - 스코프 객체: 0 Entity `0x303D50` (vt 0x2BA338), 1 Internal `0x303D70` (vt 0x2BA308), 2 GlobalData `0x2FFE38`, 3 LevelData `0x301548` — 등록 순서 `0x1A6EC0`.
 
 ### 7.1 Internal 변수 (GameMgr getter 0x1AFE18 / setter 0x1AFFB0, 점프 표 0x2B5C10 / 0x2B5C80, 번호 − 0x21) [확실]
