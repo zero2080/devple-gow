@@ -10,7 +10,7 @@ import java.util.Map;
 /**
  * 애니메이션 하나 (ANM 그룹 안의 "act").
  * <pre>
- * 0x00 u32 flags        bit0 반복(루프: standIdle, walk), bit1 1회(공격 등), 0x1000/0x2000 회전/이동 데이터, 0x200~0x800 블렌드 그룹
+ * 0x00 u32 flags        bit0 반복(루프: standIdle, walk), bit1 1회(공격 등), 0x1000/0x2000/0x4000 회전/이동/스케일 데이터, 0x200~0x800 블렌드 그룹
  * 0x04 f32 ?            (0, 0.09, 0.12, 2.0, 3.0 — 미상)
  * 0x08 u32 0x0B
  * 0x0C f32 1.0          (재생 속도로 추정)
@@ -22,13 +22,20 @@ import java.util.Map;
  * 0x24 char name[24]
  * 0x3C u32 size         act 데이터 크기
  * 0x40 u32 globalIndex  세트 전체에서의 act 번호 (그룹 firstAct + j)
- * 0x64 StateDescr[dataTypeCount] 20B: { u16 ?, u16 trackCount, u32 ?, u32 offset(act 기준), f32 frameTime, u32 ? }
+ * 0x64 StateDescr[Σ p2] 20B: { u16 ?, u16 trackCount, u32 ?, u32 offset(act 기준), f32 frameTime, u32 원소 크기 }
  * </pre>
- * 데이터 타입 0 = 관절 회전, 5 = 관절 이동 ({@link AnimTrack}).
- * 타입 10 = 오브젝트 클래스가 슬롯별 의미를 정하는 범용 채널. 디스크립터 +0x10 = 원소 크기 (4 = f32 이동 트랙과 같은 포맷,
- * 1 = 관절별 u8 상태). 히어로 슬롯 1 = 무기 로케이터 {@code lWeapOH}/{@code rWeapOH} 의 모델 공간 위치(블레이드 사슬 궤적),
- * 슬롯 2 = 관절별 부착 상태 바이트 (60 fps). 05 문서 2.8절.
- * 그 밖의 타입(3 머티리얼, 8 UV, 9 텍스처 시트, 11/12)은 디스크립터만 보관한다.
+ * <b>디스크립터 배치</b> (05 문서 §2.8.1) [확실: 코드 + 전 WAD 데이터]: 세트 데이터 타입 항목 k 가 디스크립터 p2 개 (항목 +3 u8) 를 차례로 차지한다 —
+ * 채널 생성 0x100EA8 이 항목마다 채널 객체를 만들고 +0x1C = 앞 항목 p2 합 (채널 id) 을 넣으며 (0x106328), FXC 이미터 링크는 이 id 로 채널을 찾는다 (0x130240).
+ * 형별 디스크립터 (원소 크기 +0x10 이 형마다 하나):
+ * <ul>
+ * <li>타입 0 (관절 채널, vtable 0x2C0AB0) — 재생 0x111760 이 act+0x64 부터 차례로 읽는다: 0 회전 (s16 절대 / s8 가산) → 재생기 +0x5C,
+ *     1 이동 (f32 / s16) → +0x60, 2 스케일 (s16 절대, (π/2)/4096 배 = 2607.6 이 1.0, 0x231B50) → +0x64, p2 ≥ 4 면 3 (f32) 도 이동 배열 +0x60 에 쓴다
+ *     (0x1146C4: 채널 +0x20 (p2) &lt; 4 면 건너뜀 — 히어로 lWeapOH/rWeapOH 로케이터). 네 디스크립터 모두 디스크립터 0 의 frameTime (act+0x70) 으로 돈다.</li>
+ * <li>타입 5 = 관절별 u8 상태 ({@link ByteTrack}, 41 문서 §1.3 가시성), 타입 10 = f32 채널 (FXC P 블록, 40 문서 §3), 타입 11 = 정수 값 채널 [추정],
+ *     3/8/9 = 머티리얼 ({@code MaterialAnim}), 12 = LOD.</li>
+ * </ul>
+ * 예전 파서는 항목 번호 = 디스크립터 번호로 읽어 타입 0 뒤의 형 표시가 2 (히어로 3) 칸씩 밀려 있었다 — 그 위의 보정 규칙 ("타입 11 = 이동 / 타입 5 가 있으면
+ * 아님", 운반 관절 "Anim", 히어로 "타입 10 슬롯 1/2" 로케이터) 은 모두 없앴다 (예전 해석과의 비교는 {@link LayoutDiff}).
  */
 public final class Animation {
 
@@ -36,8 +43,8 @@ public final class Animation {
 	}
 
 	/**
-	 * 타입 10 원소 크기 1 트랙: 12B 엔트리 { u16 id(관절 번호), u8 flags, u8 offHi, u16 count, u16 start, u16 hold, u16 offLo } +
-	 * u8 값[count]. 프레임 단위 = 디스크립터 frameTime (히어로 1/60).
+	 * 타입 5 (원소 크기 1) 트랙: 12B 엔트리 { u16 id(관절 번호), u8 flags, u8 offHi, u16 count, u16 start, u16 hold, u16 offLo } +
+	 * u8 값[count]. 프레임 단위 = 그 디스크립터의 frameTime (히어로 1/60).
 	 */
 	public record ByteTrack(int id, int start, int count, int hold, int[] values, float frameTime) {
 
@@ -51,6 +58,9 @@ public final class Animation {
 		}
 	}
 
+	/** 스케일 s16 → 배율: (π/2)/4096 (0x231B50 의 상수 0x39C90FD8, 아이들 쿼터니언 노름과 같은 단위 — 2607.6 = 1.0) [확실]. */
+	public static final float SCALE_UNIT = Float.intBitsToFloat(0x39C90FD8);
+
 	public final String name;
 	public final String group;
 	public final int flags;
@@ -60,70 +70,34 @@ public final class Animation {
 	public final int blendIndex;
 	public final float blendParam;
 	public final int globalIndex;
-	public final List<StateDescr> descrs = new ArrayList<>();
-	public final List<AnimTrack> rotTracks = new ArrayList<>();
-	public final List<AnimTrack> posTracks = new ArrayList<>();
-	/** 타입 10 f32 채널 트랙 (슬롯 순서). 로케이터 관절 위치로 쓰일 수 있는 것은 bake 때 고른다 ({@link #locatorTrack}). */
-	public final List<AnimTrack> channelTracks = new ArrayList<>();
-	/**
-	 * 타입 10 f32 채널을 상태 디스크립터별로 묶은 것 — <b>인덱스 = 디스크립터 번호</b> (모든 형의 디스크립터가 자리를 차지하고, 타입 10/unk10 4 가
-	 * 아니거나 트랙이 없으면 빈 목록). 이펙트 GO 에서는 디스크립터 번호 = FXC 노드 헤더 +0x0A 링크 번호이고
-	 * 스트림 k = 그 FXC 의 P 블록 k 번째 float (3 퍼짐, 4 속력, 8 초당 생성 수) 를 덮어쓴다 (40 문서 §3).
-	 * 예 R_PERMK 상자 chestGrab: 디스크립터 3/6/9/12 = 링크 3/6/9/12 (MSemit1/HSemit1/PSemit1/WSemit1, 종류별 첫 이미터) [확실: 데이터 일치].
-	 */
-	public final List<List<AnimTrack>> channelGroups = new ArrayList<>();
-	/**
-	 * 타입 11 (unk10 = 4) 트랙. <b>세트가 이동 데이터 타입 (5) 을 선언하지 않을 때만</b> 관절 이동으로 쓴다 ({@link #declaresTranslation}) [추정, 38 문서 §5]:
-	 * ATHN05D 엘리베이터는 데이터 타입이 [0, 11, 11] 이고 스트림 5/9 (관절 1/2 의 Y) 절대값 138.47 = 바인드 로컬 Y, 이후 가산으로 -52.2 까지
-	 * 내려간다 (발판이 190 내려가 Warp 도착점 WarpFrom4A 높이와 일치).
-	 * 타입 5 를 선언한 세트의 타입 11 은 이동이 아니다 — 원작은 데이터 타입 번호로 채널 소비자를 따로 만든다 (0x100EA8, 점프표 0x2B2810:
-	 * 5 → vtable 0x2C0730, 11 → 0x2C0500) [확실: 코드]. 그런 세트에서 이동 트랙 없이 타입 11 만 있는 act 100 개는 모두 스트림 8 하나에
-	 * 0 → 500/1000/2000 → 0 펄스 (부서지는 문·모래주머니·상자, SEM 소리 이미터를 가진 물체) 나 FX 크기의 값이고 바인드 로컬과 맞는 것이 없다
-	 * [확실: 데이터]. 이동으로 읽으면 ATHN01B {@code fallenposts} 의 cdHull (관절 2) x 가 바인드 −74.9 → 0 으로 옮겨져 충돌 hull 이 복도 밖에 놓인다 (41 §2.1).
-	 */
-	public final List<AnimTrack> objectTracks = new ArrayList<>();
-	/** 세트의 데이터 타입 목록에 이동 (5) 이 있는가 — 있으면 타입 11 은 관절 이동이 아니다 ({@link #objectTracks}). */
-	public final boolean declaresTranslation;
-	/** 타입 10 u8 채널: 관절별 상태 값 (미노타우로스 maiMin01 에서 도끼 부착 관절 36→54 전환). */
-	public final List<ByteTrack> byteTracks = new ArrayList<>();
-	public final float frameTime;
-	/** 위치 디스크립터의 frameTime (회전과 다르면 경고 대상, 히어로 전체에서는 항상 같음). */
-	public final float posFrameTime;
-
-	/**
-	 * <b>원작 배치로 다시 읽은 상태 디스크립터</b> (인덱스 = 원작 채널 id). 세트 데이터 타입 항목 k 는 디스크립터 p2 개 (항목 +3 u8,
-	 * {@link AnimationSet#typeParams}[k][1]) 를 차례로 차지한다 — 원작 채널 생성 0x100EA8 이 항목마다 채널 객체 +0x1C = 앞 항목 p2 합 (id),
-	 * +0x20 = p2 로 두고 FXC 이미터 링크 (노드 +0x62) 를 이 id 로 찾는다 (0x130240) [확실: 코드]. 데이터 [확실]: 전 WAD 9220 act 의 트랙 데이터가
-	 * 모두 p2 합 개 표 뒤에서 시작하고 (1685 act 는 표 끝 바로 다음), 이 배치로 다시 매긴 형은 원소 크기 (+0x10) 가 형마다 하나로 맞는다:
-	 * 타입 0 = 3 칸 (0 회전 s16 · 1 이동 f32 · 2 스케일 s16, 히어로 등 7 세트는 4 칸 + 3 로케이터 f32), 5 = u8 관절 상태, 10 = f32 채널, 11 = 정수 값 채널.
-	 * <p>위의 예전 필드 ({@link #descrs}, {@link #posTracks}, {@link #channelGroups} …) 는 <b>항목 번호 = 디스크립터 번호</b> 로 읽어 타입 0 뒤의 형 표시가
-	 * 2 (히어로 3) 칸씩 밀려 있다 (이동 = "타입 5", 히어로 u8 = "타입 10 슬롯 2", 이펙트 생성률 = "타입 11" 로 보임). 그 위에 맞춘 보정 (히드라 매달림 들어 올림,
-	 * 잡기 설계 거리, 타입 11 이동 규칙 …) 이 여럿이라 전역 전환은 따로 한다 (05 문서 §2.8.1) — 지금은 이 배치를 관절 카메라 ({@code CameraRig.CamAnim})
-	 * 와 관절 이미터 이펙트 (Animator·하늘 GO, {@code EffectDef.pose} · 생성률 채널) 만 쓴다.
-	 */
+	/** 상태 디스크립터 (Σ p2 개, 인덱스 = 원작 채널 id). */
 	public final List<StateDescr> records = new ArrayList<>();
-	/** {@link #records} 배치의 관절 회전 (타입 0 디스크립터 0). */
-	public final List<AnimTrack> recordRotation;
-	/** {@link #records} 배치의 관절 이동 (타입 0 디스크립터 1, 로컬 위치 절대 키 + 가산). */
-	public final List<AnimTrack> recordTranslation;
-	/** {@link #records} 배치의 타입 10 f32 채널 (인덱스 = 원작 채널 id = FXC 링크, 비면 빈 목록). */
-	public final List<List<AnimTrack>> recordChannels = new ArrayList<>();
-	private final Map<Skeleton, Baked> bakedRecords = new IdentityHashMap<>();
+	/** 타입 0 디스크립터 0: 관절 회전. */
+	public final List<AnimTrack> rotTracks;
+	/** 타입 0 디스크립터 1: 관절 이동 (로컬 위치 절대 키 + 가산). */
+	public final List<AnimTrack> posTracks;
+	/** 타입 0 디스크립터 2: 관절 스케일 (s16 절대, {@link #SCALE_UNIT} 배) — 값은 아직 원시 정수. */
+	public final List<AnimTrack> scaleTracks;
+	/** 타입 0 디스크립터 3 (p2 ≥ 4 세트만): 이동 배열에 이어서 쓴다 — 히어로 lWeapOH/rWeapOH 모델 공간 위치 (블레이드 사슬 궤적, 05 §2.8). */
+	public final List<AnimTrack> locatorTracks;
+	/** 타입 5: 관절별 u8 상태 (부서지는 물체의 관절 가시성 41 §1.3, 미노타우로스 도끼 손/바닥 전환). */
+	public final List<ByteTrack> byteTracks = new ArrayList<>();
+	/**
+	 * 채널 id (= 디스크립터 번호) → 타입 10 f32 트랙 (다른 형·트랙 없음은 빈 목록). FXC 이미터 링크 (노드 +0x62) 가 이 id 로 찾고 (0x130240)
+	 * 스트림 k = 그 FXC 의 P 블록 k 번째 float (3 퍼짐, 4 속력, 8 초당 생성 수) 를 덮어쓴다 (40 문서 §3).
+	 * 예 ATHN03A GateExplosion 4 = FBFemit2GE 생성률 150, R_PERMK chestGrab 3/6/9/12 = MSemit1/HSemit1/PSemit1/WSemit1.
+	 */
+	public final List<List<AnimTrack>> channels = new ArrayList<>();
+	/**
+	 * 관절 자세의 프레임 간격: 타입 0 디스크립터 0 의 frameTime (재생 0x111760 이 네 디스크립터 모두에 쓴다, 0x111804). 타입 0 이 없으면 첫 디스크립터,
+	 * 그래도 0 이면 1/30. 값 채널은 각자의 디스크립터 frameTime ({@link #channel}).
+	 */
+	public final float frameTime;
 
 	private final Map<Skeleton, Baked> baked = new IdentityHashMap<>();
 
-	Animation(String group, ByteBuffer b, int at, int[] typeIds) {
-		this(group, b, at, typeIds, ones(typeIds.length));
-	}
-
-	private static int[] ones(int n) {
-		int[] r = new int[n];
-		java.util.Arrays.fill(r, 1);
-		return r;
-	}
-
 	/**
-	 * @param recordCounts 항목마다 차지하는 디스크립터 수 (p2) — {@link #records} 배치
+	 * @param recordCounts 항목마다 차지하는 디스크립터 수 (p2)
 	 */
 	Animation(String group, ByteBuffer b, int at, int[] typeIds, int[] recordCounts) {
 		this.group = group;
@@ -135,52 +109,8 @@ public final class Animation {
 		globalIndex = b.getInt(at + 0x40);
 		duration = b.getFloat(at + 0x1C);
 		name = cstr(b, at + 0x24, 24);
+		List<AnimTrack> rot = List.of(), pos = List.of(), scale = List.of(), loc = List.of();
 		float ft = 0;
-		float pft = 0;
-		for (int k = 0; k < typeIds.length; k++) {
-			int so = at + 0x64 + k * 0x14;
-			StateDescr sd = new StateDescr(typeIds[k], Short.toUnsignedInt(b.getShort(so)), Short.toUnsignedInt(b.getShort(so + 2)),
-					b.getInt(so + 4), b.getInt(so + 8), b.getFloat(so + 12), b.getInt(so + 16));
-			descrs.add(sd);
-			channelGroups.add(List.of()); // 디스크립터 번호 = 링크 번호 — 빈·다른 형 디스크립터도 자리를 차지한다
-			if (sd.trackCount == 0) {
-				continue;
-			}
-			if (typeIds[k] == 0) {
-				rotTracks.addAll(AnimTrack.parse(b, at + sd.offset, sd.trackCount, false));
-				ft = sd.frameTime;
-			} else if (typeIds[k] == 5) {
-				posTracks.addAll(AnimTrack.parse(b, at + sd.offset, sd.trackCount, true));
-				pft = sd.frameTime;
-			} else if (typeIds[k] == 11 && sd.unk10 == 4) {
-				try {
-					objectTracks.addAll(AnimTrack.parse(b, at + sd.offset, sd.trackCount, true));
-				} catch (RuntimeException e) {
-					// 해석 실패 무시
-				}
-			} else if (typeIds[k] == 10) {
-				try {
-					if (sd.unk10 == 4) {
-						List<AnimTrack> g = AnimTrack.parse(b, at + sd.offset, sd.trackCount, true);
-						channelTracks.addAll(g);
-						channelGroups.set(k, g);
-					} else if (sd.unk10 == 1) {
-						byteTracks.addAll(parseBytes(b, at + sd.offset, sd.trackCount, sd.frameTime));
-					}
-				} catch (RuntimeException e) {
-					// 오브젝트별 채널 — 해석 실패는 무시 (관절 포즈에는 영향 없음)
-				}
-			}
-		}
-		boolean t5 = false;
-		for (int id : typeIds) {
-			t5 |= id == 5;
-		}
-		declaresTranslation = t5;
-		frameTime = ft > 0 ? ft : pft > 0 ? pft : 1f / 30f;
-		posFrameTime = pft > 0 ? pft : frameTime;
-		// 원작 배치 (Σ p2) — 예전 필드와 같은 디스크립터를 같은 형으로 읽었으면 그 목록을 함께 쓴다
-		List<AnimTrack> rr = List.of(), rt = List.of();
 		int r = 0;
 		for (int k = 0; k < typeIds.length; k++) {
 			for (int sub = 0; sub < recordCounts[k]; sub++, r++) {
@@ -191,46 +121,40 @@ public final class Animation {
 				StateDescr sd = new StateDescr(typeIds[k], Short.toUnsignedInt(b.getShort(so)), Short.toUnsignedInt(b.getShort(so + 2)),
 						b.getInt(so + 4), b.getInt(so + 8), b.getFloat(so + 12), b.getInt(so + 16));
 				records.add(sd);
-				recordChannels.add(List.of());
+				channels.add(List.of());
+				int t = typeIds[k];
+				if (t == 0 && sub == 0 || ft == 0 && r == 0) {
+					ft = sd.frameTime; // act+0x70 (0x111804)
+				}
 				if (sd.trackCount == 0) {
 					continue;
 				}
-				int t = typeIds[k];
-				boolean same = r < typeIds.length;
 				try {
-					if (t == 0 && sub == 0) {
-						rr = same && typeIds[r] == 0 ? rotTracks : AnimTrack.parse(b, at + sd.offset, sd.trackCount, false);
-					} else if (t == 0 && sub == 1) {
-						rt = same && typeIds[r] == 5 ? posTracks : AnimTrack.parse(b, at + sd.offset, sd.trackCount, true);
+					if (t == 0) {
+						switch (sub) {
+							case 0 -> rot = AnimTrack.parse(b, at + sd.offset, sd.trackCount, false);
+							case 1 -> pos = AnimTrack.parse(b, at + sd.offset, sd.trackCount, true);
+							case 2 -> scale = AnimTrack.parse(b, at + sd.offset, sd.trackCount, false);
+							case 3 -> loc = AnimTrack.parse(b, at + sd.offset, sd.trackCount, true);
+							default -> {
+								// p2 > 4 인 타입 0 은 데이터에 없다
+							}
+						}
+					} else if (t == 5 && sd.unk10 == 1) {
+						byteTracks.addAll(parseBytes(b, at + sd.offset, sd.trackCount, sd.frameTime));
 					} else if (t == 10 && sd.unk10 == 4) {
-						recordChannels.set(r, same && typeIds[r] == 10 ? channelGroups.get(r) : AnimTrack.parse(b, at + sd.offset, sd.trackCount, true));
+						channels.set(r, AnimTrack.parse(b, at + sd.offset, sd.trackCount, true));
 					}
 				} catch (RuntimeException e) {
-					// 해석 실패 — 그 디스크립터만 빈 채로
+					// 해석 실패 — 그 디스크립터만 빈 채로 (전 WAD 에서 실패 0, anim:batch)
 				}
 			}
 		}
-		recordRotation = rr;
-		recordTranslation = rt;
-	}
-
-	/**
-	 * {@link #records} 배치의 자세: 회전 {@link #recordRotation} + 이동 {@link #recordTranslation} (절대 키 + 가산, 키 없는 관절은 아이들 로컬).
-	 * 예전 {@link #sample} 의 보정 규칙 (타입 11 이동, 운반 관절, 로케이터) 은 쓰지 않는다 — 원작 배치에서는 필요 없다.
-	 * 예: ATHN03A GateExplosion 관절 2 Fireball03GE — 디스크립터 1 (예전 "타입 10") 프레임 0 (−36.9, −69.7, −408.4) → 1 = 바인드 로컬 → 가산
-	 * (−0.84, +5.98, +39.8)/프레임 = 성문 쪽으로 난다; 예전 {@link #sample} 은 디스크립터 4 (생성률 150, 예전 "타입 11") 를 관절 2 x 로 읽어 불덩이가 1000 옆으로 뛰었다.
-	 */
-	public Pose sampleRecords(Skeleton sk, float t, boolean loop) {
-		Baked bk;
-		synchronized (this) {
-			bk = bakedRecords.computeIfAbsent(sk, s -> bakeTracks(s, recordRotation, recordTranslation));
-		}
-		return samplePose(bk, sk, t, loop);
-	}
-
-	/** {@link #channel} 을 {@link #recordChannels} (원작 채널 id) 로. */
-	public float recordChannel(int id, int stream, float t, float def) {
-		return id < 0 || id >= recordChannels.size() ? def : channelValue(recordChannels.get(id), stream, t, def);
+		rotTracks = rot;
+		posTracks = pos;
+		scaleTracks = scale;
+		locatorTracks = loc;
+		frameTime = ft > 0 ? ft : 1f / 30f;
 	}
 
 	private static List<ByteTrack> parseBytes(ByteBuffer b, int at, int entries, float ft) {
@@ -247,12 +171,12 @@ public final class Animation {
 			for (int f = 0; f < cnt; f++) {
 				v[f] = b.get(data + f) & 0xFF;
 			}
-			out.add(new ByteTrack(id, start, cnt, hold, v, ft));
+			out.add(new ByteTrack(id, start, cnt, hold, v, ft > 0 ? ft : 1f / 60f));
 		}
 		return out;
 	}
 
-	/** 관절 id 의 u8 채널 값 (시간 t), 없으면 -1. */
+	/** 관절 id 의 u8 상태 값 (시간 t), 없으면 -1. */
 	public int byteChannel(int joint, float t) {
 		int v = -1;
 		for (ByteTrack bt : byteTracks) {
@@ -267,7 +191,7 @@ public final class Animation {
 	}
 
 	/**
-	 * u8 채널을 <b>관절 가시성</b>으로 읽은 숨김 표 (41 문서 §2): 값 0 인 관절과 그 자손을 숨긴다 [추정: 의미·계층].
+	 * u8 상태를 <b>관절 가시성</b>으로 읽은 숨김 표 (41 문서 §1.3): 값 0 인 관절과 그 자손을 숨긴다 [추정: 의미·계층].
 	 * 부서지는 물체 act 에서 온전한 몸 관절 (doorVis, barrelVisDisapear, breakgroup1) 이 [1,1,0], 조각 묶음 (breakgroup2) 이 [0,0,1].
 	 * 트랙이 끝난 뒤에도 마지막 값을 유지한다 (hold 0 인 통·양동이도 조각만 남아야 한다) [추정], 트랙 시작 전에는 보임.
 	 *
@@ -306,68 +230,6 @@ public final class Animation {
 		return v[j] == 0 || hiddenOf(sk, v, sk.joints.get(j).parent(), depth + 1);
 	}
 
-	/**
-	 * 운반 관절: 이름이 정확히 {@code "Anim"} 이고 메시가 붙지 않은 (inverse bind 없음) 관절 — 그 타입 10 f32 x/y/z 채널은 관절 이동 (바인드 로컬 + 값) 이다
-	 * [추정: 데이터 2 건 — ATHN02A {@code ANM_shiptrans} 관절 1 Z 0 → −480 (10.4 초, 배가 부두로 들어옴: Warp 도착 Start
-	 * ShipTrans-Anim-WarpFrom1F 가 이 관절에 붙고, 정박한 배 goshipgroup 이 GO 부모 링크로 이 관절에 붙으며, 아테나 석상 카메라 AthenaCam·
-	 * 반짝임 goathenasparkle·DocCam/LadderCam 레일이 모두 −480 자리에 있다), PAND03A {@code ANM_animhead} 관절 1 Y 0 → 160].
-	 * 원작 소비자는 미해석 (타입 10 채널 vtable 0x2C05E0 은 수동 채널 — 읽는 쪽 미상).
-	 */
-	static boolean transportJoint(Skeleton.Joint jt) {
-		return "Anim".equals(jt.name()) && !jt.hasInverseBind();
-	}
-
-	/**
-	 * 타입 10 f32 트랙이 운반 관절 ({@link #transportJoint}) 의 x/y/z 이고 같은 act 의 타입 5 가 그 관절을 건드리지 않는가. 값은 바인드 로컬 위치에
-	 * <b>더한다</b> — 두 건 모두 첫 프레임 0 (PAND03A Anim 바인드 로컬 y −192 에서 0 → 160 이면 위로 160; 절대값으로 읽으면 첫 프레임부터 192 위로 뜬다).
-	 */
-	public boolean transportTrack(Skeleton sk, AnimTrack t) {
-		if (declaresTranslation) {
-			return false;
-		}
-		for (int s : t.streams()) {
-			int j = s / 4;
-			if (s % 4 > 2 || j >= sk.size() || !transportJoint(sk.joints.get(j))) {
-				return false;
-			}
-			for (AnimTrack p : posTracks) {
-				for (int ps : p.streams()) {
-					if (ps / 4 == j) {
-						return false;
-					}
-				}
-			}
-		}
-		return true;
-	}
-
-	/**
-	 * 타입 10 f32 트랙이 이 스켈레톤의 <b>무기 로케이터</b>({@code *WeapOH}) 위치인지: 모든 스트림이 성분 x/y/z 이고, 관절이
-	 * 루트의 자식, inverse bind 없음(메시가 붙지 않음), 쿼터니언, 같은 act 의 타입 5 이동이 건드리지 않는 관절.
-	 * 슬롯 의미는 오브젝트 클래스가 정하므로 이름으로 히어로 바인딩만 적용한다 — 이름 조건 없이 고르면 통나무 조각/zeroJoint 등
-	 * 의미 미상 채널도 걸린다 (anim:batch 통계, 05 문서 2.8).
-	 */
-	public boolean locatorTrack(Skeleton sk, AnimTrack t) {
-		for (int s : t.streams()) {
-			int j = s / 4;
-			if (s % 4 > 2 || j >= sk.size()) {
-				return false;
-			}
-			Skeleton.Joint jt = sk.joints.get(j);
-			if (jt.parent() != 0 || jt.hasInverseBind() || !jt.quaternion() || !jt.name().endsWith("WeapOH")) {
-				return false;
-			}
-			for (AnimTrack p : posTracks) {
-				for (int ps : p.streams()) {
-					if (ps / 4 == j) {
-						return false;
-					}
-				}
-			}
-		}
-		return true;
-	}
-
 	static String cstr(ByteBuffer b, int at, int max) {
 		int len = 0;
 		while (len < max && b.get(at + len) != 0) {
@@ -379,19 +241,18 @@ public final class Animation {
 	}
 
 	/**
-	 * 채널 묶음 group 의 스트림 stream 값 (시간 t 초, 프레임 사이 선형). 절대 트랙의 [start, start+count−1+hold] 구간만
-	 * 정의되고, 어느 트랙도 덮지 않으면 def. 가산 트랙은 이펙트 채널에 없어 무시한다.
+	 * 채널 id 의 스트림 stream 값 (시간 t 초, 프레임 사이 선형). 절대 트랙의 [start, start+count−1+hold] 구간만
+	 * 정의되고, 어느 트랙도 덮지 않으면 def. 가산 트랙은 타입 10 채널에 없어 무시한다.
+	 * 프레임 간격 = <b>그 채널 디스크립터의 frameTime</b> — 값 채널 재생 0x268948 이 act + 0x64 + id·0x14 의 +0xC 를 읽는다 [확실]
+	 * (부서지는 물체·석화 파괴 act 는 회전 1/15, 채널 1/30 — 전 WAD 407 디스크립터).
 	 */
-	public float channel(int group, int stream, float t, float def) {
-		if (group < 0 || group >= channelGroups.size()) {
+	public float channel(int id, int stream, float t, float def) {
+		if (id < 0 || id >= channels.size()) {
 			return def;
 		}
-		return channelValue(channelGroups.get(group), stream, t, def);
-	}
-
-	private float channelValue(List<AnimTrack> tracks, int stream, float t, float def) {
-		float f = t / frameTime;
-		for (AnimTrack tr : tracks) {
+		float ft = records.get(id).frameTime();
+		float f = t / (ft > 0 ? ft : frameTime);
+		for (AnimTrack tr : channels.get(id)) {
 			if (tr.additive()) {
 				continue;
 			}
@@ -413,14 +274,18 @@ public final class Animation {
 		return def;
 	}
 
+	/** 채널 id 에 타입 10 트랙이 있는가. */
+	public boolean hasChannel(int id) {
+		return id >= 0 && id < channels.size() && !channels.get(id).isEmpty();
+	}
+
 	/** 프레임 수 (0 프레임 포함). duration/frameTime + 1 과 트랙 끝 프레임 중 큰 값. */
 	public int frameCount() {
 		int n = Math.round(duration / frameTime) + 1;
-		for (AnimTrack t : rotTracks) {
-			n = Math.max(n, t.endFrame() + 1);
-		}
-		for (AnimTrack t : posTracks) {
-			n = Math.max(n, t.endFrame() + 1);
+		for (List<AnimTrack> l : List.of(rotTracks, posTracks, scaleTracks, locatorTracks)) {
+			for (AnimTrack t : l) {
+				n = Math.max(n, t.endFrame() + 1);
+			}
 		}
 		return n;
 	}
@@ -430,39 +295,32 @@ public final class Animation {
 		return (flags & 1) != 0;
 	}
 
+	/** 관절 자세 트랙 (타입 0 의 회전·이동·스케일·로케이터) 이 하나라도 있는가. */
 	public boolean hasSkeletalData() {
-		return !rotTracks.isEmpty() || !posTracks.isEmpty() || !objectTranslation().isEmpty();
-	}
-
-	/** 관절 이동으로 쓰는 타입 11 트랙: 이동 데이터 타입 (5) 을 선언하지 않은 세트에서만 ({@link #objectTracks}). */
-	public List<AnimTrack> objectTranslation() {
-		return declaresTranslation ? List.of() : objectTracks;
+		return !rotTracks.isEmpty() || !posTracks.isEmpty() || !scaleTracks.isEmpty() || !locatorTracks.isEmpty();
 	}
 
 	/** 애니메이션이 건드리는 최대 관절 번호 + 1. */
 	public int jointSpan() {
 		int m = 0;
-		for (AnimTrack t : rotTracks) {
-			for (int s : t.streams()) {
-				m = Math.max(m, s / 4 + 1);
-			}
-		}
-		for (AnimTrack t : posTracks) {
-			for (int s : t.streams()) {
-				m = Math.max(m, s / 4 + 1);
+		for (List<AnimTrack> l : List.of(rotTracks, posTracks, scaleTracks, locatorTracks)) {
+			for (AnimTrack t : l) {
+				for (int s : t.streams()) {
+					m = Math.max(m, s / 4 + 1);
+				}
 			}
 		}
 		return m;
 	}
 
-	/** 프레임마다 모든 스트림 값을 펼친 테이블. rot/pos[frame][joint*4+c]. */
-	public record Baked(int frames, float[][] rot, float[][] pos) {
+	/** 프레임마다 모든 스트림 값을 펼친 테이블. rot/pos/scale[frame][joint*4+c] (스케일 트랙이 없으면 scale = null → 아이들 스케일). */
+	public record Baked(int frames, float[][] rot, float[][] pos, float[][] scale) {
 	}
 
 	/**
 	 * 정수 프레임 단위로 스트림을 적분/대입해 펼친다.
-	 * 초기값 = 스켈레톤 아이들 성분 (쿼터니언은 ×8 로 애니메이션 단위에 맞춤). 프레임마다 가산 트랙을 먼저 더하고
-	 * 절대 트랙을 나중에 대입한다(경계 프레임에서는 절대값이 우선).
+	 * 초기값 = 스켈레톤 아이들 성분 (쿼터니언은 ×8 로 애니메이션 단위에 맞춤, 스케일은 CXT 아이들 스케일 — 재생기 리셋 0x111510 이 같은 일을 한다).
+	 * 프레임마다 가산 트랙을 먼저 더하고 절대 트랙을 나중에 대입한다 (경계 프레임에서는 절대값이 우선). 이동은 디스크립터 1 다음 3.
 	 */
 	public synchronized Baked bake(Skeleton sk) {
 		return baked.computeIfAbsent(sk, this::doBake);
@@ -473,6 +331,7 @@ public final class Animation {
 		int frames = frameCount();
 		float[] rot = new float[nj * 4];
 		float[] pos = new float[nj * 4];
+		float[] scl = scaleTracks.isEmpty() ? null : new float[nj * 4];
 		for (int j = 0; j < nj; j++) {
 			float qs = sk.joints.get(j).quaternion() ? Skeleton.IDLE_QUAT_TO_ANIM : 1f;
 			for (int c = 0; c < 4; c++) {
@@ -480,68 +339,30 @@ public final class Animation {
 			}
 			for (int c = 0; c < 3; c++) {
 				pos[j * 4 + c] = sk.idlePos[j][c];
+				if (scl != null) {
+					scl[j * 4 + c] = sk.idleScale[j][c] / SCALE_UNIT; // 원시 정수 단위로 적분, 샘플 때 배율
+				}
 			}
 		}
-		List<AnimTrack> pt = new ArrayList<>(posTracks);
-		if (posTracks.isEmpty()) {
-			pt.addAll(objectTranslation());
+		List<AnimTrack> pt = posTracks;
+		if (!locatorTracks.isEmpty()) {
+			pt = new ArrayList<>(posTracks);
+			pt.addAll(locatorTracks);
 		}
-		List<AnimTrack> tt = new ArrayList<>();
-		for (AnimTrack t : channelTracks) {
-			if (locatorTrack(sk, t)) {
-				pt.add(t);
-			} else if (transportTrack(sk, t)) {
-				tt.add(t);
-			}
-		}
-		float[] tpos = new float[nj * 4];
 		float[][] outR = new float[frames][];
 		float[][] outP = new float[frames][];
+		float[][] outS = scl == null ? null : new float[frames][];
 		for (int f = 0; f < frames; f++) {
 			apply(rotTracks, rot, f, nj);
 			apply(pt, pos, f, nj);
 			outR[f] = rot.clone();
 			outP[f] = pos.clone();
-			if (!tt.isEmpty()) {
-				apply(tt, tpos, f, nj); // 운반 관절: 바인드 로컬 위치 + 채널 값
-				for (int i = 0; i < tpos.length; i++) {
-					outP[f][i] += tpos[i];
-				}
+			if (scl != null) {
+				apply(scaleTracks, scl, f, nj);
+				outS[f] = scl.clone();
 			}
 		}
-		return new Baked(frames, outR, outP);
-	}
-
-	/** 회전·이동 트랙만으로 펼친다 ({@link #sampleRecords}) — 초기값·적용 순서는 {@link #doBake} 와 같다. */
-	private Baked bakeTracks(Skeleton sk, List<AnimTrack> rotT, List<AnimTrack> posT) {
-		int nj = sk.size();
-		int frames = Math.round(duration / frameTime) + 1;
-		for (AnimTrack t : rotT) {
-			frames = Math.max(frames, t.endFrame() + 1);
-		}
-		for (AnimTrack t : posT) {
-			frames = Math.max(frames, t.endFrame() + 1);
-		}
-		float[] rot = new float[nj * 4];
-		float[] pos = new float[nj * 4];
-		for (int j = 0; j < nj; j++) {
-			float qs = sk.joints.get(j).quaternion() ? Skeleton.IDLE_QUAT_TO_ANIM : 1f;
-			for (int c = 0; c < 4; c++) {
-				rot[j * 4 + c] = sk.idleRot[j][c] * qs;
-			}
-			for (int c = 0; c < 3; c++) {
-				pos[j * 4 + c] = sk.idlePos[j][c];
-			}
-		}
-		float[][] outR = new float[frames][];
-		float[][] outP = new float[frames][];
-		for (int f = 0; f < frames; f++) {
-			apply(rotT, rot, f, nj);
-			apply(posT, pos, f, nj);
-			outR[f] = rot.clone();
-			outP[f] = pos.clone();
-		}
-		return new Baked(frames, outR, outP);
+		return new Baked(frames, outR, outP, outS);
 	}
 
 	private static void apply(List<AnimTrack> tracks, float[] cur, int f, int nj) {
@@ -572,13 +393,10 @@ public final class Animation {
 	/**
 	 * 시간 t(초) 의 포즈. 프레임 사이는 성분별 선형 보간 (쿼터니언은 이후 정규화 = nlerp).
 	 *
-	 * @param loop true 면 t 를 duration 으로 감싼다, false 면 [0, duration] 으로 자른다
+	 * @param loop true 면 t 를 길이로 감싼다, false 면 [0, 길이] 로 자른다
 	 */
 	public Pose sample(Skeleton sk, float t, boolean loop) {
-		return samplePose(bake(sk), sk, t, loop);
-	}
-
-	private Pose samplePose(Baked bk, Skeleton sk, float t, boolean loop) {
+		Baked bk = bake(sk);
 		float len = (bk.frames - 1) * frameTime;
 		if (len <= 0) {
 			t = 0;
@@ -609,7 +427,12 @@ public final class Animation {
 			for (int c = 0; c < 3; c++) {
 				float p0 = bk.pos[f0][j * 4 + c], p1 = bk.pos[f1][j * 4 + c];
 				p.pos[j][c] = p0 + (p1 - p0) * a;
-				p.scale[j][c] = sk.idleScale[j][c];
+				if (bk.scale == null) {
+					p.scale[j][c] = sk.idleScale[j][c];
+				} else {
+					float s0 = bk.scale[f0][j * 4 + c], s1 = bk.scale[f1][j * 4 + c];
+					p.scale[j][c] = (s0 + (s1 - s0) * a) * SCALE_UNIT;
+				}
 			}
 		}
 		return p;

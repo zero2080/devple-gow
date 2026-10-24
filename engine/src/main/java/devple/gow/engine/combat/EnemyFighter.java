@@ -176,14 +176,6 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 		this.idleClip = idleClip;
 		this.walkClip = walkClip;
 		this.anim = new Animator(sk, set, tw, animNode);
-		int pel = sk.indexOf(HYDRA_ROOT);
-		if (pel >= 0 && sk.joints.get(pel).quaternion() && sk.joints.get(pel).parent() == 0) {
-			float[] lift = hangLift(sk, anim.find(idleClip), pel);
-			if (lift != null) {
-				java.util.Map<devple.gow.tools.anim.Animation, Boolean> hang = new java.util.HashMap<>();
-				anim.setRollFix(pel, a -> hang.computeIfAbsent(a, x -> hangsUpsideDown(sk, x, pel)), lift);
-			}
-		}
 		this.navNode = animNode + "Navigation/";
 		// 이동 속도: 루프 이동 클립의 zeroJoint Z × 15fps (25 문서, 크라토스와 같은 규칙). 없으면 주어진 값
 		devple.gow.tools.anim.Animation wc = walkClip != null ? anim.find(walkClip) : null;
@@ -248,31 +240,12 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 	static final String HYDRA_JAW_TIP = "BHA01JOCTIP21";
 
 	/**
-	 * 클립 첫 프레임의 히드라 골반이 X 축 180° (정규화 |x| &gt; 0.95) = 목이 아래로 매달린 자세. ATHN01B bhh 의 BHAenc1* 21 개만 해당
-	 * (같은 리그의 BHAbabyEmerge·bha·bhb 클립과 ATHN01E 보스 bha 클립은 거의 단위) — 37 문서 §4.3.
+	 * 클립 첫 프레임의 히드라 골반이 X 축 180° (정규화 |x| &gt; 0.95) = 목이 뿌리에서 아래로 내려오는 자세. ATHN01B bhh 의 BHAenc1* 21 개만 해당
+	 * (같은 리그의 BHAbabyEmerge·bha·bhb 클립과 ATHN01E 보스 bha 클립은 거의 단위) — 37 문서 §4.3. 이 클립들은 디스크립터 1 (관절 이동) 이 골반을
+	 * 뿌리 위 (77, 842.7, −106.7) 에 둔다 → 머리가 뿌리 위·앞 (배율 0.3: 턱 끝 +126 위 · 앞 ≈ 300) 에 바로 선다. 예전 항목 번호 배치는 이 이동을 읽지 않아
+	 * 머리가 바닥 아래에 매달렸고, 엔진은 골반 앞 X 축 50.7° 회전 (예전 hangLift) 으로 대신 세웠다 — 이제 보정 없음 (05 §2.8.1, 43 §20)
+	 * [확실: 데이터 + PS2 영상 272.5–342 초: 목이 위 선체에서 내려오고 머리는 크레토스 머리보다 위, 물기·기절·마무리 때 바닥까지].
 	 */
-	/**
-	 * 매달린 히드라 클립을 세우는 골반 앞 회전 (쿼터니언, 매달리지 않았으면 null): 모델 X 축 (옆) 둘레로 θ = 2·atan2(−y, −z) —
-	 * 대기 클립 첫 프레임 턱 끝 (bhh BHAenc1Idle (9, −421, −889) → θ 50.7°) 을 수평면 위로 대칭인 (9, 421, −889) 로 옮긴다.
-	 * 머리 자리 (뿌리 + 126 위 · 앞 267, 배율 0.3) 는 예전 Z 축 180° 보정과 같고 (영웅 동기 BHAenc1Grab: 영웅 = 뿌리 + 115 = 선창 바닥),
-	 * 머리 자체는 뒤집히지 않는다 — Z 180° 는 머리를 등이 아래로 굴려 원작 영상과 달랐다 (두 눈 JOLEYE11/JOREYE11 이 턱 끝보다 아래).
-	 * BHAenc1Grab 내내 영웅 손 ↔ 머리 관절 평균 거리도 X 축 회전 중 θ ≈ 50° 에서 최소 (106, Z 180° 는 118, 무보정 254) [근사: 원작 경로 미확인 —
-	 * 같은 결과를 내는 원작 코드는 못 찾았다].
-	 */
-	static float[] hangLift(Skeleton sk, devple.gow.tools.anim.Animation idle, int pel) {
-		int tip = sk.indexOf(HYDRA_JAW_TIP);
-		if (tip < 0 || !hangsUpsideDown(sk, idle, pel)) {
-			return null;
-		}
-		float[] m = idle.sample(sk, 0, false).world(sk)[tip];
-		float y = m[13], z = m[14];
-		if (y >= 0 || z >= 0) {
-			return null;
-		}
-		double half = Math.atan2(-y, -z); // θ / 2
-		return new float[]{(float) Math.sin(half), 0, 0, (float) Math.cos(half)};
-	}
-
 	static boolean hangsUpsideDown(Skeleton sk, devple.gow.tools.anim.Animation a, int joint) {
 		if (a == null || !a.hasSkeletalData()) {
 			return false;

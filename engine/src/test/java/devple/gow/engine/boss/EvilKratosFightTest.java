@@ -61,7 +61,9 @@ class EvilKratosFightTest {
 		assertTrue(until(r, 1, () -> r.fight.sync().active() && r.fight.sync().pairedMove() == EvilKratosFight.HUG_START),
 				"포옹 동기: hero " + r.heroMoves + " fam " + move(fam));
 		// 원작: 가족 662 의 865/866 은 이벤트 19 [0–1] (867 [0–0.4]) → 가족이 영웅을 synchJoint 관계로 끈다 (0x205B28 → 0x204BF0, 37 문서 §11.6).
-		// 관계 = 가족 synch (0,0,−16) 에 영웅 synch (zero 기준 (−1,0,−11), 180° 돌아 있음) → 영웅이 가족 정면 ≈ 27, 마주 봄
+		// 관계 = 가족 synch (zero 기준) 에 영웅 synch (zero 기준 (−1,0,−11), 180° 돌아 있음). 가족 MAIEVIHugStart 의 디스크립터 1 (타입 0 이동, 05 §2.8.1)
+		// 이 zeroJoint (0,0,−27.1) · synchJoint (0,0,−32) 를 두므로 가족 synch = (0,0,−4.9) → 영웅 오브젝트가 가족 정면 ≈ 16, 마주 봄.
+		// 이때 영웅 머리 ↔ 아내 머리 2.6 · 골반 8 (포옹), 예전 항목 번호 배치 (가족 세트 [0] 의 이동을 안 읽어 zero/synch 바인드 0 / −16) 의 27 은 머리 사이 12.6 [확실: 데이터]
 		Vector3f prev = new Vector3f(r.ctl.position);
 		float step = 0;
 		for (int i = 0; i < 30; i++) {
@@ -74,7 +76,7 @@ class EvilKratosFightTest {
 		var t = devple.gow.engine.combat.SyncPull.target(fam.pos, fam.yaw, fam.animator(), fam.scale, r.ctl.animator(), 1f);
 		assertEquals(0, t.getTranslation(new Vector3f()).distance(r.ctl.position), 1f, "관계로 수렴: " + r.ctl.position);
 		var rel = new org.joml.Matrix4f().translation(fam.pos).rotateY(fam.yaw).invert().transformPosition(new Vector3f(r.ctl.position));
-		assertTrue(Math.abs(rel.x) < 3 && rel.z < -22 && rel.z > -32, "영웅 = 가족 정면 ≈ 27: " + rel);
+		assertTrue(Math.abs(rel.x) < 3 && rel.z < -12 && rel.z > -20, "영웅 = 가족 정면 ≈ 16: " + rel);
 		assertEquals(0, Math.abs(Math.IEEEremainder(r.ctl.yaw - fam.yaw - Math.PI, Math.PI * 2)), 0.05, "마주 봄");
 		r.pad.down.add(devple.gow.engine.input.PadButton.CIRCLE);
 		for (int i = 0; i < 90; i++) {

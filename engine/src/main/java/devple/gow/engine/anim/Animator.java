@@ -150,9 +150,9 @@ public final class Animator {
 		if (memo != null && memoCur == current && memoPrev == previous && memoTime == time && memoPrevTime == prevTime && memoFade == fade) {
 			return memo;
 		}
-		Pose cur = fixRoll(current, current.sample(skeleton, time, current.looping()));
+		Pose cur = current.sample(skeleton, time, current.looping());
 		Pose out = fade >= 1f || previous == null ? cur
-				: PoseBlend.lerp(skeleton, fixRoll(previous, previous.sample(skeleton, prevTime, previous.looping())), cur, fade);
+				: PoseBlend.lerp(skeleton, previous.sample(skeleton, prevTime, previous.looping()), cur, fade);
 		memo = out;
 		memoCur = current;
 		memoPrev = previous;
@@ -160,40 +160,6 @@ public final class Animator {
 		memoPrevTime = prevTime;
 		memoFade = fade;
 		return out;
-	}
-
-	/** {@link #setRollFix} 관절 (-1 = 없음), 대상 클립 판정, 앞에 곱할 회전 (쿼터니언 x, y, z, w). */
-	private int rollJoint = -1;
-	private java.util.function.Predicate<Animation> rollClips;
-	private float[] rollQuat;
-
-	/**
-	 * 클립별 뿌리 관절 회전 보정: 판정이 참인 클립에서 joint 의 로컬 회전 앞에 모델 공간 회전 r 을 곱한다 (q' = r ⊗ q — 부모 = 단위인
-	 * 뿌리 관절 전용이라 하위 관절 전체가 모델 원점 둘레로 r 만큼 돈다). ATHN01B 선창 히드라 bhh 의 BHAenc1* 애니 (골반이 X 축 180° =
-	 * 목이 뿌리 아래로 매달림) 를 세우는 데 쓴다 — r 은 {@link devple.gow.engine.combat.EnemyFighter} 가 정한다 (37 문서 §4.3).
-	 *
-	 * @param r 쿼터니언 (x, y, z, w)
-	 */
-	public void setRollFix(int joint, java.util.function.Predicate<Animation> clips, float[] r) {
-		rollJoint = joint;
-		rollClips = clips;
-		rollQuat = r.clone();
-		memo = null;
-	}
-
-	private Pose fixRoll(Animation a, Pose p) {
-		if (rollJoint < 0 || rollClips == null || !rollClips.test(a)) {
-			return p;
-		}
-		// q' = r ⊗ q (해밀턴 곱: 벡터부 = rw·qv + qw·rv + rv × qv)
-		float[] q = p.rot[rollJoint];
-		float x = q[0], y = q[1], z = q[2], w = q[3];
-		float rx = rollQuat[0], ry = rollQuat[1], rz = rollQuat[2], rw = rollQuat[3];
-		q[0] = rw * x + w * rx + (ry * z - rz * y);
-		q[1] = rw * y + w * ry + (rz * x - rx * z);
-		q[2] = rw * z + w * rz + (rx * y - ry * x);
-		q[3] = rw * w - (rx * x + ry * y + rz * z);
-		return p;
 	}
 
 	private Pose memo;

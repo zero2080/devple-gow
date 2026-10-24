@@ -120,7 +120,7 @@ ATHN01E 히드라 (이벤트 1035 = 기술 시작, Filter 250 = 히드라):
   카메라와 같은 이름의 관절이 있으면 그 관절을, 없으면 관절 0 을 따른다 (LevelData 와 같은 규칙). CAM 0x08 = 1 표시는 관절이 있는 카메라 일부에만 있어 판정에 쓰지 않는다.
 - 카메라 월드 = CAM 로컬 · (ANM 표본 관절 월드 · 인스턴스). ~~위치는 대개 고정이고 회전이 패닝한다~~ (grabLeftCam: −Z 가 (−0.87,−0.34,−0.36) → (−0.47,−0.04,−0.88), 히드라 머리를 따라감).
   **정정 (2026-10-24, 05 §2.8.1, 43 §16)**: 카메라 오브젝트 ANM 은 거의 모두 데이터 타입 [0(p2 3)] 하나 — act 디스크립터 0 회전 · **1 이동** · 2 스케일. 예전 파서는
-  항목 수만큼 (1 개) 읽어 이동을 버렸으므로 "위치 고정" 은 파서 착시였다. 원작 배치 (`Animation.sampleRecords`, `CameraRig.CamAnim`) 로 전 WAD 관절 카메라 213 개 중
+  항목 수만큼 (1 개) 읽어 이동을 버렸으므로 "위치 고정" 은 파서 착시였다. 원작 배치 (`Animation.sample` — 당시 `sampleRecords`, 전역 전환 뒤 이름 통합, `CameraRig.CamAnim`) 로 전 WAD 관절 카메라 213 개 중
   179 개에 눈 이동이 생긴다: ATHN03AA camSpecialSparky (12 초 동안 계단 위 → 원형 제단 위 z −514 → 다시 위로, PS2 영상 4800–4812 의 커튼 통과·거대한 아레스),
   ATHN03A camFireballShot (+x 120 · +y 52, 불덩이가 오른쪽 위에서 성문으로 = 영상 4978), camMinoZoom (−x 410 로 창살을 따라), ATHN01A IdleCam (갑판 위로 +z 390),
   PAND05B camEleEnter (엘리베이터 판 높이로 올라 따라 내려옴 — 43 §13.11 의 "눈 고정" 정정). 회전 (패닝) 은 두 배치가 같다.
@@ -183,8 +183,8 @@ CAM 로컬 (회전 행 × 관절 스케일 역수, 위치 = 관절 로컬) × �
     갑판에 실려 가고 0.5 초에 PortCam, 10 초 뒤 CDsOn 이 Idle 을 풀고 질의를 켠다 (스크립트 그대로).
   - (2026-10-24 정정, 05 §2.8.1: 이 "타입 10 채널" 은 실제로 act 디스크립터 1 = 타입 0 의 관절 이동이다 — 원작 배치에서는 보통 이동 트랙. ATHN02A Anim 바인드 로컬 z = 0 이라
     결과는 같고, PAND03A AnimHead 는 프레임 0 절대 −192 (= 바인드 로컬) → +160 이라 운반 규칙 (−384 → −32) 과 다르다 [미확인: 원작 화면].)
-  - 엔진: `Animation.transportTrack` (관절 이름 "Anim", inverse bind 없음, 타입 5 없음 → 바인드 로컬 + 채널; PAND03A AnimHead 관절 1 Y 0 → 160 도 같은 꼴)
-    [추정: 이름 규칙 — 타입 10 채널 vtable 0x2C05E0 은 값만 들고 있는 수동 채널, 읽는 쪽 미해석]. `Platforms.Body` 부모 링크: follow = 부모 관절 처음 월드⁻¹ ·
+  - 엔진: ~~`Animation.transportTrack` (관절 이름 "Anim" → 바인드 로컬 + 채널)~~ → 원작 배치의 관절 이동 (디스크립터 1, `Animation.sample`) 그대로 (2026-10-24, 05 §2.8.1):
+    ATHN02A 는 바인드 로컬 0 이라 배 입항 −480 이 같고, PAND03A AnimHead 는 −192 → +160 (352 오름). `Platforms.Body` 부모 링크: follow = 부모 관절 처음 월드⁻¹ ·
     지금 → 자식 관절 월드에 곱함 (렌더 자세 `poseInstance`, CDV, 영웅·적 실려 감, Marker, 엔티티 월드 `ScriptWorld.followOwner`, ENV/CMV 볼륨
     `SceneNav.followVolumes`) [근사: 둘 다 몸 (CDV·Animator·R1 대상) 인 짝만 — 렌더만 있는 반짝임 GO 는 아직 따라가지 않음].
   - 적도 디딘 발판에 실려 간다 (원작 생물 +0x24C 발판 객체, 32 문서) — 갑판 위 석상. 배 모델의 MAT_stencil 판 (flags2 bit 28, 그림자 볼륨 전용 — 원작은 초록

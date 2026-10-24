@@ -23,6 +23,8 @@ import java.util.List;
  *   anim:list  &lt;wad&gt; [ANM_x]                          애니메이션 목록 (길이, 프레임, 트랙 수)
  *   anim:pose  &lt;wad&gt; &lt;MDL_x&gt; &lt;anim|bind|idle&gt; &lt;t&gt; &lt;out.png&gt;
  *   anim:sheet &lt;wad&gt; &lt;MDL_x&gt; &lt;anim&gt; &lt;out.png&gt; [--frames N]
+ *   anim:batch  &lt;rom 디렉터리&gt;                         전체 WAD 검증
+ *   anim:layout &lt;rom 디렉터리&gt; [N]                     디스크립터 배치 전환 효과 (예전 해석 대비 자세·가시성 차이, {@link LayoutDiff})
  * 공통 옵션: --skel CXT이름  --anm ANM이름  --ext 다른.wad (외부 그룹 0x10003 연결)  --lod N  --inst N  --yaw 도
  * sheet 옵션: --weapon R_WPN0_n.WAD (블레이드를 lWeapOH/rWeapOH 에 부착)  --hit (CDV 구: 빨강 = 무기/공격, 초록 = 몸)
  * </pre>
@@ -51,7 +53,7 @@ public final class Cli {
 			System.err.println("usage: anim:<info|skel|list|pose|sheet> <wad> ...");
 			System.exit(1);
 		}
-		WadFile wad = a.get(0).equals("batch") ? null : WadFile.load(Path.of(a.get(1)));
+		WadFile wad = a.get(0).equals("batch") || a.get(0).equals("layout") ? null : WadFile.load(Path.of(a.get(1)));
 		switch (a.get(0)) {
 			case "info" -> info(wad);
 			case "skel" -> skel(Skeleton.loadAll(wad).stream().filter(s -> s.name.equals(a.get(2))).findFirst().orElseThrow());
@@ -84,6 +86,7 @@ public final class Cli {
 				}
 			}
 			case "batch" -> batch(Path.of(a.get(1)));
+			case "layout" -> LayoutDiff.run(Path.of(a.get(1)), a.size() > 2 ? Integer.parseInt(a.get(2)) : 40);
 			default -> throw new IllegalArgumentException("unknown command: " + a.get(0));
 		}
 	}
@@ -140,8 +143,9 @@ public final class Cli {
 		System.out.printf("%s  types=%s%n", s.name, Arrays.toString(s.typeIds));
 		for (AnimationSet.Group g : s.groups) {
 			for (Animation an : g.acts) {
-				System.out.printf("  %-10s %-24s dur=%6.3fs frames=%4d ft=1/%.0f rotTracks=%3d posTracks=%3d joints<%d flags=%x%s idx=%d blend=%d/%.2f%n",
+				System.out.printf("  %-10s %-24s dur=%6.3fs frames=%4d ft=1/%.0f rotTracks=%3d posTracks=%3d scale=%d loc=%d u8=%d joints<%d flags=%x%s idx=%d blend=%d/%.2f%n",
 						g.name, an.name, an.duration, an.frameCount(), 1 / an.frameTime, an.rotTracks.size(), an.posTracks.size(),
+						an.scaleTracks.size(), an.locatorTracks.size(), an.byteTracks.size(),
 						an.jointSpan(), an.flags, an.looping() ? "(loop)" : "", an.globalIndex, an.blendIndex, an.blendParam);
 			}
 		}
@@ -205,15 +209,16 @@ public final class Cli {
 							}
 							an.bake(sk);
 							baked++;
-							for (AnimTrack ct : an.channelTracks) {
-								if (an.locatorTrack(sk, ct)) {
-									for (int st : ct.streams()) {
-										locators.merge(sk.joints.get(st / 4).name(), 1, Integer::sum);
-									}
+							for (AnimTrack ct : an.locatorTracks) {
+								for (int st : ct.streams()) {
+									locators.merge(sk.joints.get(Math.min(st / 4, sk.size() - 1)).name(), 1, Integer::sum);
 								}
 							}
-							if (!an.posTracks.isEmpty() && !an.rotTracks.isEmpty() && Math.abs(an.posFrameTime - an.frameTime) > 1e-6f) {
-								errors.merge("회전/위치 frameTime 다름", 1, Integer::sum);
+							for (int r = 1; r < an.records.size(); r++) {
+								Animation.StateDescr d = an.records.get(r);
+								if (d.typeId() == 0 && d.trackCount() > 0 && Math.abs(d.frameTime() - an.frameTime) > 1e-6f) {
+									errors.merge("타입 0 디스크립터 frameTime 다름", 1, Integer::sum);
+								}
 							}
 							Pose ps = an.sample(sk, an.duration * 0.5f, false);
 							for (float[] m : ps.world(sk)) {
@@ -250,7 +255,7 @@ public final class Cli {
 		System.out.printf("wads=%d skeletons=%d (오차 초과 %d, 최대 local=%.4f inv=%.4f) anmSets=%d external=%d/%d acts=%d baked=%d fail=%d nan=%d spanOver=%d models=%d oorModels=%d%n",
 				wads.size(), skels, badSkel, worstLocal, worstInv, sets, extAttached, ext, acts, baked, fail, nan, span, models, oorModels);
 		errors.forEach((k, v) -> System.out.println("  " + v + " × " + k));
-		System.out.println("타입 10 로케이터 위치 스트림 (관절 이름별): " + locators);
+		System.out.println("타입 0·3 로케이터 위치 스트림 (관절 이름별): " + locators);
 	}
 
 	/** 모델 + 스켈레톤 + 애니메이션 세트 묶음. */

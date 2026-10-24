@@ -69,20 +69,20 @@ public final class EffectLibrary {
 		}
 
 		/**
-		 * act a 의 시간 t 자세 — 원작 디스크립터 배치 ({@link Animation#sampleRecords}, 반복 act 는 감싼다). 관절 이미터 이펙트 (Animator·하늘 GO) 의
+		 * act a 의 시간 t 자세 ({@link Animation#sample}, 반복 act 는 감싼다). 관절 이미터 이펙트 (Animator·하늘 GO) 의
 		 * 관절 월드용: ATHN03A GateExplosion 불덩이 관절 2 가 디스크립터 1 (관절 이동) 대로 성문 쪽으로 난다.
 		 */
 		public devple.gow.tools.anim.Pose pose(Animation a, float t) {
-			return a.sampleRecords(skeleton, t, a.looping());
+			return a.sample(skeleton, t, a.looping());
 		}
 
-		/** act a 에 이 오브젝트 이미터 하나라도 생성률 곡선 (원작 채널 id 의 타입 10 채널, {@link Animation#recordChannels}) 이 있는가. */
+		/** act a 에 이 오브젝트 이미터 하나라도 생성률 곡선 (원작 채널 id 의 타입 10 채널, {@link Animation#channels}) 이 있는가. */
 		public boolean hasRateChannel(Animation a) {
 			if (a == null) {
 				return false;
 			}
 			for (EmitterDef e : emitters) {
-				if (e.channel() >= 0 && e.channel() < a.recordChannels.size() && !a.recordChannels.get(e.channel()).isEmpty()) {
+				if (a.hasChannel(e.channel())) {
 					return true;
 				}
 			}
@@ -121,19 +121,15 @@ public final class EffectLibrary {
 			return param(anim, e, stream, t, def);
 		}
 
-		/** {@link #param(EmitterDef, int, float, float)} 를 다른 act 로 (mewh "On"). */
-		public float param(Animation a, EmitterDef e, int stream, float t, float def) {
-			return param(a, e, stream, t, def, false);
-		}
-
 		/**
-		 * @param records true 면 원작 채널 id 배치 ({@link Animation#recordChannels}) — 관절 이미터 이펙트 (Animator·하늘 GO). false 는 예전 항목 번호 배치.
+		 * {@link #param(EmitterDef, int, float, float)} 를 다른 act 로 (mewh "On"). 링크 = 원작 채널 id ({@link Animation#channels}, 0x130240) — 예 ATHN03A
+		 * GateExplosion FBFemit2GE (링크 4) 의 타입 10 생성률 150.
 		 */
-		public float param(Animation a, EmitterDef e, int stream, float t, float def, boolean records) {
+		public float param(Animation a, EmitterDef e, int stream, float t, float def) {
 			if (a == null || e.channel() < 0) {
 				return def;
 			}
-			return records ? a.recordChannel(e.channel(), stream, t, def) : a.channel(e.channel(), stream, t, def);
+			return a.channel(e.channel(), stream, t, def);
 		}
 
 		/**
@@ -144,16 +140,11 @@ public final class EffectLibrary {
 			return rate(anim, e, t);
 		}
 
-		/** 다른 act 의 생성률 (반복 act 는 t 를 act 길이로 감는다). */
-		public float rate(Animation a, EmitterDef e, float t) {
-			return rate(a, e, t, false);
-		}
-
 		/**
-		 * @param records true 면 원작 채널 id 배치 ({@link Animation#recordChannels}) — 관절 이미터 이펙트. ATHN03A GateExplosion FBFemit2GE (링크 4) 는
-		 *                이 배치에서만 타입 10 생성률 150 을 얻는다 (예전 배치는 디스크립터 4 를 "타입 11" 로 보아 채널이 비었다).
+		 * 다른 act 의 생성률 (반복 act 는 t 를 act 길이로 감는다). 링크 = 원작 채널 id ({@link Animation#channels}) — ATHN03A GateExplosion FBFemit2GE
+		 * (링크 4) 는 타입 10 생성률 150 (예전 항목 번호 배치는 디스크립터 4 를 "타입 11" 로 보아 채널이 비었다).
 		 */
-		public float rate(Animation a, EmitterDef e, float t, boolean records) {
+		public float rate(Animation a, EmitterDef e, float t) {
 			boolean once = a != null && !a.looping() && a.duration > 0;
 			if (once && t > a.duration) {
 				return 0;
@@ -161,9 +152,8 @@ public final class EffectLibrary {
 			if (a != null && a.looping() && a.duration > 0) {
 				t %= a.duration;
 			}
-			List<List<devple.gow.tools.anim.AnimTrack>> groups = a == null ? List.of() : records ? a.recordChannels : a.channelGroups;
-			if (a != null && e.channel() >= 0 && e.channel() < groups.size() && !groups.get(e.channel()).isEmpty()) {
-				return Math.max(0, records ? a.recordChannel(e.channel(), 8, t, 0) : a.channel(e.channel(), 8, t, 0));
+			if (a != null && a.hasChannel(e.channel())) {
+				return Math.max(0, a.channel(e.channel(), 8, t, 0));
 			}
 			if (once && e.channel() >= 0 && t > BURST) {
 				return 0; // 링크 번호가 있는데 채널이 없는 1회성 (boltHit 의 emitter1 600/초) → 처음 0.1초만 [근사]

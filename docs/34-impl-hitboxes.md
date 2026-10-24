@@ -1,10 +1,10 @@
 # 34. 구현: 무기 궤적 / 원작 히트박스 (19/34 단계)
 
-근거 문서: 05 §2.8 (ANM 타입 10), 10 §5.1a (PartType·접촉 경로), 12 (BallHull).
+근거 문서: 05 §2.8 (ANM 타입 0 디스크립터 3 로케이터 · 타입 5 u8), 10 §5.1a (PartType·접촉 경로), 12 (BallHull).
 신뢰도 표기는 10 문서와 같다: **[확실]** 디스어셈블/데이터 대조, **[추정]** 맥락 판단.
 
 ## 0. 요약
-- **블레이드 위치** = ANM 타입 10 슬롯 1: 로케이터 관절 `lWeapOH`(107)/`rWeapOH`(109) 의 모델 공간 x/y/z (회전은 타입 0). 평소엔 손목 옆, 투척 시 정면 최대 ~100 단위, 대기 중엔 등 뒤 [확실: 데이터].
+- **블레이드 위치** = ANM 타입 0 디스크립터 3 (p2 4 세트의 로케이터 트랙 — 예전 "타입 10 슬롯 1", 05 §2.8.1): 로케이터 관절 `lWeapOH`(107)/`rWeapOH`(109) 의 모델 공간 x/y/z (회전은 디스크립터 0). 평소엔 손목 옆, 투척 시 정면 최대 ~100 단위, 대기 중엔 등 뒤 [확실: 데이터 + 재생 0x1146C4].
 - **블레이드 = 별도 오브젝트** `maiblade` (R_WPN&lt;코스튬&gt;_&lt;블레이드 레벨&gt;.WAD: CXT 3관절, `MDL_MAIBlade`, `CDV_MAIBlade`). 오브젝트 루트를 OH 로케이터 월드 행렬에 둔다.
 - **히트박스 = CDV BallHull 구**. 구마다 관절 번호(off[1])와 재질 엔트리(off[3]); 재질 엔트리 +0x30 = **PartType** = `Attack.part` 와 비교되는 번호 [확실: 0x13C400 → 0x203150 → 0x203AF0 → 0x209AB0].
   - 히어로: 몸 1 (관절 4 r12, 관절 1 r13), 오른발 7 (관절 56·60 r6.8), extra1 9 (관절 1, 정면 z−20 r27)
@@ -16,7 +16,7 @@
 ## 1. 코드
 | 위치 | 내용 |
 |---|---|
-| `tools/anim/Animation` | `channelTracks`(타입 10 원소 4), `byteTracks`/`byteChannel()`(원소 1), `locatorTrack()` → bake 때 `*WeapOH` 위치 합성 |
+| `tools/anim/Animation` | `locatorTracks` (타입 0 디스크립터 3 → bake 때 이동 배열에 이어 씀, 원작 0x111760 과 같음), `byteTracks`/`byteChannel()` (타입 5 u8) |
 | `tools/anim/WeaponAttach` | 블레이드 한 벌 로드 (`blades(wpnWad)`), 부착 행렬 기준 관절/메시 포즈, CDV 구 포즈, 디버그 링 메시 |
 | `tools/level/BallHull` | `ballJoint[]`, `ballMaterial[]`, `materialPart[]`, `ballPart(b)`. **재질 엔트리 크기 = 헤더 0x38** (CDV/ENV/SEV 0x40, CMV 24) — 이전 24 고정은 두 번째 이후 이름을 잘못 읽었다 |
 | `tools/anim/Cli` | `anim:sheet … --weapon R_WPN0_n.WAD [--hit]` |
@@ -54,7 +54,7 @@ List<float[]> s = hero.spheres(2);                  // 디버그: 월드 구 (x,
 | `HitVolumesTest.sweptSpheres` | 시작·끝은 멀고 중간에 관통하는 구 = 적중, 비켜가면 실패 |
 | `HitVolumesTest.combo3AHitsFrontNotBehind` | 블레이드 Lv2 □ → COMBO3A: 정면 40 의 미노타우로스(R_MIN 실제 CDV) 적중 1, 등 뒤 40 은 0 |
 | 기존 `CombatantTest`/`DefenseTest`/`GrabTest`/`JumpAirComboTest`/`MagicTest`/`EnemyFactoryTest` | 변경 없이 통과 (TrainingDummy 는 볼륨이 없어 폴백 경로 — 기대값 수정 없음) |
-| `anim:batch gow-rom` | 214 WAD, act 7373 bake 실패 0 / NaN 0, 타입 10 로케이터 적용 = `lWeapOH` 4518, `rWeapOH` 4518 |
+| `anim:batch gow-rom` | 214 WAD, act 7373 bake 실패 0 / NaN 0, 로케이터 트랙 (타입 0 · 3) = `lWeapOH` 4683, `rWeapOH` 4686 (예전 이름 규칙 적용 4518 — 히어로는 같은 자세, ATHN08B 분신 `ANM_evi` 55 act 는 이번에 처음 적용, 05 §2.8.1) |
 
 디버그 이미지 (커밋 제외, `work/hitbox/`):
 - `sheet_combo3A.png` (`anim:sheet --weapon --hit`): 빨강 = 공격 부위 구(블레이드·발·extra1), 초록 = 몸. 0.21–0.43초 왼쪽 블레이드 투척.
@@ -82,6 +82,6 @@ List<float[]> s = hero.spheres(2);                  // 디버그: 월드 구 (x,
 - 미노타우로스 부위 3: 원작 규칙상 flags 0x200 무기 오브젝트의 2→3 인데 미노타우로스는 무기 오브젝트가 없다 — 폴백.
 - 피격 쪽 구 필터(몸만) [추정]. CDV 재질 엔트리 +0x1C, +0x2C(0x1F5/0x1FE, MFX 추정), off[2] 바이트(접촉 +0x38) 의미 미상.
 - 관절 활성 비트(+0x64, 0x13AAA8)로 구를 끄는 규칙 미구현 (예: 블레이드를 등에 멨을 때).
-- 타입 10 u8 채널(부착 상태)로 바닥 도끼·무기 가시성 제어 미구현.
+- 타입 5 u8 (부착 상태) 로 바닥 도끼·무기 가시성 제어 미구현 (적·영웅에는 u8 가시성을 쓰지 않음).
 - ~~블레이드 사슬(체인)·트레일(이벤트 17/18)~~ → 45 문서 §3, 블레이드 모델은 레벨 변경 시 교체하지 않음(구는 레벨 무관 동일).
 - 원작 접촉 단계의 프레임 보간 방식 세부(0x13C400 앞부분 VU0 코드) 미확인 — 엔진은 선형 스윕.

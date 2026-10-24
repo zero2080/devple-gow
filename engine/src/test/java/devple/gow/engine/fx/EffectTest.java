@@ -152,7 +152,11 @@ class EffectTest {
 		assertTrue(att.done());
 	}
 
-	/** 메두사 머리 GO (mewh): act "On"/"off" 를 이름으로 (40 문서 §4.1, 0x1970D0 / 0x196B18). */
+	/**
+	 * 메두사 머리 GO (mewh): act "On"/"off" 를 이름으로 (40 문서 §4.1, 0x1970D0 / 0x196B18). 이미터 MHBemit 의 링크 3 = 원작 채널 id 3 (세트 [0(p2 3), 10] 의
+	 * 타입 10, 0x130240) — "off" 도 이 채널이 있어 생성률이 0.5 초 반복으로 12.4 → 0 (0.25 초) → 12.4 맥동하고, "On" 은 25–30/초 [확실: 데이터 + 코드].
+	 * 예전 항목 번호 배치는 디스크립터를 2 개만 읽어 링크 3 이 없었다 → "off" = 0, "On" = FXC 상수 0.
+	 */
 	@Test
 	void medusaHeadActs() throws Exception {
 		EffectSystem fx = EffectSystem.headless();
@@ -169,13 +173,22 @@ class EffectTest {
 		}, Float.MAX_VALUE);
 		assertTrue(e.setAct("Off"), "Hash127Upper 이므로 대소문자 무시");
 		Vector3f eye = new Vector3f();
+		for (int i = 0; i < 15; i++) {
+			fx.update(1 / 60f, eye);
+		}
+		assertEquals(0f, e.rates()[0], 1e-3f, "Off 0.25 초: 맥동의 바닥");
+		for (int i = 0; i < 15; i++) {
+			fx.update(1 / 60f, eye);
+		}
+		assertEquals(12.4f, e.rates()[0], 0.05f, "Off 0.5 초 = 반복 처음: 12.4/초");
+		e.setAct("On");
+		assertEquals("On", e.actName());
+		assertEquals(30f, e.rates()[0], 0.05f, "On 처음: 30/초");
 		for (int i = 0; i < 30; i++) {
 			fx.update(1 / 60f, eye);
 		}
-		assertEquals(0f, e.rates()[0], 1e-6f, "Off: 이미터 꺼짐");
-		e.setAct("On");
-		assertEquals("On", e.actName());
-		for (int i = 0; i < 60; i++) {
+		assertEquals(25.04f, e.rates()[0], 0.2f, "On 0.5 초: 25/초");
+		for (int i = 0; i < 30; i++) {
 			fx.update(1 / 60f, eye);
 		}
 		assertFalse(e.done(), "머리는 첫 act(main 0.03초) 수명으로 끝나지 않는다");

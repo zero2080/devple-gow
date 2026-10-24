@@ -324,6 +324,10 @@ AI 스틱 크기 = AI1 0x68 % (평상 100) 또는 0x64 % (ai+0x72 & 0x22, 순찰
   stateMask 7 (일반 공격) 은 지상 이동 0x1EAEC8 / 0x1EB3D8 이 바닥에 붙인다. 엔진: `EnemyNav.free` (자유 이동 = 중력·지상 속도 없이 벽·바닥 아래만 막음),
   `EnemyFighter.rootMotion` 이 자유 이동 기술에서만 수직 변위를 더한다 (예전: 항상 버림 [근사]). 바닥 처리 세부 (0x1E3298 반환값 비교) 는 [근사].
 - 동기 상대가 끄는 중 (0x204BF0) 이면 없음 (`rootHold`, 0x1EC058). 결정 트리·이동 규칙은 그대로 — 공격이 앞으로 나아가며 거리가 바뀐다 (예: 미노타우로스 공격, 분신 EVIAttack02 앞으로 ≈ 49).
+- **2026-10-24 (05 §2.8.1)**: 적 세트 상당수 (고르곤 R_MEW/R_ME2, 세이렌 R_SIR, 하피 R_HAR/HAF/HA2, 해골병 R_SKA/SKB/SK2/SK3, 케르베로스 R_CEA/CEP — 데이터 타입 [0(p2 3)] 또는 [0, 10 …])
+  는 관절 이동이 타입 0 디스크립터 1 에만 있어 예전 항목 번호 배치가 zeroJoint·골반 이동을 하나도 읽지 않았다 (적 466 act). 원작 배치로 이 적들도 기술 중 루트 모션이 생기고
+  (해골병 Aswipe 앞으로 16.8 후 복귀, 하피 벽 출현 zeroJoint 7139), 대기 골반이 제 높이 (해골병 y 24.5, 예전 바인드 29.9 — 5 떠 있었음) 로 온다. 걷기 속도 추정 (`EnemyFighter.clipSpeed`,
+  결정 트리 없는 적에만 쓰임) 도 고르곤 30 → 65.1, 세이렌 30 → 3.8, 해골병 R_SKB 85.3 → 53.2 로 바뀐다.
 - 검증: `RootMotionTest.enemyAttackMovesByZeroJoint`, `GrabRelationTest.enemyVerticalRootMotionInFreeMoves` (사티로스 104: 높이 = 배율 × zero y 변화, 한 프레임 늦음),
   기존 `AiBrainTest`·`EnemyNavTest`·`EnemyClimbTest`·`TraversalTest` 통과.
 

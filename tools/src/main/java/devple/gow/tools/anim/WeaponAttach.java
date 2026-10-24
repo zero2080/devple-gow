@@ -12,7 +12,7 @@ import java.util.List;
  * 블레이드(혼돈의 블레이드) = 별도 오브젝트. R_WPN&lt;costume&gt;_&lt;level&gt;.WAD 의 {@code maiblade}
  * (CXT 3관절: MAIBlade / BDepoly6 / BDepoly3), {@code MDL_MAIBlade}, {@code CDV_MAIBlade}.
  * 히어로 로케이터 관절 {@code lWeapOH}(107) / {@code rWeapOH}(109) 의 월드 행렬에 블레이드 오브젝트 루트를 둔다
- * (위치 = ANM 타입 10 슬롯 1, 회전 = 타입 0 — 05 문서 2.8). 블레이드 메시·CDV 는 블레이드 관절 로컬이다.
+ * (위치 = ANM 타입 0 디스크립터 3 — 이동 배열에 이어 쓰는 로케이터 트랙, 회전 = 타입 0 디스크립터 0 — 05 문서 2.8.1). 블레이드 메시·CDV 는 블레이드 관절 로컬이다.
  */
 public final class WeaponAttach {
 

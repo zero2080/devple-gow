@@ -59,21 +59,27 @@ class GrabRelationTest {
 	}
 
 	/**
-	 * 적 종류별 시작 거리: 설계 관계 거리 (±1), 처형 기술, 찾은 자리에서 결합 순간 (끌기 전) 오차 &lt; 2, 결합 거리 ≈ 설계 (±8), 0.5 초 뒤 오차 &lt; 1.
+	 * 적 종류별 시작 거리: 설계 관계 거리 (±1), 처형 기술, 찾은 자리에서 결합 순간 (끌기 전) 오차 &lt; 2, 결합 거리 ≈ 설계 (±2), 0.5 초 뒤 오차 &lt; 1.
 	 * extra1 = 적중이 GRAB 부위 9 창 [0.27–0.32] 에서 (멀리서 달려들어 잡음).
+	 * <p>설계 관계는 처형 0 프레임의 zeroJoint 기준 synchJoint (0x1F7110 → 0x204BF0) — 원작 배치 (05 §2.8.1) 의 디스크립터 1 (관절 이동) 이 들어간 자세다.
+	 * 고르곤 R_MEW/R_ME2 · 세이렌 · 케르베로스 · 하피 세트는 데이터 타입이 [0(p2 3)] / [0, 10 …] 이라 예전 항목 번호 배치는 이동을 하나도 읽지 않았고
+	 * (zero/synch 가 바인드 자리), 설계 거리가 고르곤 37.7 · 세이렌 45.9 · 새끼 케르베로스 42.2 · 케르베로스 43.3 · 하피 7.9 였다. 원작 배치로는
+	 * 26.4 · 21.7 · 34.8 · 44.2 · 23.9 이고, 열 종류 모두 GRAB 첫 접촉 (몸 구가 처음 닿는 거리 — 설계 관계와 독립인 CDV 판정) 이 설계 관계와 0.7 안에서
+	 * 맞는다 (예전: 고르곤은 부위 9 창에서만 맞춰졌고 하피는 캡슐 밀기로 13 밖) [확실: 코드 경로 + 데이터].
 	 */
 	@Test
 	void designedStartPerEnemy() throws Exception {
 		List<Case> cases = List.of(
 				new Case("R_MIN.WAD", 400, 70.4f, true),   // 미노타우로스 MAIMIN01
-				new Case("R_MEW.WAD", 260, 37.7f, true),   // 고르곤 MAIMEWGRAB
-				new Case("R_ME2.WAD", 263, 37.7f, true),   // 고르곤 2 MAIMEWGRAB
-				new Case("R_SIR.WAD", 421, 45.9f, true),   // 세이렌 MAISIRKILL (HP 5)
+				new Case("R_MEW.WAD", 260, 26.4f, false),  // 고르곤 MAIMEWGRAB
+				new Case("R_ME2.WAD", 263, 26.4f, false),  // 고르곤 2 MAIMEWGRAB
+				new Case("R_SIR.WAD", 421, 21.7f, false),  // 세이렌 MAISIRKILL (HP 5)
 				new Case("R_SAT.WAD", 431, 37.4f, true),   // 사티로스 MAISATGRAB
 				new Case("R_SKS.WAD", 220, 27.6f, false),  // 해골병 (레기오네어) MAISKB00
 				new Case("R_CNM.WAD", 291, 40.6f, true),   // 켄타우로스 MAICNMKILL
-				new Case("R_CEP.WAD", 286, 42.2f, true),   // 케르베로스 새끼 MAICEPSTOMP
-				new Case("R_CEA.WAD", 395, 43.3f, false)); // 케르베로스 MAICEAKILL
+				new Case("R_CEP.WAD", 286, 34.8f, false),  // 케르베로스 새끼 MAICEPSTOMP
+				new Case("R_CEA.WAD", 395, 44.2f, false),  // 케르베로스 MAICEAKILL
+				new Case("R_HAR.WAD", 270, 23.9f, false)); // 하피 MAIHARWINGRIP (뒤에서, 요 차 0)
 		StringBuilder log = new StringBuilder();
 		for (Case c : cases) {
 			Assumptions.assumeTrue(Files.exists(rom().resolve(c.wad())));
@@ -84,7 +90,7 @@ class GrabRelationTest {
 			assertEquals(c.design(), r.design(), 1f, c.wad() + " 설계 관계");
 			assertTrue(r.contact() < 2f, c.wad() + " 결합 순간 오차: " + r);
 			assertTrue(r.error() < 1f, c.wad() + " 0.5 초 뒤 오차: " + r);
-			assertEquals(r.design(), r.link(), 8f, c.wad() + " 결합 거리 ≈ 설계 관계: " + r);
+			assertEquals(r.design(), r.link(), 2f, c.wad() + " 결합 거리 ≈ 설계 관계: " + r);
 			assertTrue(r.start() > r.link(), c.wad() + " GRAB 루트 모션으로 달려들어 잡음: " + r);
 			if (c.extra1()) {
 				assertTrue(r.hitProgress() >= 0.27f && r.hitProgress() <= 0.33f, c.wad() + " 부위 9 창에서 적중: " + r);
@@ -109,45 +115,41 @@ class GrabRelationTest {
 	}
 
 	/**
-	 * 몸 캡슐 (Sold +0x234) 이 설계 거리보다 큰 처형 (37 문서 §11.5): 사이클롭스 (캡슐 합 57.6 &gt; 설계 29.7), 하피 (19.6 &gt; 7.9, 뒤에서).
+	 * 몸 캡슐 (Sold +0x234) 이 설계 거리보다 큰 처형 (37 문서 §11.5): 사이클롭스 (캡슐 합 57.6 &gt; 설계 29.7).
 	 * <ul>
-	 *   <li>원작 밀기 규칙 [0x1E2DD8 / 0x1E28B0 — GRAB stateMask 7 = 단단함] 으로는 GRAB 이 캡슐 경계에서 닿는다 (사이클롭스 결합 ≥ 45, 하피 ≥ 13).</li>
-	 *   <li>그 어긋남은 이벤트 19 (FLAG_4) 창이 메운다 [확실: 0x206B44 → +0x1AC |= 0x4, 0x205B28 의 0x24 검사 → 0x204BF0]: 사이클롭스는 적 240
-	 *       MAICYWMINI02 [0–0.86] 이 영웅을, 하피는 영웅 270 MAIHARWINGRIP [0–1] 이 하피를 끈다 → 0.5 초 뒤 오차 &lt; 1 (예전: 27.3 / 10.2).</li>
+	 *   <li>원작 밀기 규칙 [0x1E2DD8 / 0x1E28B0 — GRAB stateMask 7 = 단단함] 으로는 GRAB 이 캡슐 경계에서 닿는다 (결합 ≥ 40).</li>
+	 *   <li>그 어긋남은 이벤트 19 (FLAG_4) 창이 메운다 [확실: 0x206B44 → +0x1AC |= 0x4, 0x205B28 의 0x24 검사 → 0x204BF0]: 적 240
+	 *       MAICYWMINI02 [0–0.86] 이 영웅을 끈다 → 0.5 초 뒤 오차 &lt; 1 (예전: 27.3).</li>
 	 *   <li>밀기를 빼면 (비교용) GRAB 첫 접촉이 그대로 설계 관계.</li>
 	 * </ul>
+	 * 하피는 원작 배치 (05 §2.8.1) 로 설계 거리가 23.9 (캡슐 합 19.6 보다 큼) 라 캡슐에 막히지 않는다 — 예전 항목 번호 배치의 7.9 (zero/synch 바인드) 가
+	 * 만든 경우였다 ({@link #designedStartPerEnemy}).
 	 */
 	@Test
 	void capsuleLimitedFinishers() throws Exception {
-		for (String w : new String[]{"R_CY2.WAD", "R_HAR.WAD"}) {
-			Assumptions.assumeTrue(Files.exists(rom().resolve(w)));
-			Supplier<GrabRelation.Trial> t = trials(w);
-			GrabRelation.Result free = GrabRelation.search(t, 5, 130, false);
-			assertNotNull(free, w);
-			assertTrue(free.contact() < 1f, w + " 밀기 없으면 첫 접촉 = 설계 관계: " + free);
-			// 서 있는 사이클롭스 (잡기 원 상태, 변위 0) 는 자기를 밀지 않는다 (0x1EBB38, 32 문서) → 영웅이 캡슐 안 깊이 (수평 < 45.6) 에서 시작하는 모의는
-			// 원작에 생길 수 없다 (영웅은 걸어 들어오며 늘 자기를 밀어 경계 밖에 있음 — 플레이어는 정지 판정 없음). 하피 (날기 = 공중) 는 늘 자기를 민다
-			GrabRelation.Result pushed = GrabRelation.search(t, w.equals("R_CY2.WAD") ? 50 : 5, 130, true);
-			assertTrue(pushed.link() > free.link() + 5, w + " 원작 밀기로 첫 접촉은 설계 거리 밖: " + pushed + " / " + free);
-			assertTrue(pushed.contact() > 5f, w + ": " + pushed);
-			assertEquals(0f, pushed.error(), 1f, w + " 이벤트 19 끌기로 설계 관계 (±1): " + pushed);
-			for (float d : new float[]{40, 60, 80}) {
-				GrabRelation.Result r = GrabRelation.run(t.get(), d, true);
-				assertEquals(0f, r.error(), 1f, w + " 시작 " + d + ": " + r);
-			}
-			GrabRelation.Trial probe = t.get();
-			if (w.equals("R_CY2.WAD")) {
-				// 캡슐 경계 (영웅 쪽 수평 45.6) 근처 — 밀기 후보는 질의 구에 닿는 사이클롭스 CDV 구가 있을 때만이라 (0x175648) 자세에 따라 조금 안쪽 (≈ 43)
-				assertTrue(pushed.link() >= 40f, "사이클롭스 캡슐 경계 근처: " + pushed);
-				CombatFile.Move m = probe.enemy().combat().data().move(240);
-				assertNotNull(SyncPull.linkedPullWindow(m, 0.5f), "적 240 이벤트 19 [0–0.86]");
-				assertNull(SyncPull.linkedPullWindow(m, 0.9f));
-				assertNull(SyncPull.pullWindow(m, 0.5f), "이벤트 22 는 없음");
-			} else {
-				assertTrue(pushed.link() >= 13f, "하피가 자기를 민다 (하피 쪽 수평 17.3): " + pushed);
-				assertNotNull(SyncPull.linkedPullWindow(probe.hero().data().move(270), 0.5f), "영웅 270 이벤트 19 [0–1]");
-			}
+		String w = "R_CY2.WAD";
+		Assumptions.assumeTrue(Files.exists(rom().resolve(w)));
+		Supplier<GrabRelation.Trial> t = trials(w);
+		GrabRelation.Result free = GrabRelation.search(t, 5, 130, false);
+		assertNotNull(free, w);
+		assertTrue(free.contact() < 1f, w + " 밀기 없으면 첫 접촉 = 설계 관계: " + free);
+		// 서 있는 사이클롭스 (잡기 원 상태, 변위 0) 는 자기를 밀지 않는다 (0x1EBB38, 32 문서) → 영웅이 캡슐 안 깊이 (수평 < 45.6) 에서 시작하는 모의는
+		// 원작에 생길 수 없다 (영웅은 걸어 들어오며 늘 자기를 밀어 경계 밖에 있음 — 플레이어는 정지 판정 없음)
+		GrabRelation.Result pushed = GrabRelation.search(t, 50, 130, true);
+		assertTrue(pushed.link() > free.link() + 5, w + " 원작 밀기로 첫 접촉은 설계 거리 밖: " + pushed + " / " + free);
+		assertTrue(pushed.contact() > 5f, w + ": " + pushed);
+		assertEquals(0f, pushed.error(), 1f, w + " 이벤트 19 끌기로 설계 관계 (±1): " + pushed);
+		for (float d : new float[]{40, 60, 80}) {
+			GrabRelation.Result r = GrabRelation.run(t.get(), d, true);
+			assertEquals(0f, r.error(), 1f, w + " 시작 " + d + ": " + r);
 		}
+		GrabRelation.Trial probe = t.get();
+		// 캡슐 경계 (영웅 쪽 수평 45.6) 근처 — 밀기 후보는 질의 구에 닿는 사이클롭스 CDV 구가 있을 때만이라 (0x175648) 자세에 따라 조금 안쪽 (≈ 43)
+		assertTrue(pushed.link() >= 40f, "사이클롭스 캡슐 경계 근처: " + pushed);
+		CombatFile.Move m = probe.enemy().combat().data().move(240);
+		assertNotNull(SyncPull.linkedPullWindow(m, 0.5f), "적 240 이벤트 19 [0–0.86]");
+		assertNull(SyncPull.linkedPullWindow(m, 0.9f));
+		assertNull(SyncPull.pullWindow(m, 0.5f), "이벤트 22 는 없음");
 	}
 
 	/**

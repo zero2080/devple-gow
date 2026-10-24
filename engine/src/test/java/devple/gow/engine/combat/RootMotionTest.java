@@ -253,8 +253,8 @@ class RootMotionTest {
 	}
 
 	/**
-	 * ATHN01B 선창 히드라 (AI1 251 "hydra enc1" → bhh, 37 문서 §4.3): BHAenc1* 의 골반 X 축 180° (매달린 자세) 를 모델 X 축 ≈ 50.7° 들어 올려
-	 * 머리가 뿌리보다 위·앞 (영웅 쪽) 에 오고, 대기 = Navigation ANIStand "BHAEnc1Idle" (예전 "main" 바인드 자세 = 위로 선 기둥),
+	 * ATHN01B 선창 히드라 (AI1 251 "hydra enc1" → bhh, 37 문서 §4.3): BHAenc1* 의 골반 이동 (디스크립터 1) 으로 머리가 뿌리보다 위·앞 (영웅 쪽) 에
+	 * 오고 (보정 없음), 대기 = Navigation ANIStand "BHAEnc1Idle" (예전 "main" 바인드 자세 = 위로 선 기둥),
 	 * 걷기 클립이 없어 제자리 (예전 Sold 속도로 영웅 쪽 미끄러짐), 영웅 □ 콤보가 머리에 맞는다.
 	 */
 	@Test
@@ -285,7 +285,9 @@ class RootMotionTest {
 			}
 		}
 		assertTrue(minY > -40 && maxY < 80, "턱 끝이 영웅 높이 (바닥 0 기준): " + minY + ".." + maxY);
-		assertTrue(minZ > 150 && maxZ < 360, "턱 끝이 앞 (영웅 쪽 +Z): " + minZ + ".." + maxZ);
+		// 대기 턱 끝 = 뿌리 앞 ≈ 300 (0.3 × 996), 물기 Bite2x 는 골반을 앞으로 옮기며 (디스크립터 1, z +51) 뿌리 앞 0.3 × 1639 ≈ 492 까지 내민다
+		// — 바닥 끝 (뿌리 + 230–280) 너머 선창 위의 영웅에게 닿는다 (예전 항목 번호 배치 + X 50.7° 들어 올림은 360 안)
+		assertTrue(minZ > 150 && maxZ < 520, "턱 끝이 앞 (영웅 쪽 +Z): " + minZ + ".." + maxZ);
 		assertEquals(0, Math.hypot(en.pos.x, en.pos.z), 1e-3, "뿌리 고정");
 		assertTrue(r.enemyMoves().stream().anyMatch(m -> m == 15 || m == 16), "DTre_251 물기 15/16: " + r.enemyMoves());
 		// 영웅 □ 연타 → 머리 적중 (영웅 CDV + 블레이드 — 뿌리가 270 떨어져 정면 구 근사로는 안 닿는다)
@@ -312,9 +314,12 @@ class RootMotionTest {
 	}
 
 	/**
-	 * 선창 히드라 머리는 모든 BHAenc1* 클립에서 바로 선다 (사용자 보고 "히드라 뒤집힘"): 예전 Z 축 180° 보정은 목 자리는 맞췄지만 머리를 등이 아래로
-	 * 굴렸다 — 두 눈 (JOLEYE11/JOREYE11) 이 턱 끝 (TIP21) 보다 아래. 새 X 축 들어 올림은 원래 애니의 머리 자세 (눈이 턱 끝 위) 를 지킨다.
-	 * 아기 히드라 bhb (같은 리그·메시, 원작과 대조된 자세) 도 대기에서 눈이 턱 끝 위다.
+	 * 선창 히드라 머리는 모든 BHAenc1* 클립에서 바로 선다 (사용자 보고 "히드라 뒤집힘") — 보정 없이: BHAenc1* 의 골반은 X 축 180° (목이 아래로) 이지만
+	 * 디스크립터 1 (타입 0 이동, 05 §2.8.1) 의 절대 키가 골반을 뿌리 위 (77, 842.7, −106.7) 에 둬 대기 턱 끝이 뿌리 위 +421 · 앞 −996 (배율 0.3: +126 · 300) 에 온다.
+	 * 예전 항목 번호 배치는 이 이동을 읽지 않아 머리가 바닥 아래로 매달렸고 (턱 끝 (9, −421, −889)), 엔진이 골반 앞 X 축 50.7° 회전 (hangLift) 으로
+	 * 그 자리를 흉내냈다 — 그 회전의 턱 끝 y +421 이 바로 골반 이동 842.7 − 목 421.3 이다 [확실: 데이터]. 830 BHAenc1Grab 동안 영웅 손목 ↔ 히드라 머리
+	 * (머리 관절·두 눈·턱 끝 중 가까운 것) 평균 거리도 새 배치 64.5 (예전 X 50.7° 108, 무보정 259).
+	 * 두 눈 (JOLEYE11/JOREYE11) 은 턱 끝 (TIP21) 보다 위 — 아기 히드라 bhb (같은 리그·메시, 원작과 대조된 자세) BHAbabyEmerge 끝 자세와 같은 부호.
 	 */
 	@Test
 	void holdHydraHeadUprightInEveryClip() throws Exception {
@@ -323,9 +328,12 @@ class RootMotionTest {
 		Skeleton sk = en.animator().skeleton();
 		int pel = sk.indexOf(EnemyFighter.HYDRA_ROOT), tip = sk.indexOf(EnemyFighter.HYDRA_JAW_TIP);
 		int le = sk.indexOf("JOLEYE11"), re = sk.indexOf("JOREYE11"), head = sk.indexOf("BHA01JOCHEA1");
-		float[] lift = EnemyFighter.hangLift(sk, en.animator().find("BHAenc1Idle"), pel);
-		assertNotNull(lift);
-		assertEquals(50.7, Math.toDegrees(2 * Math.atan2(lift[0], lift[3])), 0.5, "θ = 2·atan2(421, 889)");
+		var idle = en.animator().find("BHAenc1Idle");
+		var p0 = idle.sample(sk, 0, false);
+		assertArrayEquals(new float[]{77.15f, 842.68f, -106.67f}, p0.pos[pel], 0.05f, "골반 = 디스크립터 1 절대 키");
+		float[] t0 = p0.world(sk)[tip];
+		assertEquals(421.4f, t0[13], 1f, "대기 턱 끝 = 뿌리 위 (골반 842.7 − 목 421.3)");
+		assertEquals(-995.6f, t0[14], 1f, "대기 턱 끝 = 뿌리 앞");
 		// 머리 위쪽 = (머리 관절 → 턱 끝) × (오른눈 → 왼눈) 의 부호를 같은 세트의 매달리지 않은 (골반 ≈ 단위) BHAbabyEmerge 끝 자세로 정한다
 		en.animator().play("BHAbabyEmerge", true);
 		en.animator().update(1f);
@@ -345,9 +353,13 @@ class RootMotionTest {
 					// Grab 끝 (0.83–1, EV_DEATH 150) 은 목을 뒤로 젖혀 물러나는 구간이라 제외
 					float t = a.duration * k / 8f * (a.name.equals("BHAenc1Grab") ? 0.8f : 1f);
 					en.animator().seek(t);
-					float up = headUp(en.animator().pose().world(sk), head, tip, le, re) * Math.signum(ref);
-					// 예전 Z 축 180° 보정은 이 값의 부호를 모두 뒤집었다 (머리 등이 아래)
-					assertTrue(up > 0f, a.name + " t" + t + ": 머리 위쪽 y " + up);
+					float[][] w = en.animator().pose().world(sk);
+					float up = headUp(w, head, tip, le, re) * Math.signum(ref);
+					// 잡기 830 · 실패 831–836 은 영웅과 씨름하며 머리를 비튼다 (원본 자세 그대로 Grab 3 초 −0.05, GrabFail3/4 최저 −0.29) — 자리만 본다
+					if (!a.name.contains("Grab")) {
+						assertTrue(up > 0f, a.name + " t" + t + ": 머리 위쪽 y " + up);
+					}
+					assertTrue(w[tip][13] > 300, a.name + " t" + t + ": 턱 끝이 뿌리 위 " + w[tip][13]);
 				}
 				clips++;
 			}

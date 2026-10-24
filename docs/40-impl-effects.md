@@ -56,7 +56,7 @@ WAD 안에서는 소문자 (`goeyebeam`), 조회는 대소문자 무시 (Hash127
     이전 구현은 "트랙 있는 타입 10/unk10 4 디스크립터의 순번" 이라 sklblood 처럼 앞에 다른 디스크립터가 없는 act 에서만 맞았다.
     증거: R_PERMK 상자 chestGrab 의 곡선 디스크립터 = 3/6/9/12 = MSemit1/HSemit1/PSemit1/WSemit1 링크, combo3fExplode (0·10/4 빈·10/2·10/4×3) 의 이미터 링크 3/4/5 = 마지막 셋,
     ATHN01B 통 (0·5·10/2·10/1·10/4·11) 링크 4. R_PERMK·ATHN01B·ATHN03A·R_* 전수: 곡선을 얻는 이미터 962 (이전 804), 이전에만 얻던 17 [확실: 데이터 일치].
-    `Animation.channelGroups` 는 디스크립터마다 자리 (빈 목록 포함), 빈 자리는 곡선 없음 규칙 (FXC 상수·1회성 0.1 초) 으로.
+    `Animation.channels` 는 디스크립터마다 자리 (빈 목록 포함), 빈 자리는 곡선 없음 규칙 (FXC 상수·1회성 0.1 초) 으로.
 - **스트림 k = FXC P 블록(파일 0x84) 의 k 번째 float**: 3 = 퍼짐(P+0x0C), 4 = 속력(P+0x10), 5 = 속력 랜덤, 8 = 초당 생성 수(P+0x20).
   증거: sklblood 채널 0 프레임 0 의 스트림 3 = 0.1117, 스트림 4 = 2.869 → FXC_SKLemit 의 spread 0.11 / speed 2.87 과 같다.
 - 값: 절대 f32 키 (1/30 초), 트랙의 [start, start+count−1+hold] 만 정의. 한 디스크립터에 같은 스트림 트랙이 여러 개면 구간을 나눠 가진다
@@ -68,10 +68,12 @@ WAD 안에서는 소문자 (`goeyebeam`), 조회는 대소문자 무시 (Hash127
 - **정정 2 (2026-10-24, 05 §2.8.1)**: 링크 = **원작 채널 id** = 세트 데이터 타입 항목 p2 의 앞 합 (0x100EA8 → 채널 +0x1C, 0x130240 이 링크와 비교) = act 디스크립터 번호
   **(디스크립터 표가 Σ p2 개일 때)**. 예전 파서는 디스크립터를 항목 수만큼만 읽고 항목 형으로 표시해 타입 0 (p2 3) 뒤가 2 칸씩 밀렸다 — 위 combo3fExplode 의 "10/4 빈 · 10/2" 는
   실제로 타입 0 의 이동 · 스케일 디스크립터, ATHN03A GateExplosion 링크 4 (FBFemit2GE, 생성률 150) 는 "타입 11" 로 보여 채널이 없었고, 메두사 머리 mewh "off" 의 링크 3
-  (Σ p2 = 4 째) 은 읽히지도 않았다. 원작 배치 = `Animation.recordChannels` · `recordChannel` (관절 이미터 이펙트 — Animator·하늘 GO — 만 쓴다, `EffectDef.rate(…, records)`);
-  나머지 이펙트는 아직 예전 배치 (`channelGroups`, 전환은 후속 — 05 §2.8.1). GateExplosion 링크 22–25 (폭발 이미터) 는 채널 13 개 밖이라 원작에서도 곡선이 없다 [확실: 데이터].
+  (Σ p2 = 4 째) 은 읽히지도 않았다. GateExplosion 링크 22–25 (폭발 이미터) 는 채널 13 개 밖이라 원작에서도 곡선이 없다 [확실: 데이터].
+- **정정 3 (2026-10-24, 05 §2.8.1 전환 완료)**: 모든 이펙트가 원작 채널 id 를 쓴다 (`Animation.channels` · `channel(id, …)` · `hasChannel`, `EffectDef.rate/param` 의 배치 선택 인자 없앰).
+  채널 시간은 **그 채널 디스크립터의 frameTime** (값 채널 재생 0x268948 이 act + 0x64 + id·0x14 의 +0xC 를 읽음) [확실] — 부서지는 물체·석화 파괴 act 407 개는 회전 1/15 · 채널 1/30 이라
+  예전 (act 회전 frameTime) 은 곡선이 절반 속도였다. 메두사 머리 mewh "off" 는 링크 3 곡선대로 0.5 초 반복 12.4 → 0 → 12.4/초 맥동, "On" 25–30/초 (예전: off 0, On FXC 상수 0).
 
-구현: `Animation.channelGroups` (디스크립터별 트랙), `Animation.channel(group, stream, t, def)`, `EffectDef.rate/param`.
+구현: `Animation.channels` (원작 채널 id = 디스크립터 번호별 타입 10 트랙), `Animation.channel(id, stream, t, def)`, `EffectDef.rate/param`.
 
 ### 3.1 PTC VU 프로그램 3 상수 [확실 — 전체 해석은 16 문서 §2.4]
 VU 3 (연기·불·피) 모양의 상수 qword 배치 (16 문서 §2.3 의 "색 곡선 휴리스틱" 을 대체):
@@ -216,7 +218,7 @@ MFX 템플릿 0x48 바이트 (`/TweakTemplates/MFX/nnn/`):
 | 파일 | 변경 |
 |------|------|
 | `tools/fx/EffectLibrary` (신규) | 인스턴스 → 오브젝트 → 구성 요소, 채널 생성률, 수명, 필드 가속 |
-| `tools/anim/Animation` | `channelGroups`, `channel()` |
+| `tools/anim/Animation` | `channels`, `channel()`, `hasChannel()` (원작 채널 id, 05 §2.8.1) |
 | `tools/fx/FxResources` | `Shape.vu3()` |
 | `engine/fx/EffectSystem` (신규) | 런타임 (헤드리스 모드 포함) |
 | `engine/fx/MagicFx` | 원작 이펙트 우선 + 근사 대체, `bind/bindHero`, `playFx`, `concussion`, `footstep`, `sink()` |

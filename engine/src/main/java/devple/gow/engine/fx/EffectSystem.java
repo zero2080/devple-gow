@@ -118,9 +118,8 @@ public final class EffectSystem implements AutoCloseable {
 		 */
 		public boolean[] jointMask;
 		/**
-		 * 이미터를 붙은 관절에 둔다 (FXC 노드 헤더 +0x08 = 관절, {@code LevelEmitters} 와 같은 이미터 월드 = FXC 로컬 · 관절 월드 · GO 월드).
-		 * 관절 자세와 생성률·속력 채널은 원작 디스크립터 배치 ({@code EffectDef.pose} = {@code Animation.sampleRecords}, {@code Animation.recordChannels}).
-		 * Animator 가 튼 레벨 GO (ATHN03A 불덩이) 와 하늘 GO 에 켠다 — 다른 이펙트는 예전처럼 GO 원점 + 로컬 이동, 예전 배치 채널 (05 문서 §2.8.1).
+		 * 이미터를 붙은 관절에 둔다 (FXC 노드 헤더 +0x08 = 관절, {@code LevelEmitters} 와 같은 이미터 월드 = FXC 로컬 · 관절 월드 · GO 월드, 관절 자세 = {@code EffectDef.pose}).
+		 * Animator 가 튼 레벨 GO (ATHN03A 불덩이) 와 하늘 GO 에 켠다 — 다른 이펙트는 예전처럼 GO 원점 + 로컬 이동. 생성률·속력 채널은 어느 쪽이든 원작 채널 id (05 문서 §2.8.1).
 		 */
 		public boolean jointEmitters;
 		/** 하늘 GO 이펙트: 이미터를 {@link ParticleSystem.Emitter#sky} 로 — 파티클은 하늘 단계에서만 그린다 (세계에 덮인다, 43 §17). */
@@ -214,7 +213,7 @@ public final class EffectSystem implements AutoCloseable {
 		public float[] rates() {
 			float[] r = new float[def.emitters().size()];
 			for (int i = 0; i < r.length; i++) {
-				r[i] = def.rate(act, def.emitters().get(i), act == def.anim() ? time : actTime, jointEmitters);
+				r[i] = def.rate(act, def.emitters().get(i), act == def.anim() ? time : actTime);
 			}
 			return r;
 		}
@@ -302,17 +301,17 @@ public final class EffectSystem implements AutoCloseable {
 				}
 				float at = act == def.anim() ? time : actTime;
 				float ct = act != null && act.looping() && act.duration > 0 ? at % act.duration : at;
-				e.rate = (rateOverride >= 0 ? rateOverride : def.rate(act, ed, at, jointEmitters)) * lodScale * rateScale;
+				e.rate = (rateOverride >= 0 ? rateOverride : def.rate(act, ed, at)) * lodScale * rateScale;
 				if (emitterOff != null && emitterOff.test(ed)) {
 					e.rate = 0;
 				}
 				if (emitterRate != null) {
 					e.rate *= (float) emitterRate.applyAsDouble(ed);
 				}
-				e.speed = def.param(act, ed, 4, ct, fx.speed(), jointEmitters) * 16 * Math.min(s, 4f) * speedScale;
-				e.speedRnd = def.param(act, ed, 5, ct, fx.speedRnd(), jointEmitters) * 16 * Math.min(s, 4f) * speedScale;
+				e.speed = def.param(act, ed, 4, ct, fx.speed()) * 16 * Math.min(s, 4f) * speedScale;
+				e.speedRnd = def.param(act, ed, 5, ct, fx.speedRnd()) * 16 * Math.min(s, 4f) * speedScale;
 				if (fx.subtype() == 1 || fx.subtype() == 8) {
-					e.cone = def.param(act, ed, 3, ct, fx.spread(), jointEmitters);
+					e.cone = def.param(act, ed, 3, ct, fx.spread());
 				}
 				e.sizeScale = Math.min(s, 6f);
 			}

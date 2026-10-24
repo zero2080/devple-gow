@@ -2172,7 +2172,7 @@ public final class GameScene implements Scene {
 				e.scale = 1f / Math.max(def.scale(), 1e-3f); // 인스턴스 스케일은 행렬에 이미 들어 있다
 				e.emitterOff = ed -> {
 					devple.gow.tools.anim.Animation a = def.act(fe.actName());
-					return a == null || ed.channel() < 0 || ed.channel() >= a.recordChannels.size() || a.recordChannels.get(ed.channel()).isEmpty();
+					return a == null || !a.hasChannel(ed.channel());
 				};
 				animatorFx.put(key, e);
 				System.out.println("Animator 이펙트: " + o + " act " + act.name);
