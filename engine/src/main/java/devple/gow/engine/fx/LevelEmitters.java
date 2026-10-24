@@ -25,13 +25,22 @@ public final class LevelEmitters {
 
 	/** @return 만든 이미터 수 */
 	public static int build(LevelData data, WadAssets assets, ParticleSystem ps) {
+		return build(data, assets, ps, java.util.Set.of());
+	}
+
+	/**
+	 * @param skip 만들지 않을 배치 (소문자 인스턴스 이름) — 하늘 GO: SCR_Sky (0x218848) 가 GO 를 매 프레임 카메라로 옮기므로 이미터도 하늘 공간이다.
+	 *             월드 고정으로 만들면 미니어처 좌표 (ATHN03A group2 화톳불 y ≈ −72) 가 레벨 아래에 놓여 보이지 않았다 (GameScene.startSkyEffects 가 대신 돌린다).
+	 * @return 만든 이미터 수
+	 */
+	public static int build(LevelData data, WadAssets assets, ParticleSystem ps, java.util.Set<String> skip) {
 		FxResources fx = new FxResources(data.wad);
 		Map<String, ParticleDef> defs = new HashMap<>();
 		int n = 0;
 		float[] p = new float[3];
 		float[] d = new float[3];
 		for (LevelLayout.Placement pl : data.layout.placements()) {
-			if (pl.instance().scale() == 0) {
+			if (pl.instance().scale() == 0 || skip.contains(pl.instance().name().toLowerCase(Locale.ROOT))) {
 				continue;
 			}
 			for (String ref : pl.object().refs("FXC_")) {

@@ -45,6 +45,12 @@ public final class LevelFx implements AutoCloseable {
 
 	/** @param wadPath 레벨 WAD 경로 (같은 폴더의 R_PERMK 에서 상주 날씨 GO 를 찾는다; null 가능) */
 	public LevelFx(Engine e, WadAssets assets, LevelData data, List<LevelScene.Instance> instances, java.nio.file.Path wadPath) {
+		this(e, assets, data, instances, wadPath, java.util.Set.of());
+	}
+
+	/** @param skyOwners 하늘 GO 이름 (소문자) — 그 이미터는 월드 고정이 아니라 하늘 공간에서 돈다 ({@link LevelEmitters#build} 에서 뺀다) */
+	public LevelFx(Engine e, WadAssets assets, LevelData data, List<LevelScene.Instance> instances, java.nio.file.Path wadPath,
+				   java.util.Set<String> skyOwners) {
 		this.wadPath = wadPath;
 		env = new FxEnvironment(assets, data);
 		EnvParams p = env.params();
@@ -69,7 +75,7 @@ public final class LevelFx implements AutoCloseable {
 				waters.add(new WaterSurface(w, c, t == null ? null : assets.texture(t)));
 			}
 		}
-		LevelEmitters.build(data, assets, particles);
+		LevelEmitters.build(data, assets, particles, skyOwners);
 		for (EnvParams.Weather w : p.weathers) {
 			float[] o = ownerPosition(data, w.owner());
 			Weather.Built b = Weather.build(w, assets, o, this::permk);

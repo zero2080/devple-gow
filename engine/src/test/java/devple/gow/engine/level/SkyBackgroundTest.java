@@ -40,8 +40,17 @@ class SkyBackgroundTest {
 		assertEquals(List.of("gogroup3508", "goshitboxl"), skyInstances("PAND04E"));
 		assertEquals(List.of("gogroup1224"), skyInstances("PAND01BB"));
 		assertEquals(List.of("gonightsky"), skyInstances("ATHN01A"));
-		// 템플릿 MDL_group2 에 붙은 SCR_Sky (이름에 sky 없음)
-		assertEquals(List.of("gogroup2"), skyInstances("ATHN03A"));
+		// 템플릿 MDL_group2 에 붙은 SCR_Sky (이름에 sky 없음) + 본문 없는 인스턴스 SCR_Sky 의 소유 GO (도시 위 거대한 아레스, 43 §16):
+		// 원작 0x218848 은 스크립트가 붙은 GO 를 옮길 뿐 본문을 읽지 않는다 — MDL_AresAnimGroup1 템플릿에는 SCR_Sky 가 없다
+		assertEquals(List.of("goaresanimgroup1", "gogroup2"), skyInstances("ATHN03A"));
+		assertEquals(List.of("goaresanimgroup1"), skyInstances("ATHN03AA").stream().filter(n -> n.contains("ares")).toList());
+	}
+
+	/** 하늘 GO 의 SCR_Sky 소유자 목록 ({@link EnvParams#skyOwners}): ATHN03A 는 group2 (템플릿) 와 aresanimgroup1 (인스턴스 SCR_Sky). */
+	@Test
+	void instanceScrSkyOwners() throws Exception {
+		EnvParams a3 = new EnvParams(wad("ATHN03A"));
+		assertTrue(a3.skyOwners.stream().anyMatch(o -> o.equalsIgnoreCase("goaresanimgroup1")), "SCR_Sky 소유 GO: " + a3.skyOwners);
 	}
 
 	@Test

@@ -593,6 +593,7 @@ public final class GameScene implements Scene {
 		});
 		ph = devple.gow.engine.core.PerfMonitor.phase(". lights", ph);
 		wireEffects();
+		startSkyEffects();
 		ph = devple.gow.engine.core.PerfMonitor.phase(". wireEffects", ph);
 		hudBinding = newHudBinding();
 		boolean seamless = arrival != null && (arrival.kind() == LevelLink.Kind.SEAMLESS || arrival.kind() == LevelLink.Kind.WALK);
@@ -1041,6 +1042,15 @@ public final class GameScene implements Scene {
 			}
 
 			@Override
+			public void neighbourFade(float r, float g, float b, float seconds, boolean out) {
+				if (out) {
+					screenFade.fadeOut(r, g, b, seconds);
+				} else {
+					screenFade.fadeIn(seconds);
+				}
+			}
+
+			@Override
 			public void neighbourVisible(List<String> objects, boolean show) {
 				for (String o : objects) {
 					String k = o.toLowerCase(java.util.Locale.ROOT);
@@ -1126,9 +1136,22 @@ public final class GameScene implements Scene {
 			}
 
 			@Override
+			public void fade(float r, float g, float b, float seconds, boolean out) {
+				if (out) {
+					screenFade.fadeOut(r, g, b, seconds); // Entity 0x5 (0x1AFA20)
+				} else {
+					screenFade.fadeIn(seconds); // Entity 0x6 (0x1AFAD4)
+				}
+				if (System.getProperty("gow.debug.script") != null) {
+					System.out.printf(java.util.Locale.ROOT, "화면 페이드 %s %.2f초 (%.2f, %.2f, %.2f)%n", out ? "어둡게" : "밝게", seconds, r, g, b);
+				}
+			}
+
+			@Override
 			public void animate(ScriptEntity source, List<String> objects, String anim) {
 				if (nav != null) {
 					nav.animate(source, objects, anim);
+					startAnimatorEffects(objects); // 같은 GO 의 채널 이미터 (불덩이·폭발 연기, 43 §16)
 				} // Animator → 발판·회전방 관절 애니 (Marker 위치도 따라감)
 			}
 
@@ -1184,6 +1207,9 @@ public final class GameScene implements Scene {
 				}
 				if (func == 0xB && !args.isEmpty()) { // 질문 (원작 0x21D9C8 → GameMgr +0x152C) → HUD 메뉴 템플릿 → 1021 (선택 번호, 메시지 번호)
 					openQuestion((int) num(args.get(0)));
+				}
+				if (func == devple.gow.engine.script.GameScriptHost.ZONE_REPORT && !args.isEmpty()) {
+					zoneReport((int) num(args.get(0)));
 				}
 				if (func == 0xC && !args.isEmpty()) {
 					// Internal 0xC Idle(bool): 참이면 조작 잠금 (영웅은 대기) — ATHN01A PlayerStartZone 시작 연출 13 초 (IdleCam → Idle2Cam → VisIdleOff),
@@ -1336,7 +1362,8 @@ public final class GameScene implements Scene {
 				if ("savepoint".equals(name) && source.owner != null) {
 					float[] gp = source.owner.instance().pos();
 					savePoints.add(new Vector3f(gp[0], gp[1], gp[2]));
-					System.out.printf("세이브 포인트 생성 (%.0f, %.0f, %.0f)%n", gp[0], gp[1], gp[2]);
+					boolean body = spawnSavePoint(source.owner.instance().matrix());
+					System.out.printf("세이브 포인트 생성 (%.0f, %.0f, %.0f)%s%n", gp[0], gp[1], gp[2], body ? " + 빛기둥 savepoint" : "");
 				} else if (nav != null) {
 					// "chest" → R2 상자 (원작 Creator 0x1ACCA8: R_PERMK 오브젝트 chest 를 소유 GO 행렬에 새 GO 로, 38 §21)
 					devple.gow.engine.nav.Interactables.Item chest = nav.create(source);
@@ -1742,6 +1769,32 @@ public final class GameScene implements Scene {
 		}
 	}
 
+	/**
+	 * Internal 0x10 ZoneReport(구역) — 구역 제목 (GameMgr_OnMessage 0x1B0A28 → 0x1B60D0 → 0x1B8BA0) [확실: 디스어셈블]:
+	 * 메시지 = 800 + 구역 의 첫 줄 (0x1B95D0(…, 번호, 줄 0) — 803 "아테네로 향한 도로\n0" → "아테네로 향한 도로", 없으면 "Unknown zone")
+	 * 을 HUD +0x84 (FLP 변수 ZoneReport_Title) 에, +0x264 (ZoneReport_Event) = 1. HUD FLP 루트가 StatsZoneReport 를 "On" 으로 —
+	 * 9 프레임 페이드 인, Loop_Stats 를 GetTime 기준 10 초 반복, 28–35 페이드 아웃 (FLP_HUDK clip 129). 한 번만 띄우는 것은 스크립트
+	 * (ZoneReportGroup: GlobalData:0 ≠ 구역 일 때만, 띄운 뒤 GlobalData:0 = 구역).
+	 */
+	void zoneReport(int zone) {
+		String title = zoneTitle(session.messages, zone);
+		if (hud != null) {
+			hud.variables().set("PS2_ZoneReport_Title", title);
+			hud.variables().event("PS2_ZoneReport_Event", 1);
+		}
+		zoneTitle = title;
+		System.out.println("구역 제목 " + zone + ": " + title);
+	}
+
+	/** 마지막으로 띄운 구역 제목 (검증용, 없으면 null). */
+	String zoneTitle;
+
+	/** 구역 제목 = 메시지 800 + 구역 의 첫 줄 (0x1B95D0 줄 0), 없으면 "Unknown zone" (0x1B8BA0). */
+	static String zoneTitle(devple.gow.tools.ui.MessageTable messages, int zone) {
+		String text = messages != null ? messages.get(800 + zone) : null;
+		return text == null || text.isEmpty() ? "Unknown zone" : text.split("\n", -1)[0].trim();
+	}
+
 	private void showMessage(int id, float seconds) {
 		String text = session.messages != null ? session.messages.get(id) : null;
 		messageId = id;
@@ -1769,13 +1822,188 @@ public final class GameScene implements Scene {
 		System.out.println("메시지 " + id + ": " + text.replace('\n', ' '));
 	}
 
+	/**
+	 * 세이브 포인트 거리 (원작 0x1DC678: 영웅 GO 위치 − 세이브 포인트 GO 위치 의 길이 × 1/16, 가장 가까운 것 → 영웅 +0x90; 0x1DC3F8 이 &lt; 4.0 m 이면
+	 * R2 안내 (아이콘 슬롯 0 = 14) 와 R2 → 저장) [확실: 디스어셈블]. 4 m = 64 단위 (이전 엔진 45 [근사]).
+	 */
+	static final float SAVE_POINT_RANGE = 4f * 16f;
+
 	private boolean nearSavePoint() {
 		for (Vector3f sp : savePoints) {
-			if (sp.distance(hero.ctl.position) < 45) {
+			if (sp.distance(hero.ctl.position) < SAVE_POINT_RANGE) {
 				return true;
 			}
 		}
 		return false;
+	}
+
+	/** 스크립트 화면 페이드 (Entity 0x5 FadeOut / 0x6 FadeIn, {@link ScreenFade}). 레벨마다 새로 (0x1AF600). */
+	final ScreenFade screenFade = new ScreenFade();
+
+	/** Animator 가 튼 레벨 GO 의 채널 이미터 (소유 GO 이름 소문자 → 이펙트) 와 멈춘 뒤 경과 시간. */
+	private final Map<String, devple.gow.engine.fx.EffectSystem.Effect> animatorFx = new HashMap<>();
+	private final Map<String, Float> animatorFxIdle = new HashMap<>();
+	/** 멈춘 Animator 이펙트를 끄기까지 (초) — 나온 파티클은 수명까지 남는다 [근사]. */
+	static final float ANIMATOR_FX_LINGER = 4f;
+
+	/**
+	 * 스크립트 Animator 가 레벨 GO 를 틀면 그 GO 의 FXC 이미터 중 <b>채널 링크</b> (노드 +0x62 = 원작 채널 id, 0x130240) 가 이 act 에 곡선을 가진 것을 같이 돌린다 —
+	 * 원작은 GO 의 애니 컴포넌트가 매 프레임 타입 10 채널로 이미터 P 블록 (생성률 스트림 8 · 속력 4) 을 덮어쓰므로, act 가 돌 때만 불덩이·연기가 나온다
+	 * (40 §3, 이펙트 GO 와 같은 구성) [확실: 코드 0x100EA8/0x130240 + 데이터]. 관절 자세·채널은 원작 디스크립터 배치 (05 §2.8.1). ATHN03A 성문 cine1FireBall:
+	 * GateExplosion 의 관절 2 Fireball03GE 가 0.43 초 동안 성문으로 날아가며 FBFemit2GE 150/초 · FBSemit4GE 50/초 · FXC_GE 100/초 (PS2 영상 4978 의 불덩이),
+	 * 같은 구조의 건물 폭발 GO (group3251/3278/3284, TallBuildExplode2, CornerRip00, group3289) 도. 메시는 레벨이 그대로 그리고 (hideMesh), 링크 없는 상수
+	 * 이미터는 LevelEmitters 몫. 시간은 발판 몸 (Platforms) 의 act 시간에 맞춘다.
+	 */
+	void startAnimatorEffects(List<String> objects) {
+		if (magicFx == null || nav == null) {
+			return;
+		}
+		devple.gow.engine.fx.EffectSystem fx = magicFx.effects();
+		for (String o : objects) {
+			devple.gow.engine.nav.Platforms.Body b = nav.navWorld.platforms().body(o);
+			devple.gow.tools.fx.EffectLibrary.EffectDef def = fx.library().resolve(o);
+			if (b == null || b.anim() == null || def == null || def.emitters().isEmpty()) {
+				continue;
+			}
+			devple.gow.tools.anim.Animation act = def.act(b.anim().name);
+			if (!def.hasRateChannel(act)) {
+				continue;
+			}
+			String key = o.toLowerCase(java.util.Locale.ROOT);
+			devple.gow.engine.fx.EffectSystem.Effect e = animatorFx.get(key);
+			if (e == null || e.done()) {
+				e = fx.play(o, devple.gow.engine.fx.EffectSystem.Anchor.of(new org.joml.Matrix4f().set(b.instanceMatrix())), Float.POSITIVE_INFINITY);
+				if (e == null) {
+					continue;
+				}
+				devple.gow.engine.fx.EffectSystem.Effect fe = e;
+				e.hideMesh = true; // 메시는 레벨 (Platforms 자세) 이 그린다
+				e.jointEmitters = true;
+				e.hold = true;
+				e.scale = 1f / Math.max(def.scale(), 1e-3f); // 인스턴스 스케일은 행렬에 이미 들어 있다
+				e.emitterOff = ed -> {
+					devple.gow.tools.anim.Animation a = def.act(fe.actName());
+					return a == null || ed.channel() < 0 || ed.channel() >= a.recordChannels.size() || a.recordChannels.get(ed.channel()).isEmpty();
+				};
+				animatorFx.put(key, e);
+				System.out.println("Animator 이펙트: " + o + " act " + act.name);
+			}
+			e.setAct(act.name);
+			e.setActTime(b.time());
+			animatorFxIdle.put(key, 0f);
+		}
+	}
+
+	/** 틱마다 Animator 이펙트의 act 시간을 발판 몸에 맞추고, 멈춘 지 {@link #ANIMATOR_FX_LINGER} 초면 끈다. */
+	private void updateAnimatorEffects(float dt) {
+		if (animatorFx.isEmpty()) {
+			return;
+		}
+		for (java.util.Iterator<Map.Entry<String, devple.gow.engine.fx.EffectSystem.Effect>> it = animatorFx.entrySet().iterator(); it.hasNext(); ) {
+			Map.Entry<String, devple.gow.engine.fx.EffectSystem.Effect> en = it.next();
+			devple.gow.engine.fx.EffectSystem.Effect e = en.getValue();
+			devple.gow.engine.nav.Platforms.Body b = nav != null ? nav.navWorld.platforms().body(en.getKey()) : null;
+			if (e.done() || b == null || b.anim() == null) {
+				e.stop();
+				it.remove();
+				continue;
+			}
+			e.setAct(b.anim().name);
+			e.setActTime(b.time());
+			float idle = b.playing() ? 0 : animatorFxIdle.getOrDefault(en.getKey(), 0f) + dt;
+			animatorFxIdle.put(en.getKey(), idle);
+			if (idle > ANIMATOR_FX_LINGER) {
+				e.stop();
+				it.remove();
+			}
+		}
+	}
+
+	/** 지금 도는 Animator 이펙트 (검증용, 소문자 GO 이름). */
+	java.util.Set<String> animatorEffects() {
+		return animatorFx.keySet();
+	}
+
+	/** 하늘 GO 이미터 이펙트와 그 GO (act 시간 동기). */
+	private final List<devple.gow.engine.fx.EffectSystem.Effect> skyFx = new ArrayList<>();
+	private final List<LevelScene.SkyGo> skyFxGo = new ArrayList<>();
+
+	/**
+	 * 하늘 GO (SCR_Sky 소유자) 의 이미터를 하늘 공간에서 돌린다 — 원작 0x218848 은 GO 를 매 프레임 카메라로 옮기므로 그 파티클 컴포넌트의 이미터도 따라간다
+	 * [확실: GO 이동 / 근사: 이미 나온 파티클은 월드에 남고 깊이는 일반 파티클 패스]. 기준 = 인스턴스 행렬을 (눈 − 관절 0) 만큼 옮긴 것, 관절 붙은 이미터,
+	 * 반복 시작 act 는 레벨 렌더와 같은 시간 (시작 시간 + 효과 시간). 메시는 LevelScene 이 하늘 단계에서 그린다.
+	 * ATHN03A/03AA: group2 화톳불 (도시가 불타는 평원), 거대한 아레스의 불붙은 바위·불덩이·재.
+	 */
+	void startSkyEffects() {
+		if (magicFx == null || level == null) {
+			return;
+		}
+		devple.gow.engine.fx.EffectSystem fx = magicFx.effects();
+		for (LevelScene.SkyGo s : level.skyGos()) {
+			devple.gow.tools.fx.EffectLibrary.EffectDef def = fx.library().resolve(s.name());
+			if (def == null || def.emitters().isEmpty()) {
+				continue;
+			}
+			Matrix4f inst = new Matrix4f().set(s.inst());
+			Vector3f off = new Vector3f(s.off());
+			devple.gow.engine.fx.EffectSystem.Effect e = fx.play(s.name(), out -> {
+				out.translation(cam.eye.x - off.x, cam.eye.y - off.y, cam.eye.z - off.z).mul(inst);
+				return true;
+			}, Float.POSITIVE_INFINITY);
+			if (e == null) {
+				continue;
+			}
+			e.hideMesh = true;
+			e.jointEmitters = true;
+			e.scale = 1f / Math.max(def.scale(), 1e-3f);
+			e.silent = true; // 하늘 GO 의 SEM (아레스 SNDAthn3Ares*) 은 레벨 소리 쪽 [미확인: 재생 시점]
+			if (s.act() != null && def.act(s.act().name) != null) {
+				e.setAct(s.act().name);
+				e.hold = true;
+				e.setActTime(s.start() + level.fxTime());
+			}
+			skyFx.add(e);
+			skyFxGo.add(s);
+			System.out.println("하늘 이펙트: " + s.name() + " 이미터 " + def.emitters().size() + (s.act() != null ? " act " + s.act().name : ""));
+		}
+	}
+
+	private void updateSkyEffects() {
+		for (int i = 0; i < skyFx.size(); i++) {
+			LevelScene.SkyGo s = skyFxGo.get(i);
+			if (s.act() != null) {
+				skyFx.get(i).setActTime(s.start() + level.fxTime());
+			}
+		}
+	}
+
+	/** 생성한 세이브 포인트 몸 (빛기둥). */
+	private final List<devple.gow.engine.fx.EffectSystem.Effect> savePointBodies = new ArrayList<>();
+
+	/**
+	 * Creator Name0 "savepoint" 의 몸 (원작 0x1ACCA8 은 상자와 같은 경로로 그 이름의 오브젝트를 소유 GO 행렬에 새 GO 로 만든다 — 38 §21) [확실]:
+	 * R_PERMK 오브젝트 {@code savepoint} = MDL_SavePoint (빛기둥 SFXlightBeam7/10/11/12 · starBurst, 관절 6) + ANM_savepoint "SavePoint" 4 초 반복 +
+	 * SEM_SNDSavePoint (GO 템플릿 gosavepoint, 클래스 SavePoint 0x22E260). R_SAVEPT.WAD 는 메모리카드 아이콘 텍스처 (TXR_SavePt01..41) 뿐이다.
+	 *
+	 * @return 몸을 만들었으면 true
+	 */
+	private boolean spawnSavePoint(float[] inst) {
+		if (magicFx == null) {
+			return false;
+		}
+		devple.gow.engine.fx.EffectSystem fx = magicFx.effects();
+		devple.gow.tools.fx.EffectLibrary.EffectDef def = fx.library().resolve("savepoint");
+		if (def == null) {
+			return false;
+		}
+		devple.gow.engine.fx.EffectSystem.Effect e = fx.play("savepoint",
+				devple.gow.engine.fx.EffectSystem.Anchor.of(new org.joml.Matrix4f().set(inst)), Float.POSITIVE_INFINITY);
+		if (e == null) {
+			return false;
+		}
+		e.scale = 1f / Math.max(def.scale(), 1e-3f); // 인스턴스 스케일은 inst 에 이미 들어 있다 (ChestProps 와 같음)
+		savePointBodies.add(e);
+		return true;
 	}
 
 	/**
@@ -1935,7 +2163,11 @@ public final class GameScene implements Scene {
 				return devple.gow.engine.ui.MinigameIcon.PROMPT;
 			}
 			var near = nv != null && held == null ? nv.promptItem() : null;
-			return near != null && near.showPrompt ? devple.gow.engine.ui.MinigameIcon.PROMPT : devple.gow.engine.ui.MinigameIcon.NONE;
+			if (near != null) {
+				return near.showPrompt ? devple.gow.engine.ui.MinigameIcon.PROMPT : devple.gow.engine.ui.MinigameIcon.NONE;
+			}
+			// 0x1DC3F8: 세이브 포인트 4 m 안이면 슬롯 0 = 14 (R2) — 가까운 R2 오브젝트 (0x1C3F18) 가 있으면 그 "Show R2" 가 덮는다
+			return nearSavePoint() && !globalIdle() ? devple.gow.engine.ui.MinigameIcon.PROMPT : devple.gow.engine.ui.MinigameIcon.NONE;
 		}
 		if (grab.timed() != null) {
 			return grab.timed().iconIndex();
@@ -2090,6 +2322,7 @@ public final class GameScene implements Scene {
 
 	@Override
 	public void update(Engine e, float dt) {
+		screenFade.tick(); // 스크립트 화면 페이드 0x1AF648 (프레임마다, 43 §16)
 		if (firstUpdates < 2) { // 적재 직후 첫 틱 시간 (48 문서 §9, -Dgow.perf)
 			long t0 = System.nanoTime();
 			updateTick(e, dt);
@@ -2405,6 +2638,8 @@ public final class GameScene implements Scene {
 			}
 		}
 		chests.update(dt);
+		updateAnimatorEffects(dt);
+		updateSkyEffects();
 		poseRopes();
 		for (var b : nav.platformBodies()) {
 			if (b.anim() != null && b.scripted || b.follows()) { // 정지 CDV 오브젝트의 반복 act 는 렌더가 따로 돌린다 (반복 재생 배치). 부모 링크로 옮겨진 몸은 그 자세로
@@ -3097,6 +3332,7 @@ public final class GameScene implements Scene {
 		boolean staged = shadows != null && !NO_STAGES;
 		int prevStage = devple.gow.engine.render.DrawStage.set(staged ? devple.gow.engine.render.DrawStage.EARLY : devple.gow.engine.render.DrawStage.ALL);
 		try {
+			level.skyNeighbour = otherScene; // 다른 슬롯 레벨의 하늘 GO 도 하늘 단계에 (두 슬롯 상주, 각자 가시 칸 — 43 §16)
 			level.render(e, alpha);
 			renderOtherSlot(e);
 			drawActors(e, alpha);
@@ -3121,6 +3357,8 @@ public final class GameScene implements Scene {
 		}
 		magicFx.render(cam, e.window().aspect(), e.renderer().white());
 		renderCameraFilter();
+		float[] fc = screenFade.color();
+		e.renderer().overlay(fc[0], fc[1], fc[2], fc[3]); // 스크립트 FadeOut/FadeIn 색 사각형 0x2C8F50 [추정: HUD 아래]
 		if (levelHud != null) {
 			levelHud.render(e);
 		}

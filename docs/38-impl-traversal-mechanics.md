@@ -697,7 +697,10 @@ PAND05B `pBoxPand05B-Marker511` → `semoMovieHaveBox-…-semo08marker511` (Filt
 - 시험 `game/ChestPropsTest`: 순환 2→3→4, ATHN01B HydraHealth 종류 2·오브 014 "HealthChest"·손잡이 1·길이 1.967·CDV 충돌·health/health2 만 보임·chestParts → chestOpen,
   chestGrab/chestOpen 이미터 곡선이 디스크립터 번호대로 (HSemit1 / HSemit2·3), ATHN01B 쓰러진 기둥이 부서지기 전엔 복도를 막고 뒤엔 통과 (41 §2.1).
 - 남은 것: 같은 Creator 경로의 다른 이름 — ATHN01B `hydraHL-aoBHB1a01Hl23/24`·`aoHAR1a01Hl26/27` (소유 gohydrahl, Name1 = 인스턴스 이름, Animator 10 이 재생) 같은 "ao*" 애니 오브젝트와
-  R_SAVEPT 세이브 포인트 모델은 아직 만들지 않는다 (세이브 포인트는 위치만). 열린 상자 상태는 이음으로 돌아올 때 넘기지 않는다.
+  ~~R_SAVEPT 세이브 포인트 모델은 아직 만들지 않는다~~ → 세이브 포인트 몸 = **R_PERMK 오브젝트 `savepoint`** (MDL_SavePoint 빛기둥 SFXlightBeam·starBurst +
+  ANM "SavePoint" 4 초 반복 + SEM_SNDSavePoint, GO 템플릿 gosavepoint) 를 상자와 같은 Creator 경로로 소유 GO 행렬에 만든다 [확실: 0x1ACCA8 · 데이터] — R_SAVEPT.WAD 는
+  메모리카드 아이콘 텍스처 (TXR_SavePt01..41) 뿐이다. R2 안내·저장 거리 4 m = 64 단위 (0x1DC678 거리 × 1/16 < 4.0, 0x1DC3F8 → 아이콘 슬롯 0 = 14) (43 §16).
+  열린 상자 상태는 이음으로 돌아올 때 넘기지 않는다.
 
 
 ## 22. 천장 질의 · 한쪽 면 바닥/턱 — ATHN01B 선창에서 2단 점프로 갑판 위 (사용자 보고) [확실: 디스어셈블 / 추정: 내비 위치 = 발 + 6.4]

@@ -120,8 +120,11 @@ class CameraRigTest {
 	/**
 	 * PAND05B camEleEnter (43 §13.11): 관절 카메라 갱신 경로 해독 — 0x1F3768 (0x100 없음, 0x40000) 은 카메라 GO 월드 행렬 (0x1303D0: CAM 로컬 ×
 	 * 소유 GO 애니 관절 행렬 0x136990) 을 그대로 상태로 쓰고 주시점 = 행렬 × (0,0,−567.8). 활성화 0x1F3A38 는 카메라 노드 +0x104 (0x13EC10:
-	 * 애니 관절에 붙으면 1) 이고 플래그 0x1000 이면 소유 GO 애니를 처음부터 (0x1004B8 · 0x131038). 눈은 고정 (1080.6, 20.8, 1311.5),
+	 * 애니 관절에 붙으면 1) 이고 플래그 0x1000 이면 소유 GO 애니를 처음부터 (0x1004B8 · 0x131038).
 	 * 관절 camEleEnter 오일러 (656, 2249) → (−959, 0) = 피치 +14.4° → −21.1°, 요 49.4° → 0° (1 초 정지 뒤 패닝, 11.33 초).
+	 * <b>정정 (43 §16, 05 §2.8.1)</b>: ANM_startwad 는 데이터 타입 [0(p2 3)] 하나라 디스크립터 1 = 관절 이동 — 예전 배치는 회전만 읽어 눈이 (1080.6, 20.8, 1311.5)
+	 * 에 고정이었다 (그래서 영웅이 2 초 뒤 화면 밖). 원작 배치로는 눈이 1–3.5 초에 엘리베이터 판 높이 (y ≈ 180) 로 올라 가운데 (x 869.9) 쪽으로 가고
+	 * 내려오는 엘리베이터를 따라 (870, 79, 1227) 까지 내려간다.
 	 */
 	@Test
 	void eleEnterJointCameraPans() throws Exception {
@@ -139,12 +142,17 @@ class CameraRigTest {
 		assertEquals(20.8f, e0.y, 0.5f);
 		assertEquals(1311.5f, e0.z, 0.5f);
 		assertEquals(14.4, Math.toDegrees(Math.asin(f0.y)), 0.5);
+		float topY = -1e9f;
 		for (int i = 0; i < 12 * 60; i++) {
 			rig.update(1 / 60f, hero, 0, false);
+			topY = Math.max(topY, rig.eye().y);
 		}
 		assertEquals("camEleEnter", rig.current(), "질의 끔 → 유지");
 		Vector3f e1 = rig.eye(), f1 = rig.pose().forward(new Vector3f());
-		assertTrue(e1.distance(e0) < 0.5f, "눈 고정 " + e1);
+		assertTrue(topY > 175 && topY < 185, "엘리베이터 판 높이까지 오름 " + topY);
+		assertEquals(869.9f, e1.x, 1f, "엘리베이터 가운데 x (gostartwad 869.9)");
+		assertEquals(78.6f, e1.y, 1f, "내려오는 엘리베이터를 따라 " + e1);
+		assertEquals(1227f, e1.z, 1.5f);
 		assertEquals(-21.1, Math.toDegrees(Math.asin(f1.y)), 0.5);
 		assertEquals(0, Math.toDegrees(Math.atan2(-f1.x, -f1.z)), 1.0, "요 0 (−z)");
 	}

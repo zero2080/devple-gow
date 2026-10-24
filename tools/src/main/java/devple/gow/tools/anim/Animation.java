@@ -90,9 +90,42 @@ public final class Animation {
 	/** 위치 디스크립터의 frameTime (회전과 다르면 경고 대상, 히어로 전체에서는 항상 같음). */
 	public final float posFrameTime;
 
+	/**
+	 * <b>원작 배치로 다시 읽은 상태 디스크립터</b> (인덱스 = 원작 채널 id). 세트 데이터 타입 항목 k 는 디스크립터 p2 개 (항목 +3 u8,
+	 * {@link AnimationSet#typeParams}[k][1]) 를 차례로 차지한다 — 원작 채널 생성 0x100EA8 이 항목마다 채널 객체 +0x1C = 앞 항목 p2 합 (id),
+	 * +0x20 = p2 로 두고 FXC 이미터 링크 (노드 +0x62) 를 이 id 로 찾는다 (0x130240) [확실: 코드]. 데이터 [확실]: 전 WAD 9220 act 의 트랙 데이터가
+	 * 모두 p2 합 개 표 뒤에서 시작하고 (1685 act 는 표 끝 바로 다음), 이 배치로 다시 매긴 형은 원소 크기 (+0x10) 가 형마다 하나로 맞는다:
+	 * 타입 0 = 3 칸 (0 회전 s16 · 1 이동 f32 · 2 스케일 s16, 히어로 등 7 세트는 4 칸 + 3 로케이터 f32), 5 = u8 관절 상태, 10 = f32 채널, 11 = 정수 값 채널.
+	 * <p>위의 예전 필드 ({@link #descrs}, {@link #posTracks}, {@link #channelGroups} …) 는 <b>항목 번호 = 디스크립터 번호</b> 로 읽어 타입 0 뒤의 형 표시가
+	 * 2 (히어로 3) 칸씩 밀려 있다 (이동 = "타입 5", 히어로 u8 = "타입 10 슬롯 2", 이펙트 생성률 = "타입 11" 로 보임). 그 위에 맞춘 보정 (히드라 매달림 들어 올림,
+	 * 잡기 설계 거리, 타입 11 이동 규칙 …) 이 여럿이라 전역 전환은 따로 한다 (05 문서 §2.8.1) — 지금은 이 배치를 관절 카메라 ({@code CameraRig.CamAnim})
+	 * 와 관절 이미터 이펙트 (Animator·하늘 GO, {@code EffectDef.pose} · 생성률 채널) 만 쓴다.
+	 */
+	public final List<StateDescr> records = new ArrayList<>();
+	/** {@link #records} 배치의 관절 회전 (타입 0 디스크립터 0). */
+	public final List<AnimTrack> recordRotation;
+	/** {@link #records} 배치의 관절 이동 (타입 0 디스크립터 1, 로컬 위치 절대 키 + 가산). */
+	public final List<AnimTrack> recordTranslation;
+	/** {@link #records} 배치의 타입 10 f32 채널 (인덱스 = 원작 채널 id = FXC 링크, 비면 빈 목록). */
+	public final List<List<AnimTrack>> recordChannels = new ArrayList<>();
+	private final Map<Skeleton, Baked> bakedRecords = new IdentityHashMap<>();
+
 	private final Map<Skeleton, Baked> baked = new IdentityHashMap<>();
 
 	Animation(String group, ByteBuffer b, int at, int[] typeIds) {
+		this(group, b, at, typeIds, ones(typeIds.length));
+	}
+
+	private static int[] ones(int n) {
+		int[] r = new int[n];
+		java.util.Arrays.fill(r, 1);
+		return r;
+	}
+
+	/**
+	 * @param recordCounts 항목마다 차지하는 디스크립터 수 (p2) — {@link #records} 배치
+	 */
+	Animation(String group, ByteBuffer b, int at, int[] typeIds, int[] recordCounts) {
 		this.group = group;
 		flags = b.getInt(at);
 		unk04 = b.getFloat(at + 4);
@@ -146,6 +179,58 @@ public final class Animation {
 		declaresTranslation = t5;
 		frameTime = ft > 0 ? ft : pft > 0 ? pft : 1f / 30f;
 		posFrameTime = pft > 0 ? pft : frameTime;
+		// 원작 배치 (Σ p2) — 예전 필드와 같은 디스크립터를 같은 형으로 읽었으면 그 목록을 함께 쓴다
+		List<AnimTrack> rr = List.of(), rt = List.of();
+		int r = 0;
+		for (int k = 0; k < typeIds.length; k++) {
+			for (int sub = 0; sub < recordCounts[k]; sub++, r++) {
+				int so = at + 0x64 + r * 0x14;
+				if (so + 0x14 > b.limit()) {
+					break;
+				}
+				StateDescr sd = new StateDescr(typeIds[k], Short.toUnsignedInt(b.getShort(so)), Short.toUnsignedInt(b.getShort(so + 2)),
+						b.getInt(so + 4), b.getInt(so + 8), b.getFloat(so + 12), b.getInt(so + 16));
+				records.add(sd);
+				recordChannels.add(List.of());
+				if (sd.trackCount == 0) {
+					continue;
+				}
+				int t = typeIds[k];
+				boolean same = r < typeIds.length;
+				try {
+					if (t == 0 && sub == 0) {
+						rr = same && typeIds[r] == 0 ? rotTracks : AnimTrack.parse(b, at + sd.offset, sd.trackCount, false);
+					} else if (t == 0 && sub == 1) {
+						rt = same && typeIds[r] == 5 ? posTracks : AnimTrack.parse(b, at + sd.offset, sd.trackCount, true);
+					} else if (t == 10 && sd.unk10 == 4) {
+						recordChannels.set(r, same && typeIds[r] == 10 ? channelGroups.get(r) : AnimTrack.parse(b, at + sd.offset, sd.trackCount, true));
+					}
+				} catch (RuntimeException e) {
+					// 해석 실패 — 그 디스크립터만 빈 채로
+				}
+			}
+		}
+		recordRotation = rr;
+		recordTranslation = rt;
+	}
+
+	/**
+	 * {@link #records} 배치의 자세: 회전 {@link #recordRotation} + 이동 {@link #recordTranslation} (절대 키 + 가산, 키 없는 관절은 아이들 로컬).
+	 * 예전 {@link #sample} 의 보정 규칙 (타입 11 이동, 운반 관절, 로케이터) 은 쓰지 않는다 — 원작 배치에서는 필요 없다.
+	 * 예: ATHN03A GateExplosion 관절 2 Fireball03GE — 디스크립터 1 (예전 "타입 10") 프레임 0 (−36.9, −69.7, −408.4) → 1 = 바인드 로컬 → 가산
+	 * (−0.84, +5.98, +39.8)/프레임 = 성문 쪽으로 난다; 예전 {@link #sample} 은 디스크립터 4 (생성률 150, 예전 "타입 11") 를 관절 2 x 로 읽어 불덩이가 1000 옆으로 뛰었다.
+	 */
+	public Pose sampleRecords(Skeleton sk, float t, boolean loop) {
+		Baked bk;
+		synchronized (this) {
+			bk = bakedRecords.computeIfAbsent(sk, s -> bakeTracks(s, recordRotation, recordTranslation));
+		}
+		return samplePose(bk, sk, t, loop);
+	}
+
+	/** {@link #channel} 을 {@link #recordChannels} (원작 채널 id) 로. */
+	public float recordChannel(int id, int stream, float t, float def) {
+		return id < 0 || id >= recordChannels.size() ? def : channelValue(recordChannels.get(id), stream, t, def);
 	}
 
 	private static List<ByteTrack> parseBytes(ByteBuffer b, int at, int entries, float ft) {
@@ -301,8 +386,12 @@ public final class Animation {
 		if (group < 0 || group >= channelGroups.size()) {
 			return def;
 		}
+		return channelValue(channelGroups.get(group), stream, t, def);
+	}
+
+	private float channelValue(List<AnimTrack> tracks, int stream, float t, float def) {
 		float f = t / frameTime;
-		for (AnimTrack tr : channelGroups.get(group)) {
+		for (AnimTrack tr : tracks) {
 			if (tr.additive()) {
 				continue;
 			}
@@ -423,6 +512,38 @@ public final class Animation {
 		return new Baked(frames, outR, outP);
 	}
 
+	/** 회전·이동 트랙만으로 펼친다 ({@link #sampleRecords}) — 초기값·적용 순서는 {@link #doBake} 와 같다. */
+	private Baked bakeTracks(Skeleton sk, List<AnimTrack> rotT, List<AnimTrack> posT) {
+		int nj = sk.size();
+		int frames = Math.round(duration / frameTime) + 1;
+		for (AnimTrack t : rotT) {
+			frames = Math.max(frames, t.endFrame() + 1);
+		}
+		for (AnimTrack t : posT) {
+			frames = Math.max(frames, t.endFrame() + 1);
+		}
+		float[] rot = new float[nj * 4];
+		float[] pos = new float[nj * 4];
+		for (int j = 0; j < nj; j++) {
+			float qs = sk.joints.get(j).quaternion() ? Skeleton.IDLE_QUAT_TO_ANIM : 1f;
+			for (int c = 0; c < 4; c++) {
+				rot[j * 4 + c] = sk.idleRot[j][c] * qs;
+			}
+			for (int c = 0; c < 3; c++) {
+				pos[j * 4 + c] = sk.idlePos[j][c];
+			}
+		}
+		float[][] outR = new float[frames][];
+		float[][] outP = new float[frames][];
+		for (int f = 0; f < frames; f++) {
+			apply(rotT, rot, f, nj);
+			apply(posT, pos, f, nj);
+			outR[f] = rot.clone();
+			outP[f] = pos.clone();
+		}
+		return new Baked(frames, outR, outP);
+	}
+
 	private static void apply(List<AnimTrack> tracks, float[] cur, int f, int nj) {
 		for (AnimTrack t : tracks) {
 			if (t.additive() && f > t.start() && f <= t.start() + t.count()) {
@@ -454,7 +575,10 @@ public final class Animation {
 	 * @param loop true 면 t 를 duration 으로 감싼다, false 면 [0, duration] 으로 자른다
 	 */
 	public Pose sample(Skeleton sk, float t, boolean loop) {
-		Baked bk = bake(sk);
+		return samplePose(bake(sk), sk, t, loop);
+	}
+
+	private Pose samplePose(Baked bk, Skeleton sk, float t, boolean loop) {
 		float len = (bk.frames - 1) * frameTime;
 		if (len <= 0) {
 			t = 0;

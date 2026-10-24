@@ -65,6 +65,12 @@ WAD 안에서는 소문자 (`goeyebeam`), 조회는 대소문자 무시 (Hash127
 - 채널이 없는 이미터(헤더 링크 −1)는 FXC 상수 생성률: stdbolt 150/초, dedred 60/초 — 소유자가 끌 때까지.
 - 링크 번호는 있는데 해당 디스크립터가 없는 1회성 (bolthit 단계 2 의 emitter1 600/초): 처음 0.1초만 생성 [근사].
 
+- **정정 2 (2026-10-24, 05 §2.8.1)**: 링크 = **원작 채널 id** = 세트 데이터 타입 항목 p2 의 앞 합 (0x100EA8 → 채널 +0x1C, 0x130240 이 링크와 비교) = act 디스크립터 번호
+  **(디스크립터 표가 Σ p2 개일 때)**. 예전 파서는 디스크립터를 항목 수만큼만 읽고 항목 형으로 표시해 타입 0 (p2 3) 뒤가 2 칸씩 밀렸다 — 위 combo3fExplode 의 "10/4 빈 · 10/2" 는
+  실제로 타입 0 의 이동 · 스케일 디스크립터, ATHN03A GateExplosion 링크 4 (FBFemit2GE, 생성률 150) 는 "타입 11" 로 보여 채널이 없었고, 메두사 머리 mewh "off" 의 링크 3
+  (Σ p2 = 4 째) 은 읽히지도 않았다. 원작 배치 = `Animation.recordChannels` · `recordChannel` (관절 이미터 이펙트 — Animator·하늘 GO — 만 쓴다, `EffectDef.rate(…, records)`);
+  나머지 이펙트는 아직 예전 배치 (`channelGroups`, 전환은 후속 — 05 §2.8.1). GateExplosion 링크 22–25 (폭발 이미터) 는 채널 13 개 밖이라 원작에서도 곡선이 없다 [확실: 데이터].
+
 구현: `Animation.channelGroups` (디스크립터별 트랙), `Animation.channel(group, stream, t, def)`, `EffectDef.rate/param`.
 
 ### 3.1 PTC VU 프로그램 3 상수 [확실 — 전체 해석은 16 문서 §2.4]

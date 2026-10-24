@@ -49,9 +49,29 @@ public final class SkinnedModel {
 			this.attachJoint = attachJoint;
 		}
 
-		/** true 면 inverse bind 없이 관절 월드 행렬을 그대로 쓴다. */
+		/**
+		 * 스켈레톤을 모를 때의 예전 규칙 (부착 관절 ≠ 0 이면 관절 로컬). 스켈레톤이 있으면 {@link #jointLocal(Skeleton)} 을 쓴다.
+		 */
 		public boolean jointLocal() {
 			return attachJoint != 0;
+		}
+
+		/**
+		 * true 면 inverse bind 없이 관절 월드 행렬을 그대로 쓴다 (정점이 관절 로컬 공간).
+		 * <p>
+		 * 부착 관절 (파트 jointRefs[0]) 이 0 이 아니고 <b>그 관절에 inverse bind 가 있을 때만</b> 관절 로컬이다 — 미노타우로스 다리 (STB),
+		 * R_SKD 몸 (턱), 히어로 블레이드 등: 그 파트들의 inverse bind 는 보통 모델 공간 (invBind·bindWorld = I) 이고 정점은 관절마다 강체 [확실: 데이터].
+		 * 부착 관절에 inverse bind 가 없으면 (Ares {@code group9} 배율 2.91 노드, TIT {@code scale}, DMCdog {@code dogHead}, 키클롭스 피 관절,
+		 * 메두사 광선 {@code trail1} …) 파트 정점은 <b>부착 관절 공간의 바인드 메시</b>이고 inverse bind 가 그 공간 기준이다
+		 * (invBind·bindWorld = bindWorld[부착], 오차 0.000 — 43 §16) → 모델 공간 파트처럼 skin (invBind·world) 을 쓴다.
+		 * 이전 규칙 (부착 ≠ 0 이면 무조건 world) 은 그런 파트를 관절 위치만큼 한 번 더 옮겨 몸이 늘어난 삼각형으로 찢어졌다
+		 * (도시 위 거대한 아레스, 키클롭스 R_CY2/CY3/CYW 의 노란·분홍 큰 삼각형) [추정: 원작 VU1 팔레트 미해독, 데이터 일치].
+		 */
+		public boolean jointLocal(Skeleton sk) {
+			if (attachJoint == 0) {
+				return false;
+			}
+			return sk == null || attachJoint >= sk.size() || sk.joints.get(attachJoint).hasInverseBind();
 		}
 	}
 
@@ -191,23 +211,28 @@ public final class SkinnedModel {
 	/** 포즈 적용 TriMesh (미리보기 렌더러 입력). pose 가 null 이면 원본 정점. */
 	public TriMesh posed(Skeleton sk, Pose pose) {
 		if (pose == null) {
-			return posed((float[][]) null, null);
+			return posed(sk, null, null);
 		}
 		float[][] world = pose.world(sk);
-		return posed(world, sk.skin(world));
+		return posed(sk, world, sk.skin(world));
+	}
+
+	/** {@link #posed(Skeleton, float[][], float[][])} 를 스켈레톤 없이 (예전 규칙 {@link Part#jointLocal()}). */
+	public TriMesh posed(float[][] world, float[][] skinMats) {
+		return posed(null, world, skinMats);
 	}
 
 	/**
-	 * 정점 변환. 모델 공간 파트는 skin(= invBind·world), 관절 로컬 파트({@link Part#jointLocal()})는 world 를 쓴다.
-	 * 둘 다 null 이면 원본 정점.
+	 * 정점 변환. 모델 공간 파트는 skin(= invBind·world), 관절 로컬 파트({@link Part#jointLocal(Skeleton)})는 world 를 쓴다.
+	 * 둘 다 null 이면 원본 정점. sk 가 null 이면 예전 규칙 (부착 관절 ≠ 0 → 관절 로컬).
 	 */
-	public TriMesh posed(float[][] world, float[][] skinMats) {
+	public TriMesh posed(Skeleton sk, float[][] world, float[][] skinMats) {
 		TriMesh t = new TriMesh(name);
 		float[] a = new float[3];
 		float[] b = new float[3];
 		for (Part p : parts) {
 			TriMesh.Sub s = new TriMesh.Sub(p.name, p.material);
-			float[][] skin = p.jointLocal() ? world : skinMats;
+			float[][] skin = (sk != null ? p.jointLocal(sk) : p.jointLocal()) ? world : skinMats;
 			s.hasNormal = false;
 			for (int i = 0; i < p.pos.size(); i++) {
 				float[] v = p.pos.get(i);

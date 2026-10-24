@@ -149,8 +149,8 @@ Fire(e, sender)     0x1A98C0  (큐에서 꺼낼 때)
 | 2 | Clamp | v, lo, hi → float | min(max(v, lo), hi) |
 | 3 | RandomRange | a, b → float | a + rand·(b−a) (`0x13E600`) |
 | 4 | Sqrt | x → float | |
-| 5 | FadeOut | r, g, b, sec | 화면 페이드 (0x303D50 상태 1, 프레임 = sec·60) |
-| 6 | FadeIn | sec | 상태 2 |
+| 5 | FadeOut | r, g, b, sec | 화면 페이드 0x1AFA20: 상태 0x303D50 이 1 이면 무시, 색 + n = cvt.w.s(sec / 0.016666668) (1 초 = 59), 진행 중이면 현재 = (전체 − 현재)·n / 전체, 상태 1 (43 §16, `ScreenFade`) |
+| 6 | FadeIn | sec | 0x1AFAD4: 상태 1 일 때만 → 상태 2, 같은 식. 매 프레임 0x1AF648 이 색 사각형 0x2C8F50 알파 (상태 1 = 현재/전체, 2 = 1 − 그것), 어둡게 끝나도 덮인 채 |
 | 7 | FindObject | name → 핸들 | 오브젝트 이름 검색 |
 | 8 | Printf | fmt, 4개 | 디버그 출력 (`0x245650`) |
 | **9..12** | **EventArg** | i → (float/int/bool/string) | **현재 엔티티가 받은 이벤트 인자 i(0..2)** (+0x5C + 4i). 호출 반환형만 다르다 (1195회 = 최다) |
@@ -166,7 +166,7 @@ case 별 스택 감소량으로 읽고, **전 레벨 모든 핸들러를 실행�
 | 인자 | N |
 |------|---|
 | 0 | 0 CheckPoint, 1 GetPlayTime, 5 Warp, 0xD, 0xE, 0x13 FailedScreen, 0x20, 0x21..0x2D(미구현 case) |
-| 1 | 3 LoadWad, 4 LoadForWarp, 6 LoadCheck, 7 Goto, 8 SwitchCamera(카메라 관리자 `0x1EE658`), 9 CameraCtl?(bool, `0x1EE730`), 0xB 질문(msgId → 답 1021, 42 문서 §2), 0xC Idle, 0xF, 0x10 ZoneTitle, 0x11, 0x12, 0x14..0x1A (타이머 계열), 0x1C MusicGroupStop(sec), 0x1E, 0x2E, 0x2F CompleteGame, 0x3A SetEndGame |
+| 1 | 3 LoadWad, 4 LoadForWarp, 6 LoadCheck, 7 Goto, 8 SwitchCamera(카메라 관리자 `0x1EE658`), 9 CameraCtl?(bool, `0x1EE730`), 0xB 질문(msgId → 답 1021, 42 문서 §2), 0xC Idle, 0xF, 0x10 ZoneReport (구역 제목 = 메시지 800 + 구역, 11 문서 §6), 0x11, 0x12, 0x14..0x1A (타이머 계열), 0x1C MusicGroupStop(sec), 0x1E, 0x2E, 0x2F CompleteGame, 0x3A SetEndGame |
 | 2 | 2 Load(wad, entry), 0xA ShowMessage(msg, sec), 0x1B MusicGroupStart(name, sec), 0x31, 0x33, 0x36, 0x38 PlaySound? |
 | 3 | 0x1D MusicGroupParam?(4, 0, 5.0), 0x1F ShowItemCard(msg, sec, kind) |
 | 4 / 5 | 0x34, 0x35 / 0x37 |

@@ -19,6 +19,8 @@ import java.util.List;
  * 0x14 u32 totalActCount
  * 0x18 u32 groupOffset[groupCount]
  *      DataType[dataTypeCount] { u16 typeId, u8 p1, u8 p2 }   (0 회전, 5 이동, 3 머티리얼색, 8 UV, 9 텍스처 시트, 10/11/12 부속)
+ *        p2 = 그 항목이 act 에서 차지하는 상태 디스크립터 수 (타입 0 = 3: 회전·이동·스케일, 히어로 등 4) — 원작 채널 id = 앞 항목 p2 합
+ *        (0x100EA8) [확실: 코드 + 데이터]. 타입 표시 "5 이동" 은 항목 번호 배치의 착시다 ({@link Animation#records}, 05 문서 §2.8.1)
  * 그룹: 0x00 u32 index, 0x04 u32 firstAct, 0x08 u32 flags (0x20000 = 외부), 0x0C u32 actCount,
  *       0x14 char name[24], 0x30 u32 actOffset[actCount] (그룹 기준)
  * 외부 그룹 (0x10003, 레벨 WAD 의 ANM_hero_Athn01A, R_MIN 의 ANM_MAIMIN 등):
@@ -82,10 +84,19 @@ public final class AnimationSet {
 		if (!g.external() || forceActs) {
 			int n = b.getInt(go + 0xC);
 			for (int j = 0; j < n; j++) {
-				g.acts.add(new Animation(g.name, b, go + b.getInt(go + 0x30 + j * 4), typeIds));
+				g.acts.add(new Animation(g.name, b, go + b.getInt(go + 0x30 + j * 4), typeIds, recordCounts()));
 			}
 		}
 		return g;
+	}
+
+	/** 항목마다 차지하는 act 상태 디스크립터 수 (p2 — 원작 채널 id 증분 0x100EA8, {@link Animation#records}). */
+	int[] recordCounts() {
+		int[] n = new int[typeIds.length];
+		for (int i = 0; i < n.length; i++) {
+			n[i] = typeParams[i][1];
+		}
+		return n;
 	}
 
 	/** 외부 그룹 리소스(0x10003)를 붙인다. index 가 맞는 외부 그룹을 채우면 true. */

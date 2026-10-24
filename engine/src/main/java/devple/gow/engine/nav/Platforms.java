@@ -64,6 +64,11 @@ public final class Platforms {
 		/** 충돌 켜짐 — 스크립트 Vis Attr11_0 (1 켬 / 2 끔: "collisionOFF", "DoorCollOff") [추정: 슬롯 이름은 미확정, 데이터 용례로]. */
 		public boolean solid = true;
 
+		/** 인스턴스 월드 행렬 (행벡터, {@code GoInstance.matrix()}) — Animator 이펙트 기준 (GameScene.startAnimatorEffects). */
+		public float[] instanceMatrix() {
+			return inst;
+		}
+
 		Body(String owner, Skeleton sk, float[] inst, AnimationSet anims, BallHull hull) {
 			this.owner = owner;
 			this.skeleton = sk;

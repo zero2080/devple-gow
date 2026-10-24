@@ -296,6 +296,42 @@ public final class Renderer implements AutoCloseable {
 		return true;
 	}
 
+	/**
+	 * 화면 전체를 색 (r, g, b) · 불투명도 a 로 덮는다 — 스크립트 FadeOut/FadeIn (원작 0x2C8F50 색 사각형 노드 0x121688, 43 §16).
+	 * 정점색이 검정인 {@code fullscreen} 대신 흰 정점 사각형에 색을 곱한다.
+	 */
+	public void overlay(float r, float g, float b, float a) {
+		if (a <= 0f) {
+			return;
+		}
+		if (fullscreenWhite == null) {
+			fullscreenWhite = new MeshBuilder()
+					.vertex(-1, -1, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1)
+					.vertex(1, -1, 0, 0, 0, 1, 1, 0, 1, 1, 1, 1)
+					.vertex(1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1)
+					.vertex(-1, -1, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1)
+					.vertex(1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1)
+					.vertex(-1, 1, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1)
+					.build(GL_TRIANGLES);
+		}
+		glDisable(GL_DEPTH_TEST);
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		basic.use();
+		basic.set("uViewProj", identity);
+		basic.set("uModel", identity);
+		basic.set("uUseTex", 0);
+		basic.set("uLit", 0);
+		basic.set("uFogMode", 0);
+		basic.set("uTint", new Vector4f(r, g, b, Math.min(a, 1f)));
+		fullscreenWhite.draw();
+		basic.set("uTint", new Vector4f(1, 1, 1, 1));
+		glDisable(GL_BLEND);
+		glEnable(GL_DEPTH_TEST);
+	}
+
+	private Mesh fullscreenWhite;
+
 	public void endFrame(float fade) {
 		if (fade <= 0f) {
 			return;
@@ -330,6 +366,9 @@ public final class Renderer implements AutoCloseable {
 			warmup.close();
 		}
 		fullscreen.close();
+		if (fullscreenWhite != null) {
+			fullscreenWhite.close();
+		}
 		white.close();
 		basic.close();
 	}

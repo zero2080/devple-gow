@@ -123,6 +123,12 @@ ATHN01A `nightSky` 는 반지름 ~1024 의 **미니어처 세계**: 바다면 `l
 ATHN01A 의 "바다 표면" 은 별도 물 객체가 아니라 이 하늘 미니어처다 (SCR_Water 없음).
 SCR_Sky 는 대개 **모델 템플릿**(소유자 MDL_x)에 붙어 있다: ATHN03A/ARENA `MDL_group2`, ATHN05A `MDL_skyLR`, PAND01BB `MDL_group1224`, PAND04E `MDL_ShitBoxl`·`MDL_group3508`,
 ATHN02B·PAND04AA·PAND04C 는 하늘 2개 (본 + FX). 이름에 sky 가 없는 것이 많아 이름 휴리스틱으로는 못 찾는다 (43 §2.1).
+- **본문 없는 인스턴스 SCR_Sky** (2026-10-24, 43 §16) [확실: 0x218920 / 0x218848 디스어셈블]: 생성자·매 프레임 갱신은 본문 (오브젝트 이름) 을 읽지 않고 스크립트의
+  **소유 GO** (+0x18) 를 옮기며 그 모델을 층 1 (0x218778 → 0x150738(모델, 1), 렌더 플래그 &= ~0x800 = 동적 조명 끔) 로 둔다. ATHN03A/03AA/03C 의 `goaresanimgroup1`
+  (도시 위 거대한 아레스, 템플릿 MDL_AresAnimGroup1 에는 SCR_Sky 가 없다) 이 이 경우 — 엔진 `EnvParams.skyOwners`, `LevelScene.skyNames`. 애니가 있으면 하늘 단계에서
+  매 프레임 스키닝 (관절 0 = 눈, 반복 시작 act = 레벨 시간), 이미터는 하늘 공간 (`GameScene.startSkyEffects`). SCR_AresSky (ATHN03D/03E, 0x2189A8 무작위 act 순환) 는 미구현.
+- **두 슬롯**: 하늘 GO 도 가시 칸 컨텍스트 (CXT_bvsky 등) 를 따르므로, 현재 레벨의 칸 밖으로 눈이 나가면 그 레벨 하늘은 숨고 다른 슬롯 레벨의 같은 하늘이 보인다
+  (ATHN03AA 계단 위 → ATHN03A 원형 제단). 엔진은 다른 슬롯 장면의 하늘 GO 를 하늘 단계에서 함께 그린다 (`LevelScene.skyNeighbour`).
 
 ### 1.5 SCR_Weather
 | 오프셋 | 필드 | 신뢰도 |

@@ -117,6 +117,13 @@ public final class EffectSystem implements AutoCloseable {
 		 * 상자 종류별 magic/health/power/plain 관절).
 		 */
 		public boolean[] jointMask;
+		/**
+		 * 이미터를 붙은 관절에 둔다 (FXC 노드 헤더 +0x08 = 관절, {@code LevelEmitters} 와 같은 이미터 월드 = FXC 로컬 · 관절 월드 · GO 월드).
+		 * 관절 자세와 생성률·속력 채널은 원작 디스크립터 배치 ({@code EffectDef.pose} = {@code Animation.sampleRecords}, {@code Animation.recordChannels}).
+		 * Animator 가 튼 레벨 GO (ATHN03A 불덩이) 와 하늘 GO 에 켠다 — 다른 이펙트는 예전처럼 GO 원점 + 로컬 이동, 예전 배치 채널 (05 문서 §2.8.1).
+		 */
+		public boolean jointEmitters;
+		private float[][] bindWorld;
 		private final List<ParticleSystem.Emitter> emitters = new ArrayList<>();
 		private final Matrix4f world = new Matrix4f();
 		private final Matrix4f tmp = new Matrix4f();
@@ -195,7 +202,7 @@ public final class EffectSystem implements AutoCloseable {
 		public float[] rates() {
 			float[] r = new float[def.emitters().size()];
 			for (int i = 0; i < r.length; i++) {
-				r[i] = def.rate(act, def.emitters().get(i), act == def.anim() ? time : actTime);
+				r[i] = def.rate(act, def.emitters().get(i), act == def.anim() ? time : actTime, jointEmitters);
 			}
 			return r;
 		}
@@ -236,39 +243,63 @@ public final class EffectSystem implements AutoCloseable {
 					emitters.add(e);
 				}
 			}
+			float[][] jointWorld = null;
+			if (jointEmitters && def.skeleton() != null) {
+				if (act != null) {
+					jointWorld = def.pose(act, act == def.anim() ? time : actTime).world(def.skeleton());
+				} else {
+					if (bindWorld == null) {
+						bindWorld = def.skeleton().bindWorld();
+					}
+					jointWorld = bindWorld; // 애니 없는 GO (하늘 group2): 바인드 관절
+				}
+			}
 			for (int i = 0; i < emitters.size(); i++) {
 				EffectLibrary.EmitterDef ed = def.emitters().get(i);
 				ParticleSystem.Emitter e = emitters.get(i);
 				FxResources.Emitter fx = ed.fxc();
 				float[] lt = fx.local();
-				Vector3f lp = new Vector3f(lt[12], lt[13], lt[14]);
-				if (lp.length() > 64) {
-					lp.zero(); // Maya 장면 좌표가 남은 이미터 (Fsliceemit 407,0,1344 등) → 원점 [근사]
-				}
-				world.transformPosition(lp, e.pos);
-				// PTC 0x10/0x20 (파티클이 소유자 회전/이동을 따름) 용 시스템 행렬 = 이펙트 월드 (배율 제거) [확실: 0x15BE18]
-				e.space.set(world).normalize3x3();
-				e.normal.set(planeNormal);
-				// 방향: FXC 로컬 회전(정규화) · dir, 그다음 이펙트 월드 회전
+				int j = fx.header().length > 0 ? fx.header()[0] : -1;
 				float[] d = fx.subtype() == 1 || fx.subtype() == 8 ? fx.dir() : new float[]{0, 1, 0};
-				Vector3f ld = localDir(lt, d);
-				tmp.set(world).transformDirection(ld);
-				if (ld.lengthSquared() > 1e-8f) {
-					e.dir.set(ld).normalize();
+				if (jointWorld != null && j >= 0 && j < jointWorld.length) {
+					// 관절 이미터: (행벡터) FXC 로컬 · 관절 월드 · GO 월드 = 열벡터 GO · 관절 · 로컬 (LevelEmitters 와 같은 곱, 로컬 이동을 자르지 않음)
+					Matrix4f em = new Matrix4f(world).mul(new Matrix4f().set(jointWorld[j])).mul(new Matrix4f().set(lt));
+					em.getTranslation(e.pos);
+					e.space.set(world).mul(new Matrix4f().set(jointWorld[j])).normalize3x3();
+					e.normal.set(planeNormal);
+					Vector3f ld = em.transformDirection(new Vector3f(d[0], d[1], d[2]));
+					if (ld.lengthSquared() > 1e-8f) {
+						e.dir.set(ld).normalize();
+					}
+				} else {
+					Vector3f lp = new Vector3f(lt[12], lt[13], lt[14]);
+					if (lp.length() > 64) {
+						lp.zero(); // Maya 장면 좌표가 남은 이미터 (Fsliceemit 407,0,1344 등) → 원점 [근사]
+					}
+					world.transformPosition(lp, e.pos);
+					// PTC 0x10/0x20 (파티클이 소유자 회전/이동을 따름) 용 시스템 행렬 = 이펙트 월드 (배율 제거) [확실: 0x15BE18]
+					e.space.set(world).normalize3x3();
+					e.normal.set(planeNormal);
+					// 방향: FXC 로컬 회전(정규화) · dir, 그다음 이펙트 월드 회전
+					Vector3f ld = localDir(lt, d);
+					tmp.set(world).transformDirection(ld);
+					if (ld.lengthSquared() > 1e-8f) {
+						e.dir.set(ld).normalize();
+					}
 				}
 				float at = act == def.anim() ? time : actTime;
 				float ct = act != null && act.looping() && act.duration > 0 ? at % act.duration : at;
-				e.rate = (rateOverride >= 0 ? rateOverride : def.rate(act, ed, at)) * lodScale * rateScale;
+				e.rate = (rateOverride >= 0 ? rateOverride : def.rate(act, ed, at, jointEmitters)) * lodScale * rateScale;
 				if (emitterOff != null && emitterOff.test(ed)) {
 					e.rate = 0;
 				}
 				if (emitterRate != null) {
 					e.rate *= (float) emitterRate.applyAsDouble(ed);
 				}
-				e.speed = def.param(act, ed, 4, ct, fx.speed()) * 16 * Math.min(s, 4f) * speedScale;
-				e.speedRnd = def.param(act, ed, 5, ct, fx.speedRnd()) * 16 * Math.min(s, 4f) * speedScale;
+				e.speed = def.param(act, ed, 4, ct, fx.speed(), jointEmitters) * 16 * Math.min(s, 4f) * speedScale;
+				e.speedRnd = def.param(act, ed, 5, ct, fx.speedRnd(), jointEmitters) * 16 * Math.min(s, 4f) * speedScale;
 				if (fx.subtype() == 1 || fx.subtype() == 8) {
-					e.cone = def.param(act, ed, 3, ct, fx.spread());
+					e.cone = def.param(act, ed, 3, ct, fx.spread(), jointEmitters);
 				}
 				e.sizeScale = Math.min(s, 6f);
 			}

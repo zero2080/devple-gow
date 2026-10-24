@@ -138,6 +138,44 @@ public final class LevelScene implements Scene {
 	}
 
 	private final List<Ambient> ambient = new ArrayList<>();
+
+	/**
+	 * 반복 act 를 재생하는 하늘 GO (SCR_Sky 소유자 + 시작 act 반복). 원작 0x218848 은 소유 GO 위치를 매 프레임 카메라로 옮기고
+	 * 모델을 층 1 (하늘) 에 두며 동적 조명 플래그 0x800 을 끈다 (0x218778) [확실]. 애니 컴포넌트는 다른 GO 처럼 계속 돈다.
+	 *
+	 * @param off 관절 0 월드 (정적 하늘과 같은 규칙: 이 점이 카메라 눈에 온다)
+	 */
+	private record SkyAmbient(Ambient anim, Vector3f off) {
+	}
+
+	private final List<SkyAmbient> skyAmbient = new ArrayList<>();
+
+	/** 애니 하늘 GO 이름 (소문자) — 로그·시험용. */
+	public List<String> skyAmbientNames() {
+		return skyAmbient.stream().map(s -> s.anim().key()).toList();
+	}
+
+	/**
+	 * 하늘 GO 하나 (SCR_Sky 소유자): 관절 0 월드 {@code off} 가 카메라 눈에 온다 (0x218848). 이미터도 GO 컴포넌트라 같이 옮겨진다 —
+	 * ATHN03A/03AA group2 의 도시 화톳불 FPemit* (관절 0 기준 (±100, −72, −130..−400)), 거대한 아레스 goaresanimgroup1 의 불붙은 바위 BFBemit (관절 34, 600/초)
+	 * · 던지는 불덩이 FBFemit (관절 23, 19 초쯤 400/초) · 재 ASH* (GameScene.startSkyEffects, 43 §16).
+	 *
+	 * @param act   반복 재생하는 시작 act (없으면 null = 바인드/시작 자세 고정), start = 시작 시간
+	 */
+	public record SkyGo(String name, Vector3f off, float[] inst, devple.gow.tools.anim.Animation act, float start) {
+	}
+
+	private final List<SkyGo> skyGos = new ArrayList<>();
+
+	/** 하늘 GO 전부 (정적·애니). */
+	public List<SkyGo> skyGos() {
+		return skyGos;
+	}
+
+	/** 레벨 효과 시간 (하늘 반복 act 시간 = 시작 시간 + 이 값). */
+	public float fxTime() {
+		return fx != null ? fx.env().time() : 0;
+	}
 	/** SCR_Mirror 반사 평면 (Mirrors). */
 	private final List<Mirrors.Mirror> mirrors = new ArrayList<>();
 	private int mirrorQuery;
@@ -305,6 +343,14 @@ public final class LevelScene implements Scene {
 				// ATHN01A nightSky: 관절 0 = (0,448,0), 미니어처 바다면 y=432 → 지평선이 눈높이 바로 아래
 				float[] j0 = p.jointWorld()[0];
 				off.set(j0[12], j0[13], j0[14]);
+				skyGos.add(new SkyGo(p.instance().name().toLowerCase(Locale.ROOT), new Vector3f(off), p.instance().matrix(),
+						amb != null ? amb.act() : null, amb != null ? amb.start() : 0));
+				if (amb != null) {
+					// 반복 act 가 있는 하늘 GO (ATHN03A/03AA/03C 거대한 아레스 goaresanimgroup1, act 1 aoBAR1a03Hl09 29.7 초):
+					// 구운 시작 자세 대신 매 프레임 스키닝으로 하늘 단계에 그린다 (renderSkyAmbient)
+					skyAmbient.add(new SkyAmbient(amb, new Vector3f(off)));
+					continue;
+				}
 			}
 			devple.gow.engine.light.ShadowGeometry shadow = null;
 			if (!sky && p.object().skeleton() != null && System.getProperty("gow.noshadow") == null
@@ -403,7 +449,7 @@ public final class LevelScene implements Scene {
 		prepare();
 		glStep(e, Long.MAX_VALUE);
 		System.out.printf(Locale.ROOT, "레벨 %s: 렌더 인스턴스 %d (하늘 %d, 시작 act 자세 %d, 반복 재생 %d, 거울 %d), 충돌 삼각형 %d, 볼륨 %d, 카메라 %d%n",
-				assets.wad().name(), instances.size(), instances.stream().filter(Instance::sky).count(), startPosed, ambient.size(), mirrors.size(),
+				assets.wad().name(), instances.size(), instances.stream().filter(Instance::sky).count() + skyAmbient.size(), startPosed, ambient.size(), mirrors.size(),
 				collision.triangles().size(), data.volumes.size(), data.placedCameras.size());
 		if (Boolean.getBoolean("gow.debug") && !ambient.isEmpty()) {
 			System.out.println("반복 재생 배치: " + ambientNames());
@@ -445,7 +491,9 @@ public final class LevelScene implements Scene {
 		if (System.nanoTime() >= deadline) {
 			return false;
 		}
-		fx = new LevelFx(e, assets, data, instances, wadPath);
+		java.util.Set<String> skyOwners = new java.util.HashSet<>();
+		skyGos.forEach(s -> skyOwners.add(s.name()));
+		fx = new LevelFx(e, assets, data, instances, wadPath, skyOwners); // 하늘 GO 이미터는 하늘 공간에서 (GameScene.startSkyEffects)
 		return true;
 	}
 
@@ -532,14 +580,22 @@ public final class LevelScene implements Scene {
 				out.add(s.object().trim().toLowerCase(Locale.ROOT));
 			}
 		}
+		// 본문 없는 인스턴스 SCR_Sky 의 소유 GO (원작 0x218848 은 스크립트 소유 GO 를 옮긴다 — 본문을 읽지 않음, 16 §1.4):
+		// ATHN03A/03AA/03C goaresanimgroup1 (도시 위 거대한 아레스, 템플릿 MDL_AresAnimGroup1 에는 SCR_Sky 가 없다)
+		for (String o : env.skyOwners) {
+			if (o != null && !o.isBlank()) {
+				out.add(o.trim().toLowerCase(Locale.ROOT));
+			}
+		}
 		return out;
 	}
 
-	/** 배치가 SCR_Sky 대상인가: 모델 이름(MDL_x) 또는 오브젝트 이름이 SCR_Sky 이름과 같다. */
+	/** 배치가 SCR_Sky 대상인가: 모델 이름(MDL_x)·오브젝트 이름·GO 인스턴스 이름이 SCR_Sky 이름과 같다. */
 	static boolean isScrSky(LevelLayout.Placement p, java.util.Set<String> skyNames) {
 		String mdl = p.model();
 		return (mdl != null && skyNames.contains(mdl.toLowerCase(Locale.ROOT)))
-				|| skyNames.contains(p.object().name().toLowerCase(Locale.ROOT));
+				|| skyNames.contains(p.object().name().toLowerCase(Locale.ROOT))
+				|| skyNames.contains(p.instance().name().toLowerCase(Locale.ROOT));
 	}
 
 	private boolean isSky(LevelLayout.Placement p, GowModel gm) {
@@ -730,11 +786,9 @@ public final class LevelScene implements Scene {
 		frameCam = cam;
 		int stage = devple.gow.engine.render.DrawStage.set(devple.gow.engine.render.DrawStage.ALL);
 		glDepthMask(false);
-		for (Instance i : instances) {
-			if (i.sky() && !dbgHidden("sky") && !ctxHidden.contains(i.name().toLowerCase(Locale.ROOT))) {
-				tmp.translation(cam.eye.x - i.offset().x, cam.eye.y - i.offset().y, cam.eye.z - i.offset().z);
-				e.renderer().draw(i.model(), tmp);
-			}
+		drawSkyObjects(e, cam, fx.env().time());
+		if (skyNeighbour != null && skyNeighbour != this) {
+			skyNeighbour.drawNeighbourSky(e, cam, fx.env().time());
 		}
 		glDepthMask(true);
 		devple.gow.engine.render.DrawStage.set(stage);
@@ -1114,6 +1168,102 @@ public final class LevelScene implements Scene {
 			drawPosed(e, cam, a.key(), w, a.act().hiddenJoints(a.skeleton(), ((t % len) + len) % len));
 		}
 		FxEnvironment.disableFog(skinned);
+	}
+
+	/**
+	 * 다른 슬롯 레벨 장면 (GameScene 이 매 프레임 건다, 없으면 null): 하늘 단계에 그 레벨의 하늘 GO 도 그린다. 원작은 두 슬롯 레벨이 함께 상주해
+	 * 각 슬롯의 SCR_Sky GO 가 자기 가시 칸 결과대로 그려진다 — ATHN03AA 가 현재인 채 눈이 ATHN03A 쪽 (z &lt; −40) 으로 가면 ATHN03AA 의 하늘
+	 * (CXT_bvsky) 은 칸 밖이라 숨고 ATHN03A 의 같은 하늘이 보인다 (sparky 영상 camSpecialSparky 가 원형 제단 위로 나가는 동안, 계단 위에서 ATHN03A 로
+	 * 걸어 들어가는 동안). 엔진은 현재 레벨 하늘만 그려 하늘이 검게 비었다 (43 §16) [확실: 가시 칸 데이터 / 근사: 두 슬롯 렌더 구조].
+	 */
+	public LevelScene skyNeighbour;
+
+	/** 하늘 GO (정적 + 애니) — 가시 칸으로 숨은 것 제외, 깊이 쓰기는 호출자가 끈 상태. time = 애니 하늘의 효과 시간. */
+	private void drawSkyObjects(Engine e, Camera cam, float time) {
+		for (Instance i : instances) {
+			if (i.sky() && !dbgHidden("sky") && !ctxHidden.contains(i.name().toLowerCase(Locale.ROOT))) {
+				tmp.translation(cam.eye.x - i.offset().x, cam.eye.y - i.offset().y, cam.eye.z - i.offset().z);
+				e.renderer().draw(i.model(), tmp);
+			}
+		}
+		renderSkyAmbient(e, cam, time);
+	}
+
+	/**
+	 * 다른 슬롯으로서 하늘 GO 를 그린다 ({@link #skyNeighbour}): 이 레벨의 가시 칸 (같은 눈) 으로 거르고, 애니 하늘은 현재 레벨의 효과 시간으로
+	 * (다른 슬롯 장면은 갱신하지 않는다 — 원작 GO 애니는 두 슬롯 모두 같은 시계).
+	 */
+	void drawNeighbourSky(Engine e, Camera cam, float time) {
+		updateContextVisibility(cam.eye);
+		drawSkyObjects(e, cam, time);
+	}
+
+	/**
+	 * 애니 하늘 GO ({@link SkyAmbient}): 정적 하늘 뒤, 월드 앞. 관절 0 이 카메라 눈에 오게 옮긴 관절 월드로 스키닝하고 (0x218848),
+	 * 안개는 하늘과 같은 배경 모드. 모델 자체 가림을 위해 깊이를 쓰고, 다 그린 뒤 깊이만 지워 월드 지오메트리가 하늘 거리 깊이에 가리지 않게 한다
+	 * (정적 하늘은 깊이를 쓰지 않으므로 지운 깊이는 프레임 시작과 같다).
+	 *
+	 * @param now 애니 하늘의 효과 시간 (다른 슬롯 하늘은 현재 레벨 시간)
+	 */
+	private void renderSkyAmbient(Engine e, Camera cam, float now) {
+		if (skyAmbient.isEmpty() || dbgHidden("sky")) {
+			return;
+		}
+		if (skinned == null) {
+			skinned = new devple.gow.engine.render.Shader("skinned.vert", "basic.frag");
+		}
+		fx.env().applyFog(skinned, cam, e.window().height());
+		fx.env().setBackground(skinned, true, e.window().height());
+		glDepthMask(true);
+		boolean drew = false;
+		for (SkyAmbient s : skyAmbient) {
+			Ambient a = s.anim();
+			if (removed.contains(a.key()) || ctxHidden.contains(a.key()) || fxHidden(a.key())) {
+				continue;
+			}
+			float t = a.start() + now;
+			float[][] w = skyJoints(a, t, s.off(), cam.eye);
+			devple.gow.engine.asset.AnimatedModel m;
+			if (posedModels.containsKey(a.key())) {
+				m = posedModels.get(a.key());
+			} else {
+				m = posedModel(a.key());
+				if (m != null) {
+					m.sky = true;
+				}
+				posedModels.put(a.key(), m);
+			}
+			if (m == null) {
+				continue;
+			}
+			float len = a.act().duration;
+			m.hiddenJoints = a.act().hiddenJoints(a.skeleton(), ((t % len) + len) % len);
+			m.draw(cam, e.window().aspect(), tmp.identity(), w, e.renderer().white(), -1f, 1f);
+			m.hiddenJoints = null;
+			drew = true;
+		}
+		fx.env().setBackground(skinned, false, e.window().height());
+		FxEnvironment.disableFog(skinned);
+		e.renderer().basic().use();
+		if (drew) {
+			glDepthMask(true); // glClear 의 깊이 지우기는 쓰기 마스크를 따른다
+			glClear(GL_DEPTH_BUFFER_BIT);
+		}
+		glDepthMask(false);
+	}
+
+	/** 애니 하늘 GO 의 시간 t 관절 월드 — 관절 0 (시작 배치의 관절 0 월드 off) 을 눈 위치로 옮긴다 (0x218848: GO 위치 = 카메라). */
+	static float[][] skyJoints(Ambient a, float t, Vector3f off, Vector3f eye) {
+		float[][] lw = a.act().sample(a.skeleton(), t, true).world(a.skeleton());
+		float[][] w = new float[lw.length][];
+		float dx = eye.x - off.x, dy = eye.y - off.y, dz = eye.z - off.z;
+		for (int i = 0; i < lw.length; i++) {
+			w[i] = Mat4.mul(lw[i], a.inst());
+			w[i][12] += dx;
+			w[i][13] += dy;
+			w[i][14] += dz;
+		}
+		return w;
 	}
 
 	private boolean fxHidden(String key) {

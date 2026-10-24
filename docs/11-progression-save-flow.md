@@ -322,7 +322,7 @@ ESC Internal 변수 44/45/48/50/57(07 문서) = 눈/깃털/난이도/블레이�
 | 6 | LoadCheck | wad | 로드 완료 확인 |
 | 7 | Goto | 엔티티 이름 | 같은 레벨 안 위치로 이동 |
 | 12 | Idle | bool | |
-| 16 | ZoneReport | 구역 번호 | 구역 진입 표시 (`ZoneReport_*` HUD) |
+| 16 | ZoneReport | 구역 번호 | 구역 제목: 메시지 800 + 구역 의 첫 줄 → HUD `ZoneReport_Title` + `ZoneReport_Event` 1 (아래, 43 §16) |
 | 19 | FailedScreen | | 아레나 실패 화면 |
 | 31 | ShowItemCard | msg, sec, kind | §2.2 (kind 1 HP+1, 2 MP+1) |
 | 47 | CompleteGame | kind | §2.3 해금 비트 + `EndGame` 종류(0x29D94C) |
@@ -359,7 +359,10 @@ HDES01A→01B→01C→01D→01E→ATRET01A (6, 아테네 귀환)→01B→01C→A
 ```
 - 모든 레벨 이동은 `LoadWad`/`LoadForWarp`(미리 로드) → 경계 볼륨의 `LoadCheck`/`Warp` 로 전환, 되돌아가는 연결도 대부분 있다.
 - ATHN03D 의 `LoadCheck "Athn0E"` 는 존재하지 않는 WAD (데이터 오타, 무시).
-- 구역 메시지 601..629(`난파된 범선`, `히드라의 공격`, `아테네 부두` … `미노타우르스의 둥지`)는 `ZoneReport_Title` 용 이름이지만, 번호→메시지 대응은 미확정.
+- ~~구역 메시지 601..629 는 `ZoneReport_Title` 용 이름이지만 번호→메시지 대응은 미확정~~ → **구역 제목 = 메시지 800 + 구역 번호의 첫 줄** [확실: GameMgr_OnMessage
+  0x1B0A28 → 0x1B60D0 → 0x1B8BA0 — 0x1B95D0(…, 800 + 구역, 줄 0) 을 HUD +0x84 (`PS2_ZoneReport_Title`) 에 복사, 메시지가 없으면 "Unknown zone", +0x264
+  (`PS2_ZoneReport_Event`) = 1]. 801 "에게해*", 802 "아테네 성문", 803 "아테네로 향한 도로", 804 "아테네 도시 광장", 805 "아테네의 지붕" … (각 "이름\n0").
+  한 번만 띄우는 것은 스크립트 (ZoneReportGroup: GlobalData:0 ≠ 구역 일 때만, 띄운 뒤 GlobalData:0 = 구역 — ATHN03AA·ATHN03A 모두 3). 601..629 는 다른 용도 (미확인).
 
 ---
 
@@ -464,7 +467,7 @@ completeGame(k): k==0: unlock |= {0,0,1,2,4}[difficulty 0..3 → bit0,bit0,bit1,
 - 아이템 14(`SirenPiece`) 와 ID 1/2/8/12/13 의 정체, ID 9 가 삼지창인지(수중 비트 0x200020 로 추정).
 - 코스튬 "Infinite Magic" 열의 실제 의미, `R_WPN*_5` 의 사용처.
 - #b60d39a0(흔들림 진폭), #117c872e(수명) 원래 키 이름.
-- ZoneReport 번호 ↔ 구역 이름 메시지(601..) 대응, 일시정지 패드 비트 0x100/0x800 의 실제 버튼.
+- ~~ZoneReport 번호 ↔ 구역 이름 메시지 대응~~ (800 + 구역, 위), 일시정지 패드 비트 0x100/0x800 의 실제 버튼.
 - 사망 횟수 증가 지점(0x1D6FE4 추정)과 사망 메뉴의 세부 선택지.
 
 ## 떨어진 오브 (OrbPickups) [확실: 0x2258D8, 0x226518, 0x226710 / 근사 표시]

@@ -737,6 +737,9 @@ ATHN07B (화면 전체), ATHN06B (방 안이 흐린 벽), PAND03I (주황 판) �
 - 결론: 엔진 (`CameraRig.CamAnim`, 0x1000 재시작, 고정 주시) 과 해독이 같다. 0.5 초에는 엘리베이터 판 (폭 ≈ 310) 아래에서 올려다보고, 1–3 초에 아래·오른쪽으로 돌아
   끝에는 −z 바닥을 내려다본다 — 영웅 (요 37°, 높이 24–305) 은 2 초 뒤 화면 밖. 원작 화면 대조 전에는 **데이터대로** (스크립트 0x9 끔 → 11.3 초 `-release` 까지 유지).
   시험 `CameraRigTest.eleEnterJointCameraPans` (눈 고정 ±0.5, 활성화 애니 0 초, 피치 14.4° → −21.1°, 끝 요 0°).
+- **정정 (2026-10-24, §16 · 05 §2.8.1)**: "눈 고정" 은 ANM 파서 착시였다 — `ANM_startwad` 는 데이터 타입 [0(p2 3)] 하나라 act 디스크립터 1 = 관절 이동인데 예전 파서는
+  디스크립터를 1 개만 읽었다. 원작 배치로는 눈이 1–3.5 초에 엘리베이터 판 높이 (y ≈ 180) 로 올라 가운데 x 869.9 쪽으로 가고, 내려오는 엘리베이터를 따라 (870, 79, 1227) 까지
+  내려간다 — 영웅이 2 초 뒤 화면 밖으로 나가던 것이 풀린다 [확실: 코드 0x100EA8 + 데이터 / 미확인: 원작 화면]. 시험은 새 값 (최고 y 175–185, 끝 눈) 으로.
 
 **2. 꺼진 컨텍스트의 충돌·CMV** [확실: 충돌 세계 서버 vtable 0x2BF5E0 의 vt+0x34 0x2316D0 / vt+0x44 0x2319D0, 광역 재구성 0x11DB40 → 0x11D560, GO 컴포넌트 끄기 0x1310D0 /
 추정: 레벨 루트 컨텍스트 → GO → 컴포넌트 전파]
@@ -848,6 +851,85 @@ HallwayMinos 미노타우로스 넷·doorsGroup·음악. 끝 자리 (남쪽) 에
   `Meter Bar Hold Time` 2.0 초가 지나면 내린다 (21 문서 §5 "미터 자동 표시").
 - 엔진 결함: 게임 씬은 첫 갱신에 MeterBar 1 을 보내고 전역 정지 때만 내렸다 — 전 레벨에서 미터가 늘 떠 있었다. 수정 `HudBinding.meter`.
 - 검증: ATHN03C 자동 플레이 녹화 (쉬움, 0.5 초 간격) — 2–12 초 싸움 동안 미터, 12.5 초부터 (마지막 기술 뒤 2 초) 미터 없음. `HudMeterTest` 7 건.
+
+## 16. QA vs PS2 영상 — ATHN03AA / ATHN03A "아테네로 향한 도로" (영상 4744–5131 초, 2026-10-24)
+
+오라클 홀 (ATHN03AA) 부터 갑옷 미노타우로스 방 (ATHN03A) 까지. 엔진 = origin/main 7b47a31 (jump_if 0x0F = 거짓이면 점프, HUD 미터 자동 숨김) 위.
+녹화 r18 (`--game ATHN03AA --skip-movies`, 경로 봇 `gow.auto.route` §14.6, 1/3 초 간격, 결정적), 영상 포함 실시간 r13 (로그만), 성문 r17 (`--game ATHN03A`).
+경로: `160,965,1086;wait:5;160,965,782;wait:3;160,1050,300;160,1127,-29;160,1150,-148,4;wait:13;160,1124,-280;160,1120,-400;300,1120,-420;350,1120,-465,8;wait:3;200,1120,-500;wait:7;2380,1090,-830!;use:2447,-829;wait:6;btn:CROSS;wait:2;-825,1030,-650!;-825,1027,-560;-815,1027,-451,10;wait:40`.
+jump_if 정정 재확인: ATHN03AA 스크립트에는 jump_if 가 없고 ATHN03A 는 `archerEnt` H4 하나 (타이머 없으면 5 초 타이머, 있으면 지움 — 길 위 궁수, 이 경로 밖) — 아래 결론은 정정 뒤 실행이다.
+
+### 16.1 장면 대응 [확실: 스크립트·데이터 / 영상 대조는 섬네일]
+| 영상 | 원작 (스크립트) | 엔진 r18 (게임 시각) |
+|---|---|---|
+| 4744–4752 | ATHN03AA 홀 (봉인 원판, 시작 (160, 960, 1344)) | 0–3 초 |
+| 4756–4780 | A03MP02 오라클 영상: `a03Mp02MPEG-pCube1-idle` → Idle + FadeOut(0, 0, 0, 0.4) → 0.4 초 뒤 PlayMovie → 끝 (501 "a03Mp02", Filter 1 = 플레이어) → FadeIn(1) · 0.3 초 뒤 LoadWad Athn03A · 3 초 뒤 Idle 해제 | 3.0 초 페이드 → 3.4 초 영상 (건너뜀) → 페이드 인. r13 실시간은 영상을 틀고 봇이 × 로 넘긴다 |
+| 4784 | 원형 방 | 6–8 초 |
+| 4788–4796 | 계단 + 구역 제목 **"아테네로 향한 도로"** (ZoneReportGroup: GlobalData:0 ≠ 3 → Internal 0x10(3) → 메시지 803 첫 줄, GlobalData:0 = 3 이라 한 번) | 12.8 초부터 (`01`) |
+| 4800–4808 | 거대한 아레스 (trigSParkyCine: Idle 12 초 + camSpecialSparky, 계단 위 → 원형 제단 위로 크레인) | 23.9–35.9 초 (`02`–`04`) |
+| 4812 | 계단 위 아레스 망토 (어두운 붉은 "커튼") 통과 | 24.3 초 · 36–42 초 (`02`) |
+| 4816–4825 | ATHN03A 세이브 제단 빛기둥 + R2 | 45–48 초 (`05`) |
+| 4834–4843 | 절벽 길 (기둥) | 경로가 건너뜀 |
+| 4852–4879 | A03MP01 아레스 영상 (MoviePlay 띠 x 8..320, z −464..−536, LevelData:5) | 48.3 초 (건너뜀) → 하늘의 아레스 (`06`) |
+| 4888–4915 | 사막 문 쪽 절벽 길 | 61 초 순간이동 |
+| 4924 | DesertGates (2448, 1082, −829): R2 (1024 UseWorld, 보낸 이 접촉) → camGateZoom + Idle → 3 초 뒤 메시지 209 "오라클의 상징이 새겨진 거대한 문입니다 … 이쪽에서는 열 수 없습니다" → 1040 → 카메라·Idle 복귀 | 62–65 초 (`07` `08`) |
+| 4942–4960 | 길 위·원형 제단 위 하늘의 아레스 | (`06`) |
+| 4969–4978 | 동굴 성문 (CaveGateA1 volumeGateClose, −815, −451) → Idle, 성문 내림, GateExplosion AniFor (불덩이), cine1FireBall = camFireballShot, 3 초 뒤 camMinoZoom, 7 초 Idle 해제, 7.1 초 CheckPoint | 71.3–72.7 초 (`09`–`11`) |
+| 4987 | 창살 · MinotaurLevel2 둘 (템플릿 51, 셋째는 처치 2 이상) | 74.7–78 초 (`12`) |
+| 4996–5059 | 갑옷 미노타우로스 싸움 | 80 초부터 (`13`) |
+| 5068 | 원형 압력판 MinoPressurePlate | 봇이 이기지 못해 안 봄 (§16.5) |
+| 5086– | 고르곤 = ATHN03C (MedusaLevel1 스폰) — 이 두 레벨이 아니다 | — |
+
+### 16.2 엔진 결함과 수정
+1. **구역 제목이 없었다** — Internal 0x10 을 버림. 원작 GameMgr_OnMessage 0x1B0A28 → 0x1B60D0 → 0x1B8BA0: 메시지 800 + 구역 의 첫 줄 (0x1B95D0 줄 0, 없으면 "Unknown zone") →
+   HUD +0x84 `PS2_ZoneReport_Title`, +0x264 `PS2_ZoneReport_Event` = 1 [확실]. `GameScene.zoneReport` (11 §6, 21 §5).
+2. **스크립트 화면 페이드를 버렸다** (Entity 0x5 FadeOut / 0x6 FadeIn) — 오라클 영상 앞뒤가 바로 잘렸다. 상태 0x303D50 + 매 프레임 0x1AF648 색 사각형 [확실], `ScreenFade` ·
+   `Renderer.overlay` (HUD 아래 [추정]), 이웃 슬롯 스크립트도 (상태가 전역 하나) — `SceneNav.Host.neighbourFade` (13 §2).
+3. **세이브 제단에 빛기둥·R2 안내가 없었다** — Creator "savepoint" 의 몸 = R_PERMK 오브젝트 savepoint (0x1ACCA8) [확실], R2 아이콘·저장 거리 4 m = 64 (0x1DC678 / 0x1DC3F8,
+   예전 45 [근사]) [확실] (38 §21). `GameScene.spawnSavePoint`, `SAVE_POINT_RANGE`.
+4. **하늘의 거대한 아레스가 없거나 찢어졌다**:
+   (a) `goaresanimgroup1` 의 SCR_Sky 는 인스턴스 스크립트 (본문 없음) — 원작은 본문을 읽지 않고 소유 GO 를 카메라로 옮긴다 [확실: 0x218920 · 0x218848] (16 §1.4, `EnvParams.skyOwners`).
+   (b) 애니 하늘 GO 는 매 프레임 스키닝 (관절 0 = 눈, 반복 시작 act aoBAR1a03Hl09 = 레벨 시간) [확실: GO 이동 / 근사: 시간] (`LevelScene.renderSkyAmbient`).
+   (c) 부착 관절 파트 공간: 부착 관절에 inverse bind 가 없으면 (Ares `group9` 배율 2.91 노드) 파트 정점은 그 관절 공간의 바인드 메시 — skin (invBind·world) [추정: VU1 팔레트 미해독,
+       데이터 일치 invBind·bindWorld = bindWorld[부착] 오차 0.000] (`SkinnedModel.Part.jointLocal(Skeleton)`; 키클롭스 R_CY2/CY3/CYW 의 노란·분홍 큰 삼각형도 같은 원인).
+   (d) 하늘 모델은 동적 조명·그림자 없음 (0x218778 렌더 플래그 &= ~0x800) [확실].
+5. **하늘 GO 이미터가 없었다** (도시 화톳불 group2 9, 아레스의 불붙은 바위·불덩이·재 43): 하늘 공간 (기준 = 눈 − 관절 0) 에서 돈다 [확실: GO 이동 / 근사: 이미 나온 파티클은 월드,
+   깊이는 일반 파티클 패스] (`GameScene.startSkyEffects`, `LevelEmitters` 는 하늘 배치를 건너뜀).
+6. **Animator 가 튼 레벨 GO 의 채널 이미터가 없었다** (성문 불덩이 GateExplosion, 건물 폭발 group3251/3278/3284/3289, TallBuildExplode2, CornerRip00): act 가 돌 때 링크된 채널
+   (생성률·속력·퍼짐) 로 이미터를 관절에 붙여 돌린다 [확실: 0x130240 + 데이터 일치] (`GameScene.startAnimatorEffects`, `EffectSystem.Effect.jointEmitters`).
+7. **ANM 디스크립터 배치** (05 §2.8.1) [확실: 코드 0x100EA8 · 0x130240 + 전 WAD 데이터]: act 디스크립터 = 데이터 타입 항목 p2 의 합. 예전 파서는 항목 수만 읽어 GateExplosion 의
+   생성률 150 채널 (디스크립터 4) 을 "타입 11 = 관절 이동" 으로 읽어 불덩이를 0.45 초에 x 로 1000 옮겼고 (불꽃 본체 FBFemit2GE 는 곡선 없음), 진짜 이동 (디스크립터 1) 은 버렸다.
+   관절 카메라도 같아 camSpecialSparky · camFireballShot · camMinoZoom 이 제자리에서 돌기만 했다 (전 WAD 213 개 중 179 개). 원작 배치 (`Animation.records` …) 를
+   관절 카메라 (`CameraRig.CamAnim`) 와 관절 이미터 이펙트에만 먼저 적용 — 영상 4978 처럼 불덩이가 오른쪽 위에서 성문으로 들어오고 (`10`, 전: 카메라 고정 · 위에서 내려옴
+   `before_static_fireball_cam_r14`), sparky 크레인이 계단 위 커튼을 지나 원형 제단 위로 나간다 (영상 4800–4812).
+8. **다른 슬롯 하늘** (§16.3).
+
+### 16.3 두 슬롯 하늘 [확실: 가시 칸 데이터 / 근사: 렌더 구조]
+ATHN03AA 와 ATHN03A 는 같은 하늘 GO (gogroup2 · goaresanimgroup1, 컨텍스트 CXT_bvsky) 를 따로 가진다. 눈이 계단 위 (z > −40) 면 ATHN03AA 칸만, 그보다 남쪽이면 ATHN03A 칸만 그
+하늘을 켠다 (`LevelData.contextHidden`, 경로 위 7 점 확인). 원작은 두 슬롯이 함께 상주해 각자 가시 칸대로 그리므로 늘 하나가 보인다. 엔진은 현재 레벨 하늘만 그려 sparky 크레인
+(ATHN03AA 가 현재) 이 남쪽으로 나가는 동안·계단 위에서 ATHN03A 로 걸어 들어가 전환되기 전까지 하늘이 검게 비었다 (`before_sparky_black_sky_r15`) → 하늘 단계에서 다른 슬롯
+장면의 하늘 GO 도 그 레벨 가시 칸으로 걸러 그린다 (`LevelScene.skyNeighbour`, 애니 하늘 시간 = 현재 레벨 시간).
+
+### 16.4 시험
+`RoadToAthensScriptTest` (구역 제목 한 번, 오라클 영상 FadeOut → 영상 → FadeIn), `RoadToAthensTest` (메시지 800 + 구역 첫 줄, FadeOut/FadeIn 프레임 계수 — n = cvt.w.s(초 / 0.016666668),
+1 초 = 59 · 0.4 초 = 24 [근사: EE FPU 0 쪽 반올림이면 23] · 뒤집어 잇기, 세이브 포인트 몸·4 m), `AnimRecordsTest` (Σ p2 디스크립터 13 / 히어로 11, 표 뒤 트랙, 불덩이 경로·관절 1/3 고정,
+생성률 채널 id), `SkinAttachRuleTest` (아레스 group9 · ME3 STB), `SkyBackgroundTest` (goaresanimgroup1 하늘, skyOwners), `CameraRigTest.eleEnterJointCameraPans` (정정, §13.11).
+
+### 16.5 남은 것 · 미확인
+- 불덩이 모양: 영상은 흰·노란 핵에 주황 꼬리, 엔진은 회색 연기 + 주황 (PTC VU 파티클 색 — 16 §2.4) [미확인]. 미노타우로스가 영상보다 회청색 [미확인: 조명/재질].
+- 원형 압력판 (5068), 셋째 미노타우로스, 성문 열림 — 봇이 갑옷 미노타우로스 둘에게 짐 (r18 사망 2, r17 사망 2) [미확인: 봇 한계].
+- 영상 재생: 녹화 lockstep 에서는 영상이 느리게 간다 (r12 210 초에도 오라클 대사 중) [엔진 전용, 녹화 한계]; 실시간 봇은 × 로 넘긴다 — 영상 자체 대조는 하지 않았다.
+- 두 슬롯 스크립트: 전환 때 현재 레벨 ScriptWorld 를 새로 만들어 이웃으로 이미 돈 일회성 (LevelData) 이 다시 돌 수 있다 — 순간이동 (r14) 으로 MoviePlay 띠 안에서 전환하면
+  사망 뒤 MoviePlay 가 또 불렸다. 걸어 오면 띠 전에 전환되어 한 번 [근사: 엔진 구조]. 이웃 슬롯의 PlayMovie · Idle 은 받지 않는다.
+- SCR_AresSky (ATHN03D/03E 무작위 act) 미구현, 하늘 GO SEM 소리 끔, 하늘 파티클 깊이 [근사].
+- ANM 원작 배치의 전역 전환 (영웅·적·레벨 GO 자세, 루트 모션, 가시성) — 시험 7 개가 예전 배치 값 (05 §2.8.1).
+- [엔진 전용] 봇: 경로 끝 뒤 이어받은 AutoPlay 가 이전 레벨 (ATHN03AA) 볼륨 계획으로 돌아간다 (r15 140 초) — 경로 끝에 긴 wait 로 피함.
+
+### 16.6 증거 (`work/verify/road_to_athens/`, 커밋 안 함)
+`01_zone_title_stairs_16.0s` · `02_sparky_curtain_24.3s` · `03_sparky_ares_circle_26.3s` · `04_sparky_ares_city_31.0s` · `05_save_altar_R2_46.0s` ·
+`06_ares_sky_after_movieplay_52.0s` · `07_desert_gates_zoom_64.0s` · `08_desert_gates_msg209_65.0s` · `09_cave_gate_approach_71.3s` · `10_gate_fireball_72.3s` ·
+`11_gate_fireball_trail_72.7s` · `12_mino_zoom_portcullis_77.3s` · `13_armored_minotaurs_87.3s`, 시트 `sheet_engine_r18` · `sheet_sparky_cine_r16` · `sheet_ps2_4784_4897` ·
+`sheet_ps2_4906_5068`, 수정 전 `before_sparky_black_sky_r15` · `before_static_fireball_cam_r14`.
 
 ## 시연 녹화 (-Dgow.record, -Dgow.bot) [엔진 전용]
 

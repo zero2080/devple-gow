@@ -169,6 +169,14 @@ public class ScriptHost extends GameScriptHost {
 			case 2 -> Math.min(Math.max(EscVm.f(a.get(0)), EscVm.f(a.get(1))), EscVm.f(a.get(2)));
 			case 3 -> EscVm.f(a.get(0)) + random.nextFloat() * (EscVm.f(a.get(1)) - EscVm.f(a.get(0)));
 			case 4 -> (float) Math.sqrt(EscVm.f(a.get(0)));
+			case 5 -> { // FadeOut(r, g, b, 초) 0x1AFA20
+				listener.fade(EscVm.f(a.get(0)), EscVm.f(a.get(1)), EscVm.f(a.get(2)), EscVm.f(a.get(3)), true);
+				yield null;
+			}
+			case 6 -> { // FadeIn(초) 0x1AFAD4
+				listener.fade(0, 0, 0, EscVm.f(a.get(0)), false);
+				yield null;
+			}
 			case 8 -> {
 				listener.debug(current, String.valueOf(a.get(0)));
 				yield null;

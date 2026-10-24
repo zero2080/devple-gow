@@ -33,6 +33,9 @@ render  fx.beforeRender(e, cam)                        // FarClip → cam.far, r
 - 하늘: SCR_Sky 규칙대로 **관절 0 월드 위치 → 카메라** (이전: AABB 중심). ATHN01A 하늘 미니어처의 바다면이 눈높이 아래에 와서 바다·원경 배·먼 바위가 보인다.
 - **하늘 판정 = SCR_Sky 대상** (43 §2.1) [확실]: 모델(MDL_x, 템플릿 스크립트 소유자) 또는 오브젝트 이름이 SCR_Sky 이름과 같은 배치 (`LevelScene.skyNames/isScrSky`).
   SCR_Sky 없는 레벨만 이전 휴리스틱 (이름/텍스처 sky + 원점 중심). 이전엔 16 레벨 (group2·skyLR·group1224·ShitBoxl …) 하늘을 놓쳐 구석이 검었다.
+  + 본문 없는 인스턴스 SCR_Sky 의 **소유 GO** (ATHN03A/03AA/03C `goaresanimgroup1`, 16 §1.4) 와 GO 인스턴스 이름. 애니 하늘 GO (시작 act 반복) 는 구운 자세 대신
+  `renderSkyAmbient` 가 매 프레임 스키닝 (관절 0 = 눈, 동적 조명·그림자 없음 — 0x218778), 하늘 GO 이미터는 하늘 공간 (`GameScene.startSkyEffects`),
+  다른 슬롯 레벨의 하늘 GO 도 그 레벨 가시 칸대로 (`LevelScene.skyNeighbour`, 43 §16.3).
 - **배경 안개** (43 §2.2) [확실: 16 §1.2]: `fx.drawBackground` 가 하늘 전에 화면 사각형(지움 색)을 배경 모드 안개로 칠한다.
   계수 `FxEnvironment.backgroundFactor` = Fog_A ≥ 1 ∧ 블렌드 0 단일 안개 → 1 (0x1275E0, 배경 Z 0 → 안개색 전부), 그 밖 BackPlane_A/128, BackPlane < 0 → 안 칠함. 비교 `GOW_FOGBG=off`.
 - **패스 순서** (43 §2.3) [확실: 16 §3.3]: 모든 인스턴스의 패스 0 (불투명·알파 테스트) 뒤에 패스 1 (반투명) — `Renderer.drawPass`. 이전엔 모델마다 두 패스라

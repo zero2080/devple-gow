@@ -74,6 +74,10 @@ public final class SceneNav {
 		 */
 		default void neighbourSpawn(ScriptListener.SpawnRequest r) {
 		}
+
+		/** 이웃 레벨 스크립트의 FadeOut/FadeIn — 원작 페이드 상태 0x303D50 은 전역 하나라 슬롯 구분이 없다 (43 §16). */
+		default void neighbourFade(float r, float g, float b, float seconds, boolean out) {
+		}
 	}
 
 	private final LevelData level;
@@ -272,6 +276,11 @@ public final class SceneNav {
 						host.teleport(t.position(), (float) Math.atan2(t.world[8], t.world[10]));
 					}
 				}
+			}
+
+			@Override
+			public void fade(float r, float g, float b, float seconds, boolean out) {
+				host.neighbourFade(r, g, b, seconds, out);
 			}
 
 			@Override

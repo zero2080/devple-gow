@@ -102,6 +102,10 @@ public final class AnimatedModel implements AutoCloseable {
 	 * ({@link devple.gow.engine.render.DrawStage#LATE}). 기본 false = 층 2 (파트별 머티리얼 단계).
 	 */
 	public boolean layer3;
+	/**
+	 * 하늘 모델 (SCR_Sky 소유 GO, 0x218778): 동적 조명 플래그 0x800 을 끄고 층 1 로 — 라이트 묶음·그림자를 모으지 않는다 [확실: 0x218778 이 렌더 플래그 &amp;= ~0x800].
+	 */
+	public boolean sky;
 
 	/** 그림자 합성 뒤 단계 ({@link devple.gow.engine.render.DrawStage#LATE}) 에 그릴 파트가 있는가. */
 	public boolean drawsLate() {
@@ -190,7 +194,7 @@ public final class AnimatedModel implements AutoCloseable {
 				blend = assets.classify(mat, tex != null);
 				tint = l.rgba();
 			}
-			parts.add(new Part(new SkinnedMesh(v, idx), tex, blend, tint, p.hasNormal, p.jointLocal(), assets.materialAnim(p.material),
+			parts.add(new Part(new SkinnedMesh(v, idx), tex, blend, tint, p.hasNormal, p.jointLocal(skeleton), assets.materialAnim(p.material),
 					used.stream().mapToInt(Integer::intValue).toArray(), litColor, late));
 		}
 	}
@@ -233,7 +237,7 @@ public final class AnimatedModel implements AutoCloseable {
 			skinOut = new float[skeleton.size()][];
 			skinRows = new float[skeleton.size()][];
 		}
-		ShadowCasters sc = shadow != null ? ShadowCasters.current() : null;
+		ShadowCasters sc = shadow != null && !sky ? ShadowCasters.current() : null;
 		if (sc != null && sc.collecting()) {
 			sc.submit(this, shadowParent, shadow, w, hiddenJoints, world, devple.gow.engine.light.LightServer.jointSphere(w, world, new org.joml.Vector4f()),
 					shadowMode, shadowKey);
@@ -252,7 +256,7 @@ public final class AnimatedModel implements AutoCloseable {
 		shader.set("uModel", world);
 		shader.set("uTex", 0);
 		// 동적 라이트 (47 문서): 렌더 플래그 0x800 모델만 (원작 0x15986C), 구 = 관절 AABB [근사]
-		if ((model.renderFlags & devple.gow.engine.light.LightUniforms.LIT) != 0 && devple.gow.engine.light.LightServer.current() != null) {
+		if (!sky && (model.renderFlags & devple.gow.engine.light.LightUniforms.LIT) != 0 && devple.gow.engine.light.LightServer.current() != null) {
 			org.joml.Vector4f sph = devple.gow.engine.light.LightServer.jointSphere(w, world, new org.joml.Vector4f());
 			lastLights = devple.gow.engine.light.LightUniforms.apply(shader, model.renderFlags, new org.joml.Vector3f(sph.x, sph.y, sph.z), sph.w);
 		} else {

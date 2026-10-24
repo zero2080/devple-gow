@@ -60,7 +60,7 @@ public final class WeaponAttach {
 	/** 부착 행렬에 놓인 블레이드 메시. */
 	public TriMesh posed(float[] attach) {
 		float[][] w = world(attach);
-		return model.posed(w, skeleton.skin(w));
+		return model.posed(skeleton, w, skeleton.skin(w));
 	}
 
 	/**

@@ -81,6 +81,13 @@ public interface ScriptListener {
 	default void movie(String name, int op, int arg) {
 	}
 
+	/**
+	 * Entity:0x5 FadeOut(r, g, b, 초) (out = true) / Entity:0x6 FadeIn(초) (out = false, 색 0) — 원작 0x1AFA20 / 0x1AFAD4 가 화면 페이드
+	 * 상태 0x303D50 을 바꾸고 매 프레임 0x1AF648 이 색 사각형 0x2C8F50 을 갱신한다 (43 §16).
+	 */
+	default void fade(float r, float g, float b, float seconds, boolean out) {
+	}
+
 	/** 그 밖의 Internal 함수 호출 (인자 = push 순서). */
 	default void internal(int func, List<Object> args) {
 	}

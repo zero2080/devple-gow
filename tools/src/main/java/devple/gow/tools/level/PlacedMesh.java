@@ -59,7 +59,7 @@ public final class PlacedMesh {
 			if (hidden != null && allHidden(p, hidden, mats(jointWorld))) {
 				continue;
 			}
-			float[][] mats = p.jointLocal() ? jointWorld : skinMats;
+			float[][] mats = p.jointLocal(sk) ? jointWorld : skinMats;
 			// 체인(인스턴스) 번호 → 그 체인의 베이크 정점색 (체인마다 다른 색 REF)
 			List<int[]> chainCol = null;
 			java.util.regex.Matcher im = INST.matcher(p.name);

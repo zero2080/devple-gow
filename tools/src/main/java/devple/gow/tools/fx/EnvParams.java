@@ -101,6 +101,15 @@ public final class EnvParams {
 	public final List<Weather> weathers = new ArrayList<>();
 	public final List<Water> waters = new ArrayList<>();
 	public final List<Raw> others = new ArrayList<>();
+	/**
+	 * SCR_Sky 인스턴스 스크립트가 붙은 GO 이름 (본문 크기와 무관). 원작 SCR_Sky 생성자 0x218920 / 매 프레임 0x218848 은 본문 (오브젝트 이름) 을 읽지 않고
+	 * 스크립트의 소유 GO (+0x18) 를 카메라로 옮기고 그 모델들을 층 1 (0x218778 → 0x150738(모델, 1)) 로 둔다 [확실: 디스어셈블] —
+	 * ATHN03A/03AA/03C {@code goaresanimgroup1} (MDL_AresAnimGroup1, 템플릿 SCR_Sky 없음) 처럼 본문 없는 인스턴스도 하늘이다.
+	 * SCR_AresSky (0x218968 → 같은 0x218848 + 갱신 0x2189A8 무작위 act) 소유자는 {@link #aresSkyOwners}.
+	 */
+	public final List<String> skyOwners = new ArrayList<>();
+	/** SCR_AresSky 인스턴스 스크립트가 붙은 GO 이름 (ATHN03D/03E goaresanimgroup1) — 엔진 미구현 (act 무작위 순환 0x2189A8). */
+	public final List<String> aresSkyOwners = new ArrayList<>();
 
 	/** 인스턴스 값만 사용 (템플릿 기본값은 무시). */
 	public EnvParams(WadFile wad) {
@@ -125,6 +134,11 @@ public final class EnvParams {
 					if (s.size() > 0) {
 						skies.add(new Sky(s.owner(), s.str(0, 32)));
 					}
+					skyOwners.add(s.owner());
+				}
+				case "SCR_AresSky" -> {
+					aresSkyOwners.add(s.owner());
+					others.add(new Raw(s.target(), s.owner(), s));
 				}
 				case "SCR_Weather" -> weathers.add(new Weather(s.owner(), s.i(0), s.vec(4, 3), s.vec(0x10, 3)));
 				case "SCR_Water" -> waters.add(new Water(s.owner(), s.vec(0, 2), s.f(8), s.i(0x0C), s.str(0x10, 24), s.i(0x28),

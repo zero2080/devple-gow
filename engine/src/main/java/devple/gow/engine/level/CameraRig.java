@@ -113,9 +113,14 @@ public final class CameraRig {
 			this.anim = anim;
 		}
 
-		/** 시간 time 의 카메라 월드 행렬. 애니 끝에서는 마지막 프레임 유지 [추정]. */
+		/**
+		 * 시간 time 의 카메라 월드 행렬. 애니 끝에서는 마지막 프레임 유지 [추정]. 관절 자세는 원작 디스크립터 배치 ({@code Animation.sampleRecords}, 05 §2.8.1):
+		 * 카메라 오브젝트 ANM 은 거의 모두 데이터 타입 [0(p2 3)] 하나라 예전 배치는 회전 (디스크립터 0) 만 읽고 이동 (디스크립터 1) 을 버렸다 —
+		 * 전 WAD 관절 카메라 213 개 중 179 개의 눈 이동이 빠져 있었다 (ATHN03A camFireballShot 1.5 초 동안 +x 120 · +y 52, camMinoZoom −x 410,
+		 * ATHN01A IdleCam 9.5 초 갑판 위로 +z 390, PAND05B camEleEnter 엘리베이터 쪽으로) [확실: 코드 0x100EA8 + 데이터].
+		 */
 		float[] world() {
-			float[][] lw = anim.sample(sk, time, false).world(sk);
+			float[][] lw = anim.sampleRecords(sk, time, false).world(sk);
 			return Mat4.mul(local, Mat4.mul(lw[Math.min(joint, lw.length - 1)], inst));
 		}
 	}
