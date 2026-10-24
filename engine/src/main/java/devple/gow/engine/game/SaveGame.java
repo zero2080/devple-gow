@@ -43,6 +43,8 @@ public final class SaveGame {
 	public final Map<String, java.util.List<String>> levelCreated = new TreeMap<>();
 	/** 레벨별 오브젝트 → "Vis 엔티티|값,값,…" ({@link devple.gow.engine.script.ScriptWorld.Memory#vis}). */
 	public final Map<String, Map<String, String>> levelVis = new TreeMap<>();
+	/** 레벨별 연 상자의 Creator 키 ({@link devple.gow.engine.script.ScriptWorld.Memory#opened}). */
+	public final Map<String, java.util.List<String>> levelOpened = new TreeMap<>();
 
 	public static Path dir() {
 		return Path.of(System.getProperty("user.home"), "Library", "Application Support", "devple-gow");
@@ -85,6 +87,7 @@ public final class SaveGame {
 			m.levelData().forEach((k, v) -> d.put(k, encode(v)));
 			g.levelData.put(lv, d);
 			g.levelCreated.put(lv, new java.util.ArrayList<>(m.created()));
+			g.levelOpened.put(lv, new java.util.ArrayList<>(m.opened()));
 			Map<String, String> vis = new TreeMap<>();
 			m.vis().forEach((o, v) -> {
 				StringBuilder sb = new StringBuilder(m.visBy().getOrDefault(o, "")).append('|');
@@ -148,7 +151,8 @@ public final class SaveGame {
 				}
 			});
 			mem.put(lv, new devple.gow.engine.script.ScriptWorld.Memory(vals,
-					new java.util.LinkedHashSet<>(levelCreated.getOrDefault(lv, java.util.List.of())), vis, by));
+					new java.util.LinkedHashSet<>(levelCreated.getOrDefault(lv, java.util.List.of())), vis, by,
+					new java.util.LinkedHashSet<>(levelOpened.getOrDefault(lv, java.util.List.of()))));
 		}
 		s.restoreLevelTable(levelTable, mem);
 	}
@@ -178,6 +182,7 @@ public final class SaveGame {
 		pr.setProperty("levelTable", String.join(",", levelTable));
 		levelData.forEach((lv, d) -> d.forEach((k, v) -> pr.setProperty("level." + lv + "." + k, v)));
 		levelCreated.forEach((lv, c) -> pr.setProperty("levelCreated." + lv, String.join(",", c)));
+		levelOpened.forEach((lv, c) -> pr.setProperty("levelOpened." + lv, String.join(",", c)));
 		levelVis.forEach((lv, m) -> m.forEach((o, v) -> pr.setProperty("levelVis." + lv + "." + o, v)));
 		Files.createDirectories(file.getParent());
 		try (Writer wr = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
@@ -235,6 +240,9 @@ public final class SaveGame {
 			} else if (k.startsWith("levelCreated.")) {
 				String v = pr.getProperty(k);
 				g.levelCreated.put(k.substring(13), v.isEmpty() ? new java.util.ArrayList<>() : new java.util.ArrayList<>(java.util.List.of(v.split(","))));
+			} else if (k.startsWith("levelOpened.")) {
+				String v = pr.getProperty(k);
+				g.levelOpened.put(k.substring(12), v.isEmpty() ? new java.util.ArrayList<>() : new java.util.ArrayList<>(java.util.List.of(v.split(","))));
 			}
 		}
 		String lt = pr.getProperty("levelTable", "");

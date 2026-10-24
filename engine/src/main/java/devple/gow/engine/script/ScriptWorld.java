@@ -75,6 +75,11 @@ public final class ScriptWorld {
 	private boolean zeroDelay, minDelay;
 	/** 레벨 기억으로 되살린 세계 ({@link #restore}) — 시작 큐의 "첫 적재 때만" 메시지를 건너뛴다. */
 	private Memory restored;
+	/**
+	 * 연 상자 (Creator 키, 소문자). 원작은 두 슬롯의 GO 가 이음 (LoadCheck) 내내 그대로라 연 상자는 연 채 남는다 — 엔진 씬은 이음마다 상자를 새로
+	 * 만들므로 ({@link #recreate}) 세계가 기억해 열린 채로 다시 만든다 (예전엔 닫힌 채 다시 나와 아이템을 또 줬다, 43 §21) [확실: 구조].
+	 */
+	private final java.util.Set<String> openedChests = new java.util.LinkedHashSet<>();
 	private ScriptActor player;
 	/** Marker 엔티티 → 오브젝트 (그룹 = Marker Id, 소유 GO 관절에 붙어 움직임). */
 	private final Map<ScriptEntity, ScriptActor> markers = new LinkedHashMap<>();
@@ -224,7 +229,7 @@ public final class ScriptWorld {
 	/**
 	 * 넘겨 쓴 세계를 새 씬에 붙임: 이미 발동한 Creator 의 오브젝트 (상자·세이브 포인트) 를 새 리스너로 다시 만들고, 살아 있는 SpawnEnemy 액터의
 	 * 적을 마지막 자리에 다시 낸다 (엔진 씬은 적·상자 객체를 씬마다 새로 만든다). 생성 통지 (CreationSensor) 는 다시 보내지 않고, 대신 Vis 가
-	 * 오브젝트에 남긴 켬/끔 값을 다시 보낸다 ({@link #visState}). [근사: 다시 낸 적은 체력이 처음 값, 열린 상자는 닫힌 채 — 43 §18]
+	 * 오브젝트에 남긴 켬/끔 값을 다시 보낸다 ({@link #visState}). 연 상자는 연 채 ({@link #opened}, 43 §21). [근사: 다시 낸 적은 체력이 처음 값 — 43 §18]
 	 */
 	public void recreate() {
 		for (ScriptEntity e : new ArrayList<>(createdObjects)) {
@@ -407,7 +412,7 @@ public final class ScriptWorld {
 	 *       SpawnEnemy·Creator 는 0x1A6C70 으로 기록된 오브젝트를 되살린다. CreationSensor 모드 5 는 관문 없이 매번 (ATHN04A SuicideBody-SpecialCreationSensor
 	 *       가 GlobalData ShesDeadJim 으로 시신을 다시 켜는 까닭).</li>
 	 * </ul>
-	 * 엔진 근사: 기억 = LevelData 값 + 만들어 둔 Creator (상자·세이브 포인트, 열린 상태는 모름) + 오브젝트별 마지막 Vis 값 (GO 상태 기록 +0x48..+0x58 의
+	 * 엔진 근사: 기억 = LevelData 값 + 만들어 둔 Creator (상자·세이브 포인트) + 연 상자 ({@link #opened}) + 오브젝트별 마지막 Vis 값 (GO 상태 기록 +0x48..+0x58 의
 	 * 근사 — 첫 적재에만 도는 모드 1 생성 센서 "VisOff" 를 건너뛰어도 숨은 오브젝트가 숨은 채) — 적 기록·Animator 자세·미뤄 둔 발동은 담지 않는다 (살아 있던
 	 * 시작 생성 적은 다시 나오지 않는다) [근사]. 센서의 한 번 발동 기록도 담지 않는다 (원작 기록 목록에 엔티티 발동 상태가 있는지 미확인) [미확인].
 	 *
@@ -415,11 +420,29 @@ public final class ScriptWorld {
 	 * @param created   만들어 둔 Creator 엔티티 이름
 	 * @param vis       오브젝트 → 마지막 Vis 값 ({@link #visState(String)})
 	 * @param visBy     오브젝트 → 그 값을 남긴 Vis 엔티티 이름
+	 * @param opened    연 상자의 Creator 키 ({@link #markOpened})
 	 */
-	public record Memory(Map<Integer, Object> levelData, java.util.Set<String> created, Map<String, int[]> vis, Map<String, String> visBy) {
-		public Memory(Map<Integer, Object> levelData, java.util.Set<String> created) {
-			this(levelData, created, Map.of(), Map.of());
+	public record Memory(Map<Integer, Object> levelData, java.util.Set<String> created, Map<String, int[]> vis, Map<String, String> visBy,
+			java.util.Set<String> opened) {
+		public Memory(Map<Integer, Object> levelData, java.util.Set<String> created, Map<String, int[]> vis, Map<String, String> visBy) {
+			this(levelData, created, vis, visBy, java.util.Set.of());
 		}
+
+		public Memory(Map<Integer, Object> levelData, java.util.Set<String> created) {
+			this(levelData, created, Map.of(), Map.of(), java.util.Set.of());
+		}
+	}
+
+	/** 상자를 열었다 (Creator 키 = {@code SceneNav.creatorKey}) — 이 세계로 다시 만드는 상자는 열린 채 ({@link #opened}). */
+	public void markOpened(String key) {
+		if (key != null) {
+			openedChests.add(key.toLowerCase(java.util.Locale.ROOT));
+		}
+	}
+
+	/** 그 상자를 이미 열었는지. */
+	public boolean opened(String key) {
+		return key != null && openedChests.contains(key.toLowerCase(java.util.Locale.ROOT));
 	}
 
 	/** 지금 세계의 레벨 기억 (슬롯을 비울 때 — {@link Memory}). */
@@ -437,7 +460,7 @@ public final class ScriptWorld {
 				by.put(o, src.name());
 			}
 		});
-		return new Memory(new HashMap<>(host.levelData()), made, vis, by);
+		return new Memory(new HashMap<>(host.levelData()), made, vis, by, new java.util.LinkedHashSet<>(openedChests));
 	}
 
 	/** {@link #start} 전에: 레벨 기억으로 되살린다 — LevelData 를 그 값으로, 시작 큐의 첫 적재 전용 메시지는 건너뛴다. */
@@ -448,6 +471,7 @@ public final class ScriptWorld {
 		restored = m;
 		host.levelData().clear();
 		host.levelData().putAll(m.levelData());
+		m.opened().forEach(this::markOpened);
 	}
 
 	/** 되살린 세계: 기억한 오브젝트 Vis 값을 다시 보낸다 (시작 큐 뒤 — 모드 5 생성 센서가 그 위에 다시 켤 수 있게 먼저). */
@@ -603,7 +627,7 @@ public final class ScriptWorld {
 			}
 			case 11 -> {
 				if (!first) {
-					// 되살린 레벨: 0x1ACA70 은 관문이 거짓이면 0x1A6C70 으로 기록된 오브젝트를 다시 만든다 — 만들어 둔 Creator 를 그대로 [근사: 열린 상자 상태 없음]
+					// 되살린 레벨: 0x1ACA70 은 관문이 거짓이면 0x1A6C70 으로 기록된 오브젝트를 다시 만든다 — 만들어 둔 Creator 를 그대로 (연 상자는 연 채, {@link #opened})
 					if (restored.created().contains(e.name())) {
 						createdObjects.add(e);
 						listener.create(e);

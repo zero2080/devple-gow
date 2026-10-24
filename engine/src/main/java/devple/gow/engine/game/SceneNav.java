@@ -145,6 +145,8 @@ public final class SceneNav {
 	 * 이벤트 (1023·1048·1049) 는 공유 큐 ({@link ScriptWorld#linkEvents}) 로 이웃 센서에 간다.
 	 */
 	private Interactables neighbourItems = new Interactables();
+	/** 이웃 슬롯 레벨의 TWK (CSM 상자 템플릿 · OrbEmitter — 레벨마다 다르다). */
+	private Tweaks neighbourTweaks;
 	/** 시작 중인 이웃 세계 (setOther 안 nw.start 동안 — 생성 통지 Creator 의 슬롯을 읽을 세계). */
 	private ScriptWorld neighbourStarting;
 	private final ScriptHost mainHost;
@@ -207,7 +209,9 @@ public final class SceneNav {
 			public void interactDone(Interactables.Item it) {
 				System.out.println("상황 동작 완료: " + it);
 				if (it.kind == Interactables.Kind.CHEST) {
-					host.orbs(chestEmitter(it, tweaks), it.pos);
+					boolean other = neighbour != null && neighbourItems.items().contains(it);
+					(other ? neighbour : world).markOpened(it.owner); // 이음·레벨 기억으로 다시 만들 때 열린 채 (ScriptWorld.opened)
+					host.orbs(chestEmitter(it, other ? neighbourTweaks() : tweaks), it.pos);
 				}
 			}
 
@@ -292,6 +296,7 @@ public final class SceneNav {
 		neighbourName = name;
 		neighbour = null;
 		neighbourData = data;
+		neighbourTweaks = otherTweaks;
 		neighbourPlatforms = new Platforms();
 		navWorld.setNeighbourPlatforms(neighbourPlatforms);
 		setNeighbourItems(new Interactables());
@@ -343,6 +348,7 @@ public final class SceneNav {
 		neighbourName = null;
 		neighbour = null;
 		neighbourData = null;
+		neighbourTweaks = null;
 		neighbourPlatforms = new Platforms();
 		navWorld.setNeighbourPlatforms(neighbourPlatforms);
 		setNeighbourItems(new Interactables());
@@ -379,7 +385,8 @@ public final class SceneNav {
 
 	/**
 	 * 이웃 레벨 스크립트 리스너: 메시지·사망 존·LoadCheck·Goto 만 받는다. 이웃의 LoadWad/Warp 는 원작에서 "호출한 레벨이 아닌 슬롯" = 현재 레벨 자리에
-	 * 로드하므로 (36 문서 §2) 여기서는 무시한다 [근사]. 적 생성·상자 생성도 그 레벨로 넘어간 뒤 그 레벨 스크립트가 한다.
+	 * 로드하므로 (36 문서 §2) 여기서는 무시한다 [근사]. 적은 이웃 스폰 규칙으로 ({@code Host.neighbourSpawn}), Creator 상자·세이브 포인트는
+	 * {@code Host.neighbourCreate} ({@link #createNeighbour}).
 	 */
 	public ScriptListener neighbourListener() {
 		return new ScriptListener() {
@@ -552,14 +559,36 @@ public final class SceneNav {
 	 * @return 상자 (Creator 가 상자가 아니면 null)
 	 */
 	public Interactables.Item create(ScriptEntity source) {
-		Object name = world.slot(source, "Name0");
-		if (creatorIs(name, "chest") && source.owner != null) {
-			float[] m = creatorMatrix(source);
-			int tpl = num(world.slot(source, "unk5"));
-			int task = num(world.slot(source, "unk6"));
-			return items.addChest(creatorKey(source), new Vector3f(m[12], m[13], m[14]), tpl, task, tweaks);
+		return addChest(items, world, source, tweaks);
+	}
+
+	/**
+	 * 이웃 슬롯 레벨의 Creator "chest" → 이웃 R2 상자. 원작은 두 슬롯이 모두 살아 있어 Creator 0x1ACCA8 이 슬롯마다 자기 GO 를 만들고, 잡기 질의 0x1C3F18
+	 * 은 슬롯 구분 없는 충돌 세계 구 질의다 ({@link #neighbourItems}) [확실: 구조]. 예전 엔진은 이웃 상자를 만들지 않아 ATHN05C 항아리 방 (바닥이 05C 에만
+	 * 있다) 의 ATHN05D 상자 둘 (Chest3 CSM 010 고르곤의 눈 · Chest4 CSM 011 불사조 깃털, 영상 8090–8100) 이 보이지도 열리지도 않았다 (43 §21).
+	 * CSM 템플릿은 레벨 TWK 마다 다르므로 이웃 레벨 것으로 ({@link #neighbourTweaks()}).
+	 *
+	 * @return 상자 (이웃이 없거나 상자가 아니면 null)
+	 */
+	public Interactables.Item createNeighbour(ScriptEntity source) {
+		ScriptWorld w = neighbourStarting != null ? neighbourStarting : neighbour;
+		return w == null ? null : addChest(neighbourItems, w, source, neighbourTweaks());
+	}
+
+	/** Creator 슬롯 → 상자 (Name0 "chest", unk5 = CSM 템플릿, unk6 = 과제 id). 그 세계가 이미 연 상자면 끝난 채 ({@link ScriptWorld#opened}). */
+	static Interactables.Item addChest(Interactables into, ScriptWorld w, ScriptEntity source, Tweaks tw) {
+		if (!creatorIs(w.slot(source, "Name0"), "chest") || source.owner == null) {
+			return null;
 		}
-		return null;
+		float[] m = creatorMatrix(source);
+		Interactables.Item it = into.addChest(creatorKey(source), new Vector3f(m[12], m[13], m[14]), num(w.slot(source, "unk5")), num(w.slot(source, "unk6")), tw);
+		it.done = w.opened(it.owner);
+		return it;
+	}
+
+	/** 이웃 슬롯 레벨의 TWK (없으면 이 레벨 것). */
+	public Tweaks neighbourTweaks() {
+		return neighbourTweaks != null ? neighbourTweaks : tweaks;
 	}
 
 	/**

@@ -1110,7 +1110,7 @@ ATHN03A/03C RSRCS · R_MEW 템플릿 60), `RopeGrabEventTest` (줄 잡기 통지
 - 해치로 떨어질 때 ATHN04A ZoneReportGroup3 → 구역 제목 4 "아테네 도시 광장" 이 뜬다 (스크립트 그대로) — 영상 6448 섬네일엔 안 보임 [미확인] (구역 제목은 §16 담당).
 - 이음 직후 다른 슬롯 렌더 장면을 다시 준비하는 동안 (r11 8.6 초) 그 레벨만 지오메트리를 가진 곳이 검게 보였다 (아래층 복도 = 04A 렌더) — r12 에선 없음 [미확인: 적재 속도].
 - 메모리카드 화면은 4:3 FLP 라 16:9 출력에서 양옆으로 게임이 보인다 (원작 4:3 은 전체가 검다) [엔진 표시].
-- 이웃 상자 ("chest") Creator, 멈추지 않는 메시지 동안의 미니게임 아이콘 숨김, 첫 안내 21 (고르곤 시선 0x1964A4), 열린 상자의 이음 상태 [근사/미구현].
+- ~~이웃 상자 ("chest") Creator~~ (§21.2-6), 멈추지 않는 메시지 동안의 미니게임 아이콘 숨김, 첫 안내 21 (고르곤 시선 0x1964A4), ~~열린 상자의 이음 상태~~ (§21.2-6) [근사/미구현].
 - 창살이 영웅 손 관절 대신 진행 비율로 올라간다 [근사]. 넘겨 쓴 세계에서 다시 낸 적은 체력이 처음 값 [근사].
 
 ### 18.5 증거 (`work/verify/athn04b_interior/`, 커밋 안 함)
@@ -1331,9 +1331,9 @@ a06Mp04 (무덤 파는 노인) → graveDig AOXDI (템플릿 309) · R2 대화 3
 | 영상 | 원작 (스크립트·데이터) | 엔진 (게임 시각, 녹화) |
 |---|---|---|
 | 8070–8076 | 다리 카메라 (BridgeCam): 연기 낭떠러지 위 비계 → 다리 · 횃불 둘 문 · 바닥 홈 레버 | r2 4–12 초 (레버 · 비계 · 다리 시점) |
-| 8082–8110 | 항아리 방 · 바닥 레버 · 상자 → 깃털 카드 "1 개를 더" | r2 순간이동으로 건너뜀 [미대조] |
+| 8082–8110 | 항아리 방 (바닥은 05C 에만) · 바닥 레버 · 횃불 옆 상자 → 깃털 카드 "1 개를 더" (깃털 5 개째) | 상자 = ATHN05D Creator Chest4 (CSM 011 MagicShard) — c1 14.1 초 R2 → 16.4 chestOpen → 17.1 카드 (`12` `13`, 하네스 처음 상태라 깃털 1 개 → "5 개를 더") — 고치기 전 상자 없음 (`before_jar_room_no_chests_r2_12.5s`) (§21.2-6) |
 | 8120–8142 | 횃불 복도 · 언데드 (FirstSetEnemies DiveLevel1AI ×3, R_SKD 37) | r2 14–52 초 |
-| 8136 | 좁은 수직 통로 오르기 | 찾지 못함 [미대조] |
+| 8136 | 횃불 복도 공중 연타 — 카메라가 공중의 크레토스를 올려 본다 (천장이 보임) | 복도 카메라 ExitCam3 = 레일 NCV_ExitRail5 · 피치 모드 3 (레일 점에서 대상 조준) · 플래그 0x0435FE 에 점프 높이 고정 (0x800/0x4000) 없음 [확실: 데이터] → j1 1.3–1.9 초 2단 점프에 같은 올려 보기 (`11`) |
 | 8190–8202 | 물 방 (어두운 반사 물) 싸움 | w3 0–8 초 (고친 뒤 어두운 물, `06`) — 고치기 전 희뿌연 판 (`before_water_pale_05d`) (§21.2-4) |
 | 8210–8224 | "YOU ARE DEAD" → 기둥 방에서 다시 → 깃털 카드가 또 (체크포인트가 상자 앞) | 엔진 재시작은 체크포인트로 옮기기만 해 세계를 되돌리지 않는다 [미구현, §21.3] |
 | 8232–8358 | 둘째 복도 (SecondSetEnemies ×4) · 업그레이드 메뉴 (8286) · 엘리베이터 방 | r2 64–95 초 |
@@ -1381,14 +1381,26 @@ a06Mp04 (무덤 파는 노인) → graveDig AOXDI (템플릿 309) · R2 대화 3
    입구 (0x1B3A10): 새 칸 "Pand00B" 바로 앞이 "Pand00A" 면 표를 둘만 남기고 비운다. 세이브 (World_Serialize 0x1B3E48) 는 올라 있는 슬롯도 칸에 쓴 뒤 표 전체를 쓴다.
    엔진은 매번 처음부터라 05D 엘리베이터로 돌아온 광장에 첫 방문의 시민 (SecTP 조건 LevelData0 (키클롭스 처치) &lt; LevelData4) 이 나왔다 (영상 8426–8458 엔
    없음) → `GameSession.levelMemory` · `enterLevel` · `rememberLevel`, `ScriptWorld.Memory` · `restore` (LevelData + 첫 적재 메시지 건너뜀 + 만들어 둔 Creator +
-   오브젝트별 마지막 Vis 값) · `SaveGame` (levelTable · level.* · levelCreated.* · levelVis.*) [근사: 적 기록 · Animator 자세 · 미뤄 둔 발동 · 열린 상자 상태 ·
+   오브젝트별 마지막 Vis 값) · `SaveGame` (levelTable · level.* · levelCreated.* · levelVis.* · levelOpened.*) [근사: 적 기록 · Animator 자세 · 미뤄 둔 발동 ·
    센서 한 번 발동 기록은 담지 않는다 — 원작 기록 목록의 엔티티 발동 상태는 미확인].
+6. **ATHN05C 항아리 방의 상자 둘이 없었다 — 이웃 슬롯 상자.** 방 바닥은 05C 에만 있어 (05D 충돌 없음) 영웅이 거기 서면 걷기 이음 규칙으로 현재 레벨 = 05C 인데, 방의
+   상자는 ATHN05D 의 Creator Chest3 (CSM 010 HealthShard = 고르곤의 눈) · Chest4 (CSM 011 MagicShard = 불사조 깃털) 다. 원작은 두 슬롯이 다 살아 있어 Creator 0x1ACCA8 이
+   슬롯마다 GO 를 만들고 잡기 질의 0x1C3F18 은 슬롯을 가리지 않는다 [확실: 구조 (38 §23.2) · 영상 8090–8100 깃털 카드]. 엔진은 이웃 Creator 중 세이브 포인트만 만들어
+   ("이웃 상자는 현재 레벨 것만" [근사]) 05D 로 넘어가야만 상자가 생겼고, 05D 바닥에서는 방에 닿기 전에 다시 05C 로 넘어가 상자가 사라졌다 — 깃털·눈을 얻을 수 없었다.
+   → `SceneNav.createNeighbour` (이웃 `Interactables`, CSM 은 이웃 레벨 TWK — 05C TWK 에는 CSM 011 이 없다) · `GameScene.neighbourCreate` (몸·충돌 = 이웃 `Platforms`,
+   다른 슬롯이 바뀌면 지움). 이음마다 씬이 상자를 새로 만드므로 연 상자를 세계에 기억한다 (`ScriptWorld.markOpened` / `opened`, Creator 키 — 원작은 GO 가 그대로 남는다
+   [확실: 구조]): 다시 만든 상자는 연 채 (`SceneNav.addChest` → done, `ChestProps.spawn` → chestOpen 끝 자세, 아이템 안 줌), 레벨 기억 (`Memory.opened`) · 세이브
+   (`levelOpened.*`) 에도. 예전엔 05C ↔ 05D 이음을 오갈 때마다 연 상자가 닫힌 채 다시 나와 아이템을 또 줄 수 있었다. c2: 05C 에서 깃털 상자 열기 (16.4 초) → 05D 이음
+   (24.6) → 05C 이음 (59.0) → 그 상자에 R2 3 초 — 잡히지 않고 열린 채 (`14`), 아이템 1 번.
 
 ### 21.3 남은 것 · 미확인
 - 8210–8224: 원작 체크포인트 재시작은 메모리 세이브 (0x22D418) 를 되읽어 레벨을 다시 올린다 (11 §5.3) — 상자 (깃털) 가 닫힌 채로 돌아가 다시 줍는다. 엔진은 영웅만
   체크포인트로 옮겨 세계가 그대로라 깃털 카드가 다시 나오지 않는다 [미구현: 스냅숏 되읽기].
-- 8136 수직 통로 오르기 · 8082–8110 항아리 방은 경로로 몰지 않았다 [미대조]. 05D 복도에서 봇의 띄우기에 적이 서쪽 벽 (x −1000) 너머로 밀려 아래 ATHN05C
-  웅덩이 바닥 (y 453) 에 떨어진 적이 있다 (r2 105–155 초) [미해결: 적 넉백 벽 충돌].
+- 05D 복도에서 봇의 공격에 적이 서쪽 벽 (x −1000) 너머 · 항아리 방 아래로 밀려 ATHN05C 웅덩이 바닥 (y 453) 에 떨어진 적이 있다 (r2 105–155 초, c2 55–110 초 —
+  봇이 닿지 않는 그 적을 계속 노림) [미해결: 적 넉백 벽 충돌].
+- 항아리 방 → 횃불 복도 (8110–8120) 걷기 이음에서 엔진은 0.4 초 어두워졌다 밝아진다 (t1 15.8–16.7 초, `SceneManager` 전환 페이드) — 원작은 끊김 없음. 이미 적힌
+  엔진 구조 항목 (§19 "이음 순간 0.4 초 페이드") [엔진 구조].
+- 깃털 카드 문구의 개수 (영상 "1 개를 더" = 깃털 5 개째) 는 앞 레벨에서 모은 개수에 달렸다 — 하네스 도착은 처음 상태라 "5 개를 더" (같은 규칙) [대조 불가: 상태].
 - 동영상 a04Mp01 · a06Mp01 · a06Mp04 는 원작 PSS 그대로라 대조하지 않았다 (`--skip-movies` 와 o1 재생으로 앞뒤 스크립트만).
 - 06A 구역 제목: 하네스 도착점이 ZoneReportGroup 볼륨 안이라 처음엔 뜨지 않는다 (이음 도착은 "이미 안", 원작은 04D 계단을 걸어 들어오며 뜬다) [엔진 전용].
 - 하피 마당 처치 시간은 봇 (183 초) 과 영상 (≈ 100 초, 메두사의 시선 사용) 이 달라 대조하지 않았다. 무덤 파는 노인 (AOXDI: Ignore Hits · Target Weight 0 ·
@@ -1400,12 +1412,15 @@ a06Mp04 (무덤 파는 노인) → graveDig AOXDI (템플릿 309) · R2 대화 3
 `OracleApproachTest` (3: 발판 구 = 관절 2 pressPlate, 05D 엘리베이터 승강 → Warp 6.5–8 초 · 끝 Marker 676.2, 이웃 시작 스폰 하피의 제거는 그 세계로),
 `WaterSimTest` (4: 격자 모서리 = 소유 위치 (06A 연못 축 1280 · 05D 물 방), 쌍선형 충격 → −0.99·s, 머티리얼 대소문자, 60 초 최대 &lt; 12),
 `LevelMemoryTest` (3: 광장 재방문 LevelData0 = 3 · Init 건너뜀 · 상자 되살림 · 모드 5 시신 · SectionZone1 시민 없음 (처음이면 있음), 판도라 입구 표 비우기,
-세이브 왕복).
+세이브 왕복 + 연 상자), `NeighbourChestTest` (2: 항아리 방 상자 = 05D Creator (CSM 010/011, 아이템 10/11, 05C TWK 에 CSM 011 없음) · 상자 앞 바닥은 05C 에만,
+연 상자가 이음 recreate · 레벨 기억으로 다시 만들어도 끝난 채).
 
 ### 21.5 증거 (`work/verify/athn06_oracle_approach/`, 커밋 안 함)
 `01_elevator_descending_e3_36s` · `02_elevator_fade_e3_40.5s` · `03_athn04a_arrival_hall_o2_6s` · `04_zone_title_plaza_beam_o2_16.5s` (영상 8416 과 같은 자리) ·
 `05_water_06a_pool_w4_3s` · `06_water_05d_dark_w3_1s` · `07_athn06a_terrace_chests_h1_0s` · `08_athn06a_title_h1_24s` · `09_athn04d_cliff_fight_d1_10s` ·
-`10_gravedigger_npc_h1_242s`, 고치기 전 `before_elevator_stands_on_plate_e1_50s` · `before_water_spikes_06a_h1_57s` · `before_water_pale_05d_w2_6s`.
+`10_gravedigger_npc_h1_242s` · `11_corridor_jump_camera_j1_1.6s` · `12_jar_room_feather_chest_open_c1_16.8s` · `13_feather_card_c1_17.2s` ·
+`14_chest_stays_open_after_seams_c2_65s`, 고치기 전 `before_elevator_stands_on_plate_e1_50s` · `before_water_spikes_06a_h1_57s` · `before_water_pale_05d_w2_6s` ·
+`before_jar_room_no_chests_r2_12.5s` (횃불 둘 옆이 비었다).
 
 ## 22. QA vs PS2 영상 — ATHN05B 발리스타 복도 · ATHN05BB 감옥 홀 · 제우스 석상 (영상 7351–8066 초, 2026-10-24)
 

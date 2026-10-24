@@ -763,7 +763,7 @@ public final class GameScene implements Scene {
 			world.recreate(); // 상자·세이브 포인트·살아 있는 적을 이 씬에 다시
 		}
 		if (keptOther != null && nav.neighbour() == keptOther) {
-			keptOther.recreate(); // 이웃 리스너: 적 (이웃 스폰 규칙) · 세이브 포인트 Creator · Vis 상태 (상자 Creator 는 아직 무시)
+			keptOther.recreate(); // 이웃 리스너: 적 (이웃 스폰 규칙) · 세이브 포인트·상자 Creator (연 상자는 연 채) · Vis 상태
 		}
 		if (keptWorld == null) {
 			applyArriveState(world, levelName);
@@ -1275,12 +1275,17 @@ public final class GameScene implements Scene {
 			@Override
 			public void neighbourCreate(ScriptEntity source, Object name) {
 				// 이웃 레벨 Creator "savepoint" (원작 두 슬롯 GO 상주): 자리·빛기둥을 이 씬에 — R2 저장 (0x1DC678 은 슬롯 구분 없이 가장 가까운 것).
-				// 이웃 상자 ("chest") 는 아직 현재 레벨 것만 [근사]
 				if (SceneNav.creatorIs(name, "savepoint") && source.owner != null) {
 					float[] m = SceneNav.creatorMatrix(source); // 엔티티 행렬 (0x1A9CD0), 43 §19
 					savePoints.add(new Vector3f(m[12], m[13], m[14]));
 					boolean body = spawnSavePoint(m);
 					System.out.printf("세이브 포인트 생성 (이웃 %s, %.0f, %.0f, %.0f)%s%n", otherName, m[12], m[13], m[14], body ? " + 빛기둥 savepoint" : "");
+					return;
+				}
+				// 이웃 상자 ("chest"): 이웃 R2 오브젝트 + 몸 (충돌은 이웃 몸 묶음, CSM 은 이웃 TWK) — ATHN05C 항아리 방의 ATHN05D 깃털 상자 (43 §21)
+				devple.gow.engine.nav.Interactables.Item chest = nav != null ? nav.createNeighbour(source) : null;
+				if (chest != null && magicFx != null) {
+					chests.spawn(chest, SceneNav.creatorMatrix(source), magicFx.effects(), nav.neighbourPlatforms(), nav.neighbourTweaks());
 				}
 			}
 
@@ -1325,6 +1330,10 @@ public final class GameScene implements Scene {
 			@Override
 			public void levelLeft(String level, ScriptWorld w) {
 				session.rememberLevel(level, w);
+				if (nav != null) { // 내려가는 슬롯의 상자 몸 (이웃 R2 목록은 SceneNav 가 비운다)
+					java.util.List<devple.gow.engine.nav.Interactables.Item> gone = nav.neighbourItems().items();
+					chests.remove(p -> gone.contains(p.item));
+				}
 			}
 		};
 	}

@@ -125,7 +125,8 @@ BallHull 수정: 평면 수를 헤더 0x38 이 아니라 hull 별 평면 수의 
 - 엔진: `GameSession.levelMemory` (이름 → `ScriptWorld.Memory` = LevelData · 만들어 둔 Creator · 오브젝트별 마지막 Vis), `enterLevel` (새 세계를 만들 때: 칸이 있으면 기억,
   판도라 입구 "Pand00A" → "Pand00B" 면 표 비우기 0x1B3A10), `rememberLevel` (씬을 떠날 때 두 슬롯 · 다른 슬롯이 바뀌거나 LoadForWarp 로 비울 때 · 세이브 직전),
   `ScriptWorld.restore` (start 전). 넘겨 쓰는 이음 세계 (`residentWorlds`) 는 그대로 이어지고, 버려졌다 다시 읽는 레벨만 되살린다. 세이브에 표를 같이 쓴다.
-- [근사] 적 기록 (살아 있던 적) · Animator 자세 · 미뤄 둔 발동 · 열린 상자 · 센서 한 번 발동 기록은 담지 않는다. 시험 `LevelMemoryTest`.
+- 연 상자 (`ScriptWorld.markOpened` / `opened`, Creator 키) 도 기억·세이브 (`levelOpened.*`) 에 담는다 — 다시 만든 상자는 연 채 (43 §21.2-6, `NeighbourChestTest`).
+- [근사] 적 기록 (살아 있던 적) · Animator 자세 · 미뤄 둔 발동 · 센서 한 번 발동 기록은 담지 않는다. 시험 `LevelMemoryTest`.
 
 ## 10. 스크립트 타이머 · 카메라 이름 · 실패 화면 (43 §23) [확실: 디스어셈블]
 - GameMgr 타이머 표 0x3368F8 (칸 4) — Internal 0x14 만들기 · 0x15/0x16 멈춤/다시 · 0x17 지움 · 0x18 남은 초 · 0x19 HUD 모래시계 (13 §6.1). 매 프레임 스크립트 세계

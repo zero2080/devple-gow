@@ -151,6 +151,7 @@ class LevelMemoryTest {
 		ScriptWorld w = new ScriptWorld(lv, s.scriptHost, null);
 		w.start();
 		w.presetState("L0=3");
+		w.markOpened("gochest4"); // 연 상자 (NeighbourChestTest)
 		s.rememberLevel("ATHN04A", w);
 		SaveGame.capture(s, "ATHN05D", new float[]{0, 0, 0}, 0).write(tmp.resolve("slot0.save"));
 		GameSession t = session();
@@ -159,6 +160,7 @@ class LevelMemoryTest {
 		assertNotNull(m);
 		assertEquals(3, m.levelData().get(0));
 		assertTrue(m.created().contains("Chest4"));
+		assertEquals(java.util.Set.of("gochest4"), m.opened(), "연 상자도 세이브에 (levelOpened)");
 		assertFalse(m.vis().isEmpty());
 		assertEquals(w.memory().vis().keySet(), m.vis().keySet());
 	}

@@ -731,7 +731,8 @@ PAND05B `pBoxPand05B-Marker511` → `semoMovieHaveBox-…-semo08marker511` (Filt
   ~~R_SAVEPT 세이브 포인트 모델은 아직 만들지 않는다~~ → 세이브 포인트 몸 = **R_PERMK 오브젝트 `savepoint`** (MDL_SavePoint 빛기둥 SFXlightBeam·starBurst +
   ANM "SavePoint" 4 초 반복 + SEM_SNDSavePoint, GO 템플릿 gosavepoint) 를 상자와 같은 Creator 경로로 소유 GO 행렬에 만든다 [확실: 0x1ACCA8 · 데이터] — R_SAVEPT.WAD 는
   메모리카드 아이콘 텍스처 (TXR_SavePt01..41) 뿐이다. R2 안내·저장 거리 4 m = 64 단위 (0x1DC678 거리 × 1/16 < 4.0, 0x1DC3F8 → 아이콘 슬롯 0 = 14) (43 §16).
-  열린 상자 상태는 이음으로 돌아올 때 넘기지 않는다.
+  연 상자 = 그 레벨 세계의 `ScriptWorld.markOpened` (Creator 키, `SceneNav.interactDone`) — 이음 (`recreate`) · 레벨 기억 (`Memory.opened`) · 세이브 (`levelOpened.*`)
+  로 다시 만들 때 `SceneNav.addChest` 가 끝난 채 (`done`), `ChestProps.spawn` 이 chestOpen 끝 자세 · 아이템 안 줌 (43 §21.2-6). 예전엔 닫힌 채 다시 나와 아이템을 또 줬다.
 
 
 ## 22. 천장 질의 · 한쪽 면 바닥/턱 — ATHN01B 선창에서 2단 점프로 갑판 위 (사용자 보고) [확실: 디스어셈블 / 추정: 내비 위치 = 발 + 6.4]
@@ -805,7 +806,10 @@ ATHN01B 에도 선체 천장 (−44 ~ −64, 법선 −0.94 ~ −1) 과 빗면 �
   (자세·충돌), `HeroNavigator.setNeighbourItems` — 현재 레벨 것이 손에 없을 때 이웃 것을 잡는다. 이벤트 (1023 · 1048 · 1049) 는 공유 큐로 이웃 센서에,
   밀기 이동은 이웃 세계 (`moveOwnerBy`), 자세는 `poseItems(이웃 것, 이웃 몸, 이웃 세계)`, 이웃 Vis 의 Visible · Attr11_0 → 그 오브젝트 hidden · noCollision.
   붙잡는 레버·밀기 상자는 두 슬롯 모두 영웅 몸 충돌에서 뺀다 (`NavWorld.collideBodies`).
-- 이웃 Creator "savepoint" 도 이 씬에 만든다 (`SceneNav.Host.neighbourCreate` → 자리 + 빛기둥, R2 저장). 이웃 상자 ("chest") 는 아직 현재 레벨 것만 [근사].
+- 이웃 Creator "savepoint" 도 이 씬에 만든다 (`SceneNav.Host.neighbourCreate` → 자리 + 빛기둥, R2 저장). 이웃 상자 ("chest") 도 (43 §21.2-6):
+  `SceneNav.createNeighbour` → 이웃 `Interactables` 에 (CSM 은 이웃 레벨 TWK — 레벨마다 템플릿이 다르다: 05C TWK 에는 CSM 011 이 없다), 몸·충돌은 이웃
+  `Platforms`, 다른 슬롯 레벨이 바뀌거나 비면 (`Host.levelLeft`) 그 상자 몸을 지운다. ATHN05C 항아리 방 (바닥은 05C 에만) 의 ATHN05D 상자 둘 (고르곤의 눈 ·
+  불사조 깃털, 영상 8090–8100) 이 예전엔 없었다.
 - 이음 상태: `restoreNeighbourPlatforms` / `restorePlatforms` → 충돌 꺼진 몸 = noCollision, 열린 자세·높이의 TAndF = 끝남 (`SceneNav.restoreItems`).
 
 ### 23.3 TAndF 물리 들어 올림 (0x214058 / 0x214180) [확실: 코드 / 근사: 영웅 관절 높이 대신 진행 비율]

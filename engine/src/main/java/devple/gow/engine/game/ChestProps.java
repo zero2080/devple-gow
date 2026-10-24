@@ -98,6 +98,13 @@ public final class ChestProps {
 		e.scale = 1f / Math.max(def.scale(), 1e-3f); // 인스턴스 스케일은 inst 에 이미 들어 있다
 		Prop p = new Prop(it, e, sk);
 		apply(p);
+		if (it.done) {
+			// 이미 연 상자 (이음·레벨 기억으로 다시 만듦, ScriptWorld.opened): 연 끝 자세, 아이템·오브는 다시 주지 않는다 (43 §21)
+			p.itemGiven = true;
+			if (e.setAct(openAct(it, e))) {
+				e.setActTime(e.actDuration());
+			}
+		}
 		props.add(p);
 		float[] h = it.handles.isEmpty() ? null : it.handles.getFirst();
 		System.out.printf(Locale.ROOT, "상자 %s: CSM %03d 종류 %d, 손잡이 %s, 충돌 %s%n", it.owner, it.template, it.chestType,
@@ -175,7 +182,7 @@ public final class ChestProps {
 			apply(p);
 			if (it.done) {
 				if (!"chestOpen".equalsIgnoreCase(e.actName())) {
-					e.setAct(it.finishAnim != null && e.def.act(it.finishAnim) != null ? it.finishAnim : "chestOpen");
+					e.setAct(openAct(it, e));
 				}
 				e.hold = false;
 				if (it.chestItem > 0 && !p.itemGiven && e.actTime() >= e.actDuration()) {
@@ -198,6 +205,22 @@ public final class ChestProps {
 				e.setActTime(0);
 			}
 		}
+	}
+
+	/** 연 뒤 act (CSM 완료 애니가 오브젝트에 있으면 그것, 아니면 chestOpen). */
+	private static String openAct(Interactables.Item it, EffectSystem.Effect e) {
+		return it.finishAnim != null && e.def.act(it.finishAnim) != null ? it.finishAnim : "chestOpen";
+	}
+
+	/** 조건에 맞는 상자를 지운다 (다른 슬롯 레벨이 내려갈 때 그 레벨 상자). */
+	public void remove(java.util.function.Predicate<Prop> f) {
+		props.removeIf(p -> {
+			if (f.test(p)) {
+				p.effect.stop();
+				return true;
+			}
+			return false;
+		});
 	}
 
 	/** 레벨을 떠날 때. */
