@@ -16,7 +16,7 @@ import java.util.function.Consumer;
 public class GameScriptHost implements EscHost {
 
 	public static final int CHECKPOINT = 0, GET_PLAY_TIME = 1, LOAD = 2, LOAD_WAD = 3, LOAD_FOR_WARP = 4, WARP = 5,
-			LOAD_CHECK = 6, GOTO = 7, SHOW_MESSAGE = 0xA, IDLE = 0xC, ZONE_REPORT = 0x10, SHOW_ITEM_CARD = 0x1F,
+			LOAD_CHECK = 6, GOTO = 7, SHOW_MESSAGE = 0xA, IDLE = 0xC, ZONE_REPORT = 0x10, MAGIC_REGEN = 0x12, SHOW_ITEM_CARD = 0x1F,
 			COMPLETE_GAME = 0x2F, SET_END_GAME = 0x3A;
 
 	private final GameFlow flow;
@@ -89,6 +89,14 @@ public class GameScriptHost implements EscHost {
 				onMessage.accept(EscVm.i(st.pop()), sec);
 			}
 			case IDLE, ZONE_REPORT, SET_END_GAME, COMPLETE_GAME -> st.pop();
+			case MAGIC_REGEN -> {
+				// GameMgr_OnMessage 0x12 (0x1B0B34): float 인자 → 0x3044A4 = 마법 재생 MP/초 (PlayerState.mpRegen) [확실: 코드]
+				float rate = EscVm.f(st.pop());
+				PlayerState p = players.get();
+				if (p != null) {
+					p.mpRegen = rate;
+				}
+			}
 			case SHOW_ITEM_CARD -> {
 				int kind = EscVm.i(st.pop());
 				st.pop();

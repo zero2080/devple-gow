@@ -64,7 +64,7 @@
 | 7 Vis | 0 Visible, 1..7 속성(int, 0 그대로 / 1 켬 / 2 끔), 8 FadeTime float | 9 | +16 Attr17, +17 JointVisibility (`0x1A3200`, 효과 `0x1ABAA8`) |
 | 8 EventTransmitter | 0 EventId, 1 Arg1, 2 Arg2 (int) | 3 | `0x1A3578` |
 | 9 Start | 0 PlayerName str ("Hero"), 1 Filter int(+0x9C), 2 CameraName str | – | `0x1A3780` |
-| 10 SpawnEnemy | 0 MaximumCount int, 1 ? int(-1), 2 SpawnAtStart bool, 3 Respawn bool, 4 TemplateId int, 5..6 int, 7 SpawnAction int(-1, 생성 액션 = CombatFile 액션 ID, 32 문서), 8 InitState int (5 = 석화), 9 Patrol str ("patrolN") | 10 | `0x1A3840`, 효과 `0x1AC850` |
+| 10 SpawnEnemy | 0 MaximumCount int (+0xB0, 조건 0x1AC580: Trigger 때 +0x100 += 1), 1 ? int(-1, +0xB8 — 0x1AC580/0x1AC630/0x1AC850 은 읽지 않음), 2 SpawnAtStart bool, 3 Respawn bool, 4 TemplateId int, 5..6 int, 7 SpawnAction int(-1, 생성 액션 = CombatFile 액션 ID, 32 문서), 8 InitState int (5 = 석화), 9 Patrol str ("patrolN") | 10 | `0x1A3840`, 효과 `0x1AC850` |
 | 11 Creator | 0 Name0 str ("chest", "savepoint", "aoRED" …), 1 Name1 str, 2 float, 3..5 int(-1), 6,7 int, **8 CreateAtStart bool** (36 문서 §5), 9 bool | 10 | +17 bool (`0x1A3B90`) |
 | 12 GlobalData / 13 LevelData | 0 Priority int, 1..16 Init action (변수 초기화) | – | `0x1A3F18` / `0x1A4240` |
 | 14 Marker | 0 Id int (+0x9C) | – | `0x1A4568` |
@@ -191,13 +191,15 @@ LoadCheck 는 bool 을 반환하지만 데이터에서는 EntrySensor 의 Action
 
 예: ATHN02D `MedusaRipZone-pCube3661-EventCombat1` = `set_bool Internal:39 true` (메두사의 시선 획득) + `set_float Internal:35 ← Internal:36` (MP 가득).
 엔진 `GameScriptHost` 가 33..36·37..42·44·45 를 영웅 PlayerState 로 (게임: `GameScene` 이 `players` 를 넣음, 이웃 레벨 호스트도 같은 플레이어) —
-예전엔 Internal 변수 쓰기를 버려 머리를 뜯어도 시선 마법이 생기지 않았다. Internal 0x12 (함수) = 0x3044A4 실수 저장 (의미 미상).
+예전엔 Internal 변수 쓰기를 버려 머리를 뜯어도 시선 마법이 생기지 않았다. Internal 0x12 (함수, GameMgr_OnMessage 0x1B0B34) = 0x3044A4 실수 저장 = **마법 재생 MP/초** [확실: 코드]: 영웅 갱신 sub_001D6CF0
+(0x1D6F20) 이 게임 중 매 프레임 MP (0x30449C) += 값 × 1/60 × 시간 배율 (0..최대 MP). 데이터: ATHN02D RewardPlayer 10 (미노타우로스 방) /
+TurnFaceOffFinal 0, ATHN05B 0. 엔진 `PlayerState.mpRegen` / `regenMagic` (`HeroRig`), 세이브 `mpRegen` (37 문서 §5.2).
 
 ## 8. 남은 일
 - SpawnEnemy 슬롯 0/1/5..8, TemplateId → 적 템플릿(`CLI_WYP_Site%d`, `0x1A4E88`) 대응.
 - Vis 속성 번호(0x1C/0x1E/0x27/0x11/0x1A/0x17 → 오브젝트 속성 `0x1B1398`)의 의미 (보임/충돌/AI …).
 - 이벤트 1008/1015/1025 의 의미, EventSensor 슬롯 1.
 - Creator, Animator 효과의 세부, Marker 웨이포인트.
-- Internal 0x9/0x11/0x12/0x34..0x37 의 의미 (0xB = 질문, 42 문서).
+- Internal 0x9/0x11/0x34..0x37 의 의미 (0xB = 질문, 42 문서).
 
 > **27 문서 통합 시 확인**: ATHN01A SpawnEnemy 의 TemplateId 20 = 레벨 RSRCS 적 리소스 R_SKS 의 AI1 020 → TemplateId 는 AI1 템플릿 번호로 판단 [강한 추정].

@@ -42,6 +42,28 @@ class BotInputTest {
 		assertTrue(square, "석상에 □");
 	}
 
+	/**
+	 * 석상 (Breakable 517 Hit Points 7, 피해 바이트만큼): 서서 △ (combo6A 6) 부터 — □□□△ (2+2+2+0) 은 네 타라 셋을 얼려도 돌 지속 5 초 안에
+	 * 다 못 깼다. 석상에는 ○ 잡기 묶음 (200 grab → 204 grabReject) 을 쓰지 않는다.
+	 */
+	@Test
+	void stoneTargetStartsWithTriangleAndNeverGrabs() {
+		BotInput b = new BotInput(0);
+		b.stoneTarget = true;
+		Vector3f hero = new Vector3f(), stone = new Vector3f(0, 0, -50);
+		PadButton first = null;
+		for (float t = 0; t < 12f; t += DT) {
+			b.steer(hero, stone, 0, DT);
+			for (PadButton p : new PadButton[]{PadButton.SQUARE, PadButton.TRIANGLE, PadButton.CIRCLE}) {
+				if (b.pressed(p) && first == null) {
+					first = p;
+				}
+			}
+			assertFalse(b.held(PadButton.CIRCLE), "석상에 ○ 없음");
+		}
+		assertEquals(PadButton.TRIANGLE, first);
+	}
+
 	@Test
 	void gazeWalksCloserFirst() {
 		BotInput b = new BotInput(0);

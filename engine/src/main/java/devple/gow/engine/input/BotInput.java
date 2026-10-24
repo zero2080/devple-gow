@@ -15,6 +15,11 @@ public final class BotInput extends Input {
 	/** 한 묶음 (초, 버튼): 0.3 초 간격 누름. */
 	private static final PadButton[] COMBO = {PadButton.SQUARE, PadButton.SQUARE, PadButton.SQUARE, PadButton.TRIANGLE};
 	private static final PadButton[] GRAB = {PadButton.CIRCLE, PadButton.SQUARE, PadButton.SQUARE, PadButton.SQUARE};
+	/**
+	 * 석상 깨기: 석상 Breakable 517 Hit Points 7 은 공격 피해 바이트만큼 준다 (0x1DE4D8) — 서서 △ (combo6A, 6) + □ (2) = 두 타. □□□△ 묶음은
+	 * 2 + 2 + 2 + 0 (combo7A) 이라 네 타 (≈ 2 초) 가 걸려 셋을 얼려도 둘째·셋째가 돌 지속 5 초 안에 못 깨졌다.
+	 */
+	private static final PadButton[] STONE = {PadButton.TRIANGLE, PadButton.SQUARE, PadButton.SQUARE, PadButton.SQUARE};
 	private static final float GAP = 0.3f, PAUSE = 0.5f;
 
 	private final Set<PadButton> down = EnumSet.noneOf(PadButton.class);
@@ -24,6 +29,8 @@ public final class BotInput extends Input {
 	private int combos;
 	/** 대상이 잡기를 기다림 (자세 태그 설정 중 — 선창 히드라 기절 107 SET_1B0 830): 묶음마다 ○ 부터 (GameScene 이 매 틱 넣음). */
 	public boolean grabTarget;
+	/** 대상이 석상: ○ 잡기 묶음을 쓰지 않는다 (석상 잡기 = 200 grab → 204 grabReject 로 1 초 낭비, ATHN02D). */
+	public boolean stoneTarget;
 	/**
 	 * 메두사의 시선으로 대상을 석화 (GameScene 이 매 틱: 시선 보유·MP 충분·대상이 석화 가능하고 아직 돌이 아님). 원작 조작 = 메시지 595
 	 * "L2 를 누르고, □ 를 눌러서 발사": 다가가서 몸을 대상 쪽으로 돌린 뒤 L2 홀드 (81 PSENTHEAD → 82 USEHEAD) + □ 홀드 (광선, 0x1972E8).
@@ -33,7 +40,14 @@ public final class BotInput extends Input {
 	public boolean selectGaze;
 	private float gazeClock, selectClock;
 	/** 시선을 쏠 거리 (유닛): 원뿔 Distance 15 m × 16 = 240 안쪽. 광선을 켜 두는 최대 초. */
-	private static final float GAZE_NEAR = 170f, GAZE_MAX = 3f;
+	private static final float GAZE_NEAR = 215f;
+	/**
+	 * 광선을 켜 두는 최대 초: 미노타우로스 (게이지 6000, 단계 0 6000/초) 하나 ≈ 1 초, 광선이 켜진 동안 {@link #GAZE_SWEEP} 안의 다음 대상으로 넘겨
+	 * 셋까지 (GameScene) — 석화되면 곧바로 뗀다 (gaze 거짓).
+	 */
+	public static final float GAZE_MAX = 4.5f;
+	/** 광선을 끄지 않고 넘길 다음 대상 거리 (유닛, 원뿔 Distance 15 m × 16 = 240 안쪽). */
+	public static final float GAZE_SWEEP = 220f;
 
 	public BotInput(long window) {
 		super(window);
@@ -65,7 +79,7 @@ public final class BotInput extends Input {
 			ly = (float) Math.cos(a);
 			return;
 		}
-		PadButton[] seq = grabTarget || combos % 4 == 3 ? GRAB : COMBO;
+		PadButton[] seq = stoneTarget ? STONE : grabTarget || combos % 4 == 3 ? GRAB : COMBO;
 		int i = (int) (clock / GAP);
 		if (i < seq.length) {
 			if (clock - i * GAP < 0.08f) {

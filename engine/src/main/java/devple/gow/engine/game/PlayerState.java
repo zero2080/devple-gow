@@ -13,6 +13,12 @@ public final class PlayerState {
 	public int costume;
 	public float hp;
 	public float mp;
+	/**
+	 * 마법 재생 속도, MP/초 (원작 PlayerProgress +0x64 = 0x3044A4). 스크립트 Internal 0x12 가 쓴다 (GameMgr_OnMessage 0x1B0B34,
+	 * 표 0x2B5E20[0x12]) — ATHN02D 미노타우로스 방: RewardPlayer 10, 문이 열린 뒤 TurnFaceOffFinal 0 (ATHN05B 0). 영웅 갱신 0x1D6F20 이
+	 * 게임 중 매 프레임 MP += 값 × 1/60 × 시간 배율 (0..최대 자르기). {@link #regenMagic}
+	 */
+	public float mpRegen;
 	public float rage;
 	public int redOrbs;
 	public int hpLevel;
@@ -42,6 +48,16 @@ public final class PlayerState {
 
 	public float maxMp() {
 		return rules.maxMp(mpLevel);
+	}
+
+	/**
+	 * 영웅 갱신의 마법 재생 (원작 sub_001D6CF0 0x1D6F00–0x1D6F88) [확실: 코드]: 게임 상태 0xB (플레이 중) 이고 0x29DB58 · 영웅 +0x10 이 0 일 때
+	 * d = 0x3044A4 × (1/60) × (vt+0xC8 × 0.25 + 0.75) × +0x16C [시간 배율 추정 1], d ≠ 0 이면 MP = min(max(MP + d, 0), 최대 MP).
+	 */
+	public void regenMagic(float dt) {
+		if (mpRegen != 0) {
+			mp = Math.min(Math.max(mp + mpRegen * dt, 0), maxMp());
+		}
 	}
 
 	public void addRedOrbs(int n) {

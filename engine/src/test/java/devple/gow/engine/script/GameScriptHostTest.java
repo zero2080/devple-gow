@@ -48,6 +48,33 @@ class GameScriptHostTest {
 		assertEquals(true, n.getVar(null, 1, 39, 2));
 	}
 
+	/**
+	 * Internal 0x12 (GameMgr_OnMessage 0x1B0B34: float → 0x3044A4) = 마법 재생 MP/초. 영웅 갱신 0x1D6F20 이 매 프레임 MP += 값/60 을
+	 * 0..최대 MP 로 자른다. 예전 엔진은 0x12 를 버렸다 (ATHN02D RewardPlayer 10 / TurnFaceOffFinal 0).
+	 */
+	@Test
+	void internal12SetsMagicRegeneration() throws Exception {
+		PlayerState p = player();
+		p.addItem(4, 1);
+		ScriptHost h = new ScriptHost();
+		h.players = () -> p;
+		java.util.ArrayDeque<Object> st = new java.util.ArrayDeque<>();
+		st.push(10f);
+		h.call(null, 1, GameScriptHost.MAGIC_REGEN, 1, st);
+		assertTrue(st.isEmpty(), "인자 1 개를 꺼냄");
+		assertEquals(10f, p.mpRegen, 1e-6);
+		p.mp = 0;
+		p.regenMagic(0.5f);
+		assertEquals(5f, p.mp, 1e-4);
+		p.regenMagic(1000f);
+		assertEquals(p.maxMp(), p.mp, 1e-4, "최대 MP 로 자름");
+		st.push(0f);
+		h.call(null, 1, GameScriptHost.MAGIC_REGEN, 1, st);
+		p.mp = 3;
+		p.regenMagic(1f);
+		assertEquals(3f, p.mp, 1e-6, "0 = 재생 없음");
+	}
+
 	@Test
 	void withoutPlayerInternalWritesAreIgnored() {
 		ScriptHost h = new ScriptHost();

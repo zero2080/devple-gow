@@ -330,10 +330,41 @@ HP ≤ 9800 → 잡기 원 → ○ GRAB → 260 MAIMEWGRAB (일반 GrabSync, 같
 - 결과 (쉬움, 결정적): 머리 뜯기 57.5 초 → 메시지 595 77.9 초 → 광선·석화·파괴 83.97 / 84.04 / 86.10 / 93.17 / 96.02 / 98.12 초 (6 번째) →
   MAcdHullOff·DrOffCam·문 불꽃 사라짐·아테나 얼굴 PlayTalk2 99.1 초 (여왕 사망 약 42 초 뒤) → 107.1 초 DMCWall VisOff (문 열림), CheckPoint.
   예전: 200 초 동안 미노타우로스만 다시 나옴 (석상 파괴 0 회 집계). 증거 `work/verify/athn02d_gaze/` (광선, 석화, 파괴, 문 카메라, 불꽃 벽 꺼짐).
-- 남은 차이: ~~석화된 적은 색이 그대로~~ → 석상 GO 로 바꿔 끼움 (35 §2.2, 2026-10-24; 석상 타수 7 이라 6 번째 파괴 115.6 초, 그 사이 Respawn 이 더 나와 봇은 280 초 안에 문을 못 연다 — 43 문서), 하피류는 이 구간에 나오지 않음 [미확인], 6 번째 뒤에도 남은
+- 남은 차이: ~~석화된 적은 색이 그대로~~ → 석상 GO 로 바꿔 끼움 (35 §2.2, 2026-10-24; 석상 타수 7 이라 6 번째 파괴 115.6 초 → MP 재생·처형 대상 수정 뒤 문 109.0 초, §5.3), 하피류는 이 구간에 나오지 않음 [미확인], 6 번째 뒤에도 남은
   Respawn 이 3 마리를 더 낸다 (조건은 트리거 시점 LevelData1 ≤ 6 — 원작도 같은 데이터).
 - 테스트: `MedusaQueenFightTest.stoneKillCountsOncePerMinotaur` (1046 → LevelData1 2, 0.07 초 차이 두 석상 → LevelData4 2; 대조 0.5 초 제거 = 3),
   `MagicSpellsTest.medusaBeamNeedsSquare`, `BotInputTest`.
+
+### 5.3 미노타우로스 방 리스폰·MP 정밀 검사 (2026-10-24)
+**스크립트 (원작 그대로, 교착 없음) [확실: 데이터·코드]**
+- SpawnEnemy MinotaurLevel1AI6/10/9 (모드 1, Filter 25): 슬롯 0 MaximumCount 없음 (무제한), 1 = 3 (+0xB8, 스폰 경로 0x1AC580/0x1AC630/0x1AC850 이
+  읽지 않음), Respawn 참, RefractTime 1, 조건·DelayedEnable = `LevelData1 ≤ 6 && LevelData0 && !GlobalData1`, Delay = LevelData3 == 0 이면 1 / 2 / 1.25 초
+  (처음, FirstMsgDone 1040(141) 이 셋을 발동) 아니면 **7 초** (`jump_if` 는 참이면 점프), Action = LevelData5 = 거짓, LevelData3 += 1.
+- 제거 메시지 6 (0x1AC630): +0x104 += 1, 보낸 쪽이 있고 Respawn 이면 Trigger (최소 지연 0.25) → 조건은 **죽은 시점** LevelData1 ≤ 6.
+- MinoDestruction1 (DestructionSensor 모드 3): 조건 LevelData5 == 거짓은 제거 때, **Delay 0.5 초** 뒤 LevelData5 = 거짓, LevelData4 += 1.
+- EventSmash1 (1046) 은 지연 없이 LevelData1/4 += 1, LevelData5 = 참 (HulkSmashy 0.51 초 뒤 끔). 문 엔티티는 두 센서의 대상이라 그 발동 때만 조건
+  (LevelData1 ≥ 6 && LevelData3 == LevelData4) 을 본다.
+- 결론: 3 마리가 늘 유지되고, 부순 수 ≤ 6 인 동안 죽은 자리마다 7 초 뒤 다시 나온다. 문은 (a) 일곱 번째 파괴 뒤 (더는 안 나옴) 남은 것을 다 잡거나,
+  (b) 6 이상에서 살아 있는 셋을 리스폰 7 초 안에 모두 없애면 열린다. 세는 쪽은 스폰마다 정확히 한 번 (석상 = EventSmash1, 보통 사망 = MinoDestruction1)
+  이라 원작은 교착이 없다. 엔진 카운트도 실측 일치 (LevelData3 == 4, 석상 제거 1046 다음 틱 — §5.2 원인 3).
+
+**엔진 결함 1 — 마법 재생 [확실]**: `MedusaRipZone-RewardPlayer` (FirstMsgDone + 10 초) 의 `call_int Internal:0x12 (10)` 는 GameMgr_OnMessage 0x12
+(0x1B0B34, 표 0x2B5E20) = float 를 0x3044A4 (PlayerProgress +0x64) 에 저장하고, 영웅 갱신 sub_001D6CF0 (0x1D6F00–0x1D6F88) 이 게임 중 매 프레임
+MP (0x30449C) = min(max(MP + 값/60 × 시간 배율, 0), 최대 MP) 로 더한다 → **10 MP/초**. 문 조건 + 10 초의 `TurnFaceOffFinal` 이 0 으로 끈다.
+단계 0 광선 12.5 MP/초 이므로 순소모 2.5/초 — 이 방은 MP 가 사실상 무한하다. 미노타우로스 오브 (770/771/772/773) 는 Health·Magic 슬롯 템플릿이
+51/52 = 붉은 오브라 파란 오브가 없고 (35 §2), 방에 상자 Creator 도 없다. 엔진은 0x12 를 버렸다 (`ScriptHost` 기본 → listener.internal) →
+`PlayerState.mpRegen` / `regenMagic` (`HeroRig` 가 magic.update 앞에서, HP > 0), 세이브 `mpRegen`.
+**엔진 결함 2 — 처형 대상 [확실: 실측]**: `GameScene` 이 결합 (GrabSync) 이 처형 성공으로 끝나면 그 틱의 `target` (가장 가까운 적) 을 HP 0 으로
+했다. 여왕 머리 뜯기 결합은 여왕 사망 뒤 영웅 Idle 동안 남아 있다가 68.88 초 첫 미노타우로스가 스폰된 틱에 대상이 바뀌며 끝나, 그 미노타우로스가 즉사
+(1039 25 90 0 → 69.88 MinoDestruction1, 7 초 리스폰). 이제 잡고 있던 상대 (`grab.partner()`) 만 죽인다.
+**봇 [엔진 전용]**: 광선 조준 (`MedusaGaze.aim` = 영웅 combatant 대상) 을 봇 대상으로 (가장 가까운 적이 석상이면 광선이 석상 쪽으로 갔다); 광선 중 정면 ±60°,
+220 안의 아직 돌이 아닌 적이 있으면 끄지 않고 넘김 (`GAZE_SWEEP`, 최대 4.5 초); 대상 게이지가 0.4 초 동안 안 줄면 뗌 (헛 광선 방지 — 석화되면 곧바로
+떼는 것은 그대로); 215 안에서 시작; 석상은 △ (combo6A 피해 6) + □ (2) = 두 타 (□□□△ = 2+2+2+0 네 타), 석상에는 ○ 묶음 없음.
+- 결과 (쉬움, 결정적, 3 회 같음): EventCombat1 62.9 → RewardPlayer 77.9 → 파괴 83.6 / 86.8 / 87.1 / 93.6 / 96.9 / 100.0 초 (6 번째에 LevelData3 == 4)
+  → FinalCamOn 100.0, CheckPoint2 108.0, **DMCWall VisOff 109.0 초** (여왕 사망 46 초 뒤, 영상 약 75 초), TurnFaceOffFinal 110.0 (재생 0). 그 뒤 남은
+  리스폰 3 회는 원작 데이터대로. 예전: 6 번째 115.6 초, MP 15 고정, 보통 공격으로 셋을 잡아 DMCWall 179.8 초 (실행마다 다름 — 280 초 안에 못 연 적도).
+- 테스트: `MedusaQueenFightTest.minotaurRoomRegeneratesMagicUntilTheDoorOpens`, `GameScriptHostTest.internal12SetsMagicRegeneration`,
+  `BotInputTest.stoneTargetStartsWithTriangleAndNeverGrabs`.
 
 ## 6. 아레스 (ATHN08A 1단계 / ATHN08C 3단계) — 결말까지 동작, 연출 일부 미구현
 ```

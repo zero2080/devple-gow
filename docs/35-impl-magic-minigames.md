@@ -47,6 +47,12 @@ TWK `/Player/MedusaHead` 의 일부 값은 덤프가 float 로 잘못 보여준�
   는 USEHEAD 를 유지할 뿐이다 (놓으면 PUTAWAYHEAD). 메시지 595 "[L2]를 누르고, [□]를 눌러서 발사", 734 "L2 홀드 + □ 홀드" 와 같다.
   예전 엔진은 L2 만으로 광선을 켰다 (37 문서 §5.2).
 - 원뿔 안 적의 동결 게이지 −= FreezeFactor × 60 × dt.
+- **MP 경제 (ATHN02D 미노타우로스 방)** [확실: 코드·데이터]: 단계 0 광선은 12.5 MP/초, 미노타우로스 (게이지 6000) 하나 ≈ 1 초 ≈ 12.5 MP.
+  미노타우로스 오브는 붉은색뿐이다 — R_MIN OrbEmitter 770 "MIN Death" / 771 "MIN Shatter" / 772 "MIN Air Shatter" 의 Health·Magic 슬롯
+  템플릿이 51 / 52 (= Orb 051 "Red Orb Small 5", 052 "Red Orb Large10", 종류 2), Low 세트 없음 (임계 0). 773 Decap 도 붉은색, 774 Throat Stab 만
+  녹색 (Orb 000). 방에 상자 Creator 도 없다. 대신 스크립트 `MedusaRipZone-RewardPlayer` (메시지 141 뒤 10 초) 가 Internal 0x12 (10) =
+  **마법 재생 10 MP/초** (0x3044A4, 영웅 갱신 0x1D6F20) 를 켜고 문이 열린 뒤 `TurnFaceOffFinal` 이 0 으로 끈다 → 광선 순소모 2.5/초라 MP 가
+  사실상 줄지 않는다. 예전 엔진은 0x12 를 버려 봇이 6 번째 석상 뒤 MP 15 에서 멈췄다 (37 문서 §5.2). `PlayerState.mpRegen` / `regenMagic`.
 - 조준은 락온 대상 쪽으로 프레임당 0.15 보간한다 (Aim Speed). 몸 정면 ±80° 로 제한한다 [추정].
 
 **USEHEAD 는 애니가 없는 기술이다**. 원작은 SCR_MedusaHead 가 useHeadTurnLeft/Right 를 직접 섞는다.

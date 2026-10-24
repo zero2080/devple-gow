@@ -23,6 +23,8 @@ public final class SaveGame {
 	public int difficulty;
 	public int costume;
 	public float hp, mp;
+	/** 마법 재생 MP/초 (PlayerProgress +0x64 = 0x3044A4, 스크립트 Internal 0x12). */
+	public float mpRegen;
 	public int redOrbs, hpLevel, mpLevel, gorgonEyes, phoenixFeathers, deaths, itemFlags;
 	public String selectedMagic;
 	/** 누적 플레이 시간 (초, 원작 슬롯 디렉터리 f32 playTime — 11 문서 §5.1). */
@@ -49,6 +51,7 @@ public final class SaveGame {
 		g.costume = p.costume;
 		g.hp = p.hp;
 		g.mp = p.mp;
+		g.mpRegen = p.mpRegen;
 		g.redOrbs = p.redOrbs;
 		g.hpLevel = p.hpLevel;
 		g.mpLevel = p.mpLevel;
@@ -73,6 +76,7 @@ public final class SaveGame {
 		p.mpLevel = mpLevel;
 		p.hp = Math.max(hp, 2);
 		p.mp = mp;
+		p.mpRegen = mpRegen;
 		p.redOrbs = redOrbs;
 		p.gorgonEyes = gorgonEyes;
 		p.phoenixFeathers = phoenixFeathers;
@@ -99,6 +103,7 @@ public final class SaveGame {
 		pr.setProperty("costume", Integer.toString(costume));
 		pr.setProperty("hp", Float.toString(hp));
 		pr.setProperty("mp", Float.toString(mp));
+		pr.setProperty("mpRegen", Float.toString(mpRegen));
 		pr.setProperty("redOrbs", Integer.toString(redOrbs));
 		pr.setProperty("hpLevel", Integer.toString(hpLevel));
 		pr.setProperty("mpLevel", Integer.toString(mpLevel));
@@ -132,6 +137,7 @@ public final class SaveGame {
 		g.costume = Integer.parseInt(pr.getProperty("costume", "0"));
 		g.hp = Float.parseFloat(pr.getProperty("hp"));
 		g.mp = Float.parseFloat(pr.getProperty("mp"));
+		g.mpRegen = Float.parseFloat(pr.getProperty("mpRegen", "0"));
 		g.redOrbs = Integer.parseInt(pr.getProperty("redOrbs"));
 		g.hpLevel = Integer.parseInt(pr.getProperty("hpLevel"));
 		g.mpLevel = Integer.parseInt(pr.getProperty("mpLevel"));

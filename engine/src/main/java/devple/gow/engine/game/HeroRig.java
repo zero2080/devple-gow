@@ -315,6 +315,9 @@ public final class HeroRig implements AutoCloseable {
 			player.artemisEquipped = false;
 		}
 		magic.select(in, ctl.position); // 방향키 마법 선택 (원작 sub_001D7E10)
+		if (player.hp > 0) {
+			player.regenMagic(dt); // 스크립트 Internal 0x12 마법 재생 (0x1D6F20, ATHN02D 미노타우로스 방 10/초)
+		}
 		magic.update(combat, in, dt);
 		// 포세이돈 연타 회전 (SCR_Lightning 0x195160: 영웅 행렬에 Y 회전 Mash Max Spin · 연타율)
 		ctl.yaw += magic.lightningSpin() * dt;

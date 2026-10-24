@@ -805,6 +805,12 @@ BMI PAND03G (보스 등장 조건 미충족), 분신 크라토스 ATHN08B (가�
 같은 재현 (쉬움, 봇): 회색 석상 84.0 초, 첫 파괴 85.8 초 (조각·돌 먼지, 적중 MFX 22 돌), 6 번째 EventSmash1 115.6 초 (예전 98.1 초 — 석상이 한 방이 아니라 □ 4 번). 그 사이 Respawn 이 더 내 6 번째 때 스폰 수 ≠ 없어진 수라
 문 조건 (LevelData1 ≥ 6 && LevelData3 == LevelData4) 이 안 맞고, 봇은 MP 가 바닥나 (미노타우로스 오브는 붉은 오브뿐) 남은 미노타우로스를 보통 공격으로 늦게 잡아 280 초 안에 문이 안 열린다 [봇 한계 — 스크립트·데이터는 그대로].
 증거 `work/verify/athn02d_statue/before_petrified_93.0s.jpg` (예전), `after_statues_84.0s.jpg`, `after_shatter_86.3s.jpg`, `hero_before_petrified.png`, `hero_after_statue.png`, `hero_after_shatter.png`.
+MP·리스폰 정밀 검사 (2026-10-24, 37 §5.3): 위 "봇 한계" 는 엔진 결함 둘이었다 — (1) 스크립트 Internal 0x12 (`RewardPlayer` 10 = 마법 재생 10 MP/초,
+0x1B0B34 → 0x3044A4, 영웅 갱신 0x1D6F20) 를 버려 MP 가 바닥났다, (2) 여왕 머리 뜯기 결합이 끝나는 틱의 "가장 가까운 적" 을 처형 성공으로 죽여 68.88 초에
+막 스폰된 미노타우로스가 HP 0. 리스폰·카운터 (SpawnEnemy 조건 LevelData1 ≤ 6 · 지연 7 초, MinoDestruction1 0.5 초) 는 원작 스크립트와 같고 교착은 없다.
+봇: 광선 조준 = 봇 대상, 광선 중 정면 ±60° 220 안의 다음 대상으로 넘김, 게이지가 0.4 초 안 줄면 뗌, 석상은 △ (6) + □ (2), 석상에 ○ 없음.
+결과 (쉬움, 결정적 3 회 같음): 파괴 83.6 / 86.8 / 87.1 / 93.6 / 96.9 / 100.0 초 (6 번째에 문 조건) → FinalCamOn 100.0, CheckPoint2 108.0, DMCWall VisOff
+109.0 초 (여왕 EventCombat1 62.9 초 뒤 46 초, 영상 약 75 초), TurnFaceOffFinal 110.0 초 (재생 0). 예전: 6 번째 115.6 초, MP 15 에서 멈춤, DMCWall 179.8 초 (280 초 실행 중 한 번).
 
 이 검증으로 찾아 고친 엔진 버그:
 - **갑판 아래로 떨어짐** (ATHN01A): 위에 있는 적 몸이 영웅을 한 틱에 10–14 아래로 밀면 다음 틱 바닥 질의가 갑판 밑에서 시작해 ATHN01B 로 떨어졌다 → 38 §19 후속.

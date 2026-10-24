@@ -150,6 +150,43 @@ class MedusaQueenFightTest {
 		assertEquals(3, smashTwo(0.5f), "대조: 0.5 초 뒤 제거하면 뒤 석상을 두 번 셈 (LevelData3 ≠ 4 → 문이 안 열림)");
 	}
 
+	/**
+	 * 미노타우로스 방의 마법 재생 (원작 MP 경제): FirstMsgDone (1040, 메시지 141) → 10 초 뒤 MedusaRipZone-RewardPlayer 가 Internal 0x12 (10) =
+	 * 0x3044A4 마법 재생 10 MP/초 (GameMgr 0x1B0B34, 영웅 갱신 0x1D6F20) — 단계 0 광선 Drain 12.5/초를 거의 메운다. 문 조건 (부순 수 ≥ 6, 스폰 ==
+	 * 없어진 수) 이 서고 10 초 뒤 TurnFaceOffFinal 이 0 으로 끈다. 예전 엔진은 0x12 를 버려 봇의 MP 가 바닥나 문을 못 열었다 (미노타우로스 오브는 붉은색뿐).
+	 */
+	@Test
+	void minotaurRoomRegeneratesMagicUntilTheDoorOpens() throws Exception {
+		BossRig r = spawned();
+		devple.gow.engine.game.PlayerState p = new devple.gow.engine.game.PlayerState(devple.gow.engine.game.GameRules.load(r.perm));
+		p.addItem(4, 1); // 메두사의 시선 (EventCombat1 Internal:39)
+		r.host.players = () -> p;
+		r.host.levelData().put(0, true);
+		r.world.postEvent(1040, 141, 0, 0, null); // 메시지 141 이 닫힘 → FirstMsgDone
+		r.run(9.5f);
+		assertEquals(0f, p.mpRegen, "RewardPlayer 지연 10 초 전");
+		r.run(1f);
+		assertEquals(10f, p.mpRegen, 1e-4, "RewardPlayer → Internal 0x12 (10): " + r.log);
+		p.mp = 0;
+		for (int i = 0; i < 60; i++) {
+			p.regenMagic(1 / 60f);
+		}
+		assertEquals(10f, p.mp, 1e-3, "1 초에 10 MP");
+		// 6 번째 석상 파괴로 문 조건이 선다 (부순 수 5 → 6, 스폰 3 == 없어진 수 2 + 1)
+		float[] in = r.inside("MedusaRipZone-pCube3661-EventCombat1");
+		assertNotNull(in);
+		devple.gow.engine.script.ScriptActor a = r.world.addActor("MedusaRmEnemies#42", 25, in);
+		r.host.levelData().put(1, 5);
+		r.host.levelData().put(3, 3);
+		r.host.levelData().put(4, 2);
+		r.world.postEvent(1046, 0, 0, 0, a);
+		r.run(0.1f);
+		assertEquals(6, r.levelData(1));
+		assertEquals(3, r.levelData(4));
+		r.run(10.5f);
+		assertEquals(0f, p.mpRegen, "TurnFaceOffFinal (문 조건 + 10 초) → Internal 0x12 (0)");
+	}
+
 	/** 미노타우로스 둘을 0.07 초 차이로 석화·파괴, 각자 destroyAfter 초 뒤 스크립트 제거 → LevelData4 (부순 수는 LevelData1 = 2 확인). */
 	private static int smashTwo(float destroyAfter) throws Exception {
 		BossRig r = spawned();

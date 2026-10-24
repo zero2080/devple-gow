@@ -135,6 +135,13 @@ public class ScriptHost extends GameScriptHost {
 				return null;
 			}
 			case 0x8 -> listener.camera(s(args.get(0)));
+			case MAGIC_REGEN -> { // 0x12 (0x1B0B34): 마법 재생 MP/초 → 0x3044A4 (ATHN02D RewardPlayer 10 / TurnFaceOffFinal 0)
+				PlayerState p = players.get();
+				if (p != null) {
+					p.mpRegen = EscVm.f(args.get(0));
+				}
+				listener.internal(func, args);
+			}
 			case SHOW_MESSAGE -> listener.message(EscVm.i(args.get(0)), EscVm.f(args.get(1)));
 			case SHOW_ITEM_CARD -> listener.message(EscVm.i(args.get(0)), EscVm.f(args.get(1)));
 			case 0x1B, 0x1C, 0x1D, 0x38 -> listener.music(switch (func) {

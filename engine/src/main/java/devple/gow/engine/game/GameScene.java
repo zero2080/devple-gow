@@ -165,6 +165,17 @@ public final class GameScene implements Scene {
 	private Shader enemyShader;
 	private Tweaks orbTweaks;
 	private devple.gow.engine.combat.GrabSync grab;
+	/** 자동 플레이: 시선 보유 시 봇 대상 (영웅 combatant 대상 = 광선 조준), 아니면 null. */
+	private EnemyFighter botAim;
+	/** 자동 플레이 시선: 지켜보는 대상, 그 동결 게이지, 광선이 켜졌는데 게이지가 안 줄어든 시간 (초). */
+	private EnemyFighter gazeWatch;
+	private float gazeMeter, gazeStall;
+
+	/** p 가 영웅 정면 (fx, fz) 기준 cos ≥ minCos 안. */
+	private boolean inFront(Vector3f p, float fx, float fz, float minCos) {
+		float dx = p.x - hero.ctl.position.x, dz = p.z - hero.ctl.position.z, l = (float) Math.hypot(dx, dz);
+		return l < 1e-3f || (dx * fx + dz * fz) / l >= minCos;
+	}
 	private devple.gow.engine.fx.MagicFx magicFx;
 	private final Random rnd = Engine.LOCKSTEP ? new Random(1) : new Random(); // 검증 lockstep 이면 고정 씨앗
 	/** 보스전 (37 문서, 없으면 null) / 전투 ↔ 스크립트 이벤트 다리 (1035/1047/1039/1019/1054). */
@@ -2208,7 +2219,17 @@ public final class GameScene implements Scene {
 				EnemyFighter stone = enemies.stream().map(Enemy::fighter).filter(f -> !f.dead() && f.petrified()
 						&& f.pos.distance(hero.ctl.position) < 400).min(java.util.Comparator.comparingDouble(
 						f -> f.pos.distanceSquared(hero.ctl.position))).orElse(null);
-				if (stone != null) {
+				// 광선이 켜져 있으면 끄지 말고 옆의 아직 돌이 아닌 적으로 넘긴다 (한 번 들어 모두 얼림 — 사람 플레이처럼). 하나씩 얼려 부수면 나머지 둘이
+				// 그동안 영웅을 넘어뜨려 (hitBall/hitLand 3–4 초) 6 번째 파괴가 늦었다 [엔진 전용 봇]
+				// 다음 대상은 몸 정면 ±60° 안만 (USEHEAD 조준은 ±80°, 봇은 광선 중 몸을 돌리지 않는다)
+				float fx = (float) -Math.sin(hero.ctl.yaw), fz = (float) -Math.cos(hero.ctl.yaw);
+				EnemyFighter fresh = hero.magic.medusa.beamOn() ? enemies.stream().map(Enemy::fighter).filter(f -> !f.dead() && !f.petrified()
+						&& f.freezeMax() < 60000 && f.pos.distance(hero.ctl.position) < devple.gow.engine.input.BotInput.GAZE_SWEEP
+						&& inFront(f.pos, fx, fz, 0.5f)).min(java.util.Comparator.comparingDouble(
+						f -> f.pos.distanceSquared(hero.ctl.position))).orElse(null) : null;
+				if (fresh != null) {
+					at = fresh;
+				} else if (stone != null) {
 					at = stone;
 				}
 			}
@@ -2216,13 +2237,27 @@ public final class GameScene implements Scene {
 			// 잡기를 기다리는 소품 (HP 32767, 자세 태그 설정 중 — ATHN01F 쌍둥이 M69 SET_1B0 305: 영웅 GRAB → 846) 이 가까우면 목표에서 ○ [엔진 전용]
 			auto.grabCue = enemies.stream().map(Enemy::fighter).anyMatch(f -> !f.dead() && f.maxHp() >= 32767
 					&& f.combat().stanceTag() >= 0 && f.pos.distance(hero.ctl.position) < 120);
-			auto.grabTarget = at != null && at.maxHp() < 32767 && waitsForGrab(at);
+			// 석상은 잡지 않는다 (예전 봇은 석상에 ○ → 200 grab → 204 grabReject 로 1 초를 버렸다, ATHN02D) [엔진 전용 봇]
+			auto.grabTarget = at != null && at.maxHp() < 32767 && !at.petrified() && waitsForGrab(at);
+			auto.stoneTarget = at != null && at.petrified();
 			// 메두사의 시선 (원작 조작 L2 + □, 메시지 595): 보유 + MP + 석화 가능한 대상 (게이지 < 60000, 메두사·갑옷병 면역) 이 아직 돌이 아님 [엔진 전용 봇]
 			boolean gazeOwned = hero.player.owned(Weapon.MEDUSA);
 			auto.mp = gazeOwned ? hero.player.mp : -1;
+			// 광선이 대상을 못 맞히면 (원뿔·시선 밖 — 동결 게이지가 0.4 초 동안 그대로) 떼고 다시 다가가 몸을 돌린다: 예전엔 GAZE_MAX 동안 헛되이
+			// 켜 두었다 (MP·시간 낭비) [엔진 전용 봇]
+			if (hero.magic.medusa.beamOn() && at != null && at == gazeWatch && at.freezeMeter() >= gazeMeter - 1e-3f) {
+				gazeStall += dt;
+			} else {
+				gazeStall = 0;
+			}
+			gazeWatch = at;
+			gazeMeter = at != null ? at.freezeMeter() : 0;
 			auto.gaze = gazeOwned && hero.player.mp >= AutoPlay.GAZE_MP && at != null && !at.dead() && !at.petrified()
-					&& at.freezeMax() < 60000 && !grab.active();
+					&& at.freezeMax() < 60000 && !grab.active() && gazeStall < 0.4f;
 			auto.selectGaze = gazeOwned && hero.player.selectedMagic != Weapon.MEDUSA;
+			// 광선 조준 (MedusaGaze.aim = 영웅 combatant 대상) 은 봇이 고른 대상 — 가장 가까운 적이 석상이면 광선이 석상 쪽으로 가 산 미노타우로스를
+			// 못 맞혔다 [엔진 전용 봇]
+			botAim = gazeOwned && at != null && !at.dead() ? at : null;
 			in = obj != null ? auto.reach(hero.ctl.position, obj, inputFrame.yaw(camYaw), dt)
 					: auto.steer(hero.ctl.position, at != null && at.maxHp() < 32767 ? aimPoint(at) : null, boss != null, inputFrame.yaw(camYaw), dt);
 			if (auto.done()) {
@@ -2255,7 +2290,7 @@ public final class GameScene implements Scene {
 					Math.toDegrees(camYaw), Math.toDegrees(inYaw), inputFrame.hold(), grab.active(), globalIdle());
 		}
 		if (!grab.active()) {
-			hero.combat.setTarget(target);
+			hero.combat.setTarget(botAim != null ? botAim : target);
 			heroAim = selectHeroTarget(in, inYaw); // 스틱 월드 방향 = 입력 기준 (컷 뒤 유지 포함)
 			hero.autoAim = true;
 			hero.update(in, inYaw, dt, heroAim != null ? aimCenter(heroAim) : null);
@@ -2272,6 +2307,7 @@ public final class GameScene implements Scene {
 		if (target != null && (boss == null || !boss.claimsGrab(target))) {
 			Enemy te = enemies.stream().filter(x -> x.fighter() == target).findFirst().orElse(null);
 			boolean was = grab.active();
+			EnemyFighter held = grab.partner(); // 처형 대상 = 잡고 있던 적 (끝나는 틱의 가장 가까운 적이 아님)
 			Input gi = in;
 			if (boss != null) {
 				gi = boss.minigameInput(in, grab.timed(), grab.qte());
@@ -2281,8 +2317,10 @@ public final class GameScene implements Scene {
 			}
 			grab.update(gi, target, te != null ? te.kind().tweaks() : null, dt);
 			// HP 32767 소품 (ATHN01F 쌍둥이) 은 미니게임 성공 (853 MAIXPTBEDMOUNTWIN → 875) 뒤에도 그대로 — 처형이 아니다
-			if (was && !grab.active() && grab.executionSucceeded() && target.maxHp() < 32767) {
-				target.hp = 0; // 처형 성공 → 사망 처리 (원작은 처형 기술의 피해/스크립트) [근사]
+			// 예전엔 끝나는 틱의 target (가장 가까운 적) 을 죽였다: ATHN02D 여왕 머리 뜯기 (보스 → claimsGrab, 이 경로는 여왕 사망 뒤 영웅 Idle 동안
+			// 결합이 남아 있음) 가 끝나는 순간 막 스폰된 미노타우로스 (68.88 초) 가 HP 0 → 0.5 초 뒤 MinoDestruction1 + 7 초 Respawn 이 한 번 더 돌았다
+			if (was && !grab.active() && grab.executionSucceeded() && held != null && held.maxHp() < 32767) {
+				held.hp = 0; // 처형 성공 → 사망 처리 (원작은 처형 기술의 피해/스크립트) [근사]
 			}
 		}
 		updateThrowTarget(dt);

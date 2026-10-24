@@ -70,6 +70,8 @@ public final class AutoPlay {
 	public boolean grabCue;
 	/** 싸우는 대상이 잡기를 기다림 (자세 태그 ≥ 0, 예: 선창 히드라 기절 루프 107 SET_1B0 830) → 콤보 대신 ○ 부터. */
 	public boolean grabTarget;
+	/** 대상이 석상 (석화된 적) — ○ 잡기 묶음 없이 □ 묶음만 (BotInput.stoneTarget). */
+	public boolean stoneTarget;
 	/**
 	 * 메두사의 시선으로 대상을 석화할 때 (GameScene: 시선 보유 + MP ≥ {@link #GAZE_MP} + 대상 동결 게이지 &lt; 60000 이고 아직 돌이 아님) —
 	 * ATHN02D 메시지 595 "전진하려면 모든 미노타우르스를 얼린 뒤 부숴야" (EventSmash1 1046 만 센다). 석화된 대상은 보통 묶음 □ 로 부순다.
@@ -153,6 +155,7 @@ public final class AutoPlay {
 				return bot.press(null);
 			}
 			bot.grabTarget = grabTarget;
+			bot.stoneTarget = stoneTarget;
 			bot.gaze = gaze;
 			bot.selectGaze = selectGaze;
 			bot.steer(hero, enemy, camYaw, dt);
