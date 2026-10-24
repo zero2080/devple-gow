@@ -777,6 +777,11 @@ public final class GameScene implements Scene {
 				spawn.z, kinds.keySet());
 		WadAssets.dropPrefetched(); // 쓰지 않은 미리 해석 (예: 소리 전용 RSRCS) 은 버린다
 		otherDataPrep.clear(); // 이후 이웃 교체는 예전처럼 그 틱에 동기로
+		if (session.seamZone >= 0) { // 이음 직전 구역 제목을 새 HUD 에 (원작 HUD 는 하나 — 43 §19)
+			int z = session.seamZone;
+			session.seamZone = -1;
+			zoneReport(z);
+		}
 		devple.gow.engine.core.PerfMonitor.loadTime("enter " + levelName, enterT0);
 	}
 
@@ -1193,6 +1198,11 @@ public final class GameScene implements Scene {
 			public void neighbourIdle(boolean idle) {
 				scriptIdle = idle; // 원작 전역 정지 0x29DB58 은 하나 (현재 레벨 리스너의 0xC 와 같음)
 				devple.gow.engine.combat.AiTargets.globalHold = globalIdle();
+			}
+
+			@Override
+			public void neighbourZoneReport(int zone) {
+				zoneReport(zone); // 원작 GameMgr 구역 제목은 슬롯 구분 없음 (0x1B0A28, 43 §19)
 			}
 
 			@Override
@@ -1624,6 +1634,8 @@ public final class GameScene implements Scene {
 			}
 		} else {
 			session.warpLeft = null;
+			// 이음 직전에 띄운 구역 제목은 새 씬 HUD 가 이어 띄운다 (원작 HUD 하나, 43 §19)
+			session.seamZone = zoneShown >= 0 && time - zoneShownAt < ZONE_TITLE_SECS ? zoneShown : -1;
 		}
 		pendingEngine.scenes().transitionTo(new GameScene(session, wad, a));
 	}
@@ -1955,11 +1967,18 @@ public final class GameScene implements Scene {
 			hud.variables().event("PS2_ZoneReport_Event", 1);
 		}
 		zoneTitle = title;
+		zoneShown = zone;
+		zoneShownAt = time;
 		System.out.println("구역 제목 " + zone + ": " + title);
 	}
 
 	/** 마지막으로 띄운 구역 제목 (검증용, 없으면 null). */
 	String zoneTitle;
+	/** 마지막 구역 제목 번호와 띄운 씬 시각 — 이음으로 넘긴다 ({@link GameSession#seamZone}). */
+	private int zoneShown = -1;
+	private float zoneShownAt;
+	/** HUD StatsZoneReport 표시 시간 (페이드 인 9 프레임 + Loop_Stats 10 초, 21 문서) — 이 안에 이음이면 새 씬이 다시 띄운다. */
+	static final float ZONE_TITLE_SECS = 10f;
 
 	/** 구역 제목 = 메시지 800 + 구역 의 첫 줄 (0x1B95D0 줄 0), 없으면 "Unknown zone" (0x1B8BA0). */
 	static String zoneTitle(devple.gow.tools.ui.MessageTable messages, int zone) {

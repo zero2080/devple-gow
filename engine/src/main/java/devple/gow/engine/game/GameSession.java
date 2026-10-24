@@ -53,6 +53,11 @@ public final class GameSession {
 	public final java.util.Map<String, devple.gow.engine.script.ScriptWorld> residentWorlds = new java.util.HashMap<>();
 	/** -Dgow.auto 경로 (gow.auto.route) 중 이음 전환: 다음 레벨 씬이 같은 자동 플레이를 이어 받는다 (검증 하네스, 엔진 전용). */
 	public AutoPlay autoCarry;
+	/**
+	 * 이음 직전 10 초 안에 띄운 구역 제목 번호 (없으면 −1) — 원작 HUD 는 하나라 이음을 넘어도 제목 (StatsZoneReport 10 초) 이 이어지는데 엔진 씬은
+	 * 이음마다 HUD 를 새로 만든다 → 새 씬이 다시 띄운다 [근사: 엔진 구조, 페이드 인부터 다시] (43 문서 §19: ATHN04C → 05A "아테네의 지붕").
+	 */
+	int seamZone = -1;
 	/** -Dgow.chain 진행 번호 (48 문서). */
 	int chainIndex;
 

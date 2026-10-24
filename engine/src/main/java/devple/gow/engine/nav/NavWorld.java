@@ -80,8 +80,14 @@ public final class NavWorld {
 	 *       (턱은 &amp; 0x4300000) — 선분은 GeneralGuide 막이를 지나 뒤의 벽·턱을 본다.</li>
 	 * </ul>
 	 * 영웅 +0x258 = 0x500000 (NoPlayerCollision·NoPlayerUse, Player 생성 0x1D63E0).
+	 * <p>
+	 * 바닥 호출 마스크 (0x1EA5F0 의 s2 → 0x1EA8D4 a3, 자유 이동 0x1EA200 의 0x8020000 → 0x1EA2DC) 에는 <b>ClimbGuide 0x20000</b> 이 벽에 붙어 있지 않을 때
+	 * (+0x174 0x20 · +0x2D8 0x300 이 아닐 때, 0x1EA6A0 – 0x1EA6B8) 늘 들어 있다 → 지상·공중의 영웅과 적에게 ClimbGuide 윗면은 바닥이 아니다 [확실].
+	 * 바닥 질의는 벽에 붙지 않았을 때만 쓰므로 정적 면 거름에 넣는다. 위를 보는 ClimbGuide 면은 전 레벨 358 개 (ATHN05A 덩굴 통로 146 · PAND04E 96 …,
+	 * 덩굴 벽 아래 띠 상자 윗면) — 예전에는 ATHN05A 에서 뒤로 점프한 크라토스가 맞은편 벽 대신 16 폭 띠 윗면 (y 175 / 205) 에 내려섰다 (43 문서 §19).
+	 * 위를 보는 CombatGuide 면은 데이터에 없다.
 	 */
-	public static final long FLOOR_EXCLUDE_STATIC = SurfaceAttr.GENERAL_GUIDE.bit() | SurfaceAttr.NO_PLAYER_COLLISION.bit();
+	public static final long FLOOR_EXCLUDE_STATIC = SurfaceAttr.GENERAL_GUIDE.bit() | SurfaceAttr.NO_PLAYER_COLLISION.bit() | SurfaceAttr.CLIMB_GUIDE.bit();
 	/** 턱 질의 선분 제외 = 0x9030042 | (0x500000 &amp; 0x4300000) [확실: 0x1E3C54]. */
 	public static final long LEDGE_PROBE_EXCLUDE = SurfaceAttr.fromRecord(0x09030042, 0, 0) | SurfaceAttr.NO_PLAYER_COLLISION.bit();
 	/** 벽·옆 벽 질의 선분 제외 = 0x9030042 | 0x500000 [확실: 0x1E492C / 0x1E5530]. */

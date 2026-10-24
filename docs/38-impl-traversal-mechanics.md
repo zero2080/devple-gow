@@ -566,6 +566,10 @@ PAND05B `pBoxPand05B-Marker511` → `semoMovieHaveBox-…-semo08marker511` (Filt
 - 엔진 (정적 충돌 시트):
   - 바닥 `NavWorld.floor` 가 GeneralGuide 면을 뺀다 (`FLOOR_EXCLUDE_STATIC`) — 전 레벨 GeneralGuide 윗면 ≈ 200 (ATHN01D 8, ATHN02B 16, PAND04J 24 …) 에 더는 서지 않음.
     Water·Death 바닥은 엔진이 바닥 질의로 물·사망 면을 알아내므로 그대로 둔다 [근사].
+  - **ClimbGuide 도 바닥에서 뺀다** (43 §19): 0x1EA5F0 은 벽에 붙어 있지 않으면 호출 마스크 s2 에 0x20000 을 넣고 (0x1EA6A0 – 0x1EA6B8) 그 s2 로 바닥 질의
+    0x1E3298 을 부른다 (0x1EA8D4), 자유 이동 0x1EA200 은 0x8020000 그대로 (0x1EA2DC) [확실]. 바닥 질의는 벽에 붙지 않았을 때만 쓰므로 정적 거름에 넣었다.
+    위를 보는 ClimbGuide 면 = 전 레벨 358 (ATHN05A 덩굴 통로 146 · PAND04E 96 …, 덩굴 벽 아래 16 폭 띠 상자 윗면) — 예전엔 ATHN05A 에서 뒤로 점프한 크라토스가
+    맞은편 덩굴 벽 대신 띠 윗면 (y 175 / 205) 에 내려섰다. 위를 보는 CombatGuide 면은 데이터에 없다.
   - 벽·턱·옆 벽·위에서 사다리로 선분 = `NavWorld.segment(from, to, WALL_PROBE_EXCLUDE / LEDGE_PROBE_EXCLUDE)` (0x9030042 = Water·Death·AIBlock·ClimbGuide·GeneralGuide·CombatGuide, 벽은 NoPlayerUse 도).
     공중 다이빙 물 선분 등 다른 선분은 그대로.
   - 몸 구 밀어내기 (`LevelCollision.collideSphere`) 는 원래 GeneralGuide 를 막고 있었음 → 그대로 [확실]. CDV hull `Platforms.WALL_EXCLUDE` 도 이미 같은 규칙 ([근사] → [확실]).
@@ -788,3 +792,22 @@ ATHN01B 에도 선체 천장 (−44 ~ −64, 법선 −0.94 ~ −1) 과 빗면 �
   → 높이 = 위치 × liftHeight, 끝 = liftHeight, `Platforms.State.lift` 로 이음에 넘김. 해치 trapDoor2 (trapOpen 0.6 초 act 있음) 는 예전처럼 애니.
 - 검증: r12 (ATHN04C 에서 04A 창살) 연타에 따라 창살이 올라가고 크레토스가 지나간다 (영상 6460–6464). 시험 `AthensInteriorTest.liftGateRisesByTheTemplateHeight` ·
   `hatchIsNotGrabbableUntilTheKeyTurnsCollisionOn`.
+- ~~[근사] 영웅 관절 높이 대신 진행 비율~~ → §23.4 (원작 위치 모드).
+
+### 23.4 위치 모드 미끄럼 문 = 영웅 synchJoint 를 따라 (43 §19) [확실: 디스어셈블 / 근사: 표시한 것]
+- 이 갈래는 템플릿 +0x158 플래그 (#a6e81c1e, 로더 0x213830) **비트 0** 인 TAndF 만 탄다 (0x214470 · 0x2145B8 · 0x21491C) — ATHN04A LiftDoor13 (400) ·
+  ATHN04C "Slow Lift Gate" LiftDoor13 (7) · ATHN01C LiftDoor1 (50) 은 1, 해치 trapDoor2 (6) 는 0 (오브젝트 애니). `Interactables.Item.slide`.
+- 붙어 있고 위치 < 2 (완료 프레임 포함): 0x214058 이 문 GO y = 붙은 순간 y (+0x1E8, 0x2145A4) + **영웅 모델 인스턴스 (+0x104 → +0x50 행렬) 의 관절 +0xEA 의 모델 공간 y**,
+  속도 +0xE0 = Δy/dt. 관절 +0xEA = 이름 "synchJoint" (0x1F7D28 이 영웅 생성 때 찾음). 영웅 이동 0x60 ANITandF2 는 **매개변수 = min(문 위치, 1)** 로 세운다:
+  0x1ECA44 → 0x1F77B4 가 애니 시간 = 매개변수 × 길이, 재생 속도 0 → 영웅 liftDoor2 의 synchJoint 0 → 33.8 (5.467 초 클립), liftDoor3 끝 54.5.
+  → 문은 손과 같이 오르고 연타가 늦으면 같이 내려온다.
+- 완료 (위치 2): 0x214180 이 중력 (/GlobGame/Gravity 50 × 16 = 800 /s²) 으로 처음 + 높이 (#8743c048 × 16 = 80) 까지 가속해 올라 멈춤 — 다 든 순간 33.8 → 0.35 초 뒤 80.
+  완료 전에 놓으면 위치·속도를 곧바로 0 (0x2142B8) 으로 하고 문은 같은 중력으로 처음 자리까지 떨어진다.
+- 스크립트 1015 (IO_TandF 메시지 0x266420 → 0x213E30): 위치 0 · 완료 해제 → 다 오른 문이 떨어지고 다시 잡힌다. ATHN04C 는 문을 지나 DoorVolume 을 나가면
+  (LevelData0 거짓) LiftDoor13-EventTransmitter1 이 1015 를 보낸다 — 예전 엔진은 LIFT 에 1015 를 안 받아 문이 열린 채였다.
+- 엔진: `HeroNavigator.slideFollow` (`NavBody.jointModelY("synchJoint")` = `Animator` 자세의 모델 공간 y) · `NavBody.scrub` (`Animator.scrub`: 시간 고정, update 가 진행 안 함) ·
+  `Item.slideIdle` (중력 오름/떨어짐) · `scriptReset` LIFT 갈래, `SceneNav.poseItems` 가 `Platforms.lift(owner, slideY)` 로 몸·충돌·렌더를 옮긴다.
+  `Platforms` 는 높이 0 에서도 follow 행렬 (단위) 을 남겨 떨어져 닫힌 문도 그 자리로 다시 그린다 (예전엔 닫힌 문이 들린 자세로 남았다).
+  이음 상태 `restoreItems`: 넘겨받은 높이 그대로 (리셋이면 거기서 떨어진다).
+- 시험 `SlideDoorTest` (5): 붙은 동안 문 y = synchJoint (ANITandF2 = 위치 × 길이), 완료 뒤 0.35 초에 80, 놓으면 √(2h/800) 에 처음 자리, 1015 리셋, 데이터 (위 넷),
+  R_HERO0 synchJoint 0 → 33.8.

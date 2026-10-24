@@ -292,7 +292,7 @@ public final class HeroNavigator {
 	public void reset() {
 		if (item != null && (state == NavState.PUSH || state == NavState.INTERACT)) {
 			listener.pushDetach(item);
-			if (state == NavState.INTERACT && !item.done) {
+			if (state == NavState.INTERACT && (!item.done || item.kind == Interactables.Kind.LIFT && item.slide && !item.slideSettled())) {
 				released.add(item);
 			}
 		}
@@ -1939,6 +1939,9 @@ public final class HeroNavigator {
 				// 붙잡기 = 원작 0x1E17F0: 모든 종류가 1048 (인자 0 = CSM/상자 과제 id +0x1CC, TAndF +0x1D0, PushPull +0x284) [확실]
 				listener.pushAttach(it);
 				phase = PH_MAIN;
+				if (it.kind == Interactables.Kind.LIFT && it.slide) {
+					it.slideBase = it.slideY; // 붙는 순간 처음 y = 지금 GO y (0x2145A4) [확실]
+				}
 				if (it.kind == Interactables.Kind.LIFT && clip(it.startAnim, 0) > 0) {
 					phase = PH_GRAB;
 					body.play(it.startAnim, true);
@@ -1969,6 +1972,12 @@ public final class HeroNavigator {
 			if (it.resetting || it.cannonFired) {
 				continue; // 스크립트 1015 리셋·대포 발사 마무리는 끝날 때까지 (idle 이 플래그를 내린다)
 			}
+			if (it.kind == Interactables.Kind.LIFT && it.slide) {
+				if (it.slideSettled()) {
+					i.remove(); // 미끄럼 문은 다 오르거나 처음 자리에 내려앉을 때까지 갱신
+				}
+				continue;
+			}
 			if (it.pushType == 4 || it.pushType == 3 ? it.task().speed == 0 : it.task().time <= 0 || it.task().done) {
 				i.remove();
 			}
@@ -1987,6 +1996,17 @@ public final class HeroNavigator {
 			it.done = false;
 			return;
 		}
+		if (it.kind == Interactables.Kind.LIFT) {
+			// IO_TandF 메시지 0x266420: 1015 → 0x213E30 = 위치 0, 잡기 클래스 0x80200000 다시 켬, +0x1F4 비트 2 끔 [확실]
+			// → 놓인 미끄럼 문은 처음 자리까지 떨어진다 (0x214180). 예: ATHN04C 나무 게이트 — DoorVolume 을 나가면 LiftDoor13-EventTransmitter1
+			it.task().reset();
+			it.done = false;
+			it.openTime = 0;
+			if (it != item && !released.contains(it)) {
+				released.add(it);
+			}
+			return;
+		}
 		if (it.kind != Interactables.Kind.LEVER || it.pushType == 3) {
 			return;
 		}
@@ -2001,9 +2021,36 @@ public final class HeroNavigator {
 		}
 	}
 
+	/** 미끄럼 문 중력 = /GlobGame/ "Gravity" × 16 (0x214210 / 0x2142E0, 유닛/초²) [확실]. */
+	public static final float SLIDE_GRAVITY = NavTuning.GLOBAL_GRAVITY * 16f;
+
+	/**
+	 * 미끄럼 문이 붙은 영웅을 따라감 (0x214058): y = 처음 y + 영웅 synchJoint 모델 공간 y (원작 모델 인스턴스 +0x50 행렬의 관절 +0xEA),
+	 * 속도 y = Δy / dt (+0xE0) [확실: 디스어셈블]. 영웅 자세를 모르면 (헤드리스) 그대로.
+	 */
+	private void slideFollow(Interactables.Item it, float dt) {
+		float sy = body.jointModelY(Interactables.SYNCH_JOINT);
+		if (Float.isNaN(sy) || dt <= 0) {
+			return;
+		}
+		float ny = it.slideBase + sy;
+		it.slideVy = (ny - it.slideY) / dt;
+		it.slideY = ny;
+	}
+
 	/** 영웅이 떨어진 오브젝트 한 프레임: CSM/레버 −4 로 되감기, 크랭크 #b6ba95a3 가속으로 되감기, TAndF 내려옴. */
 	private void idle(Interactables.Item it, float dt) {
 		TaskProgress t = it.task();
+		if (it.kind == Interactables.Kind.LIFT && it.slide) {
+			// 0x214180: 놓인 미끄럼 문 — 완료 (위치 2) 면 끝까지 오르고, 아니면 위치·속도 0 (곧바로, 0x2142B8) 에 처음 자리까지 떨어진다 [확실]
+			if (!t.done) {
+				t.time = 0;
+				t.speed = 0;
+				send(it, t.lift(false, false, 0, it.liftParams(), dt));
+			}
+			it.slideIdle(dt, SLIDE_GRAVITY);
+			return;
+		}
 		if (it.resetting) {
 			// 1015 리셋 (scriptReset): 크랭크류 = 되감기 가속 (비트 2 면 곧바로), 레버 = −4
 			Float spd = it.crank ? (it.resetSnap ? null : Math.max(t.speed - it.rewindAcc * dt, -it.maxBack)) : TaskProgress.REWIND_SPEED;
@@ -2111,12 +2158,23 @@ public final class HeroNavigator {
 				if (phase == PH_GRAB && phaseTime >= clip(it.startAnim, 0) - EPS) {
 					phase = PH_MAIN;
 					phaseTime = 0;
-					body.play(it.heroAnim, true);
 				}
 				// 붙잡을 때 마지막 누름 시간 0 (0x1C3590) → 첫 틱에 한 번 가속. 누름 시간은 ANITandF2 동안만 0 으로 (0x1C4A9C)
 				boolean impulse = stateTime <= dt + EPS || phase == PH_MAIN && press;
 				sincePress = impulse ? 0 : sincePress + dt;
+				boolean wasDone = it.done;
 				send(it, t.lift(true, impulse, sincePress, it.liftParams(), dt));
+				if (phase == PH_MAIN && !it.done) {
+					// 이동 0x60 ANITandF2 = 매개변수 min(문 위치, 1) → 영웅 애니 시간 = 위치 × 길이, 속도 0 (0x1ECA44 → 0x1F77B4) [확실]
+					body.scrub(it.heroAnim, Math.min(t.time, 1f) * Math.max(0, clip(it.heroAnim, 0)));
+				}
+				if (it.slide) {
+					if (!wasDone) {
+						slideFollow(it, dt); // 0x214058: 붙어 있고 위치 < 2 (완료 프레임 포함)
+					} else {
+						it.slideIdle(dt, SLIDE_GRAVITY); // 완료 (위치 2) 뒤 ANITandF3 동안에도 문은 끝까지 오른다 (0x214180)
+					}
+				}
 				if (phase != PH_FINISH && it.done) {
 					phase = PH_FINISH;
 					phaseTime = 0;
@@ -2203,8 +2261,8 @@ public final class HeroNavigator {
 	/** 놓기 = 원작 0x1E18F8 (1049). 끝나지 않은 오브젝트는 스스로 되감긴다 ({@link #rewindReleased}). */
 	private void release(Interactables.Item it) {
 		listener.pushDetach(it);
-		if (!it.done) {
-			released.add(it);
+		if (!it.done || it.kind == Interactables.Kind.LIFT && it.slide && !it.slideSettled()) {
+			released.add(it); // 다 든 미끄럼 문도 끝까지 오를 때까지 (0x214180)
 		}
 		end();
 	}

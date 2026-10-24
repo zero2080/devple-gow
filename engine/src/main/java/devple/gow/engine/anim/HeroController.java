@@ -361,6 +361,20 @@ public final class HeroController implements NavBody {
 	}
 
 	@Override
+	public void scrub(String name, float t) {
+		anim.scrub(name, t);
+	}
+
+	@Override
+	public float jointModelY(String joint) {
+		int j = anim.skeleton().indexOf(joint);
+		if (j < 0 || anim.current() == null) {
+			return Float.NaN;
+		}
+		return anim.pose().world(anim.skeleton())[j][13];
+	}
+
+	@Override
 	public void locomotion(String walk, String idle, float scale) {
 		walkOverride = walk;
 		idleOverride = idle;

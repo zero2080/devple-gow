@@ -41,6 +41,13 @@ public final class Interactables {
 	public static final int TANDF_GRAB_ANIM = 0xff5f5921, TANDF_LIFT_ANIM = 0xdc77f412, TANDF_END_ANIM = 0x4e2b8035;
 	/** TAndF 템플릿 들어 올림 높이 (m, +0x11C, 로더 0x213840) — {@link Item#liftHeight}. */
 	public static final int TANDF_LIFT_HEIGHT = 0x8743c048;
+	/**
+	 * TAndF 템플릿 +0x158 플래그 (#a6e81c1e, 로더 0x213830) 비트 0 = 문 GO 를 직접 움직이는 문 ({@link Item#slide}) [확실: 0x214470 · 0x2145B8 · 0x21491C].
+	 * 데이터: 리프트 게이트 0x3F801001 (비트 0, 12 템플릿), ATHN04A 함정문 HatchDoor 0x3F801000 (오브젝트 애니 trapDoorTandF/trapOpen).
+	 */
+	public static final int TANDF_FLAGS = 0xa6e81c1e;
+	/** 원작 영웅 "synchJoint" (0x1F7D28 → 모델 인스턴스 +0xEA 관절 번호): 들어 올리는 문이 붙은 동안 따라가는 관절 (0x214090). */
+	public static final String SYNCH_JOINT = "synchJoint";
 	/** Push/TAndF 템플릿 속도 키: 최대 (+0x38 / +0x20), 최대 되감기 (+0x3C / +0x24), Push 되감기 가속 (+0x34). Acc/Dec 는 이름 키. */
 	public static final int SPEED_MAX = 0xfe467fe6, SPEED_MAX_BACK = 0xb503fbe4, PUSH_REWIND_ACC = 0xb6ba95a3;
 	/** Push 템플릿 +0x108 비트 4 (양방향 크랭크), +0x40 멈춤 자리 허용 (생성자 0x216370 / 기본값 0x216788) [확실]. */
@@ -199,6 +206,50 @@ public final class Interactables {
 			return new TaskProgress.LiftParams(acc, dec, maxSpeed, maxBack, tfTime);
 		}
 
+		/**
+		 * 문 GO 를 직접 움직이는 TAndF (템플릿 +0x158 비트 0, {@link #TANDF_FLAGS}) — 오브젝트 애니 대신 GO 행렬 y (0x214400) [확실: 디스어셈블]:
+		 * <pre>
+		 * 붙음 (+0x190 ≥ 0) 이고 위치 &lt; 2:  y = 처음 y + 영웅 synchJoint 모델 공간 y (0x214058, 모델 인스턴스 +0x50 행렬), 속도 = Δy / dt
+		 * 완료 (위치 1 → 2.0) 뒤 (붙어 있어도):   y &lt; 처음 + 높이 이면 속도 += Gravity·16·dt, y += 속도·dt, 끝에서 멈춤 (0x214180, 플래그 0x40)
+		 * 다 들기 전에 놓음 · 1015 리셋:          위치·속도 0, y &gt; 처음 이면 속도 −= Gravity·16·dt 로 떨어져 처음에서 멈춤 (플래그 0x20)
+		 * 처음 y (+0x1E8) = 첫 갱신 때 GO y, 붙는 순간 지금 y 로 다시 (0x2145A4)
+		 * </pre>
+		 * Gravity = /GlobGame/ "Gravity" 50 (0x337718), 높이 = {@link #liftHeight}. y 는 배치 자리 기준 오프셋 — 렌더·충돌 (CDV)·손잡이가 같이 움직인다
+		 * ({@code Platforms.lift}). 영웅 liftDoor2 의 synchJoint 는 0 → 33.8 (위치 1) 이라 다 드는 순간 문은 처음 + 33.8, 그 뒤 0.35 초에 80 (43 문서 §19).
+		 */
+		public boolean slide;
+		/** 문 오프셋 y, 속도 y (+0xE0.y), 처음 y (+0x1E8) — 배치 자리 기준. */
+		public float slideY, slideVy, slideBase;
+
+		/** 문이 멈춰 있는가 (완료면 끝까지 올라감, 아니면 처음 자리) — 놓인 뒤 더 갱신할 필요가 없음. */
+		public boolean slideSettled() {
+			return slideVy == 0 && (done ? slideY >= slideBase + liftHeight : slideY <= slideBase);
+		}
+
+		/** 0x214180 한 프레임: 완료면 오르고, 아니면 떨어진다 (g = Gravity × 16, 유닛/초²). */
+		public void slideIdle(float dt, float g) {
+			if (done) {
+				float top = slideBase + liftHeight;
+				if (slideY < top) {
+					slideVy += g * dt;
+					slideY += slideVy * dt;
+					if (slideY >= top) {
+						slideY = top;
+						slideVy = 0;
+					}
+				}
+			} else if (slideY > slideBase) {
+				slideVy -= g * dt;
+				slideY += slideVy * dt;
+				if (slideY <= slideBase) {
+					slideY = slideBase;
+					slideVy = 0;
+				}
+			} else {
+				slideVy = 0;
+			}
+		}
+
 		public Item(Kind kind, String owner, Vector3f pos, int template, int id, String heroAnim, String finishAnim, String label, float radius) {
 			this.kind = kind;
 			this.owner = owner;
@@ -327,6 +378,8 @@ public final class Interactables {
 						it.tfTime = tw.f(node, "TF Time", 0.25f);
 						it.maxSpeed = Float.intBitsToFloat(tw.rawHash(node, SPEED_MAX).orElse(Float.floatToIntBits(1.5f)));
 						it.maxBack = Float.intBitsToFloat(tw.rawHash(node, SPEED_MAX_BACK).orElse(Float.floatToIntBits(20f)));
+						// 문 GO 를 직접 움직이는 TAndF (+0x158 비트 0, 0x214470 / 0x2145B8) [확실]
+						it.slide = (tw.rawHash(node, TANDF_FLAGS).orElse(0) & 1) != 0;
 					}
 					it.showPrompt = showR2(tw, node);
 					out.items.add(it);

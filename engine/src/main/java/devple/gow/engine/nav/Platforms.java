@@ -150,11 +150,10 @@ public final class Platforms {
 
 		/** 들어 올림 → 관절 월드 (이동 행렬을 follow 로 — 렌더·충돌·Marker 가 그대로 따른다, 부모 링크 없는 몸만). */
 		void applyLift() {
-			float[] f = null;
-			if (lift != 0) {
-				f = Mat4.identity();
-				f[13] = lift; // 행벡터: 이동 = 12..14
-			}
+			// 0 으로 내려와도 단위 이동을 남긴다 — 렌더 자세 (LevelScene.poseInstance) 는 덮어쓸 때까지 남으므로 follows() 로 다시 준다
+			// (1015 리셋·놓음으로 떨어진 게이트가 들린 자세로 그려지던 것, 43 문서 §19)
+			float[] f = Mat4.identity();
+			f[13] = lift; // 행벡터: 이동 = 12..14
 			follow = f;
 			float[][] old = joints;
 			if (anim != null) {

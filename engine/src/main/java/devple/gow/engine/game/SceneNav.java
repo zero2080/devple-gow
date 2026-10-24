@@ -87,6 +87,14 @@ public final class SceneNav {
 		}
 
 		/**
+		 * 이웃 레벨 스크립트의 구역 제목 (Internal 0x10) — 원작 GameMgr_OnMessage 0x1B0A28 → 0x1B60D0 → 0x1B8BA0 (HUD PS2_ZoneReport_Title/Event) 는
+		 * 메시지를 보낸 슬롯을 보지 않는다 [확실: 코드]. 예: ATHN04C 계단을 올라 ATHN05A 마당에 들어서는 순간 05A 는 아직 이웃 슬롯인데 ZoneReportGroup
+		 * (GlobalData ZoneArea ≠ 5 → ZoneReport(5)) 이 "아테네의 지붕" 을 띄운다 (영상 6539, 43 문서 §19). 예전에는 버려져 제목이 없었다.
+		 */
+		default void neighbourZoneReport(int zone) {
+		}
+
+		/**
 		 * 이웃 레벨 스크립트의 Creator (타입 11, name = 슬롯 0 Name0) — 원작은 두 슬롯 GO 가 모두 살아 있어 이웃 레벨이 만든 세이브 포인트도 R2 로
 		 * 저장된다: ATHN04A 의 SaveGameZone (1249, −81, 1442) 은 해치로 떨어진 ATHN04C 아래층 (현재 = 04C) 에서 쓰인다 (영상 6450–6456, 43 §18).
 		 */
@@ -365,14 +373,7 @@ public final class SceneNav {
 
 			@Override
 			public void internal(int func, List<Object> args) {
-				if (func == 0x9 && !args.isEmpty()) {
-					Object a = args.get(0);
-					host.neighbourCamera(null, a instanceof Number n ? n.floatValue() != 0 : !(a instanceof Boolean b) || b, null, false);
-				}
-				if (func == 0xC && !args.isEmpty()) {
-					Object a = args.get(0);
-					host.neighbourIdle(a instanceof Number n ? n.floatValue() != 0 : !(a instanceof Boolean b) || b);
-				}
+				neighbourInternal(host, func, args);
 			}
 
 			@Override
@@ -547,10 +548,10 @@ public final class SceneNav {
 			Platforms.Body b = ps.body(it.owner);
 			float t = it.task().time;
 			if (it.kind == Interactables.Kind.LIFT && b != null && physicalLift(it, ps)) {
-				// 문 ANM 에 템플릿 act 가 없는 TAndF (ATHN04A 창살 LiftDoor13): 원작 0x214058 은 잡은 동안 문 Y = 영웅 붙잡기 관절 높이, 0x214180 은
-				// 끝나면 처음 Y + 높이 (템플릿 ×16) 까지 올려 멈춘다 → 진행 위치 × 높이, 끝 = 높이 [근사: 영웅 관절 높이 대신 진행 비율]
-				float dy = it.done ? it.liftHeight : it.liftHeight * Math.max(0f, Math.min(1f, t));
-				if (ps.lift(it.owner, dy)) {
+				// 문 GO 를 직접 움직이는 TAndF (ATHN04A 창살 · ATHN04C 나무 게이트 LiftDoor13): 원작 0x214058 은 잡은 동안 문 Y = 처음 Y + 영웅 synchJoint
+				// 모델 공간 높이, 0x214180 은 끝나면 중력 50×16 으로 처음 Y + 높이 (템플릿 ×16) 까지 오르고, 다 들기 전에 놓거나 1015 리셋이면 같은 중력으로
+				// 처음 Y 까지 떨어진다 [확실] — 오프셋은 HeroNavigator 가 정한다 (Item.slideY, 43 문서 §19)
+				if (ps.lift(it.owner, it.slideY)) {
 					world.poseOwner(b.owner, b.joints());
 				}
 				continue;
@@ -576,9 +577,33 @@ public final class SceneNav {
 		}
 	}
 
-	/** 문 ANM 에 TAndF 템플릿 act (연타 #d7f2bea8 · 완료 #c5b0169f) 가 없고 들어 올림 높이가 있는 문 — 높이로만 움직인다 ({@link Platforms#lift}). */
+	/**
+	 * 이웃 슬롯 스크립트의 Internal 호출 중 전역 상태를 바꾸는 것 — 원작 GameMgr / 카메라 관리자 / 전역 정지는 슬롯 구분이 없다:
+	 * 0x9 CMV 질의 on/off, 0xC Idle (0x1BF080 → 0x29DB58), 0x10 구역 제목 (0x1B0A28 → 0x1B8BA0, 43 문서 §19) [확실: 코드].
+	 */
+	static void neighbourInternal(Host host, int func, List<Object> args) {
+		if (args.isEmpty()) {
+			return;
+		}
+		Object a = args.get(0);
+		if (func == 0x9) {
+			host.neighbourCamera(null, a instanceof Number n ? n.floatValue() != 0 : !(a instanceof Boolean b) || b, null, false);
+		}
+		if (func == 0xC) {
+			host.neighbourIdle(a instanceof Number n ? n.floatValue() != 0 : !(a instanceof Boolean b) || b);
+		}
+		if (func == devple.gow.engine.script.GameScriptHost.ZONE_REPORT && a instanceof Number n) {
+			host.neighbourZoneReport(n.intValue()); // 구역 제목은 슬롯 구분 없이 (0x1B0A28)
+		}
+	}
+
+	/**
+	 * 문 GO 를 직접 움직이는 TAndF ({@link Platforms#lift}) — 템플릿 +0x158 플래그 비트 0 (#a6e81c1e, 0x214470 · 0x2145B8 · 0x21491C 가 이것으로만
+	 * 가른다) [확실]. 데이터의 리프트 게이트 12 템플릿이 비트 0 이고 그 문 ANM 에는 템플릿 act (연타 #d7f2bea8 · 완료 #c5b0169f) 가 없다; 해치·석상 등
+	 * 오브젝트 애니 TAndF 는 비트 0 이 없다. ps 는 예전 판정 (act 유무) 과 같은 꼴을 위해 남긴다.
+	 */
 	static boolean physicalLift(Interactables.Item it, Platforms ps) {
-		return it.liftHeight > 0 && !ps.hasAct(it.owner, it.liftObjectAnim) && !ps.hasAct(it.owner, it.openObjectAnim);
+		return it.kind == Interactables.Kind.LIFT && it.slide && it.liftHeight > 0;
 	}
 
 	/** 한 틱: 발판 애니 → Marker 위치, 이웃 스크립트. */
@@ -671,6 +696,9 @@ public final class SceneNav {
 			}
 			if (!s.solid()) {
 				it.noCollision = true;
+			}
+			if (it.kind == Interactables.Kind.LIFT && it.slide) {
+				it.slideY = s.lift(); // 넘겨받은 문 높이에서 이어서 (1015 리셋이면 거기서 떨어진다, 0x214180)
 			}
 			if (it.kind == Interactables.Kind.LIFT && (it.openObjectAnim != null && it.openObjectAnim.equalsIgnoreCase(s.anim())
 					|| it.liftHeight > 0 && s.lift() >= it.liftHeight - 0.5f)) {

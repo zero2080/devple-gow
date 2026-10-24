@@ -30,11 +30,20 @@ public final class FxResources {
 	 * @param sweep    P+0x38 volumeSweep, sectionRadius P+0x3C
 	 * @param randomDir P+0x50, dirSpeed P+0x54
 	 * @param lodNear  0xDC / lodFar 0xE0 (−1 = 끔): 생성률 × (far − d/16)/(far − near)
+	 * @param tangentSpeed P+0x24 / normalSpeed P+0x28: 커브 이미터 방향 = dir + 접선·이것 + 법선·이것 (0x1249C8) [확실: 쓰임]
 	 */
 	public record Emitter(String name, int subtype, int[] header, float[] local, String shape, String geom, float[] dir, float spread,
 						  float speed, float speedRnd, float minDist, float maxDist, float rate, float sweep, float sectionRadius,
 						  float awayCenter, float awayAxis, float alongAxis, float aroundAxis, float randomDir, float dirSpeed,
-						  float lodNear, float lodFar) {
+						  float lodNear, float lodFar, float tangentSpeed, float normalSpeed) {
+	}
+
+	/**
+	 * FXC_ 서브타입 0xD 방출 지오메트리 (136 바이트) — 커브 이미터 (서브타입 4) 가 +0x6C 모양 이름으로 찾는 커브 노드 [확실: 데이터 564 개 전부 짝이 맞음].
+	 * +0x08 s16 관절, +0x10 로컬 행렬, +0x58 char[24] NCV_ 커브 리소스 이름 (구간별 3차 다항식, {@code NcvCurve}), +0x70 char[24] 모양 이름.
+	 * 원작 커브 생성 0x1249C8: t = 균일 난수 × 끝 매듭 → P(t) → 노드 월드 (0x12EDA8 이 0x29CA68+0xC0 에 둔 행렬) [확실: 흐름].
+	 */
+	public record Geom(String name, int joint, float[] local, String curve, String shape) {
 	}
 
 	/** FXC_ 서브타입 0xC 필드 (180 바이트): kind 3 중력, 6 균일, 7 소용돌이, 36 뉴턴 [이름 추정]. */
@@ -160,6 +169,8 @@ public final class FxResources {
 
 	public final Map<String, Emitter> emitters = new LinkedHashMap<>();
 	public final Map<String, Field> fields = new LinkedHashMap<>();
+	/** 방출 지오메트리 (0xD) 모양 이름 (+0x70) → 노드. */
+	public final Map<String, Geom> geoms = new LinkedHashMap<>();
 	/** 이름 → PTC. */
 	public final Map<String, Shape> shapes = new LinkedHashMap<>();
 	/** 모양 이름(+0x54) → PTC. */
@@ -181,6 +192,9 @@ public final class FxResources {
 				} else if (sub == 0xC && t.size() >= 0x88) {
 					fields.putIfAbsent(t.name(), new Field(t.name(), floats(d, 0x10, 16), d.getInt(0x54), d.getFloat(0x58), floats(d, 0x5C, 3),
 							d.getFloat(0x68), d.getFloat(0x80), d.getFloat(0x84)));
+				} else if (sub == 0xD && t.size() >= 0x88) {
+					Geom g = new Geom(t.name(), d.getShort(8), floats(d, 0x10, 16), EnvScript.cstr(d, 0x58, 24), EnvScript.cstr(d, 0x70, 24));
+					geoms.putIfAbsent(g.shape(), g);
 				}
 			} else if (m == 0x13 && t.size() >= 0xA0) {
 				Shape s = shape(t.name(), d, material(tags, i));
@@ -196,7 +210,7 @@ public final class FxResources {
 				EnvScript.cstr(d, 0x6C, 24), floats(d, p, 3), d.getFloat(p + 0x0C), d.getFloat(p + 0x10), d.getFloat(p + 0x14),
 				d.getFloat(p + 0x18), d.getFloat(p + 0x1C), d.getFloat(p + 0x20), d.getFloat(p + 0x38), d.getFloat(p + 0x3C),
 				d.getFloat(p + 0x40), d.getFloat(p + 0x44), d.getFloat(p + 0x48), d.getFloat(p + 0x4C), d.getFloat(p + 0x50),
-				d.getFloat(p + 0x54), d.getFloat(0xDC), d.getFloat(0xE0));
+				d.getFloat(p + 0x54), d.getFloat(0xDC), d.getFloat(0xE0), d.getFloat(p + 0x24), d.getFloat(p + 0x28));
 	}
 
 	private static Shape shape(String name, ByteBuffer d, String mat) {

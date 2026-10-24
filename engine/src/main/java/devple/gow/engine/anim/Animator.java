@@ -46,6 +46,7 @@ public final class Animator {
 		if (a == null || (a == current && !restart)) {
 			return;
 		}
+		scrubbed = false;
 		previous = current;
 		prevTime = time;
 		current = a;
@@ -59,6 +60,7 @@ public final class Animator {
 
 	/** 클립 객체로 직접 재생 (전투 기술: 시작 위치 = startPhase × 길이, 속도 = 기술 speed). */
 	public void playClip(Animation a, float startTime, float rate) {
+		scrubbed = false;
 		previous = current;
 		prevTime = time;
 		current = a;
@@ -85,6 +87,21 @@ public final class Animator {
 		time = t;
 	}
 
+	/** {@link #scrub} 로 세운 클립 — 다음 {@link #play}/{@link #playClip} 까지 {@link #update} 가 시간을 진행하지 않는다. */
+	private boolean scrubbed;
+
+	/**
+	 * 클립을 시간 t 에 세워 둔다: 원작 이동 매개변수 ≥ 0 이면 애니 시간 = 매개변수 × 길이 (0x100628), 재생 속도 0 (0x100510) — 0x1F77B4 [확실].
+	 * 다른 클립이면 전환 (크로스페이드는 그대로).
+	 */
+	public void scrub(String name, float t) {
+		play(name, false);
+		if (current != null && current.name.equals(name)) {
+			time = t;
+			scrubbed = true;
+		}
+	}
+
 	public void setRate(float r) {
 		rate = r;
 	}
@@ -98,7 +115,9 @@ public final class Animator {
 	}
 
 	public void update(float dt) {
-		time += dt * rate * curScale;
+		if (!scrubbed) {
+			time += dt * rate * curScale;
+		}
 		prevTime += dt * rate * prevScale;
 		if (fade < 1f) {
 			fade = Math.min(1f, fade + dt / fadeTime);

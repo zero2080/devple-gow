@@ -48,6 +48,14 @@ public final class ParticleSystem implements AutoCloseable {
 		public boolean sky;
 		/** 원뿔 모드 방향 (월드, 정규화). */
 		public final Vector3f dir = new Vector3f(0, 1, 0);
+		/**
+		 * 커브 이미터 (FXC 서브타입 4, 원작 0x1249C8): 커브 위 점 (월드, t 를 고르게 나눈 표본 xyz…) 과 접선 (정규화 xyz…). null = 커브가 아님.
+		 * 생성: t = 균일 난수 → 위치 P(t), 방향 b = dir + T·접선 속력 + N·법선 속력 (N = (난수 − ½) × T 정규화, P+0x24 / P+0x28),
+		 * 속도 = b × (speed ± rnd)·16 (퍼짐 0) / 퍼짐 &gt; 0 이면 b 둘레 원뿔, 위치 += b̂ × lerp(최소, 최대 거리)·16 [확실: 흐름 / 근사: 원뿔·정규화 세부].
+		 */
+		public float[] curve, curveTan;
+		/** 커브 이미터 접선 / 법선 속력 (P+0x24 / P+0x28, dir 에 대한 비), 생성 거리 최소·최대 (×16 월드). */
+		public float tangentSpeed, normalSpeed, distMin, distMax;
 		/** LOD (FXC 0xDC/0xE0, ×16 월드): 생성률 × (far − d/16)/(far − near), near &lt; 0 = 끔. */
 		public float lodNear = -1, lodFar = -1;
 		/** followCamera 일 때 상자 중심을 카메라 앞으로 이 거리만큼 (원작 셀/2 − near). */
@@ -337,7 +345,9 @@ public final class ParticleSystem implements AutoCloseable {
 		px[i] = c.x + r(b[0]);
 		py[i] = c.y + r(b[1]);
 		pz[i] = c.z + r(b[2]);
-		if (d.cone() >= 0) {
+		if (e.curve != null && e.curve.length >= 6) {
+			spawnOnCurve(e, i);
+		} else if (d.cone() >= 0) {
 			// FXC 서브타입 1 (0x122E78): +Y 기준 원뿔 → 이미터 방향으로 회전
 			float coneW = Float.isNaN(e.cone) ? d.cone() : e.cone;
 			double th = rnd.nextFloat() * coneW * Math.PI / 2, ph = rnd.nextFloat() * 2 * Math.PI;
@@ -376,6 +386,69 @@ public final class ParticleSystem implements AutoCloseable {
 			v0x[i] = w.x;
 			v0y[i] = w.y;
 			v0z[i] = w.z;
+		}
+	}
+
+	/**
+	 * 커브 이미터 한 파티클 (원작 0x1249C8) [확실: 흐름 — t 균일, P(t)·T(t), 방향 = dir + T·ts + N·ns, 속도 = 방향 × 속력 / 근사: 퍼짐 원뿔].
+	 * 위치·접선은 {@link Emitter#curve} 표본 사이 선형 보간 (표본은 t 를 고르게 나눔 — 원작은 다항식을 그 t 에서 바로 계산).
+	 */
+	private void spawnOnCurve(Emitter e, int i) {
+		ParticleDef d = e.def;
+		int n = e.curve.length / 3;
+		float u = rnd.nextFloat() * (n - 1);
+		int k = Math.min((int) u, n - 2);
+		float f = u - k;
+		float[] cv = e.curve, ct = e.curveTan;
+		float x = cv[3 * k] + (cv[3 * k + 3] - cv[3 * k]) * f;
+		float y = cv[3 * k + 1] + (cv[3 * k + 4] - cv[3 * k + 1]) * f;
+		float z = cv[3 * k + 2] + (cv[3 * k + 5] - cv[3 * k + 2]) * f;
+		Vector3f t = new Vector3f(ct[3 * k] + (ct[3 * k + 3] - ct[3 * k]) * f, ct[3 * k + 1] + (ct[3 * k + 4] - ct[3 * k + 1]) * f,
+				ct[3 * k + 2] + (ct[3 * k + 5] - ct[3 * k + 2]) * f);
+		if (t.lengthSquared() > 1e-12f) {
+			t.normalize();
+		}
+		// 방향 b = dir + T·접선 속력 + N·법선 속력, N = ((난수 − ½)³ × T) 정규화 (0x124C90 – 0x124D9C)
+		Vector3f bdir = new Vector3f(e.dir);
+		if (e.tangentSpeed != 0) {
+			bdir.fma(e.tangentSpeed, t);
+		}
+		if (e.normalSpeed != 0) {
+			Vector3f nrm = new Vector3f(rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f).cross(t);
+			if (nrm.lengthSquared() > 1e-12f) {
+				bdir.fma(e.normalSpeed, nrm.normalize());
+			}
+		}
+		float bl = bdir.length();
+		if ((e.distMin != 0 || e.distMax != 0) && bl > 1e-6f) {
+			// 생성 거리: 방향으로 (최소 + 난수 · (최대 − 최소))·16 (0x124E2C – 0x124E8C)
+			float dist = (e.distMin + rnd.nextFloat() * (e.distMax - e.distMin)) * 16f;
+			x += bdir.x / bl * dist;
+			y += bdir.y / bl * dist;
+			z += bdir.z / bl * dist;
+		}
+		px[i] = x;
+		py[i] = y;
+		pz[i] = z;
+		float spd = Float.isNaN(e.speed) ? d.speed() : e.speed, sr = Float.isNaN(e.speedRnd) ? d.speedRnd() : e.speedRnd;
+		float sp = spd - sr / 2 + rnd.nextFloat() * sr;
+		float coneW = Float.isNaN(e.cone) ? d.cone() : e.cone;
+		if (coneW > 0 && bl > 1e-6f) {
+			// 퍼짐 &gt; 0 (0x124EF8): b 둘레 원뿔 θ = 난수·퍼짐·π/2 [근사: 원작 축 구성은 미해석]
+			Vector3f up = new Vector3f(bdir).div(bl);
+			double th = rnd.nextFloat() * coneW * Math.PI / 2, ph = rnd.nextFloat() * 2 * Math.PI;
+			float lx = (float) (Math.sin(ph) * Math.sin(th)), ly = (float) Math.cos(th), lz = (float) (Math.cos(ph) * Math.sin(th));
+			Vector3f t1 = Math.abs(up.y) < 0.99f ? new Vector3f(0, 1, 0).cross(up).normalize() : new Vector3f(1, 0, 0);
+			Vector3f t2 = new Vector3f(up).cross(t1);
+			float m = bl * sp;
+			vx[i] = (t1.x * lx + up.x * ly + t2.x * lz) * m;
+			vy[i] = (t1.y * lx + up.y * ly + t2.y * lz) * m;
+			vz[i] = (t1.z * lx + up.z * ly + t2.z * lz) * m;
+		} else {
+			// 퍼짐 0 (0x1250C8): 속도 = b × 속력 (b 는 정규화하지 않는다)
+			vx[i] = bdir.x * sp;
+			vy[i] = bdir.y * sp;
+			vz[i] = bdir.z * sp;
 		}
 	}
 

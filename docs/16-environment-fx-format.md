@@ -334,6 +334,23 @@ MFX 적중 배율 0x221810 f12 (1 / 0.125) 는 이미터 인스턴스 +0xB4 = **
 → PTC_Tfirepart 수명 1.0, 크기 80, LOD 15/30, 플래그 0x691 (모드 3), `MAT_fire_M01firepart3`. Tglow (1.35 s, MAT_lambert17), TSpark (MAT_lambert18) 동반.
 오브 빛 (R_PERMK `healthorb`): FXC_HOgemit 서브타입 6 (구), 50/s, PTC_HOgpart 수명 0.3, 크기 −16, MAT_pticleMat. **HDES01A 에는 PTC/FXC 가 없다** (용암 빛은 머티리얼).
 
+### 2.5 커브 이미터 (서브타입 4) 와 0xD 방출 지오메트리 (136 바이트) [확실: 연결·생성 흐름 / 근사: 표시] (43 문서 §19)
+| 오프셋 | 필드 |
+|-------|------|
+| 0x08 | s16 관절 번호 (이미터 헤더와 같은 꼴) |
+| 0x10 | f32[16] 로컬 행렬 |
+| 0x58 | char[24] `NCV_` 커브 리소스 이름 (12 문서 §3.1 꼴, 구간별 3차 다항식) |
+| 0x70 | char[24] 모양 이름 = 커브 이미터 +0x6C |
+
+- 커브 이미터 +0x6C 모양 이름 → 같은 WAD 의 0xD 노드 +0x70 → +0x58 NCV. 전 WAD 커브 이미터 564 개가 모두 짝이 맞는다 (ATHN05A 72 = 불벽 `FXC_Fwemit*` ↔
+  `FWcurve*Shape*`, ATHN05B 15, ATHN05C 36 …). 예: `FXC_Fwemit3bm6` 40/s, 속력 1.8, 방향 (0,1,0), 접선·법선 속력 0 → 노드 `FXC_FWcurve3bm6` (관절 0) → `NCV_FWcurve3bm6`.
+- 생성 0x1249C8 (갱신 0x25EC88): t = 난수 × 마지막 매듭 → 커브 P(t) · 접선 T(t) 를 노드 월드 (0x12EDA8 이 0x29CA68+0xC0 에 둔 행렬) 로 →
+  방향 b = dir + T · (P+0x24 접선 속력) + N · (P+0x28 법선 속력), N = ((난수 − ½) 세 성분 × T) 정규화 (0x124C90 – 0x124D9C) →
+  위치 += b̂ · lerp(최소, 최대 거리) · 16 (0x124E2C – 0x124E8C) → 퍼짐 0 이면 속도 = b × (speed − sr/2 + rand·sr) · 16 (b 정규화 안 함, 0x1250C8), 퍼짐 > 0 이면
+  b 둘레 원뿔 (0x124EF8, 축 구성 미해석).
+- 엔진: `FxResources.geoms` (0xD), `LevelEmitters.curveSamples` (노드 월드 = 로컬 · 소유 관절 월드, 구간마다 8 표본 — 원작은 t 에서 다항식을 바로 [근사]),
+  `ParticleSystem.spawnOnCurve`. 표면 이미터 (서브타입 3) 는 여전히 만들지 않는다.
+
 ## 3. 머티리얼 부가 효과
 
 ### 3.1 머티리얼 ANM [확실]
@@ -399,6 +416,6 @@ PAND01A `PSambLite` .751 회색 .5 / 8000, `PSFirelite*` (.777,.284,0) .75, 반�
 ## 4. 미해결
 - ~~안개 Z→알파 램프~~, ~~Fog_A ≥ 1 경로~~, ~~층 안개 키 알파·t 눈금~~ (§1.2, §1.3). 남은 것: 0x127918 단계 ③ 의 TEXA 상태 (A8 비트 7), 텍스처 층 안개 0x127240 의 UV 세부.
 - ~~PTC VU1 상수 의미~~, ~~+0x74~~ (읽지 않음), ~~종류 5~~, ~~연산 9/10/13/14~~, ~~0x10/0x20~~ (§2.3–2.4). 남은 것: 연산 6/7 의 주소 공간 (쓰는 PTC 없음), 종류 5 UV 오프셋의 정확한 화소 단위, 레코드 배치 바이트 (+0x8C) 의 4번 이후 속성.
-- FXC 0xD 방출 지오메트리 포맷 (표면/커브 이미터), 노드 헤더, 필드 단위.
+- ~~FXC 0xD 방출 지오메트리 포맷 (커브)~~ (§2.5). 남은 것: 표면 이미터 (서브타입 3) 의 메시 표면 참조, 커브 퍼짐 원뿔의 축, 노드 헤더 b, 필드 단위.
 - SCR_Water 물방울 원점, 0x0C 플래그; SCR_Mirror a/b; SCR_AresSky; ~~SCR_LensFlare~~ (46) / GhostTrail / RopeSkinned / cloth / ThingOnASpring 본문.
 - renderFlags bit16 / 0x400, flags2 의미; 한 레벨 여러 SCR_Fog 의 전환 조건 (ESC).

@@ -103,6 +103,8 @@ BallHull 수정: 평면 수를 헤더 0x38 이 아니라 hull 별 평면 수의 
   생성 스크립트 상태 (ATHN04A 해치 CDsOff, RbblCams CMV 끔, SuicideBody 숨김 …) 를 넘겨 쓴 세계에서 잃던 것.
 - 이웃 슬롯 Idle (Internal 0xC) 도 전역 정지 하나 (0x1BF080 → 0x29DB58): `SceneNav.Host.neighbourIdle` — ATHN04B 가 현재인 채 ATHN04A LedgeJumpCams 가 영웅을 세우고
   SuicideCam 을 켠다. 스크립트 Idle 동안에는 걷기 이음 (다른 슬롯 바닥) 도 하지 않는다 (`GameScene` 의 `otherFloorTime`).
+- 이웃 슬롯 구역 제목 (Internal 0x10 → GameMgr 0x1B0A28, 슬롯 구분 없음) 도 띄운다: `SceneNav.neighbourInternal` (0x9 · 0xC · 0x10 을 이웃 리스너에서 받는 한 곳) →
+  `Host.neighbourZoneReport` — ATHN04C 가 현재인 채 계단 위 ATHN05A ZoneReportGroup 이 "아테네의 지붕" 을 띄운다 (43 §19, 예전엔 버려짐).
 - 하네스 `-Dgow.arrive.state=레벨:L0=3,F=엔티티,G이름=값;…` (`ScriptWorld.presetState`: LevelData · 이미 발동 · GlobalData 이름) [엔진 전용].
 - 시험 `AthensInteriorTest.recreateReplaysVisAndCreators`.
 

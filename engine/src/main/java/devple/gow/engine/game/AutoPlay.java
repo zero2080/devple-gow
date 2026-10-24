@@ -253,6 +253,7 @@ public final class AutoPlay {
 	 *   hold:초:fx,fz      R2 를 누른 채 (fx, fz) 쪽으로 스틱 (크랭크 돌리기)
 	 *   push:초:fx,fz      버튼 없이 (fx, fz) 쪽으로 스틱 (사다리·벽 쪽으로 걸어 들어가기)
 	 *   up:초              카메라와 무관하게 스틱 위 (사다리 오르기)
+	 *   stick:초:x,y[:버튼] 카메라와 무관한 스틱 값 (벽에서 뒤로 점프 = 0,-1:CROSS), 버튼은 단계 첫 프레임에 한 번
 	 *   mash:초            R2 연타 (들어 올리는 문 TAndF)
 	 *   wait:초            입력 없음
 	 *   btn:이름           버튼 한 번 (PadButton 이름)
@@ -308,6 +309,13 @@ public final class AutoPlay {
 			}
 			case "up" -> {
 				return routeNext(routeTime > Float.parseFloat(a[0]), bot.hold(null, hero, null, new float[]{0, 1}, camYaw));
+			}
+			case "stick" -> {
+				// stick:초:x,y[:버튼] — 카메라와 무관한 스틱 (벽 오르기 위 0,1 · 뒤로 점프 0,-1:CROSS), 버튼은 단계 시작 프레임에 한 번
+				String[] q = a[1].split(",");
+				PadButton btn = a.length > 2 && routeTime < 0.05f ? PadButton.valueOf(a[2].toUpperCase(Locale.ROOT)) : null;
+				return routeNext(routeTime > Float.parseFloat(a[0]),
+						bot.hold(btn, hero, null, new float[]{Float.parseFloat(q[0]), Float.parseFloat(q[1])}, camYaw));
 			}
 			case "mash" -> {
 				return routeNext(routeTime > Float.parseFloat(a[0]), bot.press((int) (routeTime / 0.075f) % 2 == 0 ? PadButton.USE : null));
