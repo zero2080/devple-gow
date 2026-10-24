@@ -166,13 +166,64 @@ public final class EffectLibrary {
 	public static final float BURST = 0.1f;
 
 	private final Map<String, EffectDef> byName = new LinkedHashMap<>();
+	/** 등록한 WAD 순서와 그 해석 결과 — {@link #remove} 가 남은 WAD 를 같은 순서로 다시 깐다 (같은 이름은 나중 WAD 우선 그대로). */
+	private final Map<WadFile, List<Parsed>> added = new java.util.IdentityHashMap<>();
+	private final List<WadFile> order = new ArrayList<>();
 
 	/** WAD 의 모든 GO 인스턴스를 등록한다. 같은 이름은 나중에 더한 WAD 가 덮는다 (마법 단계 WAD 우선). */
 	public void add(WadFile wad) {
 		@SuppressWarnings("unchecked")
 		List<Parsed> defs = (List<Parsed>) wad.takeDerived(EffectLibrary.class);
-		for (Parsed d : defs != null ? defs : parse(wad)) {
+		if (defs == null) {
+			defs = parse(wad);
+		}
+		for (Parsed d : defs) {
 			byName.put(d.key(), d.def());
+		}
+		if (added.put(wad, defs) == null) {
+			order.add(wad);
+		} else {
+			order.remove(wad);
+			order.add(wad);
+		}
+	}
+
+	/**
+	 * WAD 의 등록을 뺀다 (엔진: 다른 슬롯에서도 내려간 레벨 WAD — 이음으로 씬이 이어지면 그 레벨 장면을 닫기 전에, 43 §27). 그 WAD 가 덮었던 이름은
+	 * 남은 WAD 의 정의로 돌아간다. 반환 = 뺀 정의 (없으면 빈 목록).
+	 */
+	public List<EffectDef> remove(WadFile wad) {
+		List<Parsed> gone = added.remove(wad);
+		if (gone == null) {
+			return List.of();
+		}
+		order.remove(wad);
+		relink();
+		List<EffectDef> out = new ArrayList<>();
+		gone.forEach(p -> out.add(p.def()));
+		return out;
+	}
+
+	/** 이미 등록한 WAD 를 맨 뒤로 (같은 이름은 이 WAD 가 이긴다 — 다시 해석하지 않는다). 없으면 false. */
+	public boolean promote(WadFile wad) {
+		if (!added.containsKey(wad)) {
+			return false;
+		}
+		if (order.getLast() != wad) {
+			order.remove(wad);
+			order.add(wad);
+			relink();
+		}
+		return true;
+	}
+
+	/** 등록 순서대로 이름 표를 다시 깐다. */
+	private void relink() {
+		byName.clear();
+		for (WadFile w : order) {
+			for (Parsed d : added.get(w)) {
+				byName.put(d.key(), d.def());
+			}
 		}
 	}
 

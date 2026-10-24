@@ -90,6 +90,11 @@ public final class FxEnvironment {
 		return time;
 	}
 
+	/** 효과 시간을 이어 받는다 (이음 — 현재 슬롯이 바뀌어도 재질 애니·반복 act 시계는 하나, LevelFx#takeOverMain). */
+	public void setTime(float t) {
+		time = t;
+	}
+
 	public void setEnabled(boolean on) {
 		enabled = on;
 	}
@@ -105,12 +110,55 @@ public final class FxEnvironment {
 	 */
 	public void update(float dt, org.joml.Vector3f eye) {
 		time += dt;
+		selectFog(eye);
+	}
+
+	/** 이번 프레임 눈 위치로 안개를 고른다 ({@link #update} 의 고르기만). @return 컨텍스트가 켜진 안개가 있었는지 (없으면 이전 안개가 남음) */
+	public boolean selectFogAt(org.joml.Vector3f eye) {
+		return selectFog(eye);
+	}
+
+	/**
+	 * 이번 프레임 안개 (색·깊이·층·텍스처·흐름 시계·FarClip) 를 이 환경 대신 가져올 환경 — 두 슬롯 레벨 중 고른 것 (GameScene, 43 §27). null = 자기.
+	 * 원작 안개 관리자는 하나라 두 슬롯 SCR_Fog 중 한 프레임에 하나가 모든 것을 덮는다 (0x20D220, 프레임 번호 0x29F324) [확실: 하나 / 추정: 슬롯 간 순서].
+	 * 대체 안개 (포세이돈) · 켬/끔은 이 환경 것.
+	 */
+	public void setFogSource(FxEnvironment src) {
+		fogSource = src == this ? null : src;
+	}
+
+	private FxEnvironment fogSource;
+
+	private FxEnvironment src() {
+		return fogSource != null ? fogSource : this;
+	}
+
+	/**
+	 * 다른 슬롯 레벨로 그릴 때 (매 프레임, GameScene): 효과 시계는 현재 레벨 것을 따르고 (원작 시계 하나 — 층 안개 텍스처 흐름 {@code uFogTexXf} 가 다른 슬롯에서
+	 * 멈춰 있다가 이음 순간 뛰지 않게) 안개는 이 레벨 것 중 눈 위치로 고른다 (예전엔 첫 안개 그대로) [근사: 원작은 두 슬롯 안개 GO 중 하나를 프레임에 하나 — 43 §27].
+	 */
+	public boolean follow(FxEnvironment main, org.joml.Vector3f eye) {
+		if (main != null && main != this) {
+			time = main.time;
+		}
+		return selectFog(eye);
+	}
+
+	/** @return 컨텍스트가 켜진 안개가 있었는지 (하나뿐인 안개도 켜졌는지 본다 — 두 슬롯 고르기용) */
+	private boolean selectFog(org.joml.Vector3f eye) {
 		if (FOG_NEAREST) {
 			nearestFog(eye);
-			return;
+			return fog != null || layered != null;
 		}
 		if (params.fogs.size() + params.layeredFogs.size() < 2) {
-			return; // 하나뿐이면 켜질 때마다 같은 안개 — 이전 안개 유지와 같다
+			// 하나뿐이면 켜질 때마다 같은 안개 — 이전 안개 유지와 같다 (값은 그대로, 켜졌는지만)
+			for (EnvParams.Fog f : params.fogs) {
+				return data.contextActive(f.owner(), eye.x, eye.y, eye.z);
+			}
+			for (EnvParams.LayeredFog f : params.layeredFogs) {
+				return data.contextActive(f.owner(), eye.x, eye.y, eye.z);
+			}
+			return false;
 		}
 		int best = Integer.MAX_VALUE;
 		EnvParams.Fog bf = null;
@@ -134,7 +182,9 @@ public final class FxEnvironment {
 		if (bf != null || bl != null) {
 			fog = bf;
 			layered = bl;
+			return true;
 		}
+		return false;
 	}
 
 	private void nearestFog(org.joml.Vector3f eye) {
@@ -163,6 +213,8 @@ public final class FxEnvironment {
 
 	/** 지금 쓰는 안개 요약 (디버그). */
 	public String activeFog() {
+		EnvParams.Fog fog = src().fog;
+		EnvParams.LayeredFog layered = src().layered;
 		if (layered != null) {
 			return String.format(Locale.ROOT, "LayeredFog %s centreZ=%d", layered.owner(), layered.centreZ());
 		}
@@ -185,7 +237,7 @@ public final class FxEnvironment {
 
 	/** 이번 프레임에 걸리는 안개가 있는가 (켜짐 + 레벨 안개 또는 대체 안개). */
 	public boolean fogActive() {
-		return enabled && (override != null || fog != null || layered != null);
+		return enabled && (override != null || src().fog != null || src().layered != null);
 	}
 
 	/** basic.frag 안개 유니폼 설정. 안개가 없거나 꺼져 있으면 끈다. 안개 텍스처는 유닛 1. */
@@ -199,8 +251,9 @@ public final class FxEnvironment {
 	 * @param texUnit 안개 텍스처 유닛 (basic = 1, 파티클은 열기 아지랑이 프레임 복사본이 1 이라 {@link SceneFog#FOG_TEX_UNIT})
 	 */
 	public void applyFog(Shader s, Camera cam, int fbHeight, int texUnit) {
-		EnvParams.Fog fog = override != null ? override : this.fog;
-		EnvParams.LayeredFog layered = override != null ? null : this.layered;
+		FxEnvironment f = src();
+		EnvParams.Fog fog = override != null ? override : f.fog;
+		EnvParams.LayeredFog layered = override != null ? null : f.layered;
 		if (!enabled || (fog == null && layered == null)) {
 			disableFog(s);
 			return;
@@ -229,18 +282,19 @@ public final class FxEnvironment {
 			s.set("uFogBand", 0f, 0f);
 		}
 		s.set("uFogScreen", fbHeight, 0f);
-		s.set("uFogGs", params.farClips.isEmpty() ? viewFar : params.farClips.getFirst().farDistance(), viewNear);
+		s.set("uFogGs", f.params.farClips.isEmpty() ? viewFar : f.params.farClips.getFirst().farDistance(), viewNear);
 		// 안개 텍스처 레이어: 스크롤(초당) · 회전(도/초) · 배율
 		String mat = layered != null ? layered.material() : fog.material();
 		float[] sc = layered != null ? layered.scroll() : fog.scroll();
 		float rot = layered != null ? layered.rotDeg() : fog.rotDeg();
 		float scale = layered != null ? layered.texScale() : fog.texScale();
-		Texture t = fogTexture(mat);
+		Texture t = f.fogTexture(mat);
 		if (t != null && textured) {
 			t.bind(texUnit);
 			glActiveTexture(GL_TEXTURE0);
 			s.set("uFogTex", texUnit);
 			s.set("uFogTexOn", 1);
+			float time = f.time;
 			s.set("uFogTexXf", sc[0] * time, sc[1] * time, (float) Math.toRadians(rot * time), scale <= 0 ? 1 : scale);
 			s.set("uFogWidth", (float) fbWidth);
 		} else {
@@ -300,8 +354,8 @@ public final class FxEnvironment {
 	 * 결과 계수 = 이 값 × 키/Fog_A 알파 (basic.frag applyFog).
 	 */
 	public float backgroundFactor() {
-		EnvParams.Fog fog = override != null ? override : this.fog;
-		EnvParams.LayeredFog layered = override != null ? null : this.layered;
+		EnvParams.Fog fog = override != null ? override : src().fog;
+		EnvParams.LayeredFog layered = override != null ? null : src().layered;
 		return enabled ? backgroundFactor(fog, layered) : -1f;
 	}
 
@@ -322,7 +376,8 @@ public final class FxEnvironment {
 	/** 배경 화소용 안개 유니폼: applyFog 뒤 배경 표시 + 배경 계수 ({@link #backgroundFactor()}). */
 	public void applyBackgroundFog(Shader s, Camera cam, int fbHeight, float factor) {
 		applyFog(s, cam, fbHeight);
-		int centreZ = layered != null && override == null ? layered.centreZ() : (override != null ? override : fog).centreZ();
+		EnvParams.LayeredFog layered = src().layered;
+		int centreZ = layered != null && override == null ? layered.centreZ() : (override != null ? override : src().fog).centreZ();
 		s.set("uFogDepth", 16f * centreZ * viewNear, cam.near, cam.far, factor);
 		s.set("uFogScreen", fbHeight, 1f);
 	}

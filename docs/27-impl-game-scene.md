@@ -30,7 +30,7 @@
 | ShowMessage(id, 초) | 원작 HUD 메시지 창: `PS2_MessageTemplate_Line1..5` 에 줄별 텍스트, `PS2_MessageTemplate_Event` = 줄 수, 시간 후 0. 초 ≤ 0 이면 ○ 를 기다림 (전역 정지 슬롯 1, `MessageTemplate_Style` 1 → ○ 아이콘, 42 문서 §5.1) |
 | CheckPoint | 재시작 위치 갱신 |
 | 데스존 (플레이어) | 사망 → 체크포인트 재시작 (원작 HP 보정 `onCheckpointRestart`) |
-| LoadWad / LoadForWarp / Warp / LoadCheck | 레벨 슬롯 2개 모델 `LevelLink` → SEAMLESS(LoadCheck, 위치 유지)·WALK(다른 슬롯 바닥)·WARP(도착 Start) 전환. 36 문서 §2 |
+| LoadWad / LoadForWarp / Warp / LoadCheck | 레벨 슬롯 2개 모델 `LevelLink` → SEAMLESS(LoadCheck, 위치 유지)·WALK(다른 슬롯 바닥)·WARP(도착 Start) 전환. 36 문서 §2. SEAMLESS·WALK 는 같은 씬에서 현재 ↔ 다른 슬롯 역할만 바꾼다 (`seamSwap`, 43 §27 — 페이드 없음) |
 | Load(wad, entry) | 진입점 이름의 GO/엔티티 위치에서 시작 (데이터에는 사용처 없음) |
 | SpawnEnemy | 레벨 RSRCS 태그(0x1F4)의 적 리소스 `R_<이름>` 를 `EnemyFactory` 로 미리 구성, **TemplateId = AI1 번호**로 종류 선택 |
 | 적 사망 | `ScriptWorld.destroy(actor)` → DestructionSensor (튜토리얼 메시지 등) + OrbEmitter "<적> Death" 오브 |

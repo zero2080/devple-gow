@@ -786,7 +786,8 @@ public final class LevelScene implements Scene {
 			applyCamera();
 		}
 		// 0x152EC8: 거울 관리자 갱신 0x12A6C8 (거울 고르기·반사 카메라) 이 가시 칸 질의보다 먼저 — 거울 뷰가 켜졌으면 반사 눈도 같은 마스크에 누적
-		frameMirror = MIRRORS ? chooseMirror(cam.eye) : null;
+		frameMirror = !MIRRORS ? null : mirrorDecided ? decidedMirror : chooseMirror(cam.eye);
+		mirrorDecided = false;
 		updateContextVisibility(cam.eye, frameMirror != null ? frameMirror.reflect(cam.eye) : null);
 		fx.beforeRender(e, cam);
 		e.renderer().begin3d(cam);
@@ -798,8 +799,12 @@ public final class LevelScene implements Scene {
 		frameCam = cam;
 		int stage = devple.gow.engine.render.DrawStage.set(devple.gow.engine.render.DrawStage.ALL);
 		glDepthMask(false);
+		boolean nb = skyNeighbour != null && skyNeighbour != this;
+		if (nb && skyNeighbourFirst) {
+			skyNeighbour.drawNeighbourSky(e, cam, fx.env().time());
+		}
 		drawSkyObjects(e, cam, fx.env().time());
-		if (skyNeighbour != null && skyNeighbour != this) {
+		if (nb && !skyNeighbourFirst) {
 			skyNeighbour.drawNeighbourSky(e, cam, fx.env().time());
 		}
 		if (skyEffects != null) {
@@ -1195,6 +1200,11 @@ public final class LevelScene implements Scene {
 	 * 걸어 들어가는 동안). 엔진은 현재 레벨 하늘만 그려 하늘이 검게 비었다 (43 §16) [확실: 가시 칸 데이터 / 근사: 두 슬롯 렌더 구조].
 	 */
 	public LevelScene skyNeighbour;
+	/**
+	 * 다른 슬롯 하늘을 이 레벨 하늘보다 먼저 그린다 — 하늘은 깊이를 쓰지 않아 나중 것이 덮는다. 두 슬롯 하늘의 순서는 슬롯 자리로 고정하고 "현재 레벨" 에
+	 * 따라 바꾸지 않는다: 이음 (GameScene.seamSwap, 43 §27) 이 현재 레벨을 바꿔도 같은 그림 (ATHN03A ↔ 03C 의 두 group2 하늘·산) [근사: 원작 슬롯 간 순서 미확인].
+	 */
+	public boolean skyNeighbourFirst;
 
 	/**
 	 * 하늘 단계 끝에 그릴 하늘 GO 파티클 (게임 씬: {@code MagicFx.renderSky}). 원작 0x218848 은 하늘 GO 의 파티클 부품도 층 1 로 두어 세계 (층 2–4) 가
@@ -1433,18 +1443,34 @@ public final class LevelScene implements Scene {
 	public void renderNeighbour(Engine e, Camera c) {
 		boolean late = devple.gow.engine.render.DrawStage.current() == devple.gow.engine.render.DrawStage.LATE;
 		if (!late) { // 합성 뒤 단계 (47 §7.4.2) 는 같은 프레임의 가시 칸 결과를 그대로
-			updateContextVisibility(c.eye); // 원작 질의는 충돌 월드의 시트 전부 (두 슬롯) 를 같은 카메라로 돈다 (0x11F098)
+			// 두 슬롯 중 이 레벨 거울이 거울 뷰로 골렸으면 (GameScene, 0x12A6C8) 그 반사 눈도 같은 마스크에 (render() 와 같음)
+			frameMirror = MIRRORS && mirrorDecided ? decidedMirror : null;
+			mirrorDecided = false;
+			updateContextVisibility(c.eye, frameMirror != null ? frameMirror.reflect(c.eye) : null); // 원작 질의는 충돌 월드의 시트 전부 (두 슬롯) 를 같은 카메라로 돈다 (0x11F098)
+		}
+		if (ambientKeys.size() != ambient.size()) {
+			ambientKeys = new java.util.HashSet<>(ambientNames());
 		}
 		e.renderer().begin3d(c);
 		fx.beginWorld(e, c, false);
 		tmp.identity();
+		boolean mirrorsHere = MIRRORS && !MODEL_PASSES && !mirrors.isEmpty();
 		for (int pass = 0; pass < 2; pass++) {
+			if (pass == 1 && mirrorsHere && !late) {
+				// 현재 레벨 render() 와 같은 자리 (불투명 뒤, 반투명 앞): 거울 뷰 (골렸을 때) + 거울 모델 층 0 — 예전엔 다른 슬롯 거울 바닥을 반사 없이 그려
+				// 이음으로 현재가 되는 순간 반사가 튀어나왔다 (ATHN04B 대리석 홀, 43 §27)
+				renderMirrors(e, c);
+				e.renderer().begin3d(c);
+				fx.beginWorld(e, c, false);
+				tmp.identity();
+			}
 			for (Instance i : instances) {
 				if (late && !i.model().hasLate()) {
 					continue;
 				}
 				String key = i.name().toLowerCase(Locale.ROOT);
-				if (!i.sky() && !fx.hidden(i) && !removed.contains(key) && !posed.containsKey(key) && !culled(key) && inMainView(key)) {
+				if (!i.sky() && !fx.hidden(i) && !removed.contains(key) && !posed.containsKey(key) && !ambientKeys.contains(key) && !culled(key)
+						&& !(mirrorsHere && mirrorKeys.contains(key)) && inMainView(key)) {
 					Map<String, Float> mt = matTimes.get(key);
 					e.renderer().setMaterialTimes(mt);
 					e.renderer().drawPass(i.model(), tmp, pass);
@@ -1452,7 +1478,7 @@ public final class LevelScene implements Scene {
 				}
 			}
 		}
-		if (!posed.isEmpty()) { // 이웃 스크립트 Animator·이음으로 넘겨받은 자세 (열린 문, 43 §13.8)
+		if (!posed.isEmpty() || !ambient.isEmpty()) { // 이웃 스크립트 Animator·이음으로 넘겨받은 자세 (열린 문, 43 §13.8) + 반복 act 배치
 			if (skinned == null) {
 				skinned = new devple.gow.engine.render.Shader("skinned.vert", "basic.frag");
 			}
@@ -1462,10 +1488,48 @@ public final class LevelScene implements Scene {
 					drawPosed(e, c, en.getKey(), en.getValue(), posedHidden.get(en.getKey()));
 				}
 			}
+			// 반복 act 배치 (깃발·돛·흔들리는 등 …) 도 현재 레벨처럼 효과 시계로 — 원작 GO 애니는 두 슬롯 모두 돈다 (예전엔 구운 시작 자세로 멈춰 있다가
+			// 이음 순간 움직이기 시작했다, 43 §27). 시계 = 현재 레벨 것 (GameScene 이 FxEnvironment.follow 로 맞춘다)
+			float now = fx.env().time();
+			for (Ambient a : ambient) {
+				if (posed.containsKey(a.key()) || removed.contains(a.key()) || culled(a.key()) || fxHidden(a.key()) || !inMainView(a.key())
+						|| late && !posedDrawsLate(a.key())) {
+					continue;
+				}
+				float t = a.start() + now;
+				float[][] lw = a.act().sample(a.skeleton(), t, true).world(a.skeleton());
+				float[][] w = new float[lw.length][];
+				for (int i = 0; i < lw.length; i++) {
+					w[i] = Mat4.mul(lw[i], a.inst());
+				}
+				float len = a.act().duration;
+				drawPosed(e, c, a.key(), w, a.act().hiddenJoints(a.skeleton(), ((t % len) + len) % len));
+			}
 			FxEnvironment.disableFog(skinned);
+		}
+		if (!late) {
+			submitStaticShadows(); // 구운 시작 자세 GO 의 그림자 (그림자 서버는 두 슬롯 GO 를 모두 돈다, 0x162F20) — 이음 순간 생기던 것 (43 §27)
 		}
 		FxEnvironment.disableFog(e.renderer().basic());
 	}
+
+	/** 두 슬롯 거울 중 하나 고르기 (GameScene): 이 레벨의 거울 뷰 후보 거리 (0x12A330 — 앞쪽만, 없으면 {@code Float.MAX_VALUE}). */
+	public float mirrorCandidateDistance(Vector3f eye) {
+		Mirrors.Mirror m = MIRRORS ? chooseMirror(eye) : null;
+		return m == null ? Float.MAX_VALUE : m.distance(eye);
+	}
+
+	/**
+	 * 이번 프레임 이 레벨 거울로 거울 뷰를 켤지 — 원작 0x12A6C8 은 렌더러의 거울 전체 (두 슬롯) 에서 가장 가까운 하나만 켠다. GameScene 이 두 슬롯 후보를
+	 * 비교해 매 프레임 부른다 (안 부르면 예전처럼 이 레벨 안에서 고름). false 면 거울 모델 층 0 만 (반사 없음).
+	 */
+	public void decideMirror(boolean on, Vector3f eye) {
+		decidedMirror = on && MIRRORS ? chooseMirror(eye) : null;
+		mirrorDecided = true;
+	}
+
+	private Mirrors.Mirror decidedMirror;
+	private boolean mirrorDecided;
 
 	/**
 	 * {@link #exit} 를 {@link devple.gow.engine.render.GlDeferred} 로 미룬다 (48 문서 §9: 씬 교체 프레임의 GL 지우기 2–9 ms) — 같은 순서로, 배치는

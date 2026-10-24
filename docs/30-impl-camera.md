@@ -260,7 +260,9 @@ CAM 로컬 (회전 행 × 관절 스케일 역수, 위치 = 관절 로컬) × �
   이웃 레벨 스크립트의 SwitchCamera·Internal 0x9·Vis Attr11_1 도 같은 카메라에 적용 (`SceneNav.Host.neighbourCamera`).
 - 시작 순서: 스크립트 `world.start()` (생성 센서 → Vis Attr11_1 CMV 끔) **뒤에** 첫 선택 → Warp 면 Start CameraName 요청 후 한 번 더 (Warp_Jump 순서).
   원작은 이 레벨이 이웃 슬롯에 먼저 올라와 생성 스크립트가 이미 돈 상태로 들어오므로 [추정].
-- 이음/걷기 전환: `CameraRig.handoff()` → 새 장면 `resume()` (활성 목록 이름·레벨, 현재 카메라, 자세, 레일 t). 원작은 LoadCheck 에서 카메라 관리자를 건드리지 않는다.
+- 이음/걷기 전환: 원작은 LoadCheck 에서 카메라 관리자를 건드리지 않는다 → 같은 씬 이음 (43 §27) 은 같은 `CameraRig` 의 현재 ↔ 다른 슬롯만 바꾼다 (`swapLevels` —
+  상태 링·활성 목록·전환 보간·관절 카메라 시간·꺼진 볼륨·질의 끔이 그대로, 이름 조회만 현재 레벨 먼저, 볼륨 후보 순서는 슬롯 순서로 고정). 새 씬으로 넘어가는 이음
+  (보스 레벨이 낌) 만 예전처럼 `CameraRig.handoff()` → 새 장면 `resume()` (활성 목록 이름·레벨, 현재 카메라, 자세, 레일 t — 보간·꺼진 볼륨은 끊김).
 - 디버그: `--game LEVEL --arrive FROM` (Warp 도착), `--arrive FROM@x,y,z[,요°]` (이음 도착, 떠나온 레벨이 다른 슬롯).
   이음 재현에는 넘겨받을 카메라가 없으므로 도착점에 CMV 후보가 없으면 `CameraRig.seedApproach` 가 떠나온 레벨의 가장 가까운 후보 자리에서 먼저 고른다
   (원작: 후보 0 이면 현재 카메라 유지 0x1EE8E0 → 걸어 들어오던 카메라가 남는다) [근사: 하네스 전용]. `-Dgow.arrive.open=오브젝트[:애니]` = 문 열린 자세 (43 §13.8).

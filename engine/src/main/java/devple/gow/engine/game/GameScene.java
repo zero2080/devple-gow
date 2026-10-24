@@ -80,7 +80,8 @@ public final class GameScene implements Scene {
 	}
 
 	private final GameSession session;
-	private final String levelName;
+	/** 현재 슬롯 레벨 (대문자) — 이음은 같은 씬 안에서 다른 슬롯과 바꾼다 ({@link #seamSwap}, 43 §27). */
+	private String levelName;
 	private final String entry;
 	private final float autoRun;
 	private LevelScene level;
@@ -218,6 +219,11 @@ public final class GameScene implements Scene {
 	private devple.gow.engine.boss.BossArena arena;
 	/** 레벨 WAD 의 FLP_&lt;레벨&gt; (보스 체력 미터 등, 없으면 null) — HUD 와 변수 공유. */
 	private UiLayer levelHud;
+	/** 지금 레벨 HUD 의 FLP 이름 (없으면 null). */
+	private String levelHudFlp;
+	/** 이음으로 다른 슬롯이 된 레벨의 레벨 HUD (그리지 않음, {@link #seamSwap}) · 그 FLP · 레벨. */
+	private UiLayer otherLevelHud;
+	private String otherLevelHudFlp, otherLevelHudLevel;
 	private final devple.gow.engine.ui.EnemyMeterBinding enemyMeters = new devple.gow.engine.ui.EnemyMeterBinding();
 
 	/** 불러오기 시 시작 위치 (null 이면 진입점/시작 인스턴스). */
@@ -486,6 +492,23 @@ public final class GameScene implements Scene {
 		return Math.min(3, n + objs.size()); // 메모리: 레벨 WAD 해석 사본은 많아야 3 개 (enter 끝에 버림)
 	}
 
+	/** 현재 슬롯으로 그리는 레벨 장면의 설정 (enter · 이음 {@link #seamSwap} 공용): 게임 카메라, 이펙트는 캐릭터 뒤 패스, 거울 반사의 영웅. */
+	private void mainSceneRole(Engine e, LevelScene s) {
+		s.setExternalCamera(cam);
+		s.setDeferEffects(true);
+		if (mirrorActors == null) {
+			// SCR_Mirror 반사 패스의 영웅 (원작 0x1DAEC0: 영웅 모델 bit 61, 마스크 0x40 → 거울 뷰 0x80, 값 [4] ≠ 0 인 거울은 뺀다 — 43 문서 §9)
+			mirrorActors = rc -> {
+				level.fx().env().applyFog(hero.shader(), rc, e.window().height());
+				hero.draw(rc, e.window().aspect(), renderAlpha, e.renderer().white());
+			};
+		}
+		s.setMirrorActors(mirrorActors);
+	}
+
+	/** 거울 반사 패스의 영웅 그리기 (두 슬롯 장면 공용). */
+	private java.util.function.Consumer<devple.gow.engine.render.Camera> mirrorActors;
+
 	@Override
 	public void enter(Engine e) {
 		long enterT0 = System.nanoTime();
@@ -496,13 +519,7 @@ public final class GameScene implements Scene {
 			long ph = devple.gow.engine.core.PerfMonitor.phase(". join", enterT0);
 			level.enter(e); // GL 올리기 (CPU 단계는 페이드 동안 끝났으면 건너뜀)
 			ph = devple.gow.engine.core.PerfMonitor.phase(". level GL", ph);
-			level.setExternalCamera(cam);
-			level.setDeferEffects(true);
-			// SCR_Mirror 반사 패스의 영웅 (원작 0x1DAEC0: 영웅 모델 bit 61, 마스크 0x40 → 거울 뷰 0x80, 값 [4] ≠ 0 인 거울은 뺀다 — 43 문서 §9)
-			level.setMirrorActors(rc -> {
-				level.fx().env().applyFog(hero.shader(), rc, e.window().height());
-				hero.draw(rc, e.window().aspect(), renderAlpha, e.renderer().white());
-			});
+			mainSceneRole(e, level);
 			col = level.collision();
 			hero = preHero != null ? preHero : new HeroRig(session.rom, session.permk, session.player != null ? session.player.costume : session.costume, session.player);
 			hero.difficulty = session.difficulty;
@@ -513,6 +530,7 @@ public final class GameScene implements Scene {
 			levelHud = preLevelHudDone ? preLevelHud : loadLevelHud(vars);
 			ph = devple.gow.engine.core.PerfMonitor.phase(". hud", ph);
 			session.sound.load(level.data().wad);
+			levelBanks.put(levelName, level.data().wad.name());
 			ph = devple.gow.engine.core.PerfMonitor.phase(". sound", ph);
 			hero.combat.onSound((h, p) -> session.sound.play(h, p));
 			// 첫 안내: 영웅 기술의 SCRIPT SCR_FirstTimeMsg (0x19CD20, idx = 안내 번호 — MAIMEWGRAB 1, MAIMIN01 7, BOLTPULLOUT 9 …)
@@ -862,6 +880,8 @@ public final class GameScene implements Scene {
 				spawn.z, kinds.keySet());
 		WadAssets.dropPrefetched(); // 쓰지 않은 미리 해석 (예: 소리 전용 RSRCS) 은 버린다
 		otherDataPrep.clear(); // 이후 이웃 교체는 예전처럼 그 틱에 동기로
+		entered = true;
+		prepareOtherSwap(otherName); // 이음 준비 (dropPrefetched 뒤라야 레벨 HUD WAD 해석이 남는다)
 		if (session.seamZone >= 0) { // 이음 직전 구역 제목을 새 HUD 에 (원작 HUD 는 하나 — 43 §19)
 			int z = session.seamZone;
 			session.seamZone = -1;
@@ -875,6 +895,11 @@ public final class GameScene implements Scene {
 		for (String name : EnemyFactory.resourceWads(level.data().wad)) {
 			var path = Content.file(session.rom, name + ".WAD");
 			if (!kinds.containsKey(name) && Files.exists(path)) {
+				var known = soundOnlyWads.get(name);
+				if (known != null) { // 이미 소리 뱅크 로더로 판정 (다른 슬롯이던 때 · 앞서 현재이던 때) — 이음으로 현재가 됨 (43 §27)
+					addSoundOnly(name, devple.gow.engine.asset.Loader.join(known, "wad " + name));
+					continue;
+				}
 				try {
 					Object pre = preKinds.remove(name);
 					if (pre instanceof RuntimeException ex) {
@@ -892,21 +917,45 @@ public final class GameScene implements Scene {
 					// 스켈레톤 없는 리소스 WAD (R_AHH 등 "FkSnd" 사운드 뱅크 로더): 사운드만 올린다
 					System.out.println("적 리소스 " + name + ": 전투 개체 아님 (" + ex.getMessage() + ") → 사운드만");
 					devple.gow.tools.wad.WadFile sw = devple.gow.tools.wad.WadFile.load(path);
-					session.sound.load(sw);
-					soundOnly.add(sw.name());
-					Tweaks st = new Tweaks();
-					st.load(sw);
-					for (String n : st.nodes("/TweakTemplates/AI1/")) {
-						try {
-							soundOnlyTemplates.add(Integer.parseInt(n.split("/")[3]));
-						} catch (RuntimeException ignored) {
-							// 숫자가 아닌 노드
-						}
-					}
+					soundOnlyWads.put(name, java.util.concurrent.CompletableFuture.completedFuture(sw));
+					addSoundOnly(name, sw);
 				}
 			}
 		}
 	}
+
+	/** 소리 뱅크 로더 RSRCS (R_AHH 등): 뱅크만 올리고 그 AI1 템플릿은 스폰하지 않는다. 이미 올린 뱅크는 다시 해석하지 않고 다시 색인한다. */
+	private void addSoundOnly(String name, devple.gow.tools.wad.WadFile sw) {
+		devple.gow.tools.audio.WadSounds loaded = session.sound.loaded().get(sw.name());
+		if (loaded != null) {
+			session.sound.register(loaded);
+		} else {
+			session.sound.load(sw);
+		}
+		if (!soundOnly.contains(sw.name())) {
+			soundOnly.add(sw.name());
+		}
+		soundOnlyTemplates.addAll(soundOnlyTpl.computeIfAbsent(name, k -> {
+			java.util.Set<Integer> out = new java.util.HashSet<>();
+			Tweaks st = new Tweaks();
+			st.load(sw);
+			for (String n : st.nodes("/TweakTemplates/AI1/")) {
+				try {
+					out.add(Integer.parseInt(n.split("/")[3]));
+				} catch (RuntimeException ignored) {
+					// 숫자가 아닌 노드
+				}
+			}
+			return out;
+		}));
+	}
+
+	/**
+	 * 소리 뱅크 로더로 판정된 RSRCS (이름 → WadFile; 다른 슬롯 것은 적재 스레드가 읽는다) 와 그 AI1 템플릿 — 씬 동안 둔다. 이음으로 그 레벨이 현재가 되면
+	 * 다시 판정 (EnemyFactory.load 실패 · WAD 다시 읽기, ATHN01A R_AHH 60 ms) 하지 않는다 (43 §27).
+	 */
+	private final Map<String, java.util.concurrent.Future<devple.gow.tools.wad.WadFile>> soundOnlyWads = new HashMap<>();
+	private final Map<String, java.util.Set<Integer>> soundOnlyTpl = new HashMap<>();
 
 	/**
 	 * 다른 슬롯 레벨의 적 리소스 (43 문서 §17): 원작 Tag_Resources 0x1BB928 은 RSRCS 이름을 <b>읽는 슬롯</b> (0x3372D8) 의 구조 +0xA + 10·i 에
@@ -934,6 +983,7 @@ public final class GameScene implements Scene {
 				System.out.println("이웃 슬롯 적 리소스: " + name + " (" + other.wad.name() + ")");
 			} catch (IOException | RuntimeException ex) {
 				neighbourKinds.put(name, null); // 전투 개체가 아닌 리소스 (사운드 뱅크 로더) — 이웃 스폰은 하지 않는다
+				soundOnlyWads.computeIfAbsent(name, k -> devple.gow.engine.asset.Loader.submit("wad " + k, () -> devple.gow.tools.wad.WadFile.load(path)));
 			}
 		}
 	}
@@ -948,6 +998,7 @@ public final class GameScene implements Scene {
 					// HUD 변수 "WadName" (원작 0x1B8668 → 0x1B8704: 불러온 레벨 이름) — FLP_Athn01B/01C 의 SimKeyEvent 가 PS2_WadName 이
 					// "Athn01B" 일 때만 미터 1 (HydraMeter1), 아니면 미터 2 를 갱신한다 (37 문서 §4.3). 이름 대소문자 = FLP 이름 그대로 [추정]
 					vars.set("PS2_WadName", t.name().substring(4));
+					levelHudFlp = t.name();
 					System.out.println("레벨 HUD: " + t.name());
 					return u;
 				} catch (RuntimeException | IOException ex) {
@@ -1150,6 +1201,7 @@ public final class GameScene implements Scene {
 		if (nav != null) {
 			nav.clearOther(); // 내려가는 슬롯 기억 (levelLeft: 몸 · 부순 물체) — 이웃 필드를 비우기 전에
 		}
+		releaseLevel(otherName);
 		otherName = null;
 		otherCol = null;
 		otherData = null;
@@ -1174,6 +1226,7 @@ public final class GameScene implements Scene {
 		if (lights != null && otherName != null) {
 			lights.removeSource(otherName); // 이전 다른 슬롯 레벨의 라이트 빼기 (47 문서 §8)
 		}
+		releaseLevel(otherName);
 		long t0 = System.nanoTime();
 		otherName = wad;
 		otherHidden.clear();
@@ -1215,7 +1268,65 @@ public final class GameScene implements Scene {
 		if (cameraRig != null) {
 			cameraRig.setOther(otherData);
 		}
+		if (entered) {
+			prepareOtherSwap(wad);
+		}
 		devple.gow.engine.core.PerfMonitor.loadTime("other " + wad, t0);
+	}
+
+	/** enter 가 끝났는지 (그 안의 미리 해석은 enter 끝에 버려지므로 이음 준비는 그 뒤에). */
+	private boolean entered;
+
+	/** 다른 슬롯 레벨이 현재가 될 때의 오브 튜닝 (영구 + 레벨 + 그 RSRCS 적 종류 순, enter 와 같은 구성) — 적재 스레드, 종류 이름 목록이 같을 때만 쓴다. */
+	private record PreTweaks(String level, List<String> kinds, java.util.concurrent.Future<Tweaks> tweaks) {
+	}
+
+	private PreTweaks otherTweaksPrep;
+
+	/** {@link #otherTweaksPrep} 시작 (R_PERMK TWK 해석 3–14 ms 를 이음 프레임에서 뺀다). 종류는 지금 올라 있는 것 (현재 · 다른 슬롯 종류) 만. */
+	private void prepareOtherTweaks(String wad) {
+		if (wad == null || otherData == null || otherData.wad == null || !devple.gow.engine.asset.Loader.async() || !SEAM_SWAP) {
+			return;
+		}
+		List<String> names = new ArrayList<>();
+		List<devple.gow.tools.wad.WadFile> wads = new ArrayList<>();
+		for (String n : EnemyFactory.resourceWads(otherData.wad)) {
+			EnemyFactory.Kind k = kinds.containsKey(n) ? kinds.get(n) : neighbourKinds.get(n);
+			if (k != null) {
+				names.add(n);
+				wads.add(k.assets().wad());
+			}
+		}
+		devple.gow.tools.wad.WadFile pk = session.permk, lw = otherData.wad;
+		otherTweaksPrep = new PreTweaks(wad, names, devple.gow.engine.asset.Loader.submit("tweaks " + wad, () -> {
+			Tweaks t = new Tweaks();
+			t.load(pk);
+			t.load(lw);
+			wads.forEach(t::load);
+			return t;
+		}));
+	}
+	/** 다른 슬롯 레벨의 소리 뱅크 해석 (적재 스레드, 레벨 이름 → 결과) — 이음으로 현재가 되면 등록만 한다 ({@link #seamSwap}). */
+	private final Map<String, java.util.concurrent.Future<devple.gow.tools.audio.WadSounds>> otherSounds = new HashMap<>();
+
+	/**
+	 * 다른 슬롯 레벨이 이음으로 현재가 될 때 그 프레임에 할 일 중 무거운 해석을 미리 (적재 스레드, 48 §9 와 같은 방식 — 값은 같다): 레벨 소리 뱅크 (WadSounds),
+	 * 레벨 HUD (FLP_ 가 있으면 그 WAD 해석 — loadLevelHud 의 new WadAssets 가 꺼내 씀). 이음 프레임의 레벨 HUD 39 ms (ATHN01B 히드라 미터) · 소리 3 ms 가 빠진다.
+	 */
+	private void prepareOtherSwap(String wad) {
+		if (wad == null || otherData == null || otherData.wad == null || !devple.gow.engine.asset.Loader.async() || !SEAM_SWAP) {
+			return;
+		}
+		otherSounds.keySet().removeIf(k -> !k.equals(wad)); // 지난 다른 슬롯 것 (끝나면 버려짐)
+		devple.gow.tools.wad.WadFile w = otherData.wad;
+		otherSounds.computeIfAbsent(wad, k -> devple.gow.engine.asset.Loader.submit("sounds " + k, () -> devple.gow.tools.audio.WadSounds.load(w)));
+		prepareOtherTweaks(wad);
+		for (devple.gow.tools.wad.WadTag t : w.tags()) {
+			if (t.hasData() && t.name().startsWith("FLP_") && t.magic() == devple.gow.tools.ui.FlpFile.MAGIC) {
+				WadAssets.prefetch(Stages.wad(session.rom, wad));
+				break;
+			}
+		}
 	}
 
 	/** 다른 슬롯 레벨 TWK (영구 + 레벨) — 이웃 R1/R2 오브젝트 템플릿 (SceneNav.setOther). */
@@ -1312,8 +1423,8 @@ public final class GameScene implements Scene {
 				// 이웃 레벨 Creator "savepoint" (원작 두 슬롯 GO 상주): 자리·빛기둥을 이 씬에 — R2 저장 (0x1DC678 은 슬롯 구분 없이 가장 가까운 것).
 				if (SceneNav.creatorIs(name, "savepoint") && source.owner != null) {
 					float[] m = SceneNav.creatorMatrix(source); // 엔티티 행렬 (0x1A9CD0), 43 §19
-					savePoints.add(new Vector3f(m[12], m[13], m[14]));
-					boolean body = spawnSavePoint(m);
+					addSavePoint(m, otherName);
+					boolean body = spawnSavePoint(m, otherName);
 					System.out.printf("세이브 포인트 생성 (이웃 %s, %.0f, %.0f, %.0f)%s%n", otherName, m[12], m[13], m[14], body ? " + 빛기둥 savepoint" : "");
 					return;
 				}
@@ -1674,8 +1785,8 @@ public final class GameScene implements Scene {
 				Object name = world.slot(source, "Name0");
 				if (SceneNav.creatorIs(name, "savepoint") && source.owner != null) {
 					float[] m = SceneNav.creatorMatrix(source);
-					savePoints.add(new Vector3f(m[12], m[13], m[14]));
-					boolean body = spawnSavePoint(m);
+					addSavePoint(m, levelName);
+					boolean body = spawnSavePoint(m, levelName);
 					System.out.printf("세이브 포인트 생성 (%.0f, %.0f, %.0f)%s%n", m[12], m[13], m[14], body ? " + 빛기둥 savepoint" : "");
 				} else {
 					// "chest"/"Chest" → R2 상자 (원작 Creator 0x1ACCA8: R_PERMK 오브젝트 chest 를 엔티티 행렬에 새 GO 로, 38 §21)
@@ -1694,6 +1805,8 @@ public final class GameScene implements Scene {
 
 	/** Creator 가 만든 그 밖의 오브젝트 (액터 이름 → 이펙트 GO): Animator (모드 3, 같은 Filter) 가 act 를 튼다. */
 	private final Map<String, devple.gow.engine.fx.EffectSystem.Effect> createdObjects = new HashMap<>();
+	/** Creator 오브젝트 → 만든 레벨 (대문자). 이음으로 씬이 이어지므로 그 레벨이 두 슬롯에서 내려갈 때 지운다 ({@link #releaseLevel}). */
+	private final Map<String, String> createdOwner = new HashMap<>();
 
 	/**
 	 * 상자·세이브 포인트가 아닌 Creator (원작 0x1ACCA8 은 이름을 가리지 않는다): Name0 앞에 "go" 를 붙인 오브젝트 (레벨 WAD 의 원점에 둔 원형 —
@@ -1741,6 +1854,7 @@ public final class GameScene implements Scene {
 			e.loopAct = actor.actLoop;
 		}
 		createdObjects.put(key, e);
+		createdOwner.put(key, levelName); // 그 레벨이 두 슬롯에서 내려가면 지운다 (releaseLevel)
 		System.out.printf("Creator 오브젝트 %s → %s (그룹 %d) at (%.0f, %.0f, %.0f)%n", source.name(), def.go(), group, m[12], m[13], m[14]);
 	}
 
@@ -1755,6 +1869,7 @@ public final class GameScene implements Scene {
 	 */
 	private boolean destroyCreated(devple.gow.engine.script.ScriptActor a) {
 		devple.gow.engine.fx.EffectSystem.Effect fx = createdObjects.remove(a.name);
+		createdOwner.remove(a.name);
 		if (fx == null) {
 			return false;
 		}
@@ -1909,9 +2024,10 @@ public final class GameScene implements Scene {
 	}
 
 	private void goToLevel(String wad, Arrival a) {
-		if (leaving) {
-			return;
+		if (leaving || pendingSeam != null && a.kind() != LevelLink.Kind.WARP) {
+			return; // 같은 틱의 두 번째 이음 요청은 무시 (Warp 는 이음보다 앞선다 — 새 씬)
 		}
+		pendingSeam = null;
 		if (auto != null && !(auto.routing() && a.kind() != LevelLink.Kind.WARP)) { // 자동 플레이: 다음 레벨이면 성공으로 끝, 아니면 막는다
 			if (auto.allow(wad, hero.ctl.position)) {
 				leaving = true;
@@ -1919,12 +2035,19 @@ public final class GameScene implements Scene {
 			}
 			return;
 		}
+		if ((a.kind() == LevelLink.Kind.SEAMLESS || a.kind() == LevelLink.Kind.WALK) && !seamNewScene && seamSwapBlocker(wad) == null) {
+			// 이음: 같은 씬 안에서 현재 레벨 표시만 바꾼다 (원작 0x1BCA10) — 이번 틱 끝에 (스크립트 틱 도중이면 두 세계가 한 번씩만 돌도록)
+			pendingSeam = new Arrival(a.kind(), a.from(), a.pos(), a.yaw());
+			pendingSeamTarget = wad;
+			return;
+		}
 		if (auto != null) {
 			session.autoCarry = auto; // 경로 중 이음 전환: 새 씬이 이어 받음
 		}
 		leaving = true;
 		rememberLevels();
-		System.out.println("레벨 전환 → " + wad + " (" + a.kind() + ", " + a.from() + " 에서)");
+		System.out.println("레벨 전환 → " + wad + " (" + a.kind() + ", " + a.from() + " 에서)"
+				+ (a.kind() == LevelLink.Kind.WARP ? "" : " — 새 씬: " + seamSwapBlocker(wad)));
 		if (a.kind() != LevelLink.Kind.WARP && a.camera() == null && cameraRig != null) {
 			a = new Arrival(a.kind(), a.from(), a.pos(), a.yaw(), cameraRig.handoff(), // 이음: 카메라 상태 유지 (30 문서 §7)
 					residents()); // 두 슬롯 화면 상태 (떠나는 레벨 → 다른 슬롯, 들어가는 레벨 → 현재)
@@ -1944,6 +2067,290 @@ public final class GameScene implements Scene {
 			session.seamZone = zoneShown >= 0 && time - zoneShownAt < ZONE_TITLE_SECS ? zoneShown : -1;
 		}
 		pendingEngine.scenes().transitionTo(new GameScene(session, wad, a));
+	}
+
+	/** -Dgow.seamSwap=false: 예전 이음 (새 GameScene + SceneManager 0.4 초 페이드) — 비교용 [엔진 전용]. */
+	private static final boolean SEAM_SWAP = !"false".equals(System.getProperty("gow.seamSwap"));
+	/** 현재 레벨의 슬롯 (0 = enter 의 레벨 자리, 1 = 다른 자리) — 이음마다 바뀐다. 다른 슬롯이 바뀌어도 (LoadWad) 그대로. 두 슬롯 하늘 그리는 순서용. */
+	private int currentSlot;
+	/** 같은 씬 이음을 못 해 예전 길 (새 씬) 로 (seamSwap 이 렌더 장면을 못 갖췄을 때). */
+	private boolean seamNewScene;
+	/** 이번 틱 끝에 할 이음 (null = 없음, {@link #seamSwap}). */
+	private Arrival pendingSeam;
+	private String pendingSeamTarget;
+	/** 이 씬이 소리 뱅크를 올린 레벨 (대문자 → WAD 이름) — enter 의 현재 레벨 + 이음으로 현재가 된 레벨. 두 슬롯에서 내려가면·씬을 떠나면 내린다. */
+	private final Map<String, String> levelBanks = new java.util.LinkedHashMap<>();
+	/** 이음으로 현재 슬롯에서 물러난 레벨의 레벨 템플릿 적 종류 ("레벨:오브젝트" — 그 레벨이 다른 슬롯에 남아 산 적이 쓸 수 있다). 씬을 떠날 때 닫는다. */
+	private final List<EnemyFactory.Kind> retiredKinds = new ArrayList<>();
+
+	/**
+	 * 같은 씬 안 이음 ({@link #seamSwap}) 을 못 하는 까닭 (할 수 있으면 null) — 그러면 예전처럼 새 GameScene + 0.4 초 페이드.
+	 * 보스 레벨 (BossDirector — 보스 리소스·연출·적이 현재 레벨 씬에 묶임) 과 덧붙는 레벨 (숙주 바닥, ATHN02D·ATHN08B 둘 다 보스) [근사: 엔진 구조].
+	 */
+	private String seamSwapBlocker(String wad) {
+		if (!SEAM_SWAP) {
+			return "gow.seamSwap=false";
+		}
+		if (otherName == null || !otherName.equalsIgnoreCase(wad)) {
+			return "다른 슬롯 레벨이 아님";
+		}
+		if (otherData == null || otherCol == null || nav == null || nav.neighbour() == null || nav.neighbourData() == null) {
+			return "다른 슬롯 세계 없음";
+		}
+		if (boss != null || devple.gow.engine.boss.BossDirector.hostsBoss(wad)) {
+			return "보스 레벨";
+		}
+		if (hostLevel != null) {
+			return "덧붙는 레벨 (숙주 " + hostLevel + ")";
+		}
+		return null;
+	}
+
+	/**
+	 * 이음 (LoadCheck · 걷기 — SEAMLESS / WALK) = 같은 씬 안에서 현재 ↔ 다른 슬롯 역할을 바꾼다 (43 §27, 36 §2). 원작 LoadCheck 0x1BCA10 은 슬롯이
+	 * 적재돼 있으면 상태 10 + 현재 레벨 이름 0x29DAE8 만 바꾸고, 두 슬롯 레벨 (스크립트·GO·충돌·렌더)·영웅·카메라 관리자·HUD·이펙트·음악은 그대로다
+	 * [확실: 0x1BCA10]. 예전 엔진은 새 GameScene 으로 두 레벨을 다시 읽고 SceneManager 페이드 0.4 초 (검게 꺼졌다 켜짐) 를 지나 영웅을 같은 자리에 다시
+	 * 세웠다 (속도·자세·잡은 줄·메시지 상자·구역 제목·이펙트·음악이 끊김, 43 §19.3 · §21.3).
+	 * <p>여기서 바꾸는 것 (그 밖은 그대로 이어진다):
+	 * <ul>
+	 *   <li>이름·렌더 장면 (다른 슬롯 장면이 그대로 현재 장면 — GL 다시 올리지 않음)·효과 시계 ({@code LevelFx.takeOverMain})·숨김/자세 넘기기</li>
+	 *   <li>정적 충돌 순서·발판·R1/R2 오브젝트·스크립트 세계 (리스너만 다시 검 — {@code SceneNav.swapSlots}), 이벤트 큐 연결, 전투 다리 (적은 만든 세계 그대로)</li>
+	 *   <li>부서지는 물체 두 벌, 카메라 리그의 현재/다른 슬롯 ({@code CameraRig.swapLevels} — 활성 목록·보간·질의 끔 그대로)</li>
+	 *   <li>새 현재 레벨 것: RSRCS 적 종류 (이웃으로 이미 올린 것을 옮김), 오브 튜닝 (영구 + 레벨 + 종류, enter 와 같은 구성), 레벨 소리 뱅크·영웅 외부 애니·
+	 *       이펙트 GO 등록, 레벨 HUD (FLP_), 줄 그리기, 하늘 GO 이미터 (같은 이름은 이어서), LevelLink (현재 = 새 레벨, 다른 슬롯 = 떠난 레벨)</li>
+	 *   <li>체크포인트 = 지금 자리 (새 씬이던 때와 같음)</li>
+	 * </ul>
+	 */
+	private void seamSwap() {
+		Arrival a = pendingSeam;
+		String wad = pendingSeamTarget;
+		pendingSeam = null;
+		pendingSeamTarget = null;
+		if (a == null || leaving) {
+			return;
+		}
+		String blocker = seamSwapBlocker(wad);
+		if (blocker == null && !ensureOtherScene(pendingEngine)) {
+			blocker = "다른 슬롯 렌더 장면 없음";
+		}
+		if (blocker != null) { // 틱 사이에 다른 슬롯이 바뀜 등 — 예전 길
+			System.out.println("이음 (같은 씬) 취소: " + blocker);
+			seamNewScene = true;
+			goToLevel(wad, a);
+			return;
+		}
+		long t0 = System.nanoTime();
+		String from = levelName, to = otherName;
+		rememberLevels(); // 예전 이음과 같이 두 세계의 레벨 기억 (세계는 그대로 이어진다)
+		long ph = devple.gow.engine.core.PerfMonitor.phase(". seam memory", t0);
+		ScriptWorld wa = world, wb = nav.neighbour();
+		// 1) 적 소속 (전투 다리) — 지금 세계 (떠나는 레벨) 가 낸 적 / 다른 슬롯 세계가 낸 적 / 이미 내려간 슬롯의 적 (예전 이음은 새 씬에 다시 내지 않았다 → 뺀다)
+		java.util.Set<devple.gow.engine.script.ScriptActor> ofA = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+		List<Enemy> orphans = new ArrayList<>();
+		for (Enemy en : enemies) {
+			devple.gow.engine.script.ScriptActor act = en.actor();
+			if (act == null) {
+				continue;
+			}
+			ScriptWorld w = worldOf(act);
+			if (w == wa) {
+				ofA.add(act);
+			} else if (w != wb) {
+				orphans.add(en);
+			}
+		}
+		orphans.forEach(this::dropEnemy);
+		devple.gow.engine.boss.CombatScriptBridge oldBridge = bridge;
+		bridge = neighbourBridge != null && neighbourBridgeWorld == wb ? neighbourBridge : new devple.gow.engine.boss.CombatScriptBridge(wb);
+		neighbourBridge = oldBridge;
+		neighbourBridgeWorld = wa;
+		neighbourActors.clear();
+		neighbourActors.addAll(ofA);
+		// 2) 이름 · 렌더 장면
+		levelName = to;
+		otherName = from;
+		currentSlot = 1 - currentSlot;
+		LevelScene la = level;
+		level = otherScene;
+		otherScene = la;
+		otherSceneName = from;
+		otherScenePending = false;
+		mainSceneRole(pendingEngine, level);
+		level.fx().takeOverMain(la.fx());
+		otherHidden.clear();
+		otherHidden.addAll(la.removedInstances()); // 떠난 레벨의 Vis 숨김·부서진 물체 = 다른 슬롯 숨김 (렌더 스레드가 매 프레임 건다)
+		otherPosed.clear(); // 다른 슬롯 자세는 다음 틱부터 그 발판에서 (장면의 마지막 자세는 그대로 남음)
+		// 3) 충돌 · 내비게이션 · 스크립트 세계
+		LevelCollision ca = col;
+		col = otherCol;
+		otherCol = ca;
+		nav.swapSlots(from);
+		otherData = nav.neighbourData();
+		world = wb;
+		world.rebind(listener());
+		wa.rebind(nav.neighbourListener());
+		world.linkEvents(wa);
+		Breakables bt = breakables;
+		breakables = otherBreakables != null ? otherBreakables : new Breakables(nav.levelData(), orbTweaks);
+		otherBreakables = bt;
+		ph = devple.gow.engine.core.PerfMonitor.phase(". seam roles", ph);
+		// 4) 새 현재 레벨의 적 종류 (RSRCS) — 다른 슬롯으로 이미 올린 것 (loadNeighbourKinds) 을 옮기고, 떠난 레벨 것은 다른 슬롯 종류로
+		Map<String, EnemyFactory.Kind> oldKinds = new java.util.LinkedHashMap<>(kinds), oldNb = new java.util.LinkedHashMap<>(neighbourKinds);
+		kinds.clear();
+		neighbourKinds.clear();
+		devple.gow.tools.wad.WadFile bw = level.data().wad;
+		for (String n : EnemyFactory.resourceWads(bw)) {
+			EnemyFactory.Kind k = oldKinds.containsKey(n) ? oldKinds.get(n) : oldNb.get(n);
+			if (k != null) {
+				if (oldKinds.containsKey(n)) {
+					k.anims().attachAll(bw); // 두 레벨이 같이 쓰는 종류: 새 현재 레벨의 적용 외부 애니 그룹도
+				}
+				kinds.put(n, k);
+			}
+		}
+		oldKinds.forEach((n, k) -> {
+			if (n.contains(":")) {
+				if (k != null) {
+					retiredKinds.add(k); // 떠난 레벨의 레벨 템플릿 종류
+				}
+			} else if (!kinds.containsKey(n)) {
+				neighbourKinds.put(n, k);
+			}
+		});
+		oldNb.forEach((n, k) -> {
+			if (!kinds.containsKey(n) && !neighbourKinds.containsKey(n)) {
+				neighbourKinds.put(n, k); // 예전 다른 슬롯들의 종류 (loadNeighbourKinds 는 씬 동안 쌓는다 — 그대로)
+			}
+		});
+		soundOnlyTemplates.clear();
+		PreTweaks pt = otherTweaksPrep;
+		otherTweaksPrep = null;
+		if (pt != null && pt.level().equals(levelName) && pt.kinds().equals(new ArrayList<>(kinds.keySet())) && pt.tweaks().isDone()) {
+			orbTweaks = devple.gow.engine.asset.Loader.join(pt.tweaks(), "tweaks " + levelName); // 다른 슬롯일 때 적재 스레드가 만들어 둔 같은 구성
+		} else {
+			Tweaks t = new Tweaks(); // enter 와 같은 구성: 영구 + 레벨 + 종류 (순서대로)
+			t.load(session.permk);
+			t.load(bw);
+			orbTweaks = t;
+			kinds.values().forEach(k -> orbTweaks.load(k.assets().wad()));
+		}
+		try {
+			loadEnemyKinds(); // 아직 없는 것 (소리 뱅크 로더 R_AHH … 와 이웃으로 못 올린 것)
+		} catch (IOException ex) {
+			throw new UncheckedIOException(ex);
+		}
+		nav.setTweaks(orbTweaks);
+		filters.clear(); // 카메라 필터 템플릿은 새 오브 튜닝에서 다시
+		ph = devple.gow.engine.core.PerfMonitor.phase(". seam kinds+tweaks", ph);
+		// 레벨 소리 뱅크 (같은 이름은 새 현재 레벨 것이 이긴다 — enter 와 같은 우선순위). 떠난 레벨 뱅크는 다른 슬롯에 남는 동안 그대로
+		var preSounds = otherSounds.remove(levelName);
+		devple.gow.tools.audio.WadSounds ws = session.sound.loaded().get(bw.name()); // 이음으로 오간 레벨: 올라 있는 뱅크를 다시 색인 (새 현재 레벨이 이김)
+		if (ws == null && preSounds != null && preSounds.isDone()) {
+			ws = devple.gow.engine.asset.Loader.join(preSounds, "sounds " + levelName); // 다른 슬롯일 때 적재 스레드가 해석해 둔 것 (prepareOtherSwap)
+		}
+		if (ws != null && ws.wad().equals(bw.name())) {
+			session.sound.register(ws);
+		} else {
+			session.sound.load(bw);
+		}
+		levelBanks.put(levelName, bw.name());
+		ph = devple.gow.engine.core.PerfMonitor.phase(". seam sound", ph);
+		hero.attachExternalAnims(bw); // 레벨별 영웅 애니 (ANM_hero_<레벨>)
+		ph = devple.gow.engine.core.PerfMonitor.phase(". seam hero anims", ph);
+		magicFx.addOrPromoteWad(level.assets()); // 레벨 이펙트 GO (적재 스레드가 미리 해석, prepareOther) — enter 처럼 레벨 → 종류 순으로 뒤에
+		kinds.values().forEach(k -> magicFx.addOrPromoteWad(k.assets()));
+		ph = devple.gow.engine.core.PerfMonitor.phase(". seam fx", ph);
+		// 5) 레벨 HUD (FLP_<레벨> — 히드라 미터 등): 현재 레벨 것만 그린다. 떠난 레벨 것은 다른 슬롯에 있는 동안 두었다가 다시 현재가 되면 그대로 (그 레벨이
+		// 두 슬롯에서 내려가면 닫음) — 다시 만들면 FLP_Athn01B 해석에 39 ms
+		UiLayer prevHud = levelHud;
+		String prevFlp = levelHudFlp;
+		if (otherLevelHud != null && levelName.equals(otherLevelHudLevel)) {
+			levelHud = otherLevelHud;
+			levelHudFlp = otherLevelHudFlp;
+			hud.variables().set("PS2_WadName", levelHudFlp.substring(4)); // loadLevelHud 와 같이 (불러온 레벨 이름, 0x1B8704)
+		} else {
+			if (otherLevelHud != null) {
+				otherLevelHud.close();
+			}
+			levelHudFlp = null;
+			levelHud = loadLevelHud(hud.variables());
+		}
+		otherLevelHud = prevHud;
+		otherLevelHudFlp = prevFlp;
+		otherLevelHudLevel = prevHud != null ? from : null;
+		ph = devple.gow.engine.core.PerfMonitor.phase(". seam level hud", ph);
+		// 6) 카메라 · 레벨 연결 · 줄 · 하늘
+		cameraRig.swapLevels();
+		link = new LevelLink(levelName, otherName, w -> Stages.exists(session.rom, w));
+		ph = devple.gow.engine.core.PerfMonitor.phase(". seam camera+link", ph);
+		warpSlot = null;
+		otherFloorTime = 0;
+		buildRopeVisuals();
+		ph = devple.gow.engine.core.PerfMonitor.phase(". seam ropes", ph);
+		swapSkyEffects();
+		ph = devple.gow.engine.core.PerfMonitor.phase(". seam sky", ph);
+		// 7) 예전 이음 씬과 같게: 체크포인트 = 지금 자리, 두 슬롯 세계 기록, Warp 되돌아옴 상태 버림
+		checkpoint.set(hero.ctl.position);
+		checkpointYaw = hero.ctl.yaw;
+		rememberResidentWorlds();
+		session.warpLeft = null;
+		session.seamZone = -1;
+		arrival = a;
+		String ln = levelName;
+		devple.gow.engine.core.PerfMonitor.gauge("level", () -> ln);
+		prepareOtherTweaks(otherName); // 되돌아가는 이음 대비 (적재 스레드)
+		devple.gow.engine.core.PerfMonitor.phase(". seam rest", ph);
+		System.out.printf("이음 (같은 씬, %s): %s → %s, 다른 슬롯 %s, 적 종류 %s (틱 %d, %.2f ms)%n", a.kind(), from, to, otherName, kinds.keySet(),
+				pendingEngine.ticks(), (System.nanoTime() - t0) / 1e6);
+		devple.gow.engine.core.PerfMonitor.loadTime("seam " + from + ">" + to, t0);
+	}
+
+	/**
+	 * 이음 직전: 다른 슬롯 렌더 장면이 GL 에 올라 있게 한다 (보통 LoadWad 뒤 한참이라 이미 있다). 적재 스레드가 준비 중이면 기다려 올리고, 캐시에 있으면 꺼낸다.
+	 * 없으면 false.
+	 */
+	private boolean ensureOtherScene(Engine e) {
+		if (otherScene != null && otherName != null && otherName.equals(otherSceneName) && !otherScenePending) {
+			return true;
+		}
+		if (e == null || otherName == null) {
+			return false;
+		}
+		renderOtherSlot(e, false); // 교체 대기 처리 (캐시 → 장면)
+		if (otherScene == null) {
+			prepareOther(otherName);
+			var f = otherPrep.remove(otherName);
+			if (f == null) {
+				return false;
+			}
+			long t0 = System.nanoTime();
+			try {
+				LevelScene s = devple.gow.engine.asset.Loader.join(f, "other " + otherName);
+				s.enter(e);
+				otherScene = s;
+				otherSceneName = otherName;
+			} catch (RuntimeException ex) {
+				System.out.println("이웃 레벨 렌더 실패 " + otherName + ": " + ex.getMessage());
+				return false;
+			}
+			devple.gow.engine.core.PerfMonitor.loadTime("otherScene (이음 대기) " + otherName, t0);
+			otherScene.setRemoved(otherHidden);
+			otherPosed.forEach((k, v) -> otherScene.poseInstance(k, (float[][]) v[0], (boolean[]) v[1]));
+		}
+		return otherScene != null && otherName.equals(otherSceneName);
+	}
+
+	/** 적 하나를 지운다 (모델·이펙트 묶음). 액터는 그 세계에 그대로 (원작: 내려간 슬롯 GO). */
+	private void dropEnemy(Enemy en) {
+		enemies.remove(en);
+		en.model().close();
+		if (magicFx != null) {
+			magicFx.unbind(en.fighter().combat(), en.fighter());
+		}
+		enemyFall.remove(en.fighter());
+		neighbourActors.remove(en.actor());
+		actorWorld.remove(en.actor());
+		System.out.printf("적 정리 (내려간 슬롯): %s%n", en.kind().assets().wad().name());
 	}
 
 	private Engine pendingEngine;
@@ -2112,6 +2519,9 @@ public final class GameScene implements Scene {
 			}
 		}
 		enemies.add(new Enemy(f, em, r.actor(), kind));
+		if (r.actor() != null) {
+			actorWorld.put(r.actor(), neighbour ? nav.spawningNeighbour() : world); // 낸 세계 (이음으로 현재/다른 슬롯이 바뀌어도 그대로)
+		}
 		if (neighbour) {
 			if (r.actor() != null) {
 				neighbourActors.add(r.actor());
@@ -2142,8 +2552,15 @@ public final class GameScene implements Scene {
 		return neighbourBridge;
 	}
 
+	/** 적 액터 → 그 적을 낸 스크립트 세계 (spawn 때). 이음이 씬을 이어 가므로 "지금 현재/이웃" 이 아니라 낸 세계로 판정한다 (43 §27). */
+	private final Map<devple.gow.engine.script.ScriptActor, ScriptWorld> actorWorld = new java.util.IdentityHashMap<>();
+
 	/** 적 액터가 속한 스크립트 세계 (이웃이 만든 적이면 그 이웃 세계 — 다른 슬롯이 바뀌었으면 떨어져 나간 그 세계라 무해). */
 	private ScriptWorld worldOf(devple.gow.engine.script.ScriptActor a) {
+		ScriptWorld w = actorWorld.get(a);
+		if (w != null) {
+			return w;
+		}
 		return neighbourActors.contains(a) && neighbourBridgeWorld != null ? neighbourBridgeWorld : world;
 	}
 
@@ -2583,6 +3000,9 @@ public final class GameScene implements Scene {
 			Map.Entry<String, devple.gow.engine.fx.EffectSystem.Effect> en = it.next();
 			devple.gow.engine.fx.EffectSystem.Effect e = en.getValue();
 			devple.gow.engine.nav.Platforms.Body b = nav != null ? nav.navWorld.platforms().body(en.getKey()) : null;
+			if (b == null && nav != null) {
+				b = nav.neighbourPlatforms().body(en.getKey()); // 이음으로 다른 슬롯이 된 레벨의 GO (43 §27) — 그 슬롯이 내려가면 몸이 없어져 꺼진다
+			}
 			if (e.done() || b == null || b.anim() == null) {
 				e.stop();
 				it.remove();
@@ -2618,35 +3038,73 @@ public final class GameScene implements Scene {
 		if (magicFx == null || level == null) {
 			return;
 		}
-		devple.gow.engine.fx.EffectSystem fx = magicFx.effects();
 		for (LevelScene.SkyGo s : level.skyGos()) {
-			devple.gow.tools.fx.EffectLibrary.EffectDef def = fx.library().resolve(s.name());
-			if (def == null || def.emitters().isEmpty()) {
-				continue;
-			}
-			Matrix4f inst = new Matrix4f().set(s.inst());
-			Vector3f off = new Vector3f(s.off());
-			devple.gow.engine.fx.EffectSystem.Effect e = fx.play(s.name(), out -> {
-				out.translation(cam.eye.x - off.x, cam.eye.y - off.y, cam.eye.z - off.z).mul(inst);
-				return true;
-			}, Float.POSITIVE_INFINITY);
-			if (e == null) {
-				continue;
-			}
-			e.hideMesh = true;
-			e.jointEmitters = true;
-			e.scale = 1f / Math.max(def.scale(), 1e-3f);
-			e.silent = true; // 하늘 GO 의 SEM (아레스 SNDAthn3Ares*) 은 레벨 소리 쪽 [미확인: 재생 시점]
-			if (s.act() != null && def.act(s.act().name) != null) {
-				e.setAct(s.act().name);
-				e.hold = true;
-				e.setActTime(s.start() + level.fxTime());
-			}
-			e.sky = true; // 파티클은 하늘 단계에서 (세계보다 먼저 — 0x218848 이 파티클 부품도 층 1 로, 43 §17)
-			skyFx.add(e);
-			skyFxGo.add(s);
-			System.out.println("하늘 이펙트: " + s.name() + " 이미터 " + def.emitters().size() + (s.act() != null ? " act " + s.act().name : ""));
+			startSkyEffect(s);
 		}
+	}
+
+	/** 하늘 GO 하나의 이미터 이펙트 (이미터가 없으면 없음). */
+	private void startSkyEffect(LevelScene.SkyGo s) {
+		devple.gow.engine.fx.EffectSystem fx = magicFx.effects();
+		devple.gow.tools.fx.EffectLibrary.EffectDef def = fx.library().resolve(s.name());
+		if (def == null || def.emitters().isEmpty()) {
+			return;
+		}
+		Matrix4f inst = new Matrix4f().set(s.inst());
+		Vector3f off = new Vector3f(s.off());
+		devple.gow.engine.fx.EffectSystem.Effect e = fx.play(s.name(), out -> {
+			out.translation(cam.eye.x - off.x, cam.eye.y - off.y, cam.eye.z - off.z).mul(inst);
+			return true;
+		}, Float.POSITIVE_INFINITY);
+		if (e == null) {
+			return;
+		}
+		e.hideMesh = true;
+		e.jointEmitters = true;
+		e.scale = 1f / Math.max(def.scale(), 1e-3f);
+		e.silent = true; // 하늘 GO 의 SEM (아레스 SNDAthn3Ares*) 은 레벨 소리 쪽 [미확인: 재생 시점]
+		if (s.act() != null && def.act(s.act().name) != null) {
+			e.setAct(s.act().name);
+			e.hold = true;
+			e.setActTime(s.start() + level.fxTime());
+		}
+		e.sky = true; // 파티클은 하늘 단계에서 (세계보다 먼저 — 0x218848 이 파티클 부품도 층 1 로, 43 §17)
+		skyFx.add(e);
+		skyFxGo.add(s);
+		System.out.println("하늘 이펙트: " + s.name() + " 이미터 " + def.emitters().size() + (s.act() != null ? " act " + s.act().name : ""));
+	}
+
+	/**
+	 * 이음 (43 §27): 하늘 GO 이미터를 새 현재 레벨 것으로 — 엔진은 현재 레벨 하늘 GO 이미터만 돌린다 (다른 슬롯 하늘은 메시만, LevelScene.skyNeighbour).
+	 * 이웃 레벨이 같은 이름의 하늘 GO 를 가지면 (같은 하늘을 두 레벨이 나눠 가짐) 돌던 이펙트를 그대로 잇고 (파티클·act 시간 연속), 새 레벨에만 있는 것은 새로,
+	 * 남은 것은 멈춘다 (나온 파티클은 수명까지) [근사: 원작은 두 슬롯 하늘 GO 가 모두 돈다].
+	 */
+	private void swapSkyEffects() {
+		if (magicFx == null) {
+			return;
+		}
+		Map<String, devple.gow.engine.fx.EffectSystem.Effect> running = new HashMap<>();
+		for (int i = 0; i < skyFx.size(); i++) {
+			running.putIfAbsent(skyFxGo.get(i).name().toLowerCase(java.util.Locale.ROOT), skyFx.get(i));
+		}
+		skyFx.clear();
+		skyFxGo.clear();
+		for (LevelScene.SkyGo s : level.skyGos()) {
+			devple.gow.engine.fx.EffectSystem.Effect e = running.remove(s.name().toLowerCase(java.util.Locale.ROOT));
+			if (e != null && !e.done()) {
+				Matrix4f inst = new Matrix4f().set(s.inst());
+				Vector3f off = new Vector3f(s.off());
+				e.setAnchor(out -> { // 새 레벨 배치 기준 (같은 자리면 같은 값)
+					out.translation(cam.eye.x - off.x, cam.eye.y - off.y, cam.eye.z - off.z).mul(inst);
+					return true;
+				});
+				skyFx.add(e);
+				skyFxGo.add(s);
+			} else {
+				startSkyEffect(s);
+			}
+		}
+		running.values().forEach(devple.gow.engine.fx.EffectSystem.Effect::stop);
 	}
 
 	private void updateSkyEffects() {
@@ -2668,7 +3126,70 @@ public final class GameScene implements Scene {
 	 *
 	 * @return 몸을 만들었으면 true
 	 */
-	private boolean spawnSavePoint(float[] inst) {
+	/** 세이브 포인트 자리·몸 → 만든 레벨 (대문자) — 그 레벨이 두 슬롯에서 내려가면 지운다 ({@link #releaseLevel}). */
+	private final Map<Object, String> savePointOwner = new java.util.IdentityHashMap<>();
+
+	/** Creator "savepoint" 의 자리 (R2 거리 판정, {@link #nearSavePoint}). */
+	private void addSavePoint(float[] m, String owner) {
+		Vector3f v = new Vector3f(m[12], m[13], m[14]);
+		savePoints.add(v);
+		savePointOwner.put(v, owner);
+	}
+
+	/**
+	 * 레벨이 두 슬롯에서 모두 내려간다 (다른 슬롯이 다른 레벨로 바뀜 · LoadForWarp 로 비움): 그 레벨이 이 씬에 남긴 Creator 연출 오브젝트·세이브 포인트,
+	 * (이음으로 현재였으면) 레벨 소리 뱅크 (그 뱅크로 울리던 소리도). 원작은 슬롯을 비울 때 (0x1BC110 → 0x1BBA20) 그 레벨 GO 가 함께 사라진다 [추정: 슬롯 힙].
+	 * 예전 엔진은 이음마다 씬을 새로 만들어 이것들이 저절로 버려졌다 — 이제 씬이 이음을 넘어 이어지므로 여기서 버린다 (43 §27). 상자는 SceneNav.Host.levelLeft,
+	 * 적은 다음 이음 ({@link #seamSwap} 의 내려간 슬롯 적 — 예전 이음과 같은 때).
+	 */
+	private void releaseLevel(String lv) {
+		if (lv == null) {
+			return;
+		}
+		String k = lv.toUpperCase(java.util.Locale.ROOT);
+		int created = 0, saves = 0;
+		for (java.util.Iterator<Map.Entry<String, String>> it = createdOwner.entrySet().iterator(); it.hasNext(); ) {
+			Map.Entry<String, String> en = it.next();
+			if (k.equalsIgnoreCase(en.getValue())) {
+				devple.gow.engine.fx.EffectSystem.Effect fx = createdObjects.remove(en.getKey());
+				if (fx != null) {
+					fx.stop();
+				}
+				it.remove();
+				created++;
+			}
+		}
+		for (java.util.Iterator<Vector3f> it = savePoints.iterator(); it.hasNext(); ) {
+			Vector3f v = it.next();
+			if (k.equalsIgnoreCase(savePointOwner.get(v))) {
+				savePointOwner.remove(v);
+				it.remove();
+				saves++;
+			}
+		}
+		for (java.util.Iterator<devple.gow.engine.fx.EffectSystem.Effect> it = savePointBodies.iterator(); it.hasNext(); ) {
+			devple.gow.engine.fx.EffectSystem.Effect e = it.next();
+			if (k.equalsIgnoreCase(savePointOwner.get(e))) {
+				savePointOwner.remove(e);
+				e.stop();
+				it.remove();
+			}
+		}
+		String bank = levelBanks.remove(k);
+		if (bank != null) {
+			session.sound.unloadStopping(bank);
+		}
+		if (otherLevelHud != null && k.equalsIgnoreCase(otherLevelHudLevel)) {
+			otherLevelHud.close();
+			otherLevelHud = null;
+			otherLevelHudLevel = otherLevelHudFlp = null;
+		}
+		if (created + saves > 0 || bank != null) {
+			System.out.printf("내려간 레벨 %s: Creator 오브젝트 %d, 세이브 포인트 %d%s%n", k, created, saves, bank != null ? ", 소리 뱅크 " + bank : "");
+		}
+	}
+
+	private boolean spawnSavePoint(float[] inst, String owner) {
 		if (magicFx == null) {
 			return false;
 		}
@@ -2684,6 +3205,7 @@ public final class GameScene implements Scene {
 		}
 		e.scale = 1f / Math.max(def.scale(), 1e-3f); // 인스턴스 스케일은 inst 에 이미 들어 있다 (ChestProps 와 같음)
 		savePointBodies.add(e);
+		savePointOwner.put(e, owner);
 		return true;
 	}
 
@@ -3250,9 +3772,12 @@ public final class GameScene implements Scene {
 			updateTick(e, dt);
 			devple.gow.engine.core.PerfMonitor.loadTime("first update " + levelName, t0);
 			firstUpdates++;
-			return;
+		} else {
+			updateTick(e, dt);
 		}
-		updateTick(e, dt);
+		if (pendingSeam != null) {
+			seamSwap(); // 이음: 틱이 끝난 뒤 (이번 틱의 두 세계 갱신이 끝난 다음) 같은 씬에서 현재 슬롯을 바꾼다 — 이 프레임 그리기부터 새 현재 레벨
+		}
 	}
 
 	private int firstUpdates, firstRenders;
@@ -3900,6 +4425,9 @@ public final class GameScene implements Scene {
 				en.model().close();
 				magicFx.unbind(en.fighter().combat(), en.fighter());
 				enemyFall.remove(en.fighter());
+				if (en.actor() != null) {
+					actorWorld.remove(en.actor());
+				}
 				return true;
 			}
 			return false;
@@ -4447,6 +4975,17 @@ public final class GameScene implements Scene {
 		renderAlpha = alpha;
 		updateCamera(alpha);
 		level.fx().env().setFogOverride(magicFx.screen.fog()); // 포세이돈 Fog Template (0x195C90, 35 문서 §4.6)
+		LevelScene os = otherScene;
+		if (os != null && (otherName == null || !otherName.equals(otherSceneName))) {
+			os = null; // 바뀌는 중인 다른 슬롯 장면 (renderOtherSlot 이 이번 프레임 교체)
+		}
+		if (os != null) {
+			// 거울 뷰는 두 슬롯 거울 중 가장 가까운 하나 (0x12A6C8 — 렌더러의 거울 전체) — 현재/다른 슬롯과 무관하게 같은 거울 (이음 순간 반사가 튀지 않게, 43 §27)
+			boolean other = os.mirrorCandidateDistance(cam.eye) < level.mirrorCandidateDistance(cam.eye);
+			level.decideMirror(!other, cam.eye);
+			os.decideMirror(other, cam.eye);
+		}
+		selectFogSource(os);
 		if (shadows != null) {
 			// 주 뷰의 레벨 스키닝 GO (모드 0, SCR_Shadow 면 1) + 적·영웅 (47 문서 §11). 거울 반사 패스는 LevelScene 이 멈춘다
 			shadows.begin();
@@ -4458,6 +4997,7 @@ public final class GameScene implements Scene {
 		int prevStage = devple.gow.engine.render.DrawStage.set(staged ? devple.gow.engine.render.DrawStage.EARLY : devple.gow.engine.render.DrawStage.ALL);
 		try {
 			level.skyNeighbour = otherScene; // 다른 슬롯 레벨의 하늘 GO 도 하늘 단계에 (두 슬롯 상주, 각자 가시 칸 — 43 §16)
+			level.skyNeighbourFirst = currentSlot == 1; // 두 하늘 순서 = 슬롯 순서 (이음이 바꾸지 않음, 43 §27)
 			if (level.skyEffects == null && magicFx != null) {
 				level.skyEffects = c -> magicFx.renderSky(c, e.window().aspect()); // 하늘 GO 파티클은 하늘 단계 (층 1, 43 §17)
 			}
@@ -4498,6 +5038,32 @@ public final class GameScene implements Scene {
 			levelHud.render(e);
 		}
 		hud.render(e);
+	}
+
+	/** 이번 프레임 안개를 가져온 레벨 환경 (두 슬롯 중, {@link #selectFogSource}). */
+	private devple.gow.engine.fx.FxEnvironment fogSource;
+
+	/**
+	 * 두 슬롯 안개 고르기 (43 §27): 원작 안개 관리자는 하나 — 두 슬롯의 SCR_Fog GO 가 저마다 컨텍스트 (가시 칸) 가 켜졌을 때만 걸고, 한 프레임에 하나 (0x20D220,
+	 * 0x29F324) [확실]. 슬롯 간 갱신 순서는 [미확인] 이라 엔진은: 눈 위치에서 한 레벨 안개만 켜졌으면 그 레벨 것, 둘 다 켜졌으면 지난 프레임 것 그대로, 둘 다
+	 * 꺼졌으면 지난 것 그대로. 다른 슬롯 레벨의 효과 시계는 현재 레벨 것을 따른다 (층 안개 텍스처 흐름). 두 슬롯 지오메트리·하늘·캐릭터·파티클이 모두 같은 안개.
+	 * 예전 엔진은 현재 레벨 안개만 (다른 슬롯 지오메트리는 그 레벨 첫 안개, 멈춘 시계) 이라 이음 순간 안개·하늘색이 바뀌었다 (ATHN01A 갑판 → 01B 선창,
+	 * ATHN03A ↔ 03C 의 층 안개 흐름) — 이제는 카메라가 그 레벨 안개 칸에 들어갈 때 바뀐다 (원작처럼 컨텍스트 경계).
+	 */
+	private void selectFogSource(LevelScene os) {
+		devple.gow.engine.fx.FxEnvironment me = level.fx().env(), oe = os != null ? os.fx().env() : null;
+		boolean ma = me.selectFogAt(cam.eye);
+		boolean oa = oe != null && oe.follow(me, cam.eye);
+		if (fogSource != me && fogSource != oe) {
+			fogSource = me; // 처음 · 다른 슬롯이 바뀜
+		}
+		if (ma != oa) {
+			fogSource = ma ? me : oe;
+		}
+		me.setFogSource(fogSource);
+		if (oe != null) {
+			oe.setFogSource(fogSource);
+		}
 	}
 
 	/** 비교용: -Dgow.shadowlate 면 예전 순서 (레벨·캐릭터 전부 뒤에 그림자 합성). */
@@ -4629,11 +5195,21 @@ public final class GameScene implements Scene {
 		if (otherPrep.containsKey(wad) || !Files.exists(p)) {
 			return;
 		}
-		otherPrep.put(wad, devple.gow.engine.asset.Loader.submit("other " + wad, () -> new LevelScene(p, -2, false).prepare()));
+		otherPrep.put(wad, devple.gow.engine.asset.Loader.submit("other " + wad, () -> {
+			LevelScene s = new LevelScene(p, -2, false).prepare();
+			// 이음으로 현재 레벨이 되면 그 장면 자산이 이펙트 GO 로 등록된다 (seamSwap → MagicFx.addWad) — 그 해석을 미리 (48 §9, 43 §27)
+			devple.gow.tools.fx.EffectLibrary.preparse(s.assets().wad());
+			return s;
+		}));
 	}
 
 	/** 다른 슬롯 레벨 지오메트리 (바뀌면 교체: 캐시 → 준비 끝난 장면 GL 올리기, 준비 중이면 다음 프레임). */
 	private void renderOtherSlot(Engine e) {
+		renderOtherSlot(e, true);
+	}
+
+	/** @param draw false 면 교체·올리기만 (이음 직전 {@link #ensureOtherScene}) */
+	private void renderOtherSlot(Engine e, boolean draw) {
 		if (otherScenePending) {
 			otherScenePending = false;
 			if (otherScene != null) {
@@ -4653,7 +5229,11 @@ public final class GameScene implements Scene {
 			}
 			while (otherCache.size() > OTHER_CACHE) {
 				var it = otherCache.entrySet().iterator();
-				it.next().getValue().exitDeferred(e); // GL 해제는 다음 틱들로 (48 §9)
+				var gone = it.next();
+				if (magicFx != null) { // 이음으로 현재였던 레벨은 그 장면 자산이 이펙트 GO 로 등록돼 있다 — 닫기 전에 뺀다 (43 §27)
+					magicFx.removeWad(gone.getValue().assets().wad(), Stages.wad(session.rom, gone.getKey()));
+				}
+				gone.getValue().exitDeferred(e); // GL 해제는 다음 틱들로 (48 §9)
 				it.remove();
 			}
 		}
@@ -4674,7 +5254,9 @@ public final class GameScene implements Scene {
 			}
 		}
 		otherPrep.keySet().removeIf(k -> !k.equals(otherName)); // 지나간 요청 (끝나면 버려짐, GL 없음)
-		if (otherScene != null) {
+		if (draw && otherScene != null) {
+			otherScene.fx().env().setFogOverride(level.fx().env().fogOverride()); // 포세이돈 안개 대체는 전역 (현재였던 때 값이 남지 않게)
+			otherScene.setMirrorActors(mirrorActors); // 그 레벨 거울 뷰에도 영웅 (두 슬롯 중 골렸을 때)
 			otherScene.setRemoved(otherHidden); // 이웃 스크립트 Vis 숨김 (SceneNav.Host.neighbourVisible)
 			otherPosed.forEach((k, v) -> otherScene.poseInstance(k, (float[][]) v[0], (boolean[]) v[1]));
 			otherScene.setMaterialTimes(otherMaterialTimes);
@@ -4710,6 +5292,7 @@ public final class GameScene implements Scene {
 		}
 		session.sound.stopAll();
 		session.sound.unload(level.data().wad.name());
+		levelBanks.values().forEach(session.sound::unload); // 이음으로 현재였던 레벨 뱅크 (43 §27)
 		kinds.values().stream().filter(k -> k != null).forEach(k -> session.sound.unload(k.assets().wad().name()));
 		neighbourKinds.values().stream().filter(k -> k != null).forEach(k -> session.sound.unload(k.assets().wad().name()));
 		soundOnly.forEach(session.sound::unload);
@@ -4725,6 +5308,7 @@ public final class GameScene implements Scene {
 		if (boss != null) {
 			boss.kinds().values().stream().filter(k -> k != null).forEach(k -> kindAssets.add(k.assets()));
 		}
+		retiredKinds.forEach(k -> kindAssets.add(k.assets())); // 이음으로 물러난 레벨 템플릿 종류
 		kindAssets.forEach(WadAssets::close);
 		// 대상 슬롯 (AiTargets.SLOTS, 정적 WeakHashMap): 값 Slot 이 담당 AiBrain → 적 → 영웅 Hittable (= 키) 을 강하게 잡아 키가 풀리지 않았다 →
 		// 떠난 GameScene 전체 (레벨·WAD·모델) 가 남았다 (48 문서 §4). 슬롯은 이 레벨의 대상 것뿐이므로 비운다
@@ -4738,6 +5322,9 @@ public final class GameScene implements Scene {
 		hud.close();
 		if (levelHud != null) {
 			levelHud.close();
+		}
+		if (otherLevelHud != null) {
+			otherLevelHud.close();
 		}
 		level.exitDeferred(e); // GL 해제는 다음 틱들로 (48 §9)
 		devple.gow.engine.core.PerfMonitor.loadTime("exit " + levelName, exitT0);

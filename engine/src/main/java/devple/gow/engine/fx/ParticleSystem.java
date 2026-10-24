@@ -174,6 +174,21 @@ public final class ParticleSystem implements AutoCloseable {
 		return emitters;
 	}
 
+	/**
+	 * 정의가 doomed 인 이미터와 이미 나온 그 파티클을 지운다 — 텍스처를 가진 WAD 가 내려갈 때 (EffectSystem#remove, 43 §27). 다른 파티클 순서는
+	 * 수명 끝 제거와 같은 방식 (마지막 것을 빈자리로).
+	 */
+	public void purge(java.util.function.Predicate<ParticleDef> doomed) {
+		emitters.removeIf(e -> doomed.test(e.def));
+		for (int i = 0; i < count; i++) {
+			if (doomed.test(owner[i].def)) {
+				int l = --count;
+				copy(l, i);
+				i--;
+			}
+		}
+	}
+
 	public int count() {
 		return count;
 	}

@@ -149,10 +149,44 @@ public final class SoundManager implements AutoCloseable {
 
 	/** WAD 의 뱅크/팩/이미터 등록 (R_PERMK → 영웅 → 레벨 → 적 순서, 같은 이름은 나중 것이 우선). */
 	public WadSounds load(WadFile wad) {
-		WadSounds ws = WadSounds.load(wad);
-		wads.put(wad.name(), ws);
+		return register(WadSounds.load(wad));
+	}
+
+	/** 미리 해석한 뱅크 등록 ({@link #load} 와 같은 결과 — 해석만 적재 스레드에서, GameScene 이음 43 §27). */
+	public WadSounds register(WadSounds ws) {
+		wads.put(ws.wad(), ws);
 		index(ws);
 		return ws;
+	}
+
+	/**
+	 * 그 WAD 뱅크로 울리던 소리를 끄고 내린다 — 다른 소리와 음악 (스트림, MusicGroupStart 가 바꿀 때까지) 은 그대로. 이음으로 씬이 이어지는 동안 두 슬롯에서
+	 * 내려간 레벨 뱅크 (GameScene, 43 §27) — 원작 LoadWad 는 배경 적재라 음악이 끊기지 않는다. 씬을 떠날 때는 {@link #stopAll} 뒤 {@link #unload}.
+	 */
+	public void unloadStopping(String wadName) {
+		WadSounds ws = wads.get(wadName);
+		if (ws == null) {
+			return;
+		}
+		java.util.Set<SoundBank> banks = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+		banks.addAll(ws.banks());
+		for (java.util.Iterator<SoundInstance> it = instances.values().iterator(); it.hasNext(); ) {
+			SoundInstance in = it.next();
+			if (banks.contains(in.bank) && !musicTree(in)) {
+				in.kill();
+				it.remove();
+			}
+		}
+		unload(wadName);
+	}
+
+	private static boolean musicTree(SoundInstance in) {
+		for (SoundInstance s = in; s != null; s = s.parent) {
+			if (s.music) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	public void unload(String wadName) {

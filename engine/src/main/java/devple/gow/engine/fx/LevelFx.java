@@ -245,6 +245,22 @@ public final class LevelFx implements AutoCloseable {
 	private long lastNeighbourNanos;
 
 	/**
+	 * 이음 (43 §27): 다른 슬롯이던 이 레벨이 현재 슬롯이 된다 — 효과 시간 (재질 애니 {@code Renderer.setFxTime} · 하늘 act · 반복 배치) 과 렌더 간격 시계를
+	 * 앞 현재 레벨 (prev) 에서 이어 받는다. 원작은 GO 애니·재질 시계가 두 슬롯 모두 하나라 LoadCheck 에서 바뀌지 않는다 [확실: 두 슬롯 상주 / 근사: 엔진은
+	 * 레벨마다 시계]. 이전에는 다른 슬롯 동안 멈춰 있던 이 레벨 시계 (또는 처음 0) 로 돌아가 불꽃·물 재질이 한 프레임에 튀었다. prev 는 다른 슬롯 쪽 파티클
+	 * 시계를 같은 순간부터 잇는다.
+	 */
+	public void takeOverMain(LevelFx prev) {
+		if (prev == null || prev == this) {
+			return;
+		}
+		env.setTime(prev.env.time());
+		lastRenderNanos = prev.lastRenderNanos;
+		updatedSinceRender = false;
+		prev.lastNeighbourNanos = prev.lastRenderNanos;
+	}
+
+	/**
 	 * 다른 슬롯 레벨로 그릴 때 ({@code LevelScene.renderNeighbourEffects}): 그 레벨 GO 의 FXC 이미터 파티클만 렌더 간격으로 진행하고 그린다 — 안개·FarClip·
 	 * 재질 시간은 현재 레벨 것 그대로. 원작은 두 슬롯 GO 가 한 세계에서 돈다 (ATHN05B 에서 본 05BB 홀 끝 횃불 불꽃, 43 §22) [확실: 두 슬롯 상주].
 	 */

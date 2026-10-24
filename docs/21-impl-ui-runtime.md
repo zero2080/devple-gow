@@ -90,7 +90,8 @@ ShellK+HUDK 에 나오는 opcode 28종 전부 지원 (07 문서 §4.3 빈도표)
 구역 제목 (Internal 0x10 ZoneReport, 2026-10-24, 43 §16): `GameScene.zoneReport` 가 메시지 800 + 구역 의 첫 줄을 `PS2_ZoneReport_Title` 에 넣고 `PS2_ZoneReport_Event` = 1
 (원작 0x1B8BA0 → HUD +0x84 / +0x264) — FLP_HUDK 의 StatsZoneReport 가 9 프레임 페이드 인, Loop_Stats 10 초, 28–35 프레임 페이드 아웃 (ATHN03AA 계단 "아테네로 향한 도로").
 이웃 슬롯 스크립트의 0x10 도 같은 길 (GameMgr 는 슬롯을 보지 않음 — `SceneNav.neighbourInternal` → `Host.neighbourZoneReport`), 이음 직전 10 초 안에 띄운 제목은
-새 씬이 다시 띄운다 (`GameSession.seamZone`, 엔진은 이음마다 HUD 를 새로 만듦 [근사: 페이드 인부터 다시]) — ATHN04C → 05A "아테네의 지붕" (43 §19).
+새 씬이 다시 띄운다 (`GameSession.seamZone`, 엔진은 이음마다 HUD 를 새로 만듦 [근사: 페이드 인부터 다시]) — ATHN04C → 05A "아테네의 지붕" (43 §19). 이제 이음은
+같은 씬에서 현재 슬롯만 바꿔 HUD 가 그대로라 제목이 한 번 원래 10 초 이어진다 (43 §27) — 넘겨 띄우기는 새 씬으로 넘어가는 이음 (보스 레벨이 낌) 에만 남았다.
 
 ```java
 UiLayer hud = UiLayer.load(rom.resolve("R_PERMK.WAD"), "FLP_HUDK", null);  // UiLayer(WadAssets, owns, flpName, MessageTable, UiVariables) 도 있음

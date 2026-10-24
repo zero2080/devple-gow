@@ -127,13 +127,14 @@ public final class SceneNav {
 		}
 	}
 
-	private final LevelData level;
-	private final ScriptWorld world;
+	/** 현재 슬롯 레벨 (이음 {@link #swapSlots} 에서 이웃과 바뀐다). */
+	private LevelData level;
+	private ScriptWorld world;
 	private final Host host;
 	public final NavWorld navWorld;
-	public final Interactables items;
+	public Interactables items;
 	public final HeroNavigator navigator;
-	private final Tweaks tweaks;
+	private Tweaks tweaks;
 	private NavWorld.Floor lastFloor;
 	/** 이웃 레벨 (다른 슬롯) 스크립트 — 원작은 두 레벨 엔티티가 같이 돈다 (36 문서 §6 한계 → 38 문서 §4). */
 	private String neighbourName;
@@ -367,6 +368,62 @@ public final class SceneNav {
 		navWorld.setNeighbourPlatforms(neighbourPlatforms);
 		setNeighbourItems(new Interactables());
 		world.linkEvents(null);
+	}
+
+	/**
+	 * 이음 (LoadCheck · 걷기 — 43 §27): 현재 ↔ 다른 슬롯 역할만 바꾼다. 원작 0x1BCA10 은 현재 레벨 이름 (0x29DAE8) 만 바꾸고 두 슬롯의 스크립트·GO·
+	 * 충돌은 그대로 산다 [확실]. 여기서도 객체는 그대로 두고 자리만 바꾼다: LevelData · 스크립트 세계 · R1/R2 오브젝트 (내비게이터의 잡은 오브젝트도
+	 * 그대로) · TWK · 발판 (자세·애니 진행 그대로) · 정적 충돌 순서 (현재 먼저). 줄은 엔진이 현재 레벨 것만 시뮬레이션하므로 새 현재 레벨 줄로 바꾸되
+	 * 지금 매달린 줄은 남긴다 [근사: 엔진 줄 구조]. 스크립트 리스너·이벤트 큐 연결은 호출자 (GameScene) 가 다시 건다.
+	 *
+	 * @param leaving 지금 현재 레벨 이름 (이웃이 된다)
+	 */
+	public void swapSlots(String leaving) {
+		if (neighbour == null || neighbourData == null) {
+			throw new IllegalStateException("이웃 슬롯 없음");
+		}
+		LevelData l = level;
+		level = neighbourData;
+		neighbourData = l;
+		ScriptWorld w = world;
+		world = neighbour;
+		neighbour = w;
+		neighbourName = leaving;
+		Tweaks t = tweaks;
+		tweaks = neighbourTweaks != null ? neighbourTweaks : tweaks;
+		neighbourTweaks = t;
+		Platforms p = navWorld.platforms();
+		navWorld.setPlatforms(neighbourPlatforms);
+		neighbourPlatforms = p;
+		navWorld.setNeighbourPlatforms(p);
+		navWorld.swapStatics();
+		NavRope held = navigator.rope();
+		navWorld.ropes().clear();
+		navWorld.ropes().addAll(NavRope.of(level));
+		if (held != null && !navWorld.ropes().contains(held)) {
+			navWorld.ropes().add(held); // 매달린 채 넘어온 줄 (떠나는 레벨 것) — 놓을 때까지
+		}
+		Interactables it = items;
+		items = neighbourItems;
+		navigator.setItems(items);
+		setNeighbourItems(it);
+	}
+
+	/** 이음 뒤 현재 슬롯 TWK 를 바꾼다 (GameScene 이 새로 만든 오브 튜닝 = 영구 + 레벨 + 적 종류, enter 와 같은 구성). */
+	public void setTweaks(Tweaks t) {
+		if (t != null) {
+			tweaks = t;
+		}
+	}
+
+	/** 현재 슬롯 레벨 데이터 (스크립트 세계·R1 오브젝트·발판이 쓰는 것). */
+	public LevelData levelData() {
+		return level;
+	}
+
+	/** 다른 슬롯 레벨 데이터 (없으면 null). */
+	public LevelData neighbourData() {
+		return neighbourData;
 	}
 
 	/** 이웃 레벨 R1/R2 오브젝트 (없으면 빈 것). */

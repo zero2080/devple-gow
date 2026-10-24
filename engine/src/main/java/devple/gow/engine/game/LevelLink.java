@@ -17,8 +17,8 @@ import java.util.function.Predicate;
  * <b>LoadForWarp 로 새로 올린 레벨은 꺼진 채</b> (스크립트·충돌·CMV 없음) Warp 0x1BC3A0 에서야 켜진다 ({@link #otherActive()}) [확실: 분기].
  * LoadWad/LoadForWarp 는 호출한 엔티티의 레벨 기준이다 (그 레벨이 아닌 슬롯을 교체). 두 레벨의 스크립트·충돌이 동시에 살아 있어서
  * SEWR01 → SEWR02 처럼 LoadCheck 없이 이웃 레벨로 걸어 들어가는 연결도 있다.
- * 이 재구현은 레벨을 하나만 올리므로 LoadCheck 전환 = 같은 월드 위치로 새 GameScene (seamless), 다른 슬롯 레벨 바닥만 밟으면
- * 같은 방식의 WALK 전환, Warp = 도착 Start 로 새 GameScene.
+ * GameScene 은 LoadCheck 전환 (SEAMLESS) 과 다른 슬롯 레벨 바닥만 밟는 WALK 전환을 같은 씬 안에서 현재 ↔ 다른 슬롯 역할을 바꿔 처리하고
+ * (GameScene.seamSwap, 43 §27 — 보스·덧붙는 레벨이 끼면 같은 월드 위치로 새 GameScene), Warp = 도착 Start 로 새 GameScene.
  */
 public final class LevelLink {
 

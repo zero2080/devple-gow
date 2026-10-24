@@ -7,7 +7,8 @@ import java.util.List;
 
 /**
  * 씬 스택. push = 오버레이(일시정지/업그레이드 메뉴), replace = 씬 이동(레벨 전환).
- * 씬 전환은 원작처럼 페이드 아웃 → 교체 → 페이드 인 으로 처리한다.
+ * 씬 전환은 원작처럼 페이드 아웃 → 교체 → 페이드 인 으로 처리한다 (Warp · Load · 재시작). 이음 (LoadCheck · 걷기) 은 씬을 바꾸지 않는다 —
+ * 원작 0x1BCA10 처럼 같은 GameScene 안에서 현재 레벨만 바뀐다 (GameScene.seamSwap, 43 §27).
  */
 public final class SceneManager {
 

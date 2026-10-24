@@ -96,8 +96,11 @@ public final class FlpRenderer implements AutoCloseable {
 	public FlpRenderer(FlpFile flp, WadAssets assets, String modelName) {
 		this.flp = flp;
 		this.assets = assets;
-		GowModel gm = GowModel.load(assets.wad()).stream().filter(m -> m.name.equals(modelName)).findFirst()
-				.orElseThrow(() -> new IllegalArgumentException("UI 모델 없음: " + modelName));
+		// 자산이 이미 해석해 둔 모델 목록 (같은 GowModel.load 결과) — 예전엔 WAD 의 모든 MDL 을 다시 해석했다 (레벨 HUD FLP_Athn01B 10 ms, 43 §27)
+		GowModel gm = assets.gowModel(modelName);
+		if (gm == null) {
+			throw new IllegalArgumentException("UI 모델 없음: " + modelName);
+		}
 		this.mesh = gm.meshes.getFirst();
 		indexIcons(flp.root);
 		for (FlpFile.Timeline t : flp.clips) {

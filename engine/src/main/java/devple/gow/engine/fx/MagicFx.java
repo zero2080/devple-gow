@@ -173,6 +173,13 @@ public final class MagicFx implements AutoCloseable {
 		}
 	}
 
+	/** {@link #addWad} 또는 이미 있으면 맨 뒤로 (이음으로 현재가 된 레벨·그 적 종류 — 새 씬 enter 와 같은 우선순위, 43 §27). */
+	public void addOrPromoteWad(devple.gow.engine.asset.WadAssets a) {
+		if (fx.addOrPromote(a)) {
+			tw.load(a.wad());
+		}
+	}
+
 	/** WAD 파일 (다른 슬롯 레벨) 의 이펙트 GO 를 등록 — 이미 올린 경로면 아무것도 안 한다 (자산은 이펙트 시스템이 소유하고 닫는다). */
 	public void addWad(java.nio.file.Path wad) {
 		if (wad != null && addedPaths.add(wad.toAbsolutePath().normalize())) {
@@ -181,6 +188,19 @@ public final class MagicFx implements AutoCloseable {
 	}
 
 	private final java.util.Set<java.nio.file.Path> addedPaths = new java.util.HashSet<>();
+
+	/**
+	 * 레벨 WAD 의 이펙트 GO 등록을 뺀다 (그 WAD 로 도는 이펙트·파티클 포함, {@link EffectSystem#remove}) — 이음으로 씬이 이어지는 동안 두 슬롯에서 모두
+	 * 내려간 레벨 장면을 닫기 전에 (엔진 전용, 43 §27). wad = 그 장면 자산의 WAD, path = 같은 레벨을 경로로 더했으면 그것도 (null 가능).
+	 */
+	public void removeWad(devple.gow.tools.wad.WadFile wad, java.nio.file.Path path) {
+		fx.remove(wad);
+		if (path != null && addedPaths.remove(path.toAbsolutePath().normalize())) {
+			for (devple.gow.tools.wad.WadFile w : fx.takeWadsAt(path)) {
+				fx.remove(w);
+			}
+		}
+	}
 
 	/** 이펙트 SEM 소리 출력 (SoundManager). Sink 로 막 낸 같은 이름은 건너뛴다 (MedusaGaze 의 SND_MEDUSA_RAY_SHOT 등). */
 	public void setSounds(EffectSystem.Sounds out) {

@@ -49,6 +49,13 @@ public final class NavWorld {
 		}
 	}
 
+	/** 이음 (GameScene/SceneNav.swapSlots): 정적 충돌 0 (현재) ↔ 1 (다른 슬롯) 순서를 바꾼다. 다른 슬롯이 없으면 그대로. */
+	public void swapStatics() {
+		if (statics.size() == 2) {
+			statics.add(statics.removeFirst());
+		}
+	}
+
 	public Platforms platforms() {
 		return platforms;
 	}

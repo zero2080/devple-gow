@@ -183,7 +183,8 @@ public final class CameraRig {
 		}
 	}
 
-	private final LevelData data;
+	/** 현재 슬롯 레벨 (이음 {@link #swapLevels} 에서 다른 슬롯과 바뀐다). */
+	private LevelData data;
 	private final Map<LevelData.PlacedCamera, CamAnim> anims = new HashMap<>();
 	/** 요청과 함께 온 추가 대상 (AresCamera1: 아레스 몸, 영웅 관절 vertebrae4, 아레스 관절 BAR01JOCVEC1). */
 	private Vector3f[] focus;
@@ -410,6 +411,33 @@ public final class CameraRig {
 
 	private LevelData other;
 
+	/**
+	 * 이음 (LoadCheck · 걷기, 43 §27): 현재 ↔ 다른 슬롯 레벨만 바꾼다. 원작 LoadCheck 0x1BCA10 은 카메라 관리자 (0x29F16C) 를 건드리지 않는다 (§7.1) —
+	 * 활성 목록·상태 링 (전환 보간 중이면 그대로)·관절 카메라 시간·CMV 질의 켬/끔·꺼진 볼륨이 모두 이어진다. 바뀌는 것은 이름 조회 순서 (현재 레벨 먼저)
+	 * 와 볼륨 후보 순서뿐. 예전 {@link #handoff}/{@link #resume} 은 활성 목록·자세만 넘겨 보간·꺼진 볼륨·질의 끔이 끊겼다. 다른 슬롯이 없으면 false.
+	 */
+	public boolean swapLevels() {
+		if (other == null) {
+			return false;
+		}
+		LevelData t = data;
+		data = other;
+		other = t;
+		otherFirst = !otherFirst;
+		return true;
+	}
+
+	/**
+	 * 볼륨 후보를 도는 레벨 순서 — 슬롯 자리 순서로 고정 (이음 {@link #swapLevels} 가 바꾸지 않는다): 원작 볼륨 질의는 슬롯 구분 없는 충돌 월드 하나라
+	 * LoadCheck 가 후보 순서 (동순위면 뒤엣것) 를 바꾸지 않는다. 이름 조회 ({@link #camera(String)}) 만 현재 레벨 먼저.
+	 */
+	private List<LevelData> slotOrder() {
+		return other == null ? List.of(data) : otherFirst ? List.of(other, data) : List.of(data, other);
+	}
+
+	/** 이음으로 현재/다른 슬롯이 바뀌어 다른 슬롯 레벨이 슬롯 순서상 앞인가. */
+	private boolean otherFirst;
+
 	/** 이름(RCM_ 선택)으로 카메라: 이 레벨 먼저, 없으면 다른 슬롯 레벨. */
 	private LevelData.PlacedCamera camera(String name) {
 		LevelData.PlacedCamera c = data.camera(name);
@@ -464,7 +492,7 @@ public final class CameraRig {
 	/** 점 t (대상 높이) 를 포함하는 켜진 CMV 가 있는지 (only = 그 레벨만, null = 두 슬롯 모두), 상태 마스크 통과. */
 	private boolean hasCandidate(Vector3f t, LevelData only) {
 		int mask = stateMask(heroBits, heroCombat);
-		for (LevelData lv : only != null ? List.of(only) : other != null ? List.of(data, other) : List.of(data)) {
+		for (LevelData lv : only != null ? List.of(only) : slotOrder()) {
 			for (LevelData.PlacedVolume v : lv.volumes) {
 				if (v.hull().kind != 1 || disabled.contains(v.owner().toLowerCase())) {
 					continue;
@@ -781,7 +809,7 @@ public final class CameraRig {
 		List<LevelData.PlacedCamera> cand = new ArrayList<>(requests);
 		requests.clear();
 		if (volumeQuery) {
-			for (LevelData lv : other != null ? List.of(data, other) : List.of(data)) {
+			for (LevelData lv : slotOrder()) {
 				for (LevelData.PlacedVolume v : lv.volumes) {
 					if (v.hull().kind != 1 || disabled.contains(v.owner().toLowerCase())) {
 						continue;

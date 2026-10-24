@@ -405,6 +405,14 @@ public final class EffectSystem implements AutoCloseable {
 	private final EffectLibrary lib = new EffectLibrary();
 	private final Map<WadFile, WadAssets> assets = new IdentityHashMap<>();
 	private final List<WadAssets> owned = new ArrayList<>();
+	/** 경로로 연 WAD ({@link #add(java.nio.file.Path)}) — 경로 → 그 WadFile. */
+	private final Map<java.nio.file.Path, List<WadFile>> byPath = new HashMap<>();
+
+	/** 경로로 연 WAD 들을 목록에서 꺼낸다 (없으면 빈 목록 — 이어서 {@link #remove} 로 뺀다). */
+	public List<WadFile> takeWadsAt(java.nio.file.Path p) {
+		List<WadFile> l = byPath.remove(p.toAbsolutePath().normalize());
+		return l != null ? l : List.of();
+	}
 	private final Map<String, AnimatedModel> models = new HashMap<>();
 	private final Map<EffectLibrary.EmitterDef, ParticleDef> pdefs = new IdentityHashMap<>();
 	private final List<Effect> live = new ArrayList<>();
@@ -448,6 +456,7 @@ public final class EffectSystem implements AutoCloseable {
 			owned.add(a);
 			lib.add(a.wad());
 			assets.put(a.wad(), a);
+			byPath.computeIfAbsent(wadPath.toAbsolutePath().normalize(), k -> new ArrayList<>()).add(a.wad());
 			return true;
 		} catch (java.io.IOException | RuntimeException ex) {
 			return false;
@@ -462,6 +471,69 @@ public final class EffectSystem implements AutoCloseable {
 		lib.add(a.wad());
 		assets.put(a.wad(), a);
 		return true;
+	}
+
+	/**
+	 * WAD 등록을 뺀다: 그 WAD 정의로 돌던 이펙트 (멈춤) · 이미 나온 파티클 · 모델/파티클 정의 캐시를 지우고, 같은 이름은 남은 WAD 정의로 돌아간다.
+	 * 엔진 전용 (43 §27): 이음이 씬을 잇게 되면서 두 슬롯에서 모두 내려간 레벨 장면을 닫기 전에 부른다 — 닫힌 자산의 GL 이름을 캐시가 쥐고 있지 않게.
+	 * 이 시스템이 경로로 연 자산이면 닫는다 (다른 소유자 자산은 그 소유자가 닫음).
+	 */
+	public void remove(WadFile wad) {
+		if (wad == null) {
+			return;
+		}
+		WadAssets a = assets.remove(wad);
+		List<EffectLibrary.EffectDef> gone = lib.remove(wad);
+		if (a == null && gone.isEmpty()) {
+			return;
+		}
+		for (int i = live.size() - 1; i >= 0; i--) {
+			Effect e = live.get(i);
+			if (e.def.wad() == wad) {
+				e.stop();
+				live.remove(i);
+			}
+		}
+		String prefix = wad.name() + "/";
+		models.entrySet().removeIf(en -> {
+			if (!en.getKey().startsWith(prefix)) {
+				return false;
+			}
+			if (en.getValue() != null) {
+				en.getValue().close();
+			}
+			return true;
+		});
+		java.util.Set<ParticleDef> doomed = java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+		for (EffectLibrary.EffectDef d : gone) {
+			for (EffectLibrary.EmitterDef ed : d.emitters()) {
+				ParticleDef pd = pdefs.remove(ed);
+				if (pd != null) {
+					doomed.add(pd);
+				}
+			}
+		}
+		if (ps != null && !doomed.isEmpty()) {
+			ps.purge(doomed::contains);
+		}
+		if (a != null && owned.remove(a)) {
+			a.close();
+		}
+	}
+
+	/**
+	 * 레벨 WAD 를 등록하거나, 이미 있으면 맨 뒤로 (같은 이름은 이 WAD 가 이긴다 — 다시 해석하지 않음). 이음으로 현재가 된 레벨 (43 §27): 새 씬의 enter 가
+	 * 그 레벨을 마지막에 더하던 것과 같은 우선순위. 처음 등록이면 true.
+	 */
+	public boolean addOrPromote(WadAssets a) {
+		if (a == null) {
+			return false;
+		}
+		if (assets.containsKey(a.wad())) {
+			lib.promote(a.wad());
+			return false;
+		}
+		return add(a);
 	}
 
 	public EffectLibrary library() {

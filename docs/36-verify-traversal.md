@@ -45,13 +45,13 @@ Warp 는 대상 이름이 없어 그때 슬롯에 있는 레벨로 간다. 검�
 | LoadWad/LoadForWarp | 다른 슬롯 레벨의 **충돌만** 즉시 로드 (`otherCol`, 렌더·스크립트 없음) [근사: 원작은 백그라운드 전체 로드] |
 | (게임 GameScene) | LoadWad = 다른 슬롯 레벨 켬 (충돌·이웃 스크립트·CMV·렌더), **LoadForWarp 로 새로 올린 레벨은 꺼진 채** (슬롯 비움, Warp 에서 켬 — 원작 0x1B2AA8 인자 1 은 0x1BC2E0 을 안 부름, 30 §7.4) |
 | 바닥 질의 | 현재 + 다른 슬롯 충돌 중 높은 바닥 (경계에서 끊기지 않음) |
-| LoadCheck(다른 슬롯) | 발밑에 그 레벨 바닥이 있고 **현재 레벨 바닥은 없으면** **SEAMLESS**: 같은 위치·방향으로 새 GameScene. 아니면 무시 (Warp 짝 · 두 레벨이 같은 바닥을 겹쳐 가진 곳 — ATHN02C 발리스타 방 LoadCheckB2, 43 §14.4) |
-| 다른 슬롯 바닥만 0.25 초 밟음 | **WALK**: 같은 위치로 새 GameScene |
-| 덧붙는 레벨 (자기 바닥 없음, 숙주가 다른 슬롯) 의 ENV 볼륨 밖 + 숙주 바닥 0.1 초 | **WALK** → 숙주 (ATHN02D 메두사 방 남쪽 출구 → ATHN02C, 43 §14.4) [근사: 엔진은 현재 레벨의 R2 오브젝트·Creator 만 다룬다] |
+| LoadCheck(다른 슬롯) | 발밑에 그 레벨 바닥이 있고 **현재 레벨 바닥은 없으면** **SEAMLESS**: 같은 씬에서 현재 ↔ 다른 슬롯 역할만 바꾼다 (`GameScene.seamSwap`, 43 §27 — 페이드·다시 읽기 없음, 영웅·카메라·HUD·이펙트·음악 그대로; 보스·덧붙는 레벨이 끼면 예전처럼 같은 위치·방향으로 새 GameScene + 0.4 초 페이드). 아니면 무시 (Warp 짝 · 두 레벨이 같은 바닥을 겹쳐 가진 곳 — ATHN02C 발리스타 방 LoadCheckB2, 43 §14.4) |
+| 다른 슬롯 바닥만 0.25 초 밟음 | **WALK**: SEAMLESS 와 같은 처리 (같은 씬에서 역할 바꾸기) |
+| 덧붙는 레벨 (자기 바닥 없음, 숙주가 다른 슬롯) 의 ENV 볼륨 밖 + 숙주 바닥 0.1 초 | **WALK** → 숙주 (ATHN02D 메두사 방 남쪽 출구 → ATHN02C, 43 §14.4) [근사: 엔진은 현재 레벨의 R2 오브젝트·Creator 만 다룬다] — 보스 레벨이라 새 GameScene |
 | 이웃 (다른 슬롯) 스크립트 SpawnEnemy | 그 적도 나온다 (이미 올린 적 종류의 템플릿만, 피해·제거 이벤트는 이웃 세계로) — 원작은 두 슬롯 스크립트가 같은 세계 (43 §14.5). 보스 레벨이 현재면 생략 |
 | Warp (LoadForWarp 뒤) | **WARP**: 새 GameScene, `LevelEntry.resolve(…, warpFrom)` = 도착 Start + 도착 카메라 |
 | Goto | 같은 레벨 엔티티 위치·방향으로 이동 (+ Start 의 카메라) |
-| 도착 후 | 떠나온 레벨이 다른 슬롯에 남는다 (되돌아가는 LoadCheck 가 동작). `ScriptWorld.placePlayer(…, seamless)` 가 서 있는 볼륨을 "이미 안" 으로 표시해 되돌아가는 LoadCheck 가 바로 발동하지 않는다 |
+| 도착 후 | 떠나온 레벨이 다른 슬롯에 남는다 (되돌아가는 LoadCheck 가 동작). 같은 씬 이음은 두 세계가 그대로 돌아 볼륨 안팎 기록이 이어지고, 새 씬 (Warp · `--arrive` · 보스 이음) 은 `ScriptWorld.placePlayer(…, seamless)` 가 서 있는 볼륨을 "이미 안" 으로 표시해 되돌아가는 LoadCheck 가 바로 발동하지 않는다 |
 
 ## 3. 하네스 방법
 1. **시작 지점**: `LevelEntry.resolve` — 첫 모드 1 Start → `start*` GO → 원점. 바닥 = `groundHeight(y+32, 600)`. 없으면 수평 256 안 가장 가까운 바닥으로 보정 (움직이는 발판 위 Start, §6).
