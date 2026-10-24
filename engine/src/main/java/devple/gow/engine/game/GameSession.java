@@ -40,6 +40,11 @@ public final class GameSession {
 	public int costume;
 	/** 누적 플레이 시간 (초): GameScene 이 일시정지가 아닐 때 더한다. 세이브 슬롯 표시용. */
 	public float playTime;
+	/**
+	 * 세계 시작 시각 (playTime 기준) — 원작 0x29D924: 세계 초기화 0x1A6EC0 (레벨 적재 0x1B3070) 가 0 으로, 걷기 이음 (LoadCheck) 은 그대로 둔다.
+	 * CheckPoint 의 "시작 뒤 1 초" 거름 (0x1B0234) 이 이것으로 잰다 (엔진 씬은 이음마다 새로 만들어 씬 시각이 0 부터라 쓰지 않는다, 43 문서 §19).
+	 */
+	float worldStart;
 	/** 새 게임 첫 ATHN01A 진입 시 오프닝(Semo01) 재생 여부 (원작 sub_0021efd8). */
 	public boolean openingPending;
 	/** 직전 Warp 로 떠나온 레벨의 화면 상태 — 원작은 그 레벨을 꺼진 채 메모리에 두므로 바로 Warp 로 돌아오면 그대로 (GameScene.goToLevel, 43 §13.10). */

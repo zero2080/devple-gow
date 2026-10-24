@@ -65,7 +65,7 @@
 | 8 EventTransmitter | 0 EventId, 1 Arg1, 2 Arg2 (int) | 3 | `0x1A3578` |
 | 9 Start | 0 PlayerName str ("Hero"), 1 Filter int(+0x9C), 2 CameraName str | – | `0x1A3780` |
 | 10 SpawnEnemy | 0 MaximumCount int (+0xB0, 조건 0x1AC580: Trigger 때 +0x100 += 1), 1 ? int(-1, +0xB8 — 0x1AC580/0x1AC630/0x1AC850 은 읽지 않음), 2 SpawnAtStart bool, 3 Respawn bool, 4 TemplateId int, 5..6 int, 7 SpawnAction int(-1, 생성 액션 = CombatFile 액션 ID, 32 문서), 8 InitState int (5 = 석화), 9 Patrol str ("patrolN") | 10 | `0x1A3840`, 효과 `0x1AC850` |
-| 11 Creator | 0 Name0 str ("chest", "savepoint", "aoRED" …), 1 Name1 str, 2 float, 3..5 int(-1), 6,7 int, **8 CreateAtStart bool** (36 문서 §5), 9 bool | 10 | +17 bool (`0x1A3B90`) |
+| 11 Creator | 0 Name0 str ("chest", "savepoint", "aoRED" … — 앞에 "go", 대소문자 무시), 1 Name1 str (= 새 GO 의 처음 act, 0x1AD110), 2 float (+0xC0 배율), 3..5 int(-1), 6,7 int (+0xE8: 생성 수 상한), **8 CreateAtStart bool** (36 문서 §5), 9 bool; base 16 Filter = 새 GO 의 오브젝트 그룹. 행렬 = 엔티티 행렬 · 소유 GO 관절 월드 (0x1A9CD0, 43 §19) | 10 | +17 bool (`0x1A3B90`), 효과 `0x1ACCA8` |
 | 12 GlobalData / 13 LevelData | 0 Priority int, 1..16 Init action (변수 초기화) | – | `0x1A3F18` / `0x1A4240` |
 | 14 Marker | 0 Id int (+0x9C) | – | `0x1A4568` |
 | 15 SoundController | 0 Op int(기본 1), 1..4 float, 5 int | 6 | `0x1A45D0` |

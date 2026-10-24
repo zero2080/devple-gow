@@ -109,6 +109,14 @@ public final class GameScene implements Scene {
 	}
 	private final Vector3f spawn = new Vector3f();
 	private final Vector3f checkpoint = new Vector3f();
+	/**
+	 * 체크포인트 때 영웅 방향 — 원작 스냅샷은 플레이어 월드 행렬 전체 (11 문서 §4 블록 0x00) 를 저장하고 재시작이 그대로 돌린다. 예전 엔진은 레벨 시작 방향
+	 * (spawnYaw) 으로 되살렸다 (43 문서 §19, 영상 7053: ATHN05B 발코니 받침대 옆).
+	 */
+	private float checkpointYaw;
+	/** 원작 GameMgr 메시지 0 의 같은 엔티티 5 초 거름 (0x303D74 엔티티 · 0x303D78 시각). */
+	private ScriptEntity lastCheckpointSource;
+	private float lastCheckpointTime;
 	private float spawnYaw;
 	private float camYaw;
 	/** 영웅 입력 기준 (카메라 컷 뒤 스틱 방향 유지, 원작 0x1DCE80 / 0x1DD1E8 — 30 문서 §9.1). */
@@ -690,6 +698,9 @@ public final class GameScene implements Scene {
 		String arrivalCam = placeSpawn();
 		respawn(spawn);
 		boolean warped = arrival != null && arrival.kind() == LevelLink.Kind.WARP;
+		if (arrival == null || warped) {
+			session.worldStart = session.playTime; // 레벨 적재 = 세계 초기화 (0x1A6EC0: 0x29D924 = 0), 걷기 이음은 이어진다
+		}
 		if (warped) {
 			// Warp_Jump → 영웅 SetMatrix 0x1E79D0: 줄이면 놓기 0x1C4FF8(1) → 떨어짐 (+0x174 0x8), 다음 프레임 공중 줄 잡기 0x1C5C20 이
 			// 도착점 줄을 잡는다 — 잡기 대기 없음 (ATRET01A WarpFrmhdes05 = 무덤 줄 gorope1 한가운데, 43 §13.9)
@@ -697,6 +708,7 @@ public final class GameScene implements Scene {
 		}
 		ph = devple.gow.engine.core.PerfMonitor.phase(". spawn", ph);
 		checkpoint.set(spawn);
+		checkpointYaw = spawnYaw;
 		cam.fovDeg = 60;
 		cam.near = devple.gow.engine.fx.FxEnvironment.viewNear; // 원작 뷰포트 near (+0x384 = −10, 0x168DC8 — 43 §11)
 		cam.far = 30000;
@@ -1209,11 +1221,11 @@ public final class GameScene implements Scene {
 			public void neighbourCreate(ScriptEntity source, Object name) {
 				// 이웃 레벨 Creator "savepoint" (원작 두 슬롯 GO 상주): 자리·빛기둥을 이 씬에 — R2 저장 (0x1DC678 은 슬롯 구분 없이 가장 가까운 것).
 				// 이웃 상자 ("chest") 는 아직 현재 레벨 것만 [근사]
-				if ("savepoint".equals(name) && source.owner != null) {
-					float[] gp = source.owner.instance().pos();
-					savePoints.add(new Vector3f(gp[0], gp[1], gp[2]));
-					boolean body = spawnSavePoint(source.owner.instance().matrix());
-					System.out.printf("세이브 포인트 생성 (이웃 %s, %.0f, %.0f, %.0f)%s%n", otherName, gp[0], gp[1], gp[2], body ? " + 빛기둥 savepoint" : "");
+				if (SceneNav.creatorIs(name, "savepoint") && source.owner != null) {
+					float[] m = SceneNav.creatorMatrix(source); // 엔티티 행렬 (0x1A9CD0), 43 §19
+					savePoints.add(new Vector3f(m[12], m[13], m[14]));
+					boolean body = spawnSavePoint(m);
+					System.out.printf("세이브 포인트 생성 (이웃 %s, %.0f, %.0f, %.0f)%s%n", otherName, m[12], m[13], m[14], body ? " + 빛기둥 savepoint" : "");
 				}
 			}
 
@@ -1316,6 +1328,15 @@ public final class GameScene implements Scene {
 
 			@Override
 			public void animate(ScriptEntity source, List<String> objects, String anim) {
+				if (!createdObjects.isEmpty()) {
+					List<String> rest = new ArrayList<>();
+					for (String o : objects) {
+						if (!animateCreated(source, o, anim)) { // Creator 오브젝트 (43 §19)
+							rest.add(o);
+						}
+					}
+					objects = rest;
+				}
 				if (nav != null) {
 					nav.animate(source, objects, anim);
 					startAnimatorEffects(objects); // 같은 GO 의 채널 이미터 (불덩이·폭발 연기, 43 §16)
@@ -1393,7 +1414,11 @@ public final class GameScene implements Scene {
 
 			@Override
 			public void checkpoint(ScriptEntity source) {
+				if (!acceptCheckpoint(source, hero.player.hp, session.playTime - session.worldStart)) {
+					return;
+				}
 				checkpoint.set(hero.ctl.position);
+				checkpointYaw = hero.ctl.yaw;
 				System.out.println("체크포인트 " + checkpoint);
 			}
 
@@ -1524,22 +1549,99 @@ public final class GameScene implements Scene {
 
 			@Override
 			public void create(ScriptEntity source) {
-				// Creator 엔티티: 이름 슬롯 "savepoint" → R_SAVEPT 세이브 포인트를 소유 GO 위치에 생성
+				// Creator 엔티티: 이름 슬롯 "savepoint" → 세이브 포인트를 엔티티 행렬 (원작 0x1ACCA8 → 0x1A9CD0, 소유 GO 인스턴스 아님) 에 생성 (43 §19)
 				Object name = world.slot(source, "Name0");
-				if ("savepoint".equals(name) && source.owner != null) {
-					float[] gp = source.owner.instance().pos();
-					savePoints.add(new Vector3f(gp[0], gp[1], gp[2]));
-					boolean body = spawnSavePoint(source.owner.instance().matrix());
-					System.out.printf("세이브 포인트 생성 (%.0f, %.0f, %.0f)%s%n", gp[0], gp[1], gp[2], body ? " + 빛기둥 savepoint" : "");
-				} else if (nav != null) {
-					// "chest" → R2 상자 (원작 Creator 0x1ACCA8: R_PERMK 오브젝트 chest 를 소유 GO 행렬에 새 GO 로, 38 §21)
-					devple.gow.engine.nav.Interactables.Item chest = nav.create(source);
-					if (chest != null && magicFx != null) {
-						chests.spawn(chest, source.owner.instance().matrix(), magicFx.effects(), nav.navWorld.platforms(), orbTweaks);
+				if (SceneNav.creatorIs(name, "savepoint") && source.owner != null) {
+					float[] m = SceneNav.creatorMatrix(source);
+					savePoints.add(new Vector3f(m[12], m[13], m[14]));
+					boolean body = spawnSavePoint(m);
+					System.out.printf("세이브 포인트 생성 (%.0f, %.0f, %.0f)%s%n", m[12], m[13], m[14], body ? " + 빛기둥 savepoint" : "");
+				} else {
+					// "chest"/"Chest" → R2 상자 (원작 Creator 0x1ACCA8: R_PERMK 오브젝트 chest 를 엔티티 행렬에 새 GO 로, 38 §21)
+					devple.gow.engine.nav.Interactables.Item chest = nav != null ? nav.create(source) : null;
+					if (chest != null) {
+						if (magicFx != null) {
+							chests.spawn(chest, SceneNav.creatorMatrix(source), magicFx.effects(), nav.navWorld.platforms(), orbTweaks);
+						}
+					} else if (name instanceof String n && !n.isEmpty()) {
+						spawnCreated(source, n);
 					}
 				}
 			}
 		};
+	}
+
+	/** Creator 가 만든 그 밖의 오브젝트 (액터 이름 → 이펙트 GO): Animator (모드 3, 같은 Filter) 가 act 를 튼다. */
+	private final Map<String, devple.gow.engine.fx.EffectSystem.Effect> createdObjects = new HashMap<>();
+
+	/**
+	 * 상자·세이브 포인트가 아닌 Creator (원작 0x1ACCA8 은 이름을 가리지 않는다): Name0 앞에 "go" 를 붙인 오브젝트 (레벨 WAD 의 원점에 둔 원형 —
+	 * ATHN05A goaored · goaosks · goaoskb · goaoxy1, 전 게임 aoRED 41 · aoSKS 27 · aoREDCAGE 17 · aoHAR 13 …) 를 {@link SceneNav#creatorMatrix 엔티티 행렬} 에
+	 * 새 GO 로 만들고, 처음 act = Name1 (0x1AD110), 그 오브젝트 그룹 = Creator 의 Filter (슬롯 16, 0x1A5130 인자) 로 생성을 알린다 (CreationSensor)
+	 * [확실: 생성 경로]. 같은 Filter 의 Animator (모드 3) 가 그 GO 에 act 를 다시 튼다 — ATHN05A 덩굴 통로·발코니의 "아테네 병사 대 해골병" 싸움 여섯 쌍
+	 * (aoRED/aoSKS act "aoRED1a05Hl05"/"aoSKS1a05Hl05" 4.33 초 반복, 지연 0.5–2 초, 영상 6575–6584 의 발코니 병사들) 이 예전엔 하나도 없었다 (43 문서 §19).
+	 * 엔진: 이펙트 GO (모델·관절 애니·관절 이미터·SEM) [근사: 충돌 CDV 없음, Animator 속도·역재생 비트는 무시].
+	 */
+	private void spawnCreated(ScriptEntity source, String name0) {
+		if (magicFx == null || source.owner == null) {
+			return;
+		}
+		devple.gow.engine.fx.EffectSystem fx = magicFx.effects();
+		devple.gow.tools.fx.EffectLibrary.EffectDef def = fx.library().resolve(name0.startsWith("go") ? name0 : "go" + name0);
+		if (def == null || def.model() == null) {
+			return;
+		}
+		float[] m = SceneNav.creatorMatrix(source);
+		String key = source.name().toLowerCase(java.util.Locale.ROOT); // Name1 은 묶음마다 같다 (aoRED1a05Hl05) → 엔티티 이름이 키
+		int group = (int) num(world.slot(source, "Filter"));
+		devple.gow.engine.script.ScriptActor actor = null;
+		for (devple.gow.engine.script.ScriptActor a : world.actors()) {
+			if (a.name.equals(key) && !a.destroyed()) {
+				actor = a; // 넘겨 쓴 세계의 recreate: 액터는 그대로, GO 만 새 씬에
+			}
+		}
+		if (actor == null) {
+			actor = world.addActor(key, group, new float[]{m[12], m[13], m[14]});
+		}
+		devple.gow.engine.fx.EffectSystem.Effect e = fx.play(def.go(),
+				devple.gow.engine.fx.EffectSystem.Anchor.of(new org.joml.Matrix4f().set(m)), Float.POSITIVE_INFINITY);
+		if (e == null) {
+			return;
+		}
+		e.scale = 1f / Math.max(def.scale(), 1e-3f);
+		e.jointEmitters = true;
+		// 처음 act = Name1 (0x1AD110 이 오브젝트 애니에서 Name1 해시 (대문자, 0x1758E0) 와 같은 act 번호를 찾아 GO 생성 0x1A5130 에 넘김) [확실]
+		Object n1 = world.slot(source, "Name1");
+		if (n1 instanceof String s && !s.isEmpty()) {
+			e.setAct(s);
+		}
+		if (actor.act != null) {
+			e.setAct(actor.act); // 이음 뒤: 마지막으로 튼 act 를 이어서
+			e.loopAct = actor.actLoop;
+		}
+		createdObjects.put(key, e);
+		System.out.printf("Creator 오브젝트 %s → %s (그룹 %d) at (%.0f, %.0f, %.0f)%n", source.name(), def.go(), group, m[12], m[13], m[14]);
+	}
+
+	/** Animator 가 Creator 오브젝트를 가리키면 그 GO 에 act (슬롯 1 비트 0x2 = 반복, Platforms.play 와 같은 규칙). @return 처리했으면 true */
+	private boolean animateCreated(ScriptEntity source, String object, String anim) {
+		devple.gow.engine.fx.EffectSystem.Effect e = createdObjects.get(object);
+		if (e == null) {
+			return false;
+		}
+		int[] mode = new int[1];
+		float[] speed = new float[1], start = new float[1];
+		SceneNav.animatorArgs(world, source, mode, speed, start);
+		if (e.setAct(anim)) {
+			e.loopAct = (mode[0] & 0x2) != 0;
+			for (devple.gow.engine.script.ScriptActor a : world.actors()) {
+				if (a.name.equals(object)) {
+					a.act = anim;
+					a.actLoop = e.loopAct;
+				}
+			}
+		}
+		return true;
 	}
 
 	/**
@@ -2535,6 +2637,7 @@ public final class GameScene implements Scene {
 		switch (saveFlow.result()) {
 			case SAVED -> {
 				checkpoint.set(hero.ctl.position);
+				checkpointYaw = hero.ctl.yaw;
 				System.out.println("저장 완료: " + MemoryCardFlow.file(SaveGame.dir(), saveFlow.fileIndex()));
 				saveFlow = null;
 				closeSaveMenu(21); // 상태 17: MemoryCard_Event 0 (흐름이 이미 보냄) → 10 프레임 → 상태 18 (1 + 10 프레임) → SaveGame_Event 0
@@ -2566,7 +2669,34 @@ public final class GameScene implements Scene {
 
 	private void restartAtCheckpoint() {
 		hero.player.onCheckpointRestart(hero.player.hp);
+		respawnAtCheckpoint();
+	}
+
+	/** 체크포인트 자리·방향으로 (원작 스냅샷의 플레이어 행렬) [확실: 위치·방향 / 근사: 세계 상태는 되돌리지 않음]. */
+	private void respawnAtCheckpoint() {
 		respawn(checkpoint);
+		hero.ctl.yaw = checkpointYaw;
+	}
+
+	/**
+	 * 원작 CheckPoint (GameMgr 메시지 0, 0x1B0234) 의 거름 [확실]: 플레이어 체력 (+0x178) ≥ 1, 레벨 시작 (0x29D924) 뒤 1 초 이상, 그리고 보낸 엔티티 (0x29D928) 가
+	 * 지난번 (0x303D74) 과 같으면 5 초 (0x303D78 + 5) 가 지나야 — 통과하면 로그 "CheckPoint" 와 0x29D960 = 1 (프레임 끝 스냅샷).
+	 */
+	private boolean acceptCheckpoint(ScriptEntity source, float hp, float now) {
+		if (!checkpointPasses(source, lastCheckpointSource, lastCheckpointTime, hp, now)) {
+			return false;
+		}
+		lastCheckpointSource = source;
+		lastCheckpointTime = now;
+		return true;
+	}
+
+	/** {@link #acceptCheckpoint} 의 판정만 (시험용): now = 레벨 시작 뒤 초. */
+	static boolean checkpointPasses(Object source, Object lastSource, float lastTime, float hp, float now) {
+		if (hp < 1f || now < 1f) {
+			return false;
+		}
+		return source != lastSource || now - 5f >= lastTime;
 	}
 
 	/** 사망 메뉴 상태: 0 없음, 1 "죽었습니다" 화면 (DeadMenu On), 2 선택 대기. */
@@ -2655,7 +2785,7 @@ public final class GameScene implements Scene {
 		paused = false;
 		hud.acceptInput = true;
 		if (name.endsWith("Menu_Choice") && "1".equals(String.valueOf(value).replace(".0", ""))) {
-			respawn(checkpoint);
+			respawnAtCheckpoint();
 		}
 	}
 

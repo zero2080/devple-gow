@@ -489,22 +489,66 @@ public final class SceneNav {
 	}
 
 	/**
-	 * Creator "chest" → R2 상자 (38 §21). 원작 Creator 생성 0x1ACCA8: 슬롯 0 Name0 에서 "go" 를 떼고 (0x1A4960) 그 이름의 오브젝트 리소스
-	 * (0x1AD280 → 0x17A7B8, 형 3) 를 소유 GO 행렬 (0x1A9CD0) 에 새 GO 로 만든다 (0x1A5130, 슬롯 3..6 = unk3..unk6 을 넘김: unk5 = CSM 템플릿,
+	 * Creator "chest" → R2 상자 (38 §21). 원작 Creator 생성 0x1ACCA8: 슬롯 0 Name0 앞에 "go" 를 붙여 (없으면, 0x1A4960) 그 이름의 오브젝트 리소스
+	 * (0x1AD280 → 0x17A7B8, 형 3) 를 {@link #creatorMatrix 엔티티 행렬} 에 새 GO 로 만든다 (0x1A5130, 슬롯 3..6 = unk3..unk6 을 넘김: unk5 = CSM 템플릿,
 	 * unk6 = 과제 id). "chest" = R_PERMK 오브젝트 chest (MDL_chest·ANM_chest·CDV_chest, GO gochest = IO_CSM) — 소유 GO (gochest2) 는 메시 없는 자리표.
+	 * 이름은 대소문자를 가리지 않는다 ({@link #creatorIs}: "Chest" 40 개). 묶음 GO 하나에 상자가 여럿이면 (ATHN05A ChestGroup 둘) 상자마다 따로 키를 준다.
 	 * 모델·충돌·손잡이는 {@link ChestProps}.
 	 *
 	 * @return 상자 (Creator 가 상자가 아니면 null)
 	 */
 	public Interactables.Item create(ScriptEntity source) {
 		Object name = world.slot(source, "Name0");
-		if ("chest".equals(name) && source.owner != null) {
-			float[] gp = source.owner.instance().pos();
+		if (creatorIs(name, "chest") && source.owner != null) {
+			float[] m = creatorMatrix(source);
 			int tpl = num(world.slot(source, "unk5"));
 			int task = num(world.slot(source, "unk6"));
-			return items.addChest(source.owner.instance().name(), new Vector3f(gp[0], gp[1], gp[2]), tpl, task, tweaks);
+			return items.addChest(creatorKey(source), new Vector3f(m[12], m[13], m[14]), tpl, task, tweaks);
 		}
 		return null;
+	}
+
+	/**
+	 * Creator Name0 이 그 오브젝트인가: 원작 오브젝트 레지스트리는 이름을 대문자로 바꿔 해시한다 (0x17A7B8 → 0x175C10 → 0x1759F0 → 0x175938 이 a–z 를
+	 * 대문자로 복사한 뒤 Hash127) → 대소문자 무시 [확실]. 데이터: Name0 "Chest" 40 개 (DEST01 8 · ATHN06B 6 · HDES01B 8 · ATHN05B RespawnChest1 …) 는
+	 * 예전 엔진 ("chest".equals) 에서 상자가 아예 생기지 않았다 (43 문서 §19).
+	 */
+	public static boolean creatorIs(Object name0, String object) {
+		if (!(name0 instanceof String s)) {
+			return false;
+		}
+		String n = s.startsWith("go") ? s.substring(2) : s; // 0x1A4960: "go" 로 시작하지 않으면 붙인다
+		return n.equalsIgnoreCase(object);
+	}
+
+	/**
+	 * Creator 가 만드는 GO 의 행렬 = 원작 0x1A9CD0: 엔티티 레코드 행렬 (+0x00) · 소유 GO 관절 (+0x40) 월드 ({@link ScriptEntity#world}), 회전 세 행은
+	 * 길이 1 로 정규화, 이동은 그대로 [확실]. 0x1ACCA8 은 그 앞에 슬롯 2 (unk2, +0xC0) 배율 대각 행렬을 곱한다 — 기록에 처리기가 없는 Creator 뿐이라
+	 * 1 로 둔다 [추정: 엔티티 생성 기본값]. 소유 GO 인스턴스 행렬과 다를 수 있다: 묶음 GO (ATHN05A ChestGroup 인스턴스 (0, 0, 0) · 관절 0 (608, 640, 3008))
+	 * 는 상자마다 엔티티 행렬이 자리를 준다 — 전 레벨 상자 24 개 · PAND02C 세이브 포인트 하나가 예전엔 소유 GO 자리 (대개 원점) 에 생겼다 (43 문서 §19).
+	 */
+	public static float[] creatorMatrix(ScriptEntity s) {
+		float[] m = s.world.clone();
+		for (int r = 0; r < 3; r++) {
+			float l = (float) Math.sqrt(m[r * 4] * m[r * 4] + m[r * 4 + 1] * m[r * 4 + 1] + m[r * 4 + 2] * m[r * 4 + 2]);
+			if (l > 1e-6f) {
+				m[r * 4] /= l;
+				m[r * 4 + 1] /= l;
+				m[r * 4 + 2] /= l;
+			}
+		}
+		return m;
+	}
+
+	/**
+	 * Creator 가 만든 GO 의 이름 (상호작용 키): 원작은 새 GO 라 소유 GO 와 따로다. 엔진 키는 만든 자리가 소유 GO 자리면 소유 GO 이름 (Vis·이음 상태가
+	 * 그 이름으로 찾는다), 아니면 소유 GO 이름 + "/" + 엔티티 이름 (묶음 GO 의 상자들이 한 키를 나눠 쓰지 않게).
+	 */
+	public static String creatorKey(ScriptEntity s) {
+		String owner = s.owner.instance().name();
+		float[] m = s.world, p = s.owner.instance().pos();
+		float dx = m[12] - p[0], dy = m[13] - p[1], dz = m[14] - p[2];
+		return dx * dx + dy * dy + dz * dz <= 1f ? owner : owner + "/" + s.name().toLowerCase(java.util.Locale.ROOT);
 	}
 
 	private static int num(Object o) {

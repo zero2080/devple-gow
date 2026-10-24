@@ -521,7 +521,7 @@ public final class TraversalVerifier {
 			@Override
 			public void create(ScriptEntity s) {
 				Object n = wref[0].slot(s, "Name0");
-				if ("savepoint".equals(n)) {
+				if (devple.gow.engine.game.SceneNav.creatorIs(n, "savepoint")) {
 					r.savePoints.add(s.name());
 				}
 			}
@@ -542,7 +542,7 @@ public final class TraversalVerifier {
 				r.heard.add(intSlot(w, e, "EventId"));
 			}
 		}
-		r.savePointCreators = (int) w.entities().stream().filter(e -> e.type() == 11 && "savepoint".equals(w.slot(e, "Name0"))).count();
+		r.savePointCreators = (int) w.entities().stream().filter(e -> e.type() == 11 && devple.gow.engine.game.SceneNav.creatorIs(w.slot(e, "Name0"), "savepoint")).count();
 
 		// 시작 지점 (GameScene 과 같은 규칙)
 		LevelEntry.Spot spot = LevelEntry.resolve(lv, w, null, null);
@@ -764,10 +764,12 @@ public final class TraversalVerifier {
 			String[] currentSource, Runnable step, LevelResult r) {
 		Interactables items = levelItems; // 레벨당 하나 (진행 상태·자세 유지)
 		for (ScriptEntity e : w.entities()) {
-			if (e.type() == 11 && "chest".equals(w.slot(e, "Name0")) && e.owner != null
-					&& items.items().stream().noneMatch(x -> x.owner.equalsIgnoreCase(e.owner.instance().name()))) {
-				float[] gp = e.owner.instance().pos();
-				items.addChest(e.owner.instance().name(), new org.joml.Vector3f(gp[0], gp[1], gp[2]), intSlot(w, e, "unk5"), intSlot(w, e, "unk6"), tw);
+			// 게임과 같은 이름 비교 · 엔티티 행렬 · 키 (SceneNav.create, 43 §19)
+			if (e.type() == 11 && devple.gow.engine.game.SceneNav.creatorIs(w.slot(e, "Name0"), "chest") && e.owner != null
+					&& items.items().stream().noneMatch(x -> x.owner.equalsIgnoreCase(devple.gow.engine.game.SceneNav.creatorKey(e)))) {
+				float[] gp = devple.gow.engine.game.SceneNav.creatorMatrix(e);
+				items.addChest(devple.gow.engine.game.SceneNav.creatorKey(e), new org.joml.Vector3f(gp[12], gp[13], gp[14]), intSlot(w, e, "unk5"),
+						intSlot(w, e, "unk6"), tw);
 			}
 		}
 		// 보이는 것 먼저 → 버튼 안내 센서(1024) → 그 사이 드러난 것 → 끝까지 숨은 것 (PAND05A 지구본 손잡이는 석상 R2 1024 뒤에 보인다)

@@ -677,9 +677,13 @@ PAND05B `pBoxPand05B-Marker511` → `semoMovieHaveBox-…-semo08marker511` (Filt
 ## 21. Creator 상자의 몸 — 모델·충돌·종류·열림 (`game/ChestProps`) [확실: 디스어셈블·데이터 / 추정: 표시]
 사용자 보고 (PS2 영상 대조): ATHN01B 선창에 내려오면 시작 근처에 녹색 체력 상자가 있어야 하는데 없었다 (메시지 441 "궤짝을 열려면 R2 를 누르고 있으십시오" 만 뜸).
 원인 둘: `SceneNav.create` 가 불리지 않았고 (스크립트 Creator → R2 아이템이 안 생김), 불려도 소유 GO `gochest2` (오브젝트 `chest2`) 는 **ESC_Chest2 만 있는 메시 없는 자리표**라 그릴 것이 없었다.
-- **Creator 생성 0x1ACCA8** (엔티티 클래스 Creator, vtable 0x2BA4FC): 슬롯 0 Name0 문자열에서 "go" 접두를 떼고 (0x1A4960, 문자열 0x29D8A8) 0x1AD280 → 0x17A7B8 로
-  **그 이름의 리소스 (형 3 = 오브젝트)** 를 찾는다. 소유 GO 행렬 (0x1A9CD0) 과 슬롯 3..6 (unk3..unk6 — unk5 = CSM 템플릿, unk6 = 과제 id) 을 넘겨 0x1A5130 이 새 GO 를 만든다
-  (세이브 포인트 Name0 "savepoint" 도 같은 경로). "chest" = **R_PERMK 오브젝트 `chest`** (MDL_chest·ANM_chest·CDV_chest + FXC 12 개, GO 템플릿 `gochest` = IO_CSM) [확실].
+- **Creator 생성 0x1ACCA8** (엔티티 클래스 Creator, vtable 0x2BA4FC): 슬롯 0 Name0 앞에 "go" 를 붙이고 ("go" 로 시작하지 않으면, 0x1A4960, 문자열 0x29D8A8) 0x1AD280 → 0x17A7B8 로
+  **그 이름의 리소스 (형 3 = 오브젝트)** 를 찾는다 — 레지스트리는 이름을 대문자로 바꿔 해시 (0x175C10 → 0x1759F0 → 0x175938 + Hash127) 라 **대소문자 무시** ("Chest" 40 개도 상자).
+  행렬 = **0x1A9CD0: 엔티티 레코드 행렬 (+0x00) · 소유 GO 관절 (+0x40) 월드, 회전 행 정규화** (소유 GO 인스턴스 행렬이 아니다 — 묶음 GO ATHN05A gochestgroup 은 인스턴스 원점,
+  상자마다 엔티티 행렬이 자리를 준다), 그 앞에 슬롯 2 (+0xC0) 배율 대각 행렬, 처음 act = 슬롯 1 Name1 (0x1AD110: 오브젝트 애니에서 Name1 의 대문자 해시와 같은 act),
+  슬롯 3..6 (unk3..unk6 — unk5 = CSM 템플릿, unk6 = 과제 id), 슬롯 16 Filter = 오브젝트 그룹 → 0x1A5130 이 새 GO 를 만든다 (세이브 포인트 Name0 "savepoint" 도 같은 경로,
+  그 밖의 이름은 레벨 WAD 원형 — ATHN05A goaored/goaosks 병사 대 해골병, 43 §19.2-7·8). "chest" = **R_PERMK 오브젝트 `chest`** (MDL_chest·ANM_chest·CDV_chest + FXC 12 개,
+  GO 템플릿 `gochest` = IO_CSM) [확실].
 - ANM_chest act: `chestParts` (0.033 초, 대기), `chestGrab` (1.967 초 — 영웅 chestGrab 과 같은 길이 = CSM ANICSM1 #fea292e6), `chestOpen` (0.633 초, #fea292e7). 관절:
   chestParts, chestLid, magic2/health2/power2 (뚜껑 아래), handle1, magic, health, power, plain.
 - **종류 = CSM "Chest Type"** (#0c67f4f9, 생성자 0x215010 이 enum 으로 +0x9E s16 에, TWK 값의 하위 16 비트): 1 plain, 2 health, 3 magic, 4 power, 5 = 순환.
@@ -694,8 +698,9 @@ PAND05B `pBoxPand05B-Marker511` → `semoMovieHaveBox-…-semo08marker511` (Filt
   숨은 관절에 붙은 이미터는 끈다 [추정: 원작 관절 가시성이 부착물에 미치는 경로 미확인].
 
 **엔진** (`game/ChestProps`, `GameScene.listener().create`):
-- Creator Name0 "chest" → `SceneNav.create` 가 R2 아이템 (`Interactables.addChest`: 종류·오브 템플릿·순환 주기) 을 돌려주고, `ChestProps.spawn` 이 이펙트 라이브러리의 `chest` (R_PERMK, MagicFx 가 이미 등록) 를
-  소유 GO 행렬에 수명 무한으로 재생 — `Effect.jointMask` (종류 마스크), `emitterOff` (숨은 관절 이미터), `hold`.
+- Creator Name0 "chest" (대소문자 무시, `SceneNav.creatorIs`) → `SceneNav.create` 가 R2 아이템 (`Interactables.addChest`: 종류·오브 템플릿·순환 주기) 을 돌려주고, `ChestProps.spawn` 이 이펙트 라이브러리의 `chest` (R_PERMK, MagicFx 가 이미 등록) 를
+  `SceneNav.creatorMatrix` (위 0x1A9CD0) 에 수명 무한으로 재생 — `Effect.jointMask` (종류 마스크), `emitterOff` (숨은 관절 이미터), `hold`. 키 = 소유 GO 이름 (만든 자리가 그 자리일 때),
+  아니면 소유 GO 이름 + "/" + 엔티티 이름 (`creatorKey`, 묶음 상자).
 - 충돌: CDV_chest (평면 hull 6 장, 반지름 20) 를 `Platforms.add` 로 정지 몸에 [추정: 원작 GO 생성이 CDV 마다 충돌 인스턴스를 올린다]. 손잡이 = 관절 handle1 (`Interactables.handles(it, sk, jw, …)`, §20),
   길이 = 상자 chestGrab (`lengthKnown`).
 - act: 대기 chestParts 0 초 정지 → 과제 시간 > 0 이면 chestGrab 을 그 시간에 (놓으면 −4 되감기 그대로) → 완료 chestOpen 을 속도 1 로 재생, 끝 자세 유지 (뚜껑 열림). 완료 오브 = 종류별 OrbEmitter 이름 (`SceneNav.chestEmitter(it, tw)`).

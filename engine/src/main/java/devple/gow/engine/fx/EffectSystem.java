@@ -112,6 +112,8 @@ public final class EffectSystem implements AutoCloseable {
 		public java.util.function.ToDoubleFunction<EffectLibrary.EmitterDef> emitterRate;
 		/** 시간 정지 (act 0 초 포즈 유지 — BMI 갑옷 조각이 깨지기 전, 원작 0x1C1B10 이 애니를 0 초에 둔다). */
 		public boolean hold;
+		/** {@link #setAct} 로 바꾼 act 를 데이터 반복 플래그와 관계없이 되풀이 (스크립트 Animator 모드 비트 0x2 — Creator 오브젝트, 43 문서 §19). */
+		public boolean loopAct;
 		/**
 		 * 코드가 정한 관절 숨김 (참 = 그 관절 숨김, 파트는 쓰는 관절이 모두 숨김이면 안 그림) — act 의 u8 가시성과 합친다. 원작 GO 관절 가시성 표 (+0x104 → +0x54, 0x215AF0:
 		 * 상자 종류별 magic/health/power/plain 관절).
@@ -230,6 +232,9 @@ public final class EffectSystem implements AutoCloseable {
 			if (!hold) {
 				time += dt;
 				actTime += dt;
+				if (loopAct && act != null && act != def.anim() && act.duration > 0 && actTime >= act.duration) {
+					actTime %= act.duration;
+				}
 			}
 			if (time >= life || anchor == null || !anchor.world(tmp)) {
 				stop();
