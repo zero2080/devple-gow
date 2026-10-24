@@ -9,6 +9,7 @@ import devple.gow.tools.wad.WadFile;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.List;
 
 /**
  * 레벨을 넘어 유지되는 게임 상태: 진행도(PlayerState), 스크립트 GlobalData(ScriptHost), 상주 WAD(R_PERMK), 메시지.
@@ -63,6 +64,31 @@ public final class GameSession {
 	 * 세이브에 같이 쓴다 (원작 World_Serialize 0x1B3E48 끝이 표 칸 덩어리를 쓴다).
 	 */
 	public final java.util.LinkedHashMap<String, devple.gow.engine.script.ScriptWorld.Memory> levelMemory = new java.util.LinkedHashMap<>();
+	/**
+	 * 체크포인트 스냅숏 — 원작은 세이브와 같은 직렬화 (Save_Serialize 0x22D490) 를 0x14000 버퍼 0x3387B8 에 메모리로 쓴다 (0x22D418) [확실]: 새 게임
+	 * 레벨 적재가 끝날 때 (상태 9 0x21FD48, 0x29F454 — 메모리카드 불러오기는 읽은 버퍼가 곧 스냅숏), 스크립트 CheckPoint 가 받아들여진 프레임 끝 (0x1B3070, 0x29D960 — 영웅이 점프·떨어짐·줄
+	 * (+0x174 &amp; 0x40E) 이거나 HP &lt; 1 이면 다음 프레임으로 미룸), 세이브 포인트 R2 (0x22D390 → 저장 질문). 사망 메뉴 · 실패 메뉴 · 일시정지 메뉴의
+	 * "마지막 체크포인트에서 다시 시작" (0x21E3D0) 은 이것을 되읽어 두 슬롯 레벨을 다시 올린다 ({@link SaveGame#applyCheckpoint}, 43 §26).
+	 * Warp · Load 는 새 스냅숏을 찍지 않는다 (상태 9 를 거치지 않음) — 레벨을 옮긴 뒤 CheckPoint 전에 죽으면 앞 레벨의 체크포인트로 돌아간다.
+	 * null = 아직 없음 (씬이 첫 틱에 찍는다).
+	 */
+	public SaveGame checkpoint;
+	/**
+	 * 사망 메뉴에서 "쉬움으로 다시 하기" 를 골랐음 (원작 0x29F484: 체크포인트 복원 0x22DA88 이 스냅숏 난이도 대신 0 을 쓴다 — 메모리카드 불러오기만 지운다)
+	 * [확실].
+	 */
+	public boolean easyRestart;
+	/**
+	 * 받아들인 CheckPoint 의 스냅숏 대기 (원작 0x29D960 = 1, 보낸 엔티티 이름 — null = 없음): 프레임 끝 0x1B3070 이 영웅 +0x174 &amp; (0x2 | 0x4 | 0x8 | 0x400)
+	 * (점프·떨어짐·줄) 이거나 HP &lt; 1 이면 찍지 않고 다음 프레임에 다시 본다 [확실]. 전역이라 이음으로 씬이 바뀌어도 남는다. 되읽기는 지운다 (0x1B15E0 → 0x1B33F0).
+	 */
+	public String checkpointPending;
+	/**
+	 * 다음 씬이 이어서 틀 음악 (SND_M_* 이름, "" = 없음, null = 정하지 않음) — 씬이 떠날 때 지금 음악, 세이브·체크포인트 되읽기는 스냅숏의 음악
+	 * (원작 음악 그룹 블록 0xEC, 0x22BD80) [근사: 이름만].
+	 */
+	public String music;
+
 	/** 표에 칸을 연 순서 (처음 읽은 레벨, 0x1B38A8) — 판도라 신전 입구 비우기 규칙용. */
 	private final java.util.List<String> levelTable = new java.util.ArrayList<>();
 	/** 원작 표 칸 수 (0x1B4308 · 0x1B38A8 이 0x78 까지). */
@@ -70,6 +96,16 @@ public final class GameSession {
 
 	/** 레벨이 슬롯에서 내려간다 (이음으로 넘겨 쓰지 않는 세계를 버릴 때): 그 세계의 기억을 표에. */
 	public void rememberLevel(String level, devple.gow.engine.script.ScriptWorld w) {
+		rememberLevel(level, w, null, null);
+	}
+
+	/**
+	 * {@link #rememberLevel(String, devple.gow.engine.script.ScriptWorld)} + 그 레벨 Animator 몸 상태 (원작 덩어리의 GO 상태 기록 +0x28, 씬의
+	 * {@code Platforms.states()}) · 부순 물체 (+0x40) — 세션 시계 (플레이 시간) 를 같이 적어 다시 읽을 때 흐른 시간을 발동 기록에 더한다
+	 * ({@code Memory.aged}).
+	 */
+	public void rememberLevel(String level, devple.gow.engine.script.ScriptWorld w, List<devple.gow.engine.nav.Platforms.State> anims,
+			java.util.Set<String> broken) {
 		if (level == null || w == null) {
 			return;
 		}
@@ -80,17 +116,18 @@ public final class GameSession {
 		if (!levelTable.contains(k)) {
 			levelTable.add(k);
 		}
-		levelMemory.put(k, w.memory());
+		levelMemory.put(k, w.memory().with(anims, broken, playTime));
 	}
 
 	/**
-	 * 레벨을 읽는다 (새 세계를 만들기 전): 표에 칸이 있으면 그 기억, 없으면 새 칸 (null = 처음).
+	 * 레벨을 읽는다 (새 세계를 만들기 전): 표에 칸이 있으면 그 기억 (지금 시계로 늙힌 것), 없으면 새 칸 (null = 처음).
 	 * 판도라 신전 입구 규칙 0x1B38A8 → 0x1B3A10: 새 칸이 "Pand00B" 이고 바로 앞 칸이 "Pand00A" 면 표를 그 두 칸만 남기고 비운다 (두 칸의 덩어리도 비움) [확실].
 	 */
 	public devple.gow.engine.script.ScriptWorld.Memory enterLevel(String level) {
 		String k = level.toUpperCase(java.util.Locale.ROOT);
 		if (levelTable.contains(k)) {
-			return levelMemory.get(k);
+			devple.gow.engine.script.ScriptWorld.Memory m = levelMemory.get(k);
+			return m != null ? m.aged(playTime) : null;
 		}
 		if (k.equals("PAND00B") && !levelTable.isEmpty() && levelTable.getLast().equals("PAND00A")) {
 			levelTable.clear();

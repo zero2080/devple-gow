@@ -412,24 +412,71 @@ public final class ScriptWorld {
 	 *       SpawnEnemy·Creator 는 0x1A6C70 으로 기록된 오브젝트를 되살린다. CreationSensor 모드 5 는 관문 없이 매번 (ATHN04A SuicideBody-SpecialCreationSensor
 	 *       가 GlobalData ShesDeadJim 으로 시신을 다시 켜는 까닭).</li>
 	 * </ul>
-	 * 엔진 근사: 기억 = LevelData 값 + 만들어 둔 Creator (상자·세이브 포인트) + 연 상자 ({@link #opened}) + 오브젝트별 마지막 Vis 값 (GO 상태 기록 +0x48..+0x58 의
-	 * 근사 — 첫 적재에만 도는 모드 1 생성 센서 "VisOff" 를 건너뛰어도 숨은 오브젝트가 숨은 채) — 적 기록·Animator 자세·미뤄 둔 발동은 담지 않는다 (살아 있던
-	 * 시작 생성 적은 다시 나오지 않는다) [근사]. 센서의 한 번 발동 기록도 담지 않는다 (원작 기록 목록에 엔티티 발동 상태가 있는지 미확인) [미확인].
+	 * <b>엔티티 발동 기록</b> (덩어리 +0x30 목록) [확실: 0x1B1830 → 메시지 7 · 0x1B2360 → 메시지 8]: 슬롯을 비울 때 (와 세이브·체크포인트 0x1B3E48) 0x1B1830 이
+	 * 슬롯의 모든 엔티티에 메시지 7 을 보내면 센서·이펙터 (0x1AA410 · 0x1AB758 · 0x1AB9F8 · 0x1AAFE8 …) 는 마지막 발동 시각 +0x68 이 0 보다 크고 재발동 대기
+	 * (0x1AA210: 음수 = FLT_MAX) 가 0 보다 크면 0x1B2280 으로 {+0xC 시각, +0x10 엔티티 번호, +0x12, +0x14} 기록을 남긴다 — SpawnEnemy (0x1AC630) 는 만든 수
+	 * +0x100 이 있어도 남기고 +0x12 = 만든 수 · +0x14 = 죽은 수 (+0x104). 다시 읽을 때 엔티티를 만들자마자 (0x1A7388 → 0x1B2360, 시작 큐 메시지 1 보다 먼저)
+	 * 번호로 기록을 찾아 메시지 8 로 +0x68 (· +0x100 · +0x104) 을 되돌린다. 그래서 <b>한 번만 (재발동 −1) 센서는 다시 읽어도 다시 돌지 않는다</b> —
+	 * ATHN04A 광장 북쪽 계단 DMC TriggerVol0 (재발동 −1) 은 재방문에 결투를 다시 열지 않는다. 시각은 전역 세계 시계 0x29D920 (새 게임 · 셸 0x1A6EC0 과
+	 * 스냅숏 복원 0x1B4450 만 바꾼다) 기준.
+	 * <p>
+	 * 엔진: 기억 = LevelData 값 + 만들어 둔 Creator (상자·세이브 포인트) + 연 상자 ({@link #opened}) + 오브젝트별 마지막 Vis 값 (GO 상태 기록 +0x48..+0x58 의
+	 * 근사 — 첫 적재에만 도는 모드 1 생성 센서 "VisOff" 를 건너뛰어도 숨은 오브젝트가 숨은 채) + 엔티티 발동 기록 ({@link #fired}: 기억할 때 몇 초 전 ·
+	 * 만든 수 · 죽은 수, 시계는 {@link #stamp} — 세션 플레이 시간) + 살아 있는 SpawnEnemy 적 ({@link #enemies}, 원작 +0x20 기록 목록의 형 3 기록 →
+	 * 0x1A6C70 이 SpawnEnemy 시작 메시지에서 다시 낸다 [근사: 자리만, 체력은 처음 값]) + 미뤄 둔 발동 ({@link #pending}, 원작 +0x38 = 큐 0x303DB0 의 그 슬롯
+	 * 항목 {엔티티, 보낸 쪽, 발동 시각} [근사: 보낸 쪽은 영웅 아니면 없음]) + Animator 몸 자세 ({@link #anims}, 원작 GO 상태 +0x28 목록 0x1B1BD0 의 근사 —
+	 * 씬이 채운다) + 부순 물체 ({@link #broken}, 원작 +0x40 목록 — 0x1DDF70 (파괴 상태 진입) → 0x1B4C20 이 GO 번호를 남긴다, 씬이 채운다).
 	 *
 	 * @param levelData LevelData 번호 → 값
 	 * @param created   만들어 둔 Creator 엔티티 이름
 	 * @param vis       오브젝트 → 마지막 Vis 값 ({@link #visState(String)})
 	 * @param visBy     오브젝트 → 그 값을 남긴 Vis 엔티티 이름
 	 * @param opened    연 상자의 Creator 키 ({@link #markOpened})
+	 * @param fired     엔티티 번호 → {마지막 발동이 몇 초 전 (기억할 때, NaN = 없음), 만든 수, 죽은 수}
+	 * @param enemies   살아 있던 SpawnEnemy 적 {만든 엔티티 번호, x, y, z}
+	 * @param pending   미뤄 둔 발동 {엔티티 번호, 남은 초, 보낸 쪽이 영웅이면 1}
+	 * @param anims     Animator 몸 상태 (씬이 {@code Platforms.states()} 로 채운다, 없으면 빈 목록)
+	 * @param broken    부순 물체의 소유 GO 이름 (씬이 {@code Breakables} 에서 채운다)
+	 * @param stamp     기억한 때의 세션 시계 (플레이 시간, NaN = 모름) — 다시 읽을 때 그동안 흐른 시간을 발동 기록에 더한다 ({@link #aged})
 	 */
 	public record Memory(Map<Integer, Object> levelData, java.util.Set<String> created, Map<String, int[]> vis, Map<String, String> visBy,
-			java.util.Set<String> opened) {
+			java.util.Set<String> opened, Map<Integer, float[]> fired, List<float[]> enemies, List<float[]> pending,
+			List<devple.gow.engine.nav.Platforms.State> anims, java.util.Set<String> broken, float stamp) {
+		public Memory(Map<Integer, Object> levelData, java.util.Set<String> created, Map<String, int[]> vis, Map<String, String> visBy,
+				java.util.Set<String> opened) {
+			this(levelData, created, vis, visBy, opened, Map.of(), List.of(), List.of(), List.of(), java.util.Set.of(), Float.NaN);
+		}
+
 		public Memory(Map<Integer, Object> levelData, java.util.Set<String> created, Map<String, int[]> vis, Map<String, String> visBy) {
 			this(levelData, created, vis, visBy, java.util.Set.of());
 		}
 
 		public Memory(Map<Integer, Object> levelData, java.util.Set<String> created) {
 			this(levelData, created, Map.of(), Map.of(), java.util.Set.of());
+		}
+
+		/** 씬 쪽 상태 (Animator 몸 · 부순 물체) 와 세션 시계를 붙인 사본. */
+		public Memory with(List<devple.gow.engine.nav.Platforms.State> anims, java.util.Set<String> broken, float stamp) {
+			return new Memory(levelData, created, vis, visBy, opened, fired, enemies, pending, anims != null ? List.copyOf(anims) : List.of(),
+					broken != null ? java.util.Set.copyOf(broken) : java.util.Set.of(), stamp);
+		}
+
+		/**
+		 * 지금 세션 시계 now 로 본 기억: 기억한 뒤 흐른 시간만큼 발동 기록은 더 오래전, 미뤄 둔 발동은 더 가까이 (원작은 전역 시계 0x29D920 의 절대 시각을
+		 * 기록하므로 내려가 있던 동안에도 시간이 흐른다). 시계를 모르면 그대로.
+		 */
+		public Memory aged(float now) {
+			if (Float.isNaN(stamp) || Float.isNaN(now) || now <= stamp) {
+				return this;
+			}
+			float d = now - stamp;
+			Map<Integer, float[]> f = new LinkedHashMap<>();
+			fired.forEach((id, v) -> f.put(id, new float[]{v[0] + d, v[1], v[2]}));
+			List<float[]> p = new ArrayList<>();
+			for (float[] q : pending) {
+				p.add(new float[]{q[0], Math.max(0, q[1] - d), q[2]});
+			}
+			return new Memory(levelData, created, vis, visBy, opened, f, enemies, p, anims, broken, now);
 		}
 	}
 
@@ -445,7 +492,7 @@ public final class ScriptWorld {
 		return key != null && openedChests.contains(key.toLowerCase(java.util.Locale.ROOT));
 	}
 
-	/** 지금 세계의 레벨 기억 (슬롯을 비울 때 — {@link Memory}). */
+	/** 지금 세계의 레벨 기억 (슬롯을 비울 때 — {@link Memory}). Animator 몸 · 부순 물체 · 세션 시계는 씬이 {@link Memory#with} 로 붙인다. */
 	public Memory memory() {
 		java.util.Set<String> made = new java.util.LinkedHashSet<>();
 		for (ScriptEntity e : createdObjects) {
@@ -460,10 +507,55 @@ public final class ScriptWorld {
 				by.put(o, src.name());
 			}
 		});
-		return new Memory(new HashMap<>(host.levelData()), made, vis, by, new java.util.LinkedHashSet<>(openedChests));
+		return new Memory(new HashMap<>(host.levelData()), made, vis, by, new java.util.LinkedHashSet<>(openedChests), firedRecords(),
+				livingEnemies(), pendingRecords(), List.of(), java.util.Set.of(), Float.NaN);
 	}
 
-	/** {@link #start} 전에: 레벨 기억으로 되살린다 — LevelData 를 그 값으로, 시작 큐의 첫 적재 전용 메시지는 건너뛴다. */
+	/**
+	 * 메시지 7 (0x1AA410 · 0x1AB758 · 0x1AAFE8 · SpawnEnemy 0x1AC630 …) 이 남기는 기록: 발동한 적이 있고 재발동 대기가 0 이 아닌 (음수 = 한 번만) 엔티티,
+	 * SpawnEnemy 는 만든 수가 있으면 그것만으로도 — {몇 초 전 (NaN = 기록 없음), 만든 수, 죽은 수}.
+	 */
+	private Map<Integer, float[]> firedRecords() {
+		Map<Integer, float[]> out = new LinkedHashMap<>();
+		for (ScriptEntity e : entities) {
+			if (EntitySlots.baseIndex(e.type()) < 0 || byId.get(e.id()) != e) {
+				continue; // 번호가 겹치면 (ESC 여럿) 번호로 찾히는 것만 — 되살림도 번호로 찾는다
+			}
+			boolean fired = e.lastTrigger > -Float.MAX_VALUE;
+			boolean keep = fired && floatSlot(e, EntitySlots.REFRACT) != 0;
+			boolean counts = e.type() == 10 && (e.spawnCount > 0 || e.spawnedDeaths > 0);
+			if (keep || counts) {
+				out.put(e.id(), new float[]{fired ? time - e.lastTrigger : Float.NaN, e.spawnCount, e.spawnedDeaths});
+			}
+		}
+		return out;
+	}
+
+	/** 살아 있는 SpawnEnemy 적 {만든 엔티티 번호, x, y, z} (원작 +0x20 엔티티별 오브젝트 기록, 형 3). */
+	private List<float[]> livingEnemies() {
+		List<float[]> out = new ArrayList<>();
+		for (ScriptActor a : actors) {
+			if (a.spawner != null && !a.destroyed && a != player && a.spawner.type() == 10) {
+				out.add(new float[]{a.spawner.id(), a.pos[0], a.pos[1], a.pos[2]});
+			}
+		}
+		return out;
+	}
+
+	/** 미뤄 둔 발동 {엔티티 번호, 남은 초, 보낸 쪽이 영웅이면 1} (원작 +0x38, 0x1B1830 이 큐 0x303DB0 에서 옮김). */
+	private List<float[]> pendingRecords() {
+		List<float[]> out = new ArrayList<>();
+		for (Pending p : pending.stream().sorted(Comparator.comparingDouble(Pending::time).thenComparingLong(Pending::seq)).toList()) {
+			out.add(new float[]{p.entity().id(), Math.max(0, p.time() - time), p.sender() != null && p.sender() == player ? 1 : 0});
+		}
+		return out;
+	}
+
+	/**
+	 * {@link #start} 전에: 레벨 기억으로 되살린다 — LevelData 를 그 값으로, 시작 큐의 첫 적재 전용 메시지는 건너뛴다. 엔티티 발동 기록은 곧바로 (원작
+	 * 0x1A7388 → 0x1B2360: 엔티티를 만들 때 메시지 8 — 시작 큐보다 먼저), 살아 있던 적은 SpawnEnemy 의 시작 메시지에서 (0x1A6C70), 미뤄 둔 발동은
+	 * 시작 큐 뒤 큐로.
+	 */
 	public void restore(Memory m) {
 		if (started || m == null) {
 			return;
@@ -472,6 +564,43 @@ public final class ScriptWorld {
 		host.levelData().clear();
 		host.levelData().putAll(m.levelData());
 		m.opened().forEach(this::markOpened);
+		m.fired().forEach((id, v) -> {
+			ScriptEntity e = byId.get(id);
+			if (e == null) {
+				return;
+			}
+			if (!Float.isNaN(v[0])) {
+				e.lastTrigger = time - v[0];
+			}
+			e.spawnCount = (int) v[1];
+			e.spawnedDeaths = (int) v[2];
+		});
+	}
+
+	/** 되살린 세계: SpawnEnemy e 가 만들어 살아 있던 적을 기록한 자리에 다시 (원작 0x1AC630 메시지 1 → 0x1A6C70, 생성 통지 없음). */
+	private void restoreEnemies(ScriptEntity e) {
+		for (float[] r : restored.enemies()) {
+			if ((int) r[0] != e.id()) {
+				continue;
+			}
+			ScriptActor a = new ScriptActor(e.group() + "#" + e.id(), intSlot(e, EntitySlots.FILTER), new float[]{r[1], r[2], r[3]}, e);
+			actors.add(a);
+			float[] m = e.world.clone();
+			m[12] = r[1];
+			m[13] = r[2];
+			m[14] = r[3];
+			listener.spawnEnemy(new ScriptListener.SpawnRequest(e, a, intSlot(e, "TemplateId"), String.valueOf(slot(e, "Patrol")), m, -1));
+		}
+	}
+
+	/** 되살린 세계: 미뤄 둔 발동을 큐에 (보낸 쪽은 영웅이었으면 영웅, 아니면 없음 [근사]). */
+	private void restorePending() {
+		for (float[] r : restored.pending()) {
+			ScriptEntity e = byId.get((int) r[0]);
+			if (e != null) {
+				pending.add(new Pending(time + r[1], seq++, e, r[2] != 0 ? player : null));
+			}
+		}
 	}
 
 	/** 되살린 세계: 기억한 오브젝트 Vis 값을 다시 보낸다 (시작 큐 뒤 — 모드 5 생성 센서가 그 위에 다시 켤 수 있게 먼저). */
@@ -529,6 +658,9 @@ public final class ScriptWorld {
 		}
 		for (ScriptEntity e : queue) {
 			startMessage(e);
+		}
+		if (restored != null) {
+			restorePending();
 		}
 		createMarkers();
 		runPending();
@@ -619,7 +751,9 @@ public final class ScriptWorld {
 				}
 			}
 			case 10 -> {
-				if (first && e.owner != null && boolSlot(e, "SpawnAtStart", false)) {
+				if (!first) {
+					restoreEnemies(e); // 0x1AC630: 관문이 거짓이면 0x1A6C70 으로 기록된 적을 다시
+				} else if (e.owner != null && boolSlot(e, "SpawnAtStart", false)) {
 					zeroDelay = true;
 					trigger(e, null);
 					zeroDelay = false;

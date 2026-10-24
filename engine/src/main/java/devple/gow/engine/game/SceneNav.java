@@ -71,6 +71,13 @@ public final class SceneNav {
 		}
 
 		/**
+		 * 이웃 레벨 스크립트의 CheckPoint (Internal 0x0) — GameMgr_OnMessage 0x1B0234 는 보낸 엔티티의 슬롯을 보지 않는다 [확실: 코드]
+		 * (예 ATHN05D 가 현재인 채 ATHN05C CheckpointGroup 볼륨에 들어감).
+		 */
+		default void neighbourCheckpoint(ScriptEntity source) {
+		}
+
+		/**
 		 * 이웃 레벨 스크립트의 Vis Visible (슬롯 0: 1 보임 / 2 숨김) — 원작은 두 슬롯 GO 가 같은 렌더 서버에 있어 이웃 스크립트의 숨김도 그대로 화면에 걸린다
 		 * (예 PAND01A AxeAlcWall-CamSensor1: 이벤트 1037 카메라 AltCam43 등이면 goaxealcwall 숨김, 43 §13.8).
 		 */
@@ -307,13 +314,17 @@ public final class SceneNav {
 		try {
 			// 두 슬롯에 그대로 있던 레벨 (이음으로 떠나온 레벨) 은 그 세계를 넘겨 쓴다 — 시작 큐를 다시 돌리지 않는다 (GameSession.residentWorlds, 43 §18)
 			ScriptWorld nw = kept != null ? kept : new ScriptWorld(data, ScriptHost.neighbour(mainHost), neighbourListener);
+			ScriptWorld.Memory mem = null;
+			neighbourMemory = null;
 			if (kept != null) {
 				nw.rebind(neighbourListener);
 			} else {
-				ScriptWorld.Memory mem = host.levelMemory(name); // 레벨 기억 (0x1B38A8 → 0x1B4618)
+				mem = host.levelMemory(name); // 레벨 기억 (0x1B38A8 → 0x1B4618)
+				neighbourMemory = mem;
 				if (mem != null) {
 					nw.restore(mem);
-					System.out.println("이웃 레벨 기억으로 되살림: " + name);
+					System.out.println("이웃 레벨 기억으로 되살림: " + name + " (발동 기록 " + mem.fired().size() + ", 적 " + mem.enemies().size() + ", 몸 "
+							+ mem.anims().size() + ")");
 				}
 			}
 			Interactables ni = Interactables.of(data, otherTweaks != null ? otherTweaks : tweaks);
@@ -330,6 +341,9 @@ public final class SceneNav {
 				neighbourStarting = null;
 				Vector3f p = world.player() != null ? new Vector3f(world.player().pos[0], world.player().pos[1], world.player().pos[2]) : new Vector3f();
 				nw.placePlayer(p.x, p.y, p.z, true); // 이미 서 있는 볼륨은 "안" 으로 (들어올 때 발동하지 않음)
+				if (mem != null && !mem.anims().isEmpty()) {
+					restoreNeighbourPlatforms(mem.anims()); // 레벨 기억의 Animator 몸 (원작 덩어리 GO 상태)
+				}
 			}
 			neighbour = nw;
 			world.linkEvents(nw); // 전역 이벤트 큐 공유 (원작 0x303DB8)
@@ -370,6 +384,13 @@ public final class SceneNav {
 		return neighbour;
 	}
 
+	/** 다른 슬롯 레벨을 되살린 레벨 기억 (부순 물체를 씬이 건다, null = 처음 · 넘겨 씀). */
+	private ScriptWorld.Memory neighbourMemory;
+
+	public ScriptWorld.Memory neighbourMemory() {
+		return neighbourMemory;
+	}
+
 	/**
 	 * 이웃 스크립트가 지금 적을 낸 세계: 시작 큐를 도는 중이면 (SpawnAtStart, {@link #setOther} 안 — 아직 {@link #neighbour()} 가 비었다) 그 세계.
 	 * 예전에는 이 순간의 null 을 전투 다리 세계로 잡아, 시작 스폰 적의 제거·Respawn 이 현재 레벨 세계로 가서 현재 레벨 리스너가 이웃 템플릿을
@@ -393,6 +414,11 @@ public final class SceneNav {
 			@Override
 			public void message(int id, float seconds) {
 				host.message(id, seconds);
+			}
+
+			@Override
+			public void checkpoint(ScriptEntity source) {
+				host.neighbourCheckpoint(source); // GameMgr 메시지 0 은 슬롯 구분 없음 (0x1B0234)
 			}
 
 			@Override

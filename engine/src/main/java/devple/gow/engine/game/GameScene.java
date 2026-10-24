@@ -228,19 +228,27 @@ public final class GameScene implements Scene {
 	/** Creator 가 만든 R2 상자의 모델·충돌 (38 §21). */
 	private final ChestProps chests = new ChestProps();
 
+	/**
+	 * 세이브 · 체크포인트 스냅숏의 두 슬롯을 다시 올린다 (원작 0x1B4528: 지금 레벨 + 다른 슬롯 레벨, 켬 바이트가 선 슬롯만 켬) — 세션은 이미
+	 * {@link SaveGame#applyTo} / {@link SaveGame#applyCheckpoint} 를 거쳤다 (레벨 기억 표가 두 슬롯 덩어리를 갖는다).
+	 */
 	public GameScene(GameSession session, SaveGame save) {
 		this(session, save.level, null, 0);
 		this.loadPos = save.pos;
 		this.loadYaw = save.yaw;
+		this.restoreOther = save.other != null && !save.other.equalsIgnoreCase(save.level) ? save.other.toUpperCase(java.util.Locale.ROOT) : null;
+		this.restoreOtherActive = save.otherActive;
+		this.restoreHeroState = save.heroState;
 	}
 
-	/** 레벨을 새로 읽고 (pos, yaw) 에 둔다 — 실패 화면 다시 하기 ({@link #restartFailed}). */
-	static GameScene at(GameSession session, String levelName, float[] pos, float yaw) {
-		GameScene s = new GameScene(session, levelName, (String) null, 0);
-		s.loadPos = pos;
-		s.loadYaw = yaw;
-		return s;
-	}
+	/** 스냅숏 때 영웅 이동 상태 (NavState 이름, null = 지상) — 벽·사다리면 되읽은 자리에서 다시 붙인다. */
+	private String restoreHeroState;
+
+	/** 스냅숏에서 다시 올리는 다른 슬롯 레벨 (null = 없음) · 켬 여부 (거짓 = LoadForWarp 로 꺼진 채, Warp 준비). */
+	private String restoreOther;
+	private boolean restoreOtherActive = true;
+	/** 이 레벨 세계를 되살린 레벨 기억 (Animator 몸 상태를 시작 뒤에 건다, null = 처음). */
+	private ScriptWorld.Memory restoredMem;
 
 	public GameScene(GameSession session, String levelName, String entry, float autoRun) {
 		this.session = session;
@@ -664,8 +672,13 @@ public final class GameScene implements Scene {
 		ph = devple.gow.engine.core.PerfMonitor.phase(". wireEffects", ph);
 		hudBinding = newHudBinding();
 		boolean seamless = arrival != null && (arrival.kind() == LevelLink.Kind.SEAMLESS || arrival.kind() == LevelLink.Kind.WALK);
-		link = new LevelLink(levelName, seamless ? arrival.from() : null, w -> Stages.exists(session.rom, w));
-		if (link.other() != null) {
+		// 세이브·체크포인트 되읽기는 다른 슬롯 레벨도 다시 올린다 (0x1B4528 → 0x1B2AA8): 켬 바이트가 선 슬롯은 켜고, 아니면 LoadForWarp 처럼 꺼진 채 Warp 준비
+		link = new LevelLink(levelName, seamless ? arrival.from() : restoreOtherActive ? restoreOther : null, w -> Stages.exists(session.rom, w));
+		if (!seamless && restoreOther != null && !restoreOtherActive) {
+			link.handle(new ScriptListener.LevelRequest(ScriptListener.LevelOp.LOAD_FOR_WARP, restoreOther, null, null));
+			warpSlot = link.other();
+		}
+		if (link.other() != null && link.otherActive()) {
 			loadOther(link.other());
 		}
 		ph = devple.gow.engine.core.PerfMonitor.phase(". other", ph);
@@ -697,7 +710,9 @@ public final class GameScene implements Scene {
 			ScriptWorld.Memory mem = session.enterLevel(levelName); // 레벨 기억 (원작 0x1B38A8 → 0x1B4618, GameSession.levelMemory)
 			if (mem != null) {
 				world.restore(mem);
-				System.out.println("레벨 기억으로 되살림: " + levelName + " (LevelData " + mem.levelData().size() + ", Creator " + mem.created().size() + ")");
+				restoredMem = mem;
+				System.out.println("레벨 기억으로 되살림: " + levelName + " (LevelData " + mem.levelData().size() + ", Creator " + mem.created().size()
+						+ ", 발동 기록 " + mem.fired().size() + ", 적 " + mem.enemies().size() + ", 미룸 " + mem.pending().size() + ", 몸 " + mem.anims().size() + ")");
 			}
 		}
 		nav = new SceneNav(level.data(), col, hero, world, session.scriptHost, orbTweaks, navHost());
@@ -727,6 +742,7 @@ public final class GameScene implements Scene {
 		if (otherName != null) {
 			nav.setOther(otherName, otherData, otherCol, nav.neighbourListener(), keptOther, neighbourTweaks(otherData));
 			otherBreakables = otherData != null ? new Breakables(otherData, neighbourTweaks(otherData)) : null;
+			restoreBroken(otherBreakables, nav.neighbourMemory(), true);
 			Resident left = resident(arrival, otherName);
 			if (left != null) { // 이음: 떠나온 레벨 = 다른 슬롯 그대로 (생성 스크립트 결과보다 넘긴 상태가 우선)
 				otherHidden.clear();
@@ -740,13 +756,22 @@ public final class GameScene implements Scene {
 		String arrivalCam = placeSpawn();
 		respawn(spawn);
 		boolean warped = arrival != null && arrival.kind() == LevelLink.Kind.WARP;
-		if (arrival == null || warped) {
-			session.worldStart = session.playTime; // 레벨 적재 = 세계 초기화 (0x1A6EC0: 0x29D924 = 0), 걷기 이음은 이어진다
+		if (arrival == null) {
+			// 세계 시작 0x29D924: 새 게임 (셸 0x29D964 → 0x1A6EC0 = 0) · 세이브·체크포인트 되읽기 (0x1B4450 = 스냅숏 세계 시각) 만 바꾼다 [확실: 쓰는 곳 둘뿐].
+			// Warp 와 이음은 이어진다 — 예전 엔진은 Warp 에서도 다시 잡아 Warp 로 들어온 레벨 시작의 CheckPoint (ARENA06 TimerControl-AutoCheckPoint 등) 를
+			// 1 초 거름에 버렸다 (43 §26)
+			session.worldStart = session.playTime;
 		}
-		if (warped) {
+		if (warped || loadPos != null) {
 			// Warp_Jump → 영웅 SetMatrix 0x1E79D0: 줄이면 놓기 0x1C4FF8(1) → 떨어짐 (+0x174 0x8), 다음 프레임 공중 줄 잡기 0x1C5C20 이
-			// 도착점 줄을 잡는다 — 잡기 대기 없음 (ATRET01A WarpFrmhdes05 = 무덤 줄 gorope1 한가운데, 43 §13.9)
+			// 도착점 줄을 잡는다 — 잡기 대기 없음 (ATRET01A WarpFrmhdes05 = 무덤 줄 gorope1 한가운데, 43 §13.9).
+			// 세이브·체크포인트 되읽기 (Load_PlayerBlock 0x1DC130) 는 행렬과 이동 상태 +0x174 (스냅숏 +0x40, 벽 0x20 등) 를 그대로 되돌린다 — 벽·덩굴·사다리에서 찍은
+			// 스냅숏이면 그 자리 벽 질의로 곧바로 다시 붙이고 (ATHN06C 오라클 덩굴 체크포인트 a06Mp03Done), 아니면 대기 없는 공중 잡기 [근사: 붙은 상태 세부]
 			nav.navigator.warpArrived();
+			if (loadPos != null && restoreHeroState != null && restoreHeroState.matches("WALL_CLIMB|LADDER|WALL_WALK")) {
+				boolean on = nav.navigator.reattachWall();
+				System.out.println("되읽은 이동 상태 " + restoreHeroState + (on ? " → 벽에 다시 붙음" : " → 벽 질의 빗나감 (공중)"));
+			}
 		}
 		ph = devple.gow.engine.core.PerfMonitor.phase(". spawn", ph);
 		checkpoint.set(spawn);
@@ -758,6 +783,7 @@ public final class GameScene implements Scene {
 		if (boss != null) {
 			boss.attach(arena());
 		}
+		resumeMusic(); // 시작 스크립트의 MusicGroupStart 가 그 위에 바꿀 수 있게 먼저
 		world.start(); // 넘겨 쓴 세계면 이미 돌았으므로 그대로 (ScriptWorld.start 는 한 번)
 		if (keptWorld != null) {
 			world.recreate(); // 상자·세이브 포인트·살아 있는 적을 이 씬에 다시
@@ -765,6 +791,10 @@ public final class GameScene implements Scene {
 		if (keptOther != null && nav.neighbour() == keptOther) {
 			keptOther.recreate(); // 이웃 리스너: 적 (이웃 스폰 규칙) · 세이브 포인트·상자 Creator (연 상자는 연 채) · Vis 상태
 		}
+		if (restoredMem != null && !restoredMem.anims().isEmpty()) {
+			nav.restorePlatforms(restoredMem.anims()); // 레벨 기억의 Animator 몸 (원작 덩어리 GO 상태 +0x28 — 열린 문은 열린 채, 발동 기록이 다시 틀지 않으므로)
+		}
+		restoreBroken(breakables, restoredMem, false); // 부순 물체 (+0x40) — ATHN05C 항아리 방 돌문 gobreakdoorstone
 		if (keptWorld == null) {
 			applyArriveState(world, levelName);
 		}
@@ -1117,6 +1147,9 @@ public final class GameScene implements Scene {
 		if (lights != null) {
 			lights.removeSource(otherName);
 		}
+		if (nav != null) {
+			nav.clearOther(); // 내려가는 슬롯 기억 (levelLeft: 몸 · 부순 물체) — 이웃 필드를 비우기 전에
+		}
 		otherName = null;
 		otherCol = null;
 		otherData = null;
@@ -1125,7 +1158,6 @@ public final class GameScene implements Scene {
 		otherPosed.clear();
 		otherScenePending = true;
 		if (nav != null) {
-			nav.clearOther();
 			rememberResidentWorlds();
 		}
 		if (cameraRig != null) {
@@ -1177,6 +1209,9 @@ public final class GameScene implements Scene {
 			rememberResidentWorlds(); // 다른 슬롯이 새 레벨로 — 예전 슬롯 세계는 버린다 (0x1BC110)
 		}
 		otherBreakables = otherData != null ? new Breakables(otherData, neighbourTweaks(otherData)) : null;
+		if (nav != null) {
+			restoreBroken(otherBreakables, nav.neighbourMemory(), true);
+		}
 		if (cameraRig != null) {
 			cameraRig.setOther(otherData);
 		}
@@ -1328,8 +1363,14 @@ public final class GameScene implements Scene {
 			}
 
 			@Override
+			public void neighbourCheckpoint(ScriptEntity source) {
+				onCheckpoint(source); // 이웃 슬롯 CheckPoint 도 같은 GameMgr 메시지 0 (0x1B0234)
+			}
+
+			@Override
 			public void levelLeft(String level, ScriptWorld w) {
-				session.rememberLevel(level, w);
+				// 내려가는 슬롯 몸 · 부순 물체 (아직 바뀌기 전 — loadOther · unloadOther 는 이웃 필드를 이 뒤에 바꾼다)
+				session.rememberLevel(level, w, nav != null ? nav.neighbourPlatforms().states() : null, brokenOwners(otherBreakables));
 				if (nav != null) { // 내려가는 슬롯의 상자 몸 (이웃 R2 목록은 SceneNav 가 비운다)
 					java.util.List<devple.gow.engine.nav.Interactables.Item> gone = nav.neighbourItems().items();
 					chests.remove(p -> gone.contains(p.item));
@@ -1496,12 +1537,7 @@ public final class GameScene implements Scene {
 
 			@Override
 			public void checkpoint(ScriptEntity source) {
-				if (!acceptCheckpoint(source, hero.player.hp, session.playTime - session.worldStart)) {
-					return;
-				}
-				checkpoint.set(hero.ctl.position);
-				checkpointYaw = hero.ctl.yaw;
-				System.out.println("체크포인트 " + checkpoint);
+				onCheckpoint(source);
 			}
 
 			@Override
@@ -1777,10 +1813,63 @@ public final class GameScene implements Scene {
 
 	/** 씬을 떠난다: 두 슬롯 세계를 레벨 기억에 (이음으로 넘겨 쓰는 세계는 그대로 이어지고, 버려지는 세계는 다시 읽을 때 되살아난다 — GameSession.levelMemory). */
 	private void rememberLevels() {
-		session.rememberLevel(levelName, world);
+		session.rememberLevel(levelName, world, nav != null ? nav.platformStates() : null, brokenOwners(breakables));
 		if (nav != null && nav.neighbour() != null && otherName != null) {
-			session.rememberLevel(otherName, nav.neighbour());
+			session.rememberLevel(otherName, nav.neighbour(), nav.neighbourPlatforms().states(), brokenOwners(otherBreakables));
 		}
+	}
+
+	/**
+	 * 음악 이어 틀기: 원작 음악 그룹 상태 (0x2A26A8, 스트림 6 의 0xEC 바이트 0x22BD58 / 0x22BD80) 는 레벨을 넘어 전역이고 세이브·체크포인트가 담아 되돌린다 —
+	 * 엔진 씬은 떠날 때 소리를 모두 멈추므로 지금 음악 이름을 세션에 넘겨 새 씬에서 다시 튼다 (되읽기면 스냅숏의 음악) [근사: 이름만 — 재생 위치 · 층 볼륨은
+	 * 처음부터]. 발동 기록이 이어져 음악을 튼 센서 (재발동 −1) 가 다시 돌지 않으므로 필요하다.
+	 */
+	private void resumeMusic() {
+		String m = session.music;
+		session.music = null;
+		if (m == null || m.isEmpty() || session.sound.currentMusic() != null) {
+			return;
+		}
+		int h = session.sound.music(m, 0);
+		System.out.println("음악 이어서: " + m + (h == 0 ? " (뱅크에 없음)" : ""));
+	}
+
+	/** 부순 물체의 소유 GO 이름 (원작 덩어리 +0x40 목록, 0x1DDF70 → 0x1B4C20). */
+	private static java.util.Set<String> brokenOwners(Breakables b) {
+		java.util.Set<String> out = new java.util.LinkedHashSet<>();
+		if (b != null) {
+			for (Breakables.Item it : b.items()) {
+				if (it.broken()) {
+					out.add(it.owner);
+				}
+			}
+		}
+		return out;
+	}
+
+	/**
+	 * 레벨 기억의 부순 물체를 부순 채로 (오브 · 파괴 애니 · Marker 파괴 없이): 정적 메시 숨김 + 충돌 끔 — 원작은 +0x40 기록으로 GO 를 파괴 상태로 되돌린다
+	 * [근사: Marker 오브젝트는 남긴다]. other = 다른 슬롯 레벨.
+	 */
+	private void restoreBroken(Breakables b, ScriptWorld.Memory m, boolean other) {
+		if (b == null || m == null || m.broken().isEmpty()) {
+			return;
+		}
+		for (String owner : m.broken()) {
+			Breakables.Item it = b.item(owner);
+			if (it == null || it.broken) {
+				continue;
+			}
+			it.broken = true;
+			if (other) {
+				otherHidden.add(owner.toLowerCase(java.util.Locale.ROOT));
+				nav.neighbourPlatforms().setSolid(owner, false);
+			} else {
+				level.hideInstance(owner);
+				nav.navWorld.platforms().setSolid(owner, false);
+			}
+		}
+		System.out.println("부순 물체 그대로 (" + (other ? "다른 슬롯 " : "") + "레벨 기억): " + m.broken());
 	}
 
 	private void goToLevel(String wad, String entryName) {
@@ -2836,12 +2925,10 @@ public final class GameScene implements Scene {
 			closeSaveMenu(11); // FLP 가 ○ 에서 SaveGameMenu "Off" (질문만 숨김) — Ω 배경은 SaveGame_Event 0 까지 남는다
 			return;
 		}
-		Vector3f p = new Vector3f(hero.ctl.position);
-		float yaw = hero.ctl.yaw;
-		// 원작 World_Serialize 0x1B3E48: 올라 있는 두 슬롯도 0x1B4080(…, 0) 으로 표 칸에 쓴 뒤 표 전체를 쓴다 → 지금 레벨 상태도 세이브에 (43 §21)
-		rememberLevels();
-		saveFlow = MemoryCardFlow.save(hud.variables(), session.messages, SaveGame.dir(),
-				() -> SaveGame.capture(session, levelName, new float[]{p.x, p.y, p.z}, yaw));
+		// 메모리카드 쓰기 (0x230A98) 는 R2 때 찍은 스냅숏 버퍼 0x3387B8 를 그대로 쓴다 (0x22D390 → 0x22D418 뒤 저장 질문) — 그 스냅숏 = 두 슬롯 덩어리를
+		// 표에 쓴 World_Serialize 0x1B3E48 (43 §21, §26)
+		SaveGame snap = session.checkpoint;
+		saveFlow = MemoryCardFlow.save(hud.variables(), session.messages, SaveGame.dir(), () -> snap != null ? snap : snapshot());
 		saveFlow.start();
 	}
 
@@ -2849,8 +2936,6 @@ public final class GameScene implements Scene {
 		saveFlow.update(dt);
 		switch (saveFlow.result()) {
 			case SAVED -> {
-				checkpoint.set(hero.ctl.position);
-				checkpointYaw = hero.ctl.yaw;
 				System.out.println("저장 완료: " + MemoryCardFlow.file(SaveGame.dir(), saveFlow.fileIndex()));
 				saveFlow = null;
 				closeSaveMenu(21); // 상태 17: MemoryCard_Event 0 (흐름이 이미 보냄) → 10 프레임 → 상태 18 (1 + 10 프레임) → SaveGame_Event 0
@@ -2868,27 +2953,104 @@ public final class GameScene implements Scene {
 	}
 
 	private void heroDied() {
+		if (deadMenu > 0 || failedMenu || leaving) {
+			return; // 한 번 (같은 틱의 데스존 + HP 0)
+		}
 		if (auto != null) {
 			auto.died(hero.ctl.position);
 		}
 		hero.player.deaths++;
 		orbPickups.clear(); // 영웅 HP ≤ 0 이면 떠 있던 오브는 사라진다 (0x226710)
-		if (auto == null && bot == null && debugInput == null && System.getProperty("gow.nodeadmenu") == null) {
+		if ((auto == null || AutoPlay.DEAD_MENU) && bot == null && debugInput == null && System.getProperty("gow.nodeadmenu") == null) {
 			openDeadMenu();
 			return;
 		}
-		restartAtCheckpoint();
+		restartFromCheckpoint(false);
 	}
 
-	private void restartAtCheckpoint() {
-		hero.player.onCheckpointRestart(hero.player.hp);
-		respawnAtCheckpoint();
+	/**
+	 * 스크립트 CheckPoint (Internal 0x0, 이웃 슬롯 것 포함): 거름 (0x1B0234) 을 지나면 프레임 끝 스냅숏을 기다린다 (0x29D960 = 1 → 0x1B3070).
+	 */
+	private void onCheckpoint(ScriptEntity source) {
+		if (!acceptCheckpoint(source, hero.player.hp, session.playTime - session.worldStart)) {
+			return;
+		}
+		session.checkpointPending = source != null ? source.name() : "CheckPoint";
 	}
 
-	/** 체크포인트 자리·방향으로 (원작 스냅샷의 플레이어 행렬) [확실: 위치·방향 / 근사: 세계 상태는 되돌리지 않음]. */
-	private void respawnAtCheckpoint() {
-		respawn(checkpoint);
-		hero.ctl.yaw = checkpointYaw;
+	/**
+	 * 프레임 끝 (원작 0x1B3070, 게임 상태 0xB): 기다리는 체크포인트가 있으면 영웅이 점프·떨어짐·줄 (+0x174 &amp; 0x40E — 엔진 {@link #heroStateBits}
+	 * 0x4 · 0x8 · 0x400, 0x2 는 엔진에 없음 [미확인: 뜻]) 이 아니고 HP ≥ 1 일 때 찍는다. 아니면 다음 프레임에 다시 [확실].
+	 */
+	private void checkpointFrameEnd() {
+		if (session.checkpoint == null) {
+			takeCheckpoint("레벨 적재"); // 새 게임 · 하네스 시작: 상태 9 의 적재 끝 스냅숏 (0x21FD48, 0x29F454) — 불러오기는 세이브가 곧 스냅숏
+			return;
+		}
+		if (session.checkpointPending == null || snapshotWaits(heroStateBits(), hero.player.hp)) {
+			return;
+		}
+		String why = session.checkpointPending;
+		session.checkpointPending = null;
+		takeCheckpoint(why);
+	}
+
+	/** 0x1B3070 의 미룸: 영웅 +0x174 &amp; (0x2 | 0x4 | 0x8 | 0x400) 이거나 HP (+0x178) &lt; 1.0 이면 이 프레임은 찍지 않는다 (시험용으로 따로). */
+	static boolean snapshotWaits(int heroStateBits, float hp) {
+		return hp < 1f || (heroStateBits & 0x40E) != 0;
+	}
+
+	/**
+	 * 체크포인트 스냅숏 (0x22D418 → Save_Serialize 0x22D490): 사망 수를 0 으로 (Save_PlayerBlock 0x1DBFD8 이 살아 있는 +0x48 을 지운다), 올라 있는 두
+	 * 슬롯을 표에 쓰고 (0x1B3E48 → 0x1B4080(…, 0)) 세션 전체를 담는다 ({@link SaveGame#capture}). 사망 메뉴 재시작은 이것을 되읽는다.
+	 */
+	private void takeCheckpoint(String why) {
+		hero.player.deaths = 0;
+		session.checkpoint = snapshot();
+		checkpoint.set(hero.ctl.position);
+		checkpointYaw = hero.ctl.yaw;
+		System.out.printf(java.util.Locale.ROOT, "체크포인트 스냅숏 (%s) %s (%.0f, %.0f, %.0f) 다른 슬롯 %s%n", why, levelName, checkpoint.x, checkpoint.y,
+				checkpoint.z, session.checkpoint.other == null ? "-" : session.checkpoint.other + (session.checkpoint.otherActive ? "" : " (꺼짐)"));
+	}
+
+	/** 지금 세션 스냅숏 (두 슬롯 세계를 표에 쓴 뒤). */
+	private SaveGame snapshot() {
+		rememberLevels();
+		Vector3f p = hero.ctl.position;
+		String other = otherName != null ? otherName : warpSlot;
+		SaveGame g = SaveGame.capture(session, levelName, other, otherName != null, new float[]{p.x, p.y, p.z}, hero.ctl.yaw);
+		devple.gow.engine.nav.NavState st = nav != null ? nav.navigator.state() : devple.gow.engine.nav.NavState.GROUND;
+		g.heroState = st == devple.gow.engine.nav.NavState.GROUND ? null : st.name(); // 영웅 +0x174 (스냅숏 +0x40)
+		return g;
+	}
+
+	/**
+	 * "마지막 체크포인트에서 다시 시작" (사망 메뉴 0x220360 · 실패 메뉴 · 일시정지 메뉴 → Game_RestartCheckpoint 0x21E3D0) [확실: 흐름]: 메시지 정리
+	 * (0x1B9118), 음악 (0x22B208), 메모리카드 표시 0x29F444 = 0, 0x22D440 → 명령 0xF (두 슬롯 내림, 0x22D660 단계 0) · 0x10 (스냅숏 되읽기 0x22D660 단계 1:
+	 * 게임 블록 · 세계 0x1B4450 · 두 슬롯 다시 올림 0x1B4528), 상태 9 — 적재 끝에 "Restarted or loaded save game" (0x1A7C80) 이 플레이어·카메라·음악·
+	 * GameMgr 블록을 되돌린다 (0x22DA88). 엔진: 스냅숏을 세션에 ({@link SaveGame#applyCheckpoint}) → 스냅숏 레벨 + 다른 슬롯을 새 씬으로. 체크포인트
+	 * 뒤에 연 상자는 닫히고 얻은 아이템·LevelData·적·스크립트 상태는 스냅숏 때로 돌아간다 (영상 8202–8224 깃털 상자). 카메라 블록 (0xC0) · 음악 블록
+	 * (0xEC) 은 되돌리지 않는다 [근사: 씬이 새로 고른다].
+	 *
+	 * @param easy 사망 메뉴 "쉬움으로 다시 하기" (0x29F484 = 1)
+	 */
+	private void restartFromCheckpoint(boolean easy) {
+		SaveGame cp = session.checkpoint;
+		if (cp == null || pendingEngine == null || leaving) {
+			// 스냅숏이 없거나 씬 전환을 못 하면 (헤드리스) 예전처럼 자리만 [엔진 전용]
+			hero.player.onCheckpointRestart(hero.player.hp);
+			respawn(checkpoint);
+			hero.ctl.yaw = checkpointYaw;
+			return;
+		}
+		cp.applyCheckpoint(session, easy);
+		if (auto != null) {
+			session.autoCarry = auto;
+		}
+		leaving = true;
+		System.out.printf(java.util.Locale.ROOT, "체크포인트에서 다시 → %s (%.0f, %.0f, %.0f)%s, 사망 %d, HP %.0f%s%n", cp.level, cp.pos[0], cp.pos[1], cp.pos[2],
+				cp.other != null ? " + " + cp.other : "", session.player.deaths, session.player.hp, easy ? " (쉬움으로)" : "");
+		pendingEngine.scenes().transitionTo(new GameScene(session, cp));
 	}
 
 	/**
@@ -2952,15 +3114,10 @@ public final class GameScene implements Scene {
 			return;
 		}
 		if (c == 2) {
-			// 쉬움으로 다시 하기: 난이도 0 (세이브에도 0), 적 배율·회복 시간도 새 난이도로
-			session.difficulty = 0;
-			hero.difficulty = 0;
-			for (Enemy en : enemies) {
-				en.fighter().setDifficulty(0);
-			}
+			// 쉬움으로 다시 하기 (0x2204BC: 0x29F484 = 1 → 0x21E3D0): 체크포인트 복원 0x22DA88 이 난이도 0 (세이브에도 0) — 새 씬의 적·영웅이 그 난이도로
 			System.out.println("쉬움으로 다시 하기 (사망 " + hero.player.deaths + ")");
 		}
-		restartAtCheckpoint();
+		restartFromCheckpoint(c == 2);
 	}
 
 	/**
@@ -3019,7 +3176,10 @@ public final class GameScene implements Scene {
 		}
 		System.out.println("실패 화면 (FailedScreen)");
 		if (auto != null || bot != null || debugInput != null || System.getProperty("gow.nodeadmenu") != null || hud == null) {
-			restartFailed();
+			if (auto != null) {
+				auto.died(hero.ctl.position);
+			}
+			restartFromCheckpoint(false);
 			return;
 		}
 		paused = true;
@@ -3038,30 +3198,9 @@ public final class GameScene implements Scene {
 			pendingEngine.scenes().transitionTo(new ShellScene(session.rom)); // 나가기 → 주 메뉴
 			return;
 		}
-		restartFailed();
-	}
-
-	/**
-	 * 실패 뒤 다시 하기: 원작은 체크포인트 스냅샷 복원 (0x22D440 — 플레이어 블록 0x1DC130 이 타이머 표를 비우고 0x1B15E0 이 GameMgr 블록 0x3368F8 을
-	 * 되돌림, 레벨 스크립트 상태 · 영웅 자세 (덩굴에 매달린 채) 도 스냅샷 것). 엔진은 세계·영웅 상태 스냅샷이 없어 이 레벨을 처음 상태로 새로 읽고 (레벨 기억
-	 * 지움) 마지막 체크포인트 자리·방향에 둔다 — 떨어진 오라클 · 시작된 아레나처럼 실패가 바꾼 세계를 되돌리려면 세계를 새로 시작해야 하고, 오라클
-	 * 체크포인트 (a06Mp03Done) 는 덩굴 위라 진행 중 LevelData 로 되살리면 떨어지자마자 heroFAILS 로 다시 실패한다 [근사: 이 레벨 진행이 처음으로].
-	 */
-	private void restartFailed() {
-		hero.player.onCheckpointRestart(hero.player.hp);
-		world.host().timers.reset();
-		if (pendingEngine == null || leaving) {
-			respawnAtCheckpoint();
-			return;
-		}
-		session.levelMemory.remove(levelName.toUpperCase(java.util.Locale.ROOT));
-		if (auto != null) {
-			auto.died(hero.ctl.position);
-			session.autoCarry = auto;
-		}
-		leaving = true;
-		System.out.printf(java.util.Locale.ROOT, "실패 → %s 다시 (체크포인트 %.0f, %.0f, %.0f)%n", levelName, checkpoint.x, checkpoint.y, checkpoint.z);
-		pendingEngine.scenes().transitionTo(at(session, levelName, new float[]{checkpoint.x, checkpoint.y, checkpoint.z}, checkpointYaw));
+		// 실패 메뉴도 상태 0xE (0x21D808 → 0x220360) 라 다시 하기 = 사망 메뉴와 같은 Game_RestartCheckpoint 0x21E3D0 (스냅숏 되읽기) [확실] —
+		// 떨어진 오라클 · 시작된 아레나는 스냅숏 때로 돌아간다 (69cfd3e 의 "레벨을 처음 상태로" 근사 대신)
+		restartFromCheckpoint(false);
 	}
 
 	/** 게임 씬의 HUD 바인딩: 미터 자동 표시, 마지막으로 본 값은 세션 것 (레벨을 넘어 유지). */
@@ -3099,7 +3238,7 @@ public final class GameScene implements Scene {
 		paused = false;
 		hud.acceptInput = true;
 		if (name.endsWith("Menu_Choice") && "1".equals(String.valueOf(value).replace(".0", ""))) {
-			respawnAtCheckpoint();
+			restartFromCheckpoint(false); // 일시정지 메뉴 1 = 체크포인트 재시작 (상태 12 0x220200 → 0x21E3D0)
 		}
 	}
 
@@ -3203,7 +3342,7 @@ public final class GameScene implements Scene {
 		if (debugInput != null && (questionId >= 0 || powerUp || pickupOpen)) {
 			debugInput.advance(dt); // 질문·업그레이드 메뉴·아이템 카드 중에는 게임 틱이 멈추므로 스크립트 입력을 여기서 진행해 HUD 로 (검증용, 43 §17)
 			hud.update(debugInput);
-		} else if (auto != null && (questionId >= 0 || pickupOpen || saveAsk || saveFlow != null)) {
+		} else if (auto != null && (questionId >= 0 || pickupOpen || saveAsk || saveFlow != null || deadMenu == 2)) {
 			// 자동 플레이: 질문·카드·세이브 질문·메모리카드 화면은 ○ 로 기본 선택지, 메모리카드 예/아니오 (기본 아니오) 는 ↑ 뒤 ○ (검증용)
 			hud.update(auto.menu(dt, saveFlow != null && saveFlow.yesNoScreen()));
 		} else {
@@ -3274,6 +3413,7 @@ public final class GameScene implements Scene {
 		}
 		boolean use = e.input().pressed(PadButton.USE) || lastInput != null && lastInput.pressed(PadButton.USE);
 		if (use && !hero.combat.active() && nearSavePoint()) {
+			takeCheckpoint("세이브 포인트"); // 0x1DC4DC → 0x22D390: 스냅숏 (0x22D418) 뒤 저장 질문 (0x21D8B0)
 			askSave();
 			return;
 		}
@@ -3304,6 +3444,18 @@ public final class GameScene implements Scene {
 		}
 		if (auto != null) {
 			auto.redOrbs = hero.player.redOrbs;
+			if (auto.takeDie()) {
+				hero.player.hp = 0; // 경로 단계 die: (검증) 이번 틱 끝에 사망 → 체크포인트 재시작
+			}
+			String brk = auto.takeBreak();
+			if (brk != null) { // 경로 단계 break: (검증) 부서지는 물체를 부순다 — 공격으로 부술 때와 같은 길 (Marker 파괴 · 숨김 · 충돌 · 오브)
+				Breakables.Item bi = breakables.item(brk);
+				if (bi != null) {
+					breakables.damage(bi, 1e6f, world, this::onBreak);
+				} else if (otherBreakables != null && otherBreakables.item(brk) != null) {
+					otherBreakables.damage(otherBreakables.item(brk), 1e6f, nav.neighbour(), this::onBreakOther);
+				}
+			}
 			float[] tp = auto.takeTeleport();
 			if (tp != null) {
 				float yaw = hero.ctl.yaw;
@@ -3503,6 +3655,9 @@ public final class GameScene implements Scene {
 		surfaceDamage(dt);
 		if (hero.player.hp <= 0) {
 			heroDied();
+		}
+		if (!leaving && deadMenu == 0 && !failedMenu) {
+			checkpointFrameEnd(); // 0x1B3070 (프레임 끝): 기다리는 CheckPoint 스냅숏
 		}
 		footsteps(dt);
 		Vector3f fwd = new Vector3f(cam.target).sub(cam.eye).normalize();
@@ -4549,6 +4704,9 @@ public final class GameScene implements Scene {
 		otherPrep.clear(); // 진행 중인 CPU 단계는 끝나면 버려진다 (GL 없음)
 		if (levelPrep != null) { // enter 없이 버려진 장면 (없어야 정상)
 			levelPrep = null;
+		}
+		if (session.music == null) {
+			session.music = session.sound.currentMusic(); // 음악 그룹 상태는 전역 (0x2A26A8) — 다음 씬이 이어서 튼다 (enter)
 		}
 		session.sound.stopAll();
 		session.sound.unload(level.data().wad.name());

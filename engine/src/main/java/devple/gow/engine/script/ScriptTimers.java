@@ -79,6 +79,32 @@ public final class ScriptTimers {
 		}
 	}
 
+	/**
+	 * 표 그대로 {남은[4], 길이[4], 플래그[4]} — 원작 GameMgr 블록 0x3368F8 (0x1C4 바이트) 을 세이브·체크포인트 스트림 7 로 통째로 쓴다 (0x1B15B8) [확실].
+	 */
+	public float[] save() {
+		float[] out = new float[SLOTS * 3];
+		for (int i = 0; i < SLOTS; i++) {
+			out[i] = remaining[i];
+			out[SLOTS + i] = duration[i];
+			out[2 * SLOTS + i] = flags[i];
+		}
+		return out;
+	}
+
+	/** {@link #save()} 를 되돌린다 (0x1B15E0: 체크포인트 재시작은 +0x00..+0x2F 타이머·동영상 칸만, 본 동영상 목록 +0x30.. 은 지금 것 유지). null = 비움. */
+	public void restore(float[] v) {
+		reset();
+		if (v == null || v.length < SLOTS * 3) {
+			return;
+		}
+		for (int i = 0; i < SLOTS; i++) {
+			remaining[i] = v[i];
+			duration[i] = v[SLOTS + i];
+			flags[i] = (int) v[2 * SLOTS + i];
+		}
+	}
+
 	/** 0x1A72C8. */
 	public void reset() {
 		for (int i = 0; i < SLOTS; i++) {

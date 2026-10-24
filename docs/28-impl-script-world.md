@@ -126,13 +126,21 @@ BallHull 수정: 평면 수를 헤더 0x38 이 아니라 hull 별 평면 수의 
   판도라 입구 "Pand00A" → "Pand00B" 면 표 비우기 0x1B3A10), `rememberLevel` (씬을 떠날 때 두 슬롯 · 다른 슬롯이 바뀌거나 LoadForWarp 로 비울 때 · 세이브 직전),
   `ScriptWorld.restore` (start 전). 넘겨 쓰는 이음 세계 (`residentWorlds`) 는 그대로 이어지고, 버려졌다 다시 읽는 레벨만 되살린다. 세이브에 표를 같이 쓴다.
 - 연 상자 (`ScriptWorld.markOpened` / `opened`, Creator 키) 도 기억·세이브 (`levelOpened.*`) 에 담는다 — 다시 만든 상자는 연 채 (43 §21.2-6, `NeighbourChestTest`).
-- [근사] 적 기록 (살아 있던 적) · Animator 자세 · 미뤄 둔 발동 · 센서 한 번 발동 기록은 담지 않는다. 시험 `LevelMemoryTest`.
+- 엔티티 발동 기록 (원작 덩어리 +0x30, 메시지 7 → 0x1B2280 / 메시지 8 ← 0x1B2360, 11 §5.4) [확실]: `Memory.fired` = 엔티티 번호 → {몇 초 전, 만든 수, 죽은 수} —
+  발동한 적이 있고 재발동 대기가 0 이 아닌 엔티티 (음수 = 한 번만), SpawnEnemy 는 만든 수만 있어도. `restore` 가 시작 전에 `lastTrigger` · `spawnCount` ·
+  `spawnedDeaths` 를 되돌려 **한 번만 센서는 재방문에 다시 돌지 않는다** (ATHN04A 광장 DMC TriggerVol0 → 키클롭스 결투, 43 §26). 시계: 기억할 때의 세션 플레이 시간
+  (`stamp`) → 다시 읽을 때 흐른 시간을 더한다 (`aged`, 원작은 전역 시계의 절대 시각).
+- 살아 있는 SpawnEnemy 적 (`enemies`, 원작 +0x20 형 3 기록) 은 되살린 세계의 SpawnEnemy 시작 메시지에서 기록한 자리에 다시 (0x1AC630 → 0x1A6C70, 등장 동작 없음),
+  미뤄 둔 발동 (`pending`, +0x38) 은 시작 큐 뒤 큐로, Animator 몸 (`anims`) · 부순 물체 (`broken`) 는 씬이 붙여 (`GameSession.rememberLevel(…, anims, broken)`) 씬이
+  되돌린다 (`SceneNav.restorePlatforms` · `GameScene.restoreBroken`) [근사: 적은 자리만 — 체력 처음 값, 보낸 쪽은 영웅 아니면 없음].
+- 체크포인트 스냅숏도 같은 표를 담는다 (`SaveGame`, 11 §5.6). 시험 `LevelMemoryTest`, `CheckpointRestartTest`.
 
 ## 10. 스크립트 타이머 · 카메라 이름 · 실패 화면 (43 §23) [확실: 디스어셈블]
 - GameMgr 타이머 표 0x3368F8 (칸 4) — Internal 0x14 만들기 · 0x15/0x16 멈춤/다시 · 0x17 지움 · 0x18 남은 초 · 0x19 HUD 모래시계 (13 §6.1). 매 프레임 스크립트 세계
   갱신 (0x1A7A78) 이 1/60 씩 줄이고 다 되면 전역 이벤트 1050 (인자 0 = 번호, 보낸 쪽 = 영웅). 표는 하나라 두 슬롯이 같이 쓴다.
 - 엔진: `ScriptTimers` (`GameScriptHost.timers`, `ScriptHost.neighbour` 와 공유), `ScriptHost` 가 0x14–0x19 를 처리하고 (0x14 · 0x18 은 값 반환), `GameScene.scriptTimers` 가
-  `world.tick` 다음에 (일시정지·질문·카드·메뉴 동안은 세계와 같이 멈춤) 줄이고 1050 을 보낸다 (`world.postEvent` → 이웃 세계도). 실패 화면 다시 하기 · 레벨 새로 읽기에서 비움.
+  `world.tick` 다음에 (일시정지·질문·카드·메뉴 동안은 세계와 같이 멈춤) 줄이고 1050 을 보낸다 (`world.postEvent` → 이웃 세계도). 체크포인트 · 세이브는 표를 담고
+  (`ScriptTimers.save`) 되읽기가 되돌린다 (`restore`, 0x1B15E0).
 - 0xD / 0xE (지금 / 바로 앞 카메라 이름) → `ScriptListener.cameraName` (`GameScene` 이 `CameraRig.onSwitch` 로 기록, 이웃 리스너는 `SceneNav.Host.cameraName`).
 - 0x13 FailedScreen → `ScriptListener.internal` → `GameScene.failedScreen` (이웃 슬롯도 `SceneNav.neighbourInternal`) (11 §5.5).
 - 1008 을 Creator 가 만든 GO 에 보내면 그 GO 를 지운다 (13 §4.1) → `GameScene.destroyCreated` (`ScriptWorld.destroy` = DestructionSensor).

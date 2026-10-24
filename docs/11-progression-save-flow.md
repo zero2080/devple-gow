@@ -222,7 +222,7 @@ ESC Internal 변수 44/45/48/50/57(07 문서) = 눈/깃털/난이도/블레이�
 | 0x00 | f32[16] | matrix | 플레이어 월드 행렬 (Player+0x10..0x4F). 체크포인트/세이브 위치 |
 | 0x40 | u32 | playerFlags | Player+0x174 & 0xFFFF3BFF [추정: 의미] |
 | 0x44 | u32 | – | 리셋 시 0, 참조 미발견 |
-| 0x48 | u32 | deaths | 사망 횟수 (쉬움 제안, 재시작 HP 보정). 메모리카드에서 불러오면 0 |
+| 0x48 | u32 | deaths | 사망 횟수 (쉬움 제안, 재시작 HP 보정) — **마지막 체크포인트 뒤 사망 수**: 스냅숏·세이브 (Save_PlayerBlock 0x1DBFD8) 가 살아 있는 값을 0 으로, 죽으면 +1 (0x1D6FDC), 체크포인트 재시작은 지금 값을 남긴다 [확실]. 메모리카드에서 불러오면 0 |
 | 0x4C | f32 | playTime | 플레이 시간(초), 매 프레임 +dt (0x1D6D7C). 메시지 1 이 스크립트에 반환 |
 | 0x50 | u32 | hintMask | 첫 안내 메시지 비트. `FirstTimeHint(id)` 0x1DBEB0: 플레이 2초 이후, 비트 미설정이면 메시지 **500+id** 표시 후 비트 설정. 체크포인트 재시작에도 유지 |
 | 0x54 | u8 | hintCount1 | 안내 1 은 3번째 조건 충족 때 표시 |
@@ -267,43 +267,86 @@ ESC Internal 변수 44/45/48/50/57(07 문서) = 눈/깃털/난이도/블레이�
 |------|------|------|------|
 | 1 | 4 | – | 매직 0xCAFEBAD1 (불일치면 로드 중단) |
 | 2 | 4 | HUD `Costume_Choice` | 다르면 영웅 WAD 재로드 |
-| 3 | (10+1)×2 | 0x1BBB88 | 현재 WAD 이름 char[10] + u8 (중첩 WAD 2단) [추정] |
+| 3 | (10+1)×2 | 0x1BBB88 | 두 슬롯 WAD 이름 char[10] + 켬 바이트 (×2) — 되읽기가 둘 다 다시 올리고 바이트가 선 슬롯만 켠다 (0x1B4528 → 0x1BC110 · 0x1B2AA8) [확실] |
 | 4 | 0x90 | 0x306828 | **PlayerProgress** (§4) |
 | 5 | 0xC0 | 0x3068B8 / 0x1EE438 | 카메라·연출 상태 [추정] |
 | 6 | 0xEC | 0x306978 / 0x22BD58 | 음악 그룹 상태 (0x2A26A8 객체) [추정] |
 | 7 | 0x1C4 | 0x3368F8 memcpy | GameMgr 상태 (체크포인트·구역) [추정] |
 | 8 | 0xB | 0x306C30 | 옵션: [0]0x1BF150() [1]음악 [2]효과음 [3]진동 [4]와이드 [5]디플리커 [6]사운드 모드 [7]`PowerUp_FirstTime` [8]코스튬 [9]난이도 [10]`EndGame` |
-| 9 | 가변 | `World_Serialize` 0x1B3E48 | 체크포인트 위치 0x29D920.., 활성 WAD 정보, **GlobalData(0x2FFE38)/LevelData(0x301548) ESC 변수**, 엔티티별 상태 청크(0x1B4080, 0x1B3FC0); 끝에 **레벨 상태 표** 0x336B28 (칸 = 이름 10 + 덩어리, 개수 0x29D9E8 ≤ 120) — 올라 있는 슬롯도 먼저 칸에 쓴다 [확실] (§5.4) |
+| 9 | 가변 | `World_Serialize` 0x1B3E48 | 세계 시각 0x29D920 · 0x29D910 · 0x29D918 (Warp 준비) · 표 칸 수 0x29D9E8, 올라 있는 두 슬롯의 덩어리를 표 칸에 (0x1B1830 → 0x1B4080(…, 0)), **GlobalData** (0x1AF0F0: 슬롯 번호표 0x2FFE3C · 전역 표 0x30063C · 0x30143C 0x100) · **LevelData 풀** (0x1AF540: 개수 + 0x301548) · 페이드 상태 0x303D50 (0x1AF720), 끝에 **레벨 상태 표** 0x336B28 (칸 = 이름 10 + 덩어리 크기 + 덩어리, ≤ 120) [확실] (§5.4). 되읽기 0x1B4450 (+0x1B1588) 은 세계 시각을 **세계 시작 0x29D924** 에 넣는다 |
 
 ### 5.4 레벨 상태 표 (레벨 기억) [확실: 흐름 / 근사: 엔진이 담는 것]
 - 표 0x336B28: 칸 16 바이트 (이름 + 덩어리 번호 +0xC, −1 = 없음) × 120, 개수 0x29D9E8. 레벨을 읽을 때 0x1B38A8 이 이름으로 칸을 찾아 덩어리가 있으면 0x1B4618 로
   슬롯 문맥을 되살리고, 없으면 빈 칸을 연다 — 새 칸이 "Pand00B" 이고 바로 앞이 "Pand00A" 면 0x1B3A10 이 표를 그 둘만 남기고 비운다 (판도라 신전 입구).
 - 슬롯을 비울 때 0x1B3CD0 → 0x1B4080(슬롯, 칸, 1): 첫 적재 비트 (+0x8) · LevelData 풀 기준·개수 (+0x18/+0x1C) · 엔티티별 오브젝트 기록 (+0x20) · GO 상태 (+0x28..+0x58)
   · 미뤄 둔 발동 (+0x38, 0x1B1830 이 큐 0x303DB0 에서 옮김) 을 덩어리로, 오브젝트는 메시지 3 으로 없앤다.
+- 덩어리의 목록 (0x1B4618 이 되읽는 순서, 기록 크기) [확실: 코드 / 추정: 일부 이름]:
+  - +0x28 (0x28): 슬롯 엔티티의 소유 GO 상태 (0x1B1830 → 0x1B16C8 이 1 인 GO → 0x1B1BD0).
+  - **+0x30 (0x18): 엔티티 발동 기록** — 0x1B1830 이 슬롯의 모든 엔티티에 메시지 7 을 보내면 센서·이펙터 (0x1AA410 · 0x1AB758 · 0x1AB9F8 · 0x1AAFE8 …) 는 마지막
+    발동 시각 +0x68 &gt; 0 이고 재발동 대기 (0x1AA210: 음수 = FLT_MAX) &gt; 0 이면 0x1B2280 으로 {+0xC 시각, +0x10 엔티티 번호, +0x12, +0x14} 를 남긴다. SpawnEnemy
+    (0x1AC630) 는 만든 수 +0x100 만 있어도 남기고 +0x12 = 만든 수 · +0x14 = 죽은 수 (+0x104). 다시 읽으면 엔티티를 만들자마자 (0x1A7388 → 0x1B2360 — 시작 큐 메시지 1
+    보다 먼저) 번호로 찾아 메시지 8 로 되돌리고 기록을 지운다. → **한 번만 (재발동 −1) 센서는 다시 읽어도 다시 돌지 않는다** (ATHN04A 광장 DMC TriggerVol0).
+    시각은 전역 세계 시계 0x29D920 (새 게임 0x1A6EC0 · 되읽기 0x1B4450 만 바꿈) 기준이라 내려가 있던 동안에도 흐른다.
+  - +0x38 (0x18): 미뤄 둔 발동 {엔티티 번호, 보낸 쪽 그룹 +0x2A, 보낸 쪽 GO 번호, 발동 절대 시각} (0x1A59B8).
+  - +0x40 (0x10): 부순 물체 (Breakable 파괴 상태 진입 0x1DDF70 → 0x1B4C20, GO 번호). +0x48 (0x24) · +0x50 (0x20) · +0x58 (0x1C): GO 컴포넌트 상태
+    (0x1B4CD0 ← 0x2120D0, 0x1B4DF8 ← 0x2154F8, 0x1B4F00 ← 0x213C08; 0x1B5028 이 저장 직전에 갱신).
+  - +0x20: 엔티티별 오브젝트 기록 — 엔티티 번호마다 형 바이트 + 기록, 0 으로 끝. 형 3 (0x34) = SpawnEnemy 가 만든 적 (0x1A4E88, 자리 +0x10..), 형 7 (0x40) = Creator
+    GO (0x1A5298). 살아 있는 오브젝트는 저장 때 0x1AD350 이 기록을 새로 만든다. 다시 읽은 슬롯의 SpawnEnemy · Creator 시작 메시지가 0x1A6C70 으로 다시 낸다.
+- 엔진 (`ScriptWorld.Memory`): LevelData · 만들어 둔 Creator · 연 상자 · 오브젝트별 Vis + **발동 기록** (`fired`: 엔티티 번호 → 몇 초 전 · 만든 수 · 죽은 수) ·
+  **살아 있는 적** (`enemies`: 만든 엔티티 · 자리) · **미뤄 둔 발동** (`pending`) · **Animator 몸** (`anims`, +0x28 의 근사) · **부순 물체** (`broken`, +0x40) · 세션 시계
+  (`stamp`: 다시 읽을 때 흐른 시간을 더함, `Memory.aged`) [근사: 적은 자리만 (체력 처음 값), 보낸 쪽은 영웅 아니면 없음, GO 컴포넌트 +0x48..+0x58 은 Vis 값으로만].
 - LevelData 값은 풀 0x301548 (0x500 칸) 에 그대로 — 되살린 슬롯은 +0x1C ≠ 0 이라 0x1AF2C0 이 기준을 다시 잡지 않는다. 첫 적재 관문 0x1A9F30 → 0x1B3C58 이 거짓이면
   Init · SpawnAtStart · CreateAtStart · CreationSensor 모드 1 을 건너뛴다 (13 §7). 엔진 `GameSession.levelMemory` · `ScriptWorld.Memory` · 세이브 levelTable/level.*
   (28 §9, 43 §21.2-5).
 
-### 5.3 체크포인트와 재시작 [확실: 흐름 / 추정: 세부]
-- ESC `CheckPoint`(메시지 0) → 체크포인트 위치·플래그(0x29D920..0x29D960) 기록 → **같은 0x14000 버퍼에 메모리 직렬화** (0x22D418, 상태 9 진입과
-  0x1B3070 에서 호출). 즉 체크포인트 = 메모리 안의 세이브.
+### 5.3 체크포인트와 재시작 [확실: 흐름 / 근사: 엔진이 담는 것]
+- ESC `CheckPoint`(메시지 0) → 거름 (아래) 을 지나면 0x29D960 = 1 → 프레임 끝 0x1B3070 이 **같은 0x14000 버퍼에 메모리 직렬화** (0x22D418 → Save_Serialize 0x22D490).
+  즉 체크포인트 = 메모리 안의 세이브 (§5.2 의 스트림 전부: 두 슬롯 이름, PlayerProgress, 카메라, 음악, GameMgr, 옵션, 세계 — 두 슬롯 덩어리를 표에 쓴 뒤).
+- 스냅숏을 찍는 곳 셋 [확실]: (1) 0x1B3070 — 0x29D960 이고 영웅 +0x174 &amp; (0x2 | 0x4 | 0x8 | 0x400) (점프·떨어짐·줄) 이 아니고 HP (+0x178) ≥ 1 일 때만, 아니면
+  플래그를 둔 채 다음 프레임 (벽 0x20 · 지상은 찍는다), (2) 상태 9 0x21FD48 — 새 게임 (0x21F8D0) 적재가 끝날 때 (0x21FC28 a0 → 0x29F454; 체크포인트 재시작 0x21E3D0
+  · 메모리카드 불러오기 0x21FB70 은 a0 = 0 — 읽은 카드 버퍼가 곧 스냅숏), (3) 세이브 포인트 R2 0x1DC4DC → 0x22D390 (찍은 뒤 저장 질문 0x21D8B0 — 메모리카드에 쓰는 것은 이
+  버퍼). Warp · LoadCheck 는 찍지 않는다.
+- Save_PlayerBlock 0x1DBFD8 은 살아 있는 사망 수 +0x48 을 0 으로 만들고 담는다 (스냅숏의 사망 수도 0) — 쉬움 제안 · 재시작 체력 보정은 "체크포인트 뒤 사망 수".
 - 메시지 0 의 거름 (GameMgr_OnMessage 0x1B0234) [확실]: 플레이어 (0x29DC1C) 체력 (+0x178) ≥ 1, 세계 시각 0x29D920 − 세계 시작 0x29D924 ≥ 1 초 (0x29D924 는 세계 초기화
   0x1A6EC0 — 레벨 적재 0x1B3070 — 와 스냅샷 복원 0x1B4450 만 바꾼다, 걷기 이음은 그대로), 보낸 엔티티 (0x29D928) 가 지난번 (0x303D74) 과 같으면 5 초 (0x303D78 + 5)
   지나야 → 로그 "CheckPoint", 0x29D960 = 1. 엔진 `GameScene.acceptCheckpoint` · `checkpointYaw` (스냅샷의 플레이어 행렬 = 방향까지, 43 §19.2-9).
-- 재시작 `Game_RestartCheckpoint` 0x21E3D0 → 0x22D440 → 역직렬화(메모리카드 플래그 0x29F444 = 0) → 레벨 재로드(상태 9).
+- 재시작 `Game_RestartCheckpoint` 0x21E3D0 (사망 메뉴 0x220360 선택 0 · 2 (쉬움: 0x29F484 = 1) · 실패 메뉴 (같은 상태 0xE) · 일시정지 메뉴 0x220200 선택 1) [확실]:
+  미니게임 아이콘 · 메시지 정리 (0x21E6A8 · 0x21DAD0 · 0x1B9118), 음악 0x22B208, 0x29F444 = 0, 0x22D440 → 0x1BC9D0 → WAD 명령 0xF: 0x22D660 단계 0 (스냅숏 WAD 이름과
+  다른 슬롯은 명령 1 인자 0, 같은 이름 슬롯은 명령 1 인자 4 로 내림 — 둘 다 내리고 다시 읽는다) → 명령 0x10: 0x22D660 단계 1 (게임 블록을 대기 자리로 0x22DA20, 세계
+  0x1B4450, 두 슬롯 다시 올림 0x1B4528) → 상태 9 (0x21FC28(0, 1)). 다 올라오면 0x1B2AA8 이 0x29D940 = 1 → 세계 갱신 0x1A7C80 "** Restarted or loaded save game **":
+  세계 시각 = 세계 시작 (스냅숏 시각), 0x22DA88 이 게임 블록을 적용. 영상은 그동안 "로딩 중..." 화면 ≈ 4.5 초 (8212–8215.5).
+- 내릴 때도 0x1B3CD0 이 지금 슬롯 상태를 표에 쓰지만 0x1B4450 이 표 전체를 스냅숏 것으로 덮는다 — 체크포인트 뒤에 연 상자 · 얻은 아이템 · 부순 항아리 · LevelData ·
+  발동 기록 · 적은 모두 스냅숏 때로 돌아간다 (영상 8202–8224: 깃털 상자가 닫혀 있고 같은 카드 "1 개를 더", 8220 항아리가 다시 서 있음).
 - 재시작 HP 규칙 (`Load_PlayerBlock`):
   - 체크포인트 재시작: `hp = max(saved, 25)`; `deaths ≥ 4` 이면 `hp += (deaths − 3) × 10` 후 최대 HP 로 클램프; `saved < 75` 이면 `hp = min(hp, 75)`.
   - 메모리카드 로드: `hp = max(saved, 2)`, `deaths = 0`.
   - 저장 시점에 날아오던 오브(0x226FE0 가 합산)는 저장값에 포함된다.
 - 복원 순서 0x22DA88: Load_PlayerBlock 0x1DC130 → Progress_Reset 0x1D6710 → 0x1D6818 이 **스크립트 타이머 표 0x3368F8 를 비우고** (0x1A72C8), 뒤에 0x1B15E0 이
-  GameMgr 블록 (0x3368F8, 0x1C4 바이트 — 타이머 포함, 저장은 0x1B15B8) 을 스냅샷 값으로 되돌린다 [확실] (13 §6.1).
+  GameMgr 블록 (0x3368F8, 0x1C4 바이트 — 타이머 포함, 저장은 0x1B15B8) 을 스냅샷 값으로 되돌린다 [확실] (13 §6.1). 체크포인트 재시작이면 본 동영상 목록 (+0x30 개수 ·
+  +0x34 해시 100) 은 지금 것을 남기고 (메모리카드면 모두 스냅숏), 플래그 0x1B33F0 (0x29D960 …) 을 지운다.
+- Load_PlayerBlock 의 체크포인트 재시작 [확실]: PlayerProgress 0x90 을 통째로 스냅숏으로 — 단 **사망 수 +0x48 · 첫 안내 비트 +0x50 은 지금 것** (안내 누적 +0x54/+0x55 ·
+  플레이 시간 +0x4C 는 스냅숏), 영웅 행렬 = 스냅숏, **이동 상태 +0x174 = 스냅숏 +0x40** (벽 0x20 이면 벽에 붙은 채), 최대 HP 다시 계산, 삼지창 비트, 체력 규칙 (아래).
+- 옵션 블록: 코스튬 · EndGame 은 늘, 난이도는 0x29F484 (쉬움으로) 면 0 아니면 스냅숏 [9] — 0x29F484 는 메모리카드 불러오기만 지운다 (쉬움을 고른 뒤 재시작은 계속 쉬움).
 
-### 5.5 실패 화면 (FailedScreen) [확실: 흐름 / 근사: 엔진 재시작]
+### 5.5 실패 화면 (FailedScreen) [확실: 흐름]
 - Internal 0x13 → 0x29D958 = 1 → 0x1B3070 → 0x21D808 (게임 상태 0xB 일 때): 0x2207F8 (메시지 정리 0x1B9118 — 버튼 메시지면 1040), 소리 0x22B208(0.5) ·
   0x22BDA8(3.0, 1), 전역 정지 0x1BF080, HUD FailedMenu_Event (+0x260) = 1 · Menu_Choice (+0x278) = 0 · Done (+0x27C) = 0, 게임 상태 0xE (21 문서).
-- 엔진 `GameScene.failedScreen`: 메뉴 (다시 하기 = 체크포인트 재시작, 나가기 = 주 메뉴). 다시 하기는 원작이 스냅샷 (세계 · 영웅 자세 · 타이머) 을 되돌리는 것 대신 이 레벨을
-  처음 상태로 다시 읽어 체크포인트 자리에 둔다 (레벨 기억 지움, 타이머 표 비움) — 실패가 바꾼 세계 (떨어진 오라클 · 시작된 아레나) 를 되돌리기 위해서이고, 덩굴 위
-  체크포인트를 진행 중 LevelData 로 되살리면 영웅이 떨어져 곧바로 다시 실패한다 [근사]. 자동 플레이는 메뉴 없이 다시 하기 [엔진 전용] (43 §23).
+- 상태 0xE 는 사망 메뉴와 같은 0x220360 이라 다시 하기 = 체크포인트 스냅숏 되읽기 (0x21E3D0, §5.3) [확실]. 엔진 `GameScene.failedScreen` → `restartFromCheckpoint`
+  (43 §26) — 예전 (69cfd3e) 은 레벨을 처음 상태로 다시 읽는 근사였다. 오라클 덩굴 체크포인트 (a06Mp03Done) 는 스냅숏의 이동 상태 (벽) 로 덩굴에 다시 붙인다
+  (`HeroNavigator.reattachWall`, 게임 안에서는 [미확인]). 자동 플레이는 메뉴 없이 다시 하기 [엔진 전용].
+
+### 5.6 엔진 체크포인트 스냅숏 (43 §26) [근사: 담는 것]
+- `GameSession.checkpoint` = `SaveGame` (세이브와 같은 직렬화): 새 게임 · 하네스 첫 씬 첫 틱 (상태 9 의 적재 끝 스냅숏 — 불러오기는 읽은 세이브가 곧 스냅숏),
+  받아들인 CheckPoint 의 프레임 끝 (`GameScene.checkpointFrameEnd`,
+  대기는 `GameSession.checkpointPending` — 이음을 넘어 남음, `snapshotWaits` = 0x40E · HP), 세이브 포인트 R2 (메모리카드는 이 스냅숏을 쓴다). 찍기 전 사망 수 0, 두 슬롯 세계를
+  표에 (`rememberLevels`).
+- 담는 것: PlayerProgress 값 (`rage` 포함) · 영웅 자리·방향 · 이동 상태 (`heroState`) · 난이도·코스튬 · 플레이 시간 · GlobalData · 초기화 기록 · GameMgr 타이머 · 레벨 상태 표
+  (덩어리 = `ScriptWorld.Memory`, §5.4) · 다른 슬롯 이름과 켬 (`other` · `otherActive`) · 음악 이름 (음악 블록 0xEC 의 근사).
+- 되읽기 `SaveGame.applyCheckpoint` (사망 수 · 첫 안내 비트는 지금 것, 체력 규칙, 쉬움 0x29F484 = `GameSession.easyRestart`) → `new GameScene(session, 스냅숏)`: 스냅숏
+  레벨 + 다른 슬롯 (꺼진 채면 LoadForWarp 처럼 Warp 준비), 표에서 두 세계를 되살림, 벽·사다리 스냅숏이면 벽 질의로 다시 붙임, 음악 이어 틀기. 세계 시작
+  (`GameSession.worldStart`) 은 새 게임 · 불러오기 · 되읽기만 다시 잡는다 (Warp 는 이어짐 — 0x29D924 를 쓰는 곳은 0x1A6EC0 · 0x1B4450 둘뿐).
+- [근사] 카메라 블록 (0xC0) · 음악 재생 위치 · 페이드 상태 · 본 동영상 목록은 담지 않는다. "로딩 중..." 화면 없이 씬 전환 페이드. 메모리카드에서 불러오기 (`applyTo`) 도
+  같은 세계 블록 · 다른 슬롯을 쓰고, 읽은 세이브를 그대로 체크포인트로 둔다.
 
 ---
 
@@ -433,7 +476,13 @@ HDES01A→01B→01C→01D→01E→ATRET01A (6, 아테네 귀환)→01B→01C→A
 | 0x226518 / 0x226710 / 0x226460 | Orb_Spawn / Orb_Update / Orb_Value | 확실 |
 | 0x226FE0 | Orbs_PendingTotal | 추정 |
 | 0x22D490 / 0x22D518 | Save_Serialize / Load_Deserialize | 확실 |
-| 0x22D418 / 0x22D440 | Checkpoint_Snapshot / Checkpoint_Restore | 확실 |
+| 0x22D418 / 0x22D440 | Checkpoint_Snapshot / Checkpoint_Restore (0x1BC9D0 → WAD 명령 0xF) | 확실 |
+| 0x22D660 | Load_Deserialize 본체 (a0 0 = 슬롯 내림 단계, 1 = 블록·세계·슬롯 다시 올림) | 확실 |
+| 0x22D390 | SavePoint_Snapshot (스냅숏 → 저장 질문) | 확실 |
+| 0x1B4450 / 0x1B4528 | World_Restore (세계 시작 = 스냅숏 시각, 표) / World_ReloadSlots (두 이름 다시 올림) | 확실 |
+| 0x1B4080 / 0x1B4618 | Slot_SaveChunk / Slot_RestoreChunk (레벨 상태 표 덩어리) | 확실 |
+| 0x1B1830 | Slot_SaveRecords (엔티티 메시지 7 · 미뤄 둔 발동 → +0x38) | 확실 |
+| 0x1B2280 / 0x1B2360 | Entity_RecordFired (+0x30) / Entity_RestoreFired (메시지 8) | 확실 |
 | 0x22DBC8 / 0x22DCF8 | Stream_Write / Stream_Read | 확실 |
 | 0x22D8F8 / 0x22DA20 | Save_GameBlocks / Load_GameBlocks | 확실 |
 | 0x1B3E48 | World_Serialize | 확실 |
@@ -473,8 +522,10 @@ addItem(id, n):  flags |= 1 << (id-1)
                  11:  feathers = min(feathers+n, 18); magicLevel += Δ(feathers/6) (≤5); mp = maxMagic
 itemCard(kind):  1 → healthLevel = min(4, +1); 2 → magicLevel = min(5, +1)
 death:           deaths++; if difficulty in {1,2} && deaths % 5 == 0: offer Easy
-restartCheckpoint: deserialize(snapshot); hp = max(saved,25); if deaths>=4: hp = min(hp+(deaths-3)*10, maxHp)
-                   if saved < 75: hp = min(hp, 75)
+checkpoint:      deaths = 0; snapshot = serialize(all)      (CheckPoint 프레임 끝 · 새 게임/불러오기 적재 끝 · 세이브 포인트 R2)
+restartCheckpoint: keep(deaths, hintMask); deserialize(snapshot); reload both slots from the snapshot's level table
+                   hp = max(saved,25); if deaths>=4: hp = min(hp+(deaths-3)*10, maxHp); if saved < 75: hp = min(hp, 75)
+                   difficulty = easyChosen ? 0 : snapshot.difficulty
 loadFromCard:    hp = max(saved, 2); deaths = 0
 completeGame(k): k==0: unlock |= {0,0,1,2,4}[difficulty 0..3 → bit0,bit0,bit1,bit2]; k==1: |= 8; k==2: |= 16
                  hardModeUnlocked = unlock & 7; costumesUnlocked = (unlock & 8) ? 3 : 0

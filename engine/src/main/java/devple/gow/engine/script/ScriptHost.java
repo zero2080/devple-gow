@@ -66,6 +66,14 @@ public class ScriptHost extends GameScriptHost {
 	}
 
 	/**
+	 * 초기화한 GlobalData 엔티티 ("ESC 이름/엔티티 이름") — 원작 전역 표 0x30063C 의 칸별 초기화됨 바이트 (+0x19) 의 근사. 세이브·체크포인트 스트림의
+	 * GlobalData 블록 (0x1AF0F0) 과 같이 쓰고 되돌린다.
+	 */
+	public Set<String> initedGlobals() {
+		return initedGlobals;
+	}
+
+	/**
 	 * 이웃 레벨 스크립트용 호스트: GlobalData·초기화 기록은 공유, LevelData 는 따로 (원작은 레벨 슬롯마다 LevelData 엔티티).
 	 */
 	public static ScriptHost neighbour(ScriptHost main) {

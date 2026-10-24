@@ -205,6 +205,36 @@ class HeroNavigatorTest {
 		assertTrue(b.played.contains("wClimbBlend0") && b.played.contains("WallhangCatch") && b.played.contains("wallpullup"), b.played.toString());
 	}
 
+	/**
+	 * 체크포인트·세이브 되읽기 (Load_PlayerBlock 0x1DC130: 행렬 + 이동 상태 +0x174 = 스냅숏 +0x40): 벽에서 찍은 스냅숏이면 그 자리·방향의 벽 질의로 곧바로
+	 * 벽 오르기 — ATHN06C 오라클 덩굴 체크포인트 (a06Mp03Done) 를 되읽어도 떨어지지 않는다 (43 §26).
+	 */
+	@Test
+	void restoredClimbSnapshotReattachesToTheWall() {
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -200, -20, 200, 200, -300, SurfaceAttr.GROUND);
+		wallZ(t, -20, -100, 100, -300, 300, SurfaceAttr.CLIMBABLE);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		Body b = new Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		b.grounded = false;
+		b.pos.set(0, 120, -20 + HeroNavigator.WALL_OFF); // 스냅숏의 벽 위 자리 (벽 쪽을 봄)
+		nav.reset();
+		assertEquals(NavState.AIR, nav.state(), "되읽은 직후는 공중 (리스폰)");
+		assertTrue(nav.reattachWall());
+		assertEquals(NavState.WALL_CLIMB, nav.state());
+		assertEquals(-20 + HeroNavigator.WALL_OFF, b.pos.z, 0.01f);
+		assertEquals(120, b.pos.y, 0.01f, "높이 그대로");
+		// 벽에서 먼 자리 (지상 스냅숏을 벽 앞에서 찍은 경우와 다름 — 상태가 벽이 아니면 부르지 않는다) 는 빗나간다
+		Body far = new Body();
+		HeroNavigator nav2 = new HeroNavigator(far, w, null);
+		far.grounded = false;
+		far.pos.set(0, 120, 60);
+		nav2.reset();
+		assertFalse(nav2.reattachWall());
+		assertEquals(NavState.AIR, nav2.state());
+	}
+
 	@Test
 	void nonClimbableWallDoesNotClimb() {
 		List<LevelCollision.Tri> t = new ArrayList<>();

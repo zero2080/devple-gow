@@ -316,6 +316,25 @@ public final class HeroNavigator {
 		cooldown = 0;
 	}
 
+	/**
+	 * 세이브·체크포인트 되읽기 (Load_PlayerBlock 0x1DC130: 행렬을 놓고 이동 상태 +0x174 = 스냅숏 +0x40 — 벽 0x20 이면 벽에 붙은 채) [확실]: 스냅숏 때
+	 * 벽·덩굴·사다리에 붙어 있었으면 지금 자리·방향에서 벽 질의 (0x1E47E0, {@link #probeWall}) 로 곧바로 다시 붙인다 [근사: 붙은 상태의 세부 (애니 시각 ·
+	 * 벽 끝 플래그) 는 담지 않는다]. 질의가 빗나가면 그대로 (공중 → 다음 틱의 공중 잡기).
+	 *
+	 * @return 붙었으면 true
+	 */
+	public boolean reattachWall() {
+		Vector3f p = body.position();
+		WallProbe w = probeWall(p, forward(body.yaw()), null);
+		if (w == null) {
+			return false;
+		}
+		p.y = w.feet().y;
+		enterWall(w, false);
+		cooldown = 0;
+		return true;
+	}
+
 	// ---- 매 틱 ----
 
 	/** @return true = 이번 틱 이동을 처리함 (기본 이동·중력 생략) */

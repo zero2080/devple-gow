@@ -260,6 +260,8 @@ public final class AutoPlay {
 	 *   cam:이름           CMV 질의 끄고 카메라 요청 (Internal 0x9 false + 0x8), "cam:" = 질의 다시 켬
 	 *   wait:초            입력 없음
 	 *   btn:이름           버튼 한 번 (PadButton 이름)
+	 *   die:               영웅 HP 0 (체크포인트 재시작 검증)
+	 *   break:소유GO       부서지는 물체를 부숨 (지금 레벨, 없으면 다른 슬롯 레벨 것)
 	 * </pre>
 	 */
 	private final List<String> route = parseRoute(System.getProperty("gow.auto.route"));
@@ -349,6 +351,16 @@ public final class AutoPlay {
 			}
 			case "wait" -> {
 				return routeNext(routeTime > Float.parseFloat(a[0]), bot.press(null));
+			}
+			case "die" -> {
+				// die: — 영웅 HP 0 (사망 → 체크포인트 재시작 검증, 43 §26) [엔진 전용]
+				pendingDie = true;
+				return routeNext(true, bot.press(null));
+			}
+			case "break" -> {
+				// break:소유GO — 부서지는 물체를 부순다 (앞 구간의 마법 파괴 대신, 예 ATHN05C 돌문 gobreakdoorstone Hit Points 99) [엔진 전용]
+				pendingBreak = a[0];
+				return routeNext(true, bot.press(null));
 			}
 			case "btn" -> {
 				if (routeTime < 0.1f) {
@@ -543,6 +555,28 @@ public final class AutoPlay {
 		pendingTeleport = null;
 		return t;
 	}
+
+	/** 경로 단계 die: 이번 틱에 영웅을 죽인다 (한 번). */
+	public boolean takeDie() {
+		boolean d = pendingDie;
+		pendingDie = false;
+		return d;
+	}
+
+	private boolean pendingDie;
+	private String pendingBreak;
+
+	/** 경로 단계 break:소유GO — 이번 틱에 부술 물체 (한 번, 없으면 null). */
+	public String takeBreak() {
+		String b = pendingBreak;
+		pendingBreak = null;
+		return b;
+	}
+	/**
+	 * gow.auto.deadmenu: 자동 플레이도 죽으면 사망 메뉴 ("YOU ARE DEAD" → 1 초 뒤 ○ = 기본 선택 "마지막 체크포인트에서 다시 시작") 를 거친다 — 영상 8210 화면
+	 * 대조용 [엔진 전용]. 없으면 메뉴 없이 곧바로 체크포인트 재시작.
+	 */
+	public static final boolean DEAD_MENU = System.getProperty("gow.auto.deadmenu") != null;
 
 	private float menuClock;
 

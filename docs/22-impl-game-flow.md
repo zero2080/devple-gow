@@ -15,7 +15,8 @@ BOOT → SHELL_LOAD → SHELL_MENU ─새 게임→ NEW_GAME → LEVEL_LOADING �
                               └불러오기→ LOAD_CARD → …
 IN_GAME ─START→ PAUSE ─계속→ IN_GAME / ─체크포인트→ LEVEL_LOADING / ─종료→ SHELL_LOAD
 IN_GAME ─SELECT→ POWER_UP_MENU → IN_GAME
-IN_GAME ─사망→ DEAD (deaths++) → LEVEL_LOADING | SHELL_LOAD
+IN_GAME ─사망→ DEAD (deaths++) → LEVEL_LOADING (스냅숏 되읽기, §8) | SHELL_LOAD
+IN_GAME ─FailedScreen→ DEAD (실패 메뉴, 같은 상태 0xE) → LEVEL_LOADING (스냅숏 되읽기) | SHELL_LOAD
 IN_GAME ─세이브 포인트→ SAVE_POINT → SAVE_DONE → IN_GAME
 스크립트: LoadWad(w) → pendingLevel=w (다음 WAD 백그라운드 로드) … Warp → level=w, LEVEL_LOADING
 ```
@@ -107,3 +108,20 @@ IN_GAME ─세이브 포인트→ SAVE_POINT → SAVE_DONE → IN_GAME
 - 포맷·공간 부족·귀중품 화면(3–9, 24–27)은 PC 에서 일어나지 않아 쓰지 않는다.
 - 검증: `MemoryCardFlowTest` (원작 FLP 헤드리스) — 셸 불러오기 끝까지 / 빈 카드·카드 2 없음·△ 취소 / HUD 저장 질문 → 새 파일 저장.
   화면: `./gradlew :engine:run --args="--ui gow-rom/R_SHELLK.WAD FLP_ShellK memcard --ui-warm 120"` → 파일 선택 화면 (`work/uirt/memcard23.png`).
+
+## 8. 체크포인트 스냅숏과 재시작 (11 문서 §5.3 · §5.6, 43 §26)
+
+원작 체크포인트는 세이브와 같은 직렬화를 메모리 버퍼에 쓰는 것이고 (0x22D418), "마지막 체크포인트에서 다시 시작" (사망 메뉴 · 실패 메뉴 · 일시정지 메뉴 → 0x21E3D0)
+은 그 버퍼를 되읽어 두 슬롯 레벨을 다시 올린다 (상태 9) [확실]. 엔진:
+
+| 단계 | 원작 | 엔진 |
+|------|------|------|
+| 찍기 | CheckPoint 프레임 끝 0x1B3070 (점프·떨어짐·줄이면 미룸), 새 게임 적재 끝 (상태 9 — 불러오기는 읽은 버퍼가 곧 스냅숏), 세이브 포인트 R2 0x22D390 | `GameScene.checkpointFrameEnd` · 첫 틱 · R2 → `takeCheckpoint` → `GameSession.checkpoint` (`SaveGame`), 불러오기 = 그 세이브 |
+| 담는 것 | 스트림 전부 (두 슬롯 이름, PlayerProgress, 카메라, 음악, GameMgr, 옵션, 세계: GlobalData · LevelData 풀 · 레벨 상태 표 + 두 슬롯 덩어리) | `SaveGame.capture` + 다른 슬롯 · 이동 상태 · 타이머 · 초기화 기록 · 음악 이름, 레벨 기억 (`ScriptWorld.Memory`: 발동 기록 · 살아 있는 적 · 미뤄 둔 발동 · Animator 몸 · 부순 물체) |
+| 되읽기 | 0x22D440 → 명령 0xF/0x10 → 0x22D660 → 0x1B4450 · 0x1B4528 → "Restarted or loaded" 0x22DA88 (사망 수 · 첫 안내 비트 유지, 체력 규칙, 쉬움 0x29F484) | `restartFromCheckpoint` → `SaveGame.applyCheckpoint` → `new GameScene(session, 스냅숏)` (다른 슬롯 · 레벨 기억 · 벽 다시 붙이기 · 음악) |
+
+- 메모리카드 저장은 R2 때 찍은 스냅숏을 쓴다 (`GameScene.onSaveAnswered`), 불러오기 (`SaveGame.applyTo`) 도 같은 세계 블록 · 다른 슬롯을 쓰고 읽은 세이브를 그대로
+  체크포인트로 둔다 (0x21FB70 → 0x21FC28 a0 = 0).
+- 음악: 원작 음악 그룹은 전역이라 씬이 떠날 때 지금 음악 이름을 `GameSession.music` 에 넘기고 새 씬이 다시 튼다 (되읽기면 스냅숏의 음악) [근사: 이름만].
+- 하네스 [엔진 전용]: 경로 단계 `die:` (영웅 HP 0) · `break:소유GO` (부서지는 물체), `-Dgow.auto.deadmenu` (자동 플레이도 사망 메뉴를 거쳐 ○).
+- 시험: `CheckpointRestartTest` (7), `HeroNavigatorTest.restoredClimbSnapshotReattachesToTheWall`.
