@@ -236,9 +236,13 @@ public final class HeroTestScene implements Scene {
 			}
 			enemy.combat().onLog(s -> System.out.println("[" + enemyWad + "] " + s));
 			EnemyFighter en0 = enemy;
+			magicFx.addWad(kind.assets()); // 적 WAD 의 이펙트 GO (석상 goMINStonedBRK·석화 순간 goMINFreeze)
+			enemy.setStoneLook(magicFx.stoneLook());
 			enemy.onShatter(() -> {
 				System.out.println(enemyWad + " 석상 파괴 (Stone Kill)");
-				magicFx.effect("shatter", en0.pos);
+				if (!en0.statueShown()) {
+					magicFx.effect("shatter", en0.pos);
+				}
 			});
 			hud = new UiLayer(new WadAssets(Content.file(rom, Region.of(rom).perm())), true, Region.of(rom).flpHud(), MessageTable.fromWad(perm).orElse(null), new devple.gow.engine.ui.UiVariables());
 		} catch (IOException ex) {
@@ -325,11 +329,12 @@ public final class HeroTestScene implements Scene {
 			}
 			scripted = new ScriptedInput(e.window().handle(), st);
 		} else if (auto == Auto.MAGIC) {
-			// ← 메두사 선택 → L2 홀드 + □ 홀드 (광선, 석화 — 0x1972E8 은 □ 로 켠다) → □□ (석상 파괴) → ↑ 하데스 → L2 (영혼)
+			// ← 메두사 선택 → L2 홀드 + □ 홀드 (광선, 석화 — 0x1972E8 은 □ 로 켠다) → □×4 (석상 파괴: Brkb 517 타수 7, □ 피해 2) → ↑ 하데스 → L2 (영혼)
 			scripted = new ScriptedInput(e.window().handle(), List.of(new ScriptedInput.Step(0.2f, 0.05f, PadButton.LEFT),
 					new ScriptedInput.Step(0.5f, 3f, PadButton.L2), new ScriptedInput.Step(0.9f, 2.5f, PadButton.SQUARE),
-					new ScriptedInput.Step(4.0f, 0.05f, PadButton.SQUARE),
-					new ScriptedInput.Step(4.4f, 0.05f, PadButton.SQUARE), new ScriptedInput.Step(6.0f, 0.05f, PadButton.UP),
+					new ScriptedInput.Step(4.0f, 0.05f, PadButton.SQUARE), new ScriptedInput.Step(4.4f, 0.05f, PadButton.SQUARE),
+					new ScriptedInput.Step(4.8f, 0.05f, PadButton.SQUARE), new ScriptedInput.Step(5.2f, 0.05f, PadButton.SQUARE),
+					new ScriptedInput.Step(6.0f, 0.05f, PadButton.UP),
 					new ScriptedInput.Step(6.3f, 0.1f, PadButton.L2)));
 		}
 	}
@@ -509,7 +514,7 @@ public final class HeroTestScene implements Scene {
 			e.renderer().basic().set("uTint", dummy.flash > 0 ? new Vector4f(1, 1, 1, 1) : new Vector4f(0.8f, 0.25f + 0.5f * k, 0.2f, 1));
 			e.renderer().draw(box, new Matrix4f().translation(dummy.pos), true);
 			e.renderer().basic().set("uTint", new Vector4f(1, 1, 1, 1));
-		} else if (enemy.deadTime() < 3f && !enemy.shattered()) {
+		} else if (enemy.deadTime() < 3f && !enemy.shattered() && !enemy.statueShown()) {
 			minModel.draw(cam, e.window().aspect(), enemy.world(new Matrix4f(), alpha), enemy.animator().pose(), e.renderer().white());
 		}
 		var pose = ctl.animator().pose();

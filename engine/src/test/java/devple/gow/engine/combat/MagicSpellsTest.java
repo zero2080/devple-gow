@@ -261,9 +261,9 @@ class MagicSpellsTest {
 		r.ps.level.put(devple.gow.engine.game.Weapon.ZEUS, 2);
 		TrainingDummy far = new TrainingDummy(new Vector3f(0, 0, -300), 500, 1000);
 		r.c.setTarget(far);
-		// R2 홀드 + □ 홀드(차지): Stage 2 Ch2 Threshold 0.75 × Charge Time 0.75 = 0.56초
+		// L2 홀드 + △ 홀드 (차지, 0x1A07CC 패드 & 0x10, 메시지 741): Stage 2 Ch2 Threshold 0.75 × Charge Time 0.75 = 0.56초
 		ScriptedInput in = new ScriptedInput(0, List.of(new ScriptedInput.Step(0.1f, 0.8f, PadButton.L2),
-				new ScriptedInput.Step(0.1f, 0.8f, PadButton.SQUARE)));
+				new ScriptedInput.Step(0.1f, 0.8f, PadButton.TRIANGLE)));
 		for (float t = 0; t < 2f; t += DT) {
 			r.tick(in, far.pos);
 			far.update(DT);
@@ -271,6 +271,24 @@ class MagicSpellsTest {
 		assertEquals(2, r.magic.zeus.lastLevel, "Ch2: moves " + r.moves);
 		assertEquals(20f, r.magic.zeus.lastDrain, 0.01f, "Stage 2 Ch2 Magic Drain");
 		assertTrue(far.hp <= 500 - 65, "Arrow 004 Damage 65: " + far.hp);
+	}
+
+	@Test
+	void zeusSquareHoldDoesNotCharge() throws Exception {
+		Rig r = new Rig(5);
+		r.ps.level.put(devple.gow.engine.game.Weapon.ZEUS, 2);
+		TrainingDummy far = new TrainingDummy(new Vector3f(0, 0, -300), 500, 1000);
+		r.c.setTarget(far);
+		// □ 는 던지기 요청 (0x1A0F20 새로 누름 & 0x80) 일 뿐 차지가 아니다 — 같은 시간 □ 홀드는 일반 샷 (Stage 2 Drain 2.5)
+		ScriptedInput in = new ScriptedInput(0, List.of(new ScriptedInput.Step(0.1f, 0.8f, PadButton.L2),
+				new ScriptedInput.Step(0.1f, 0.8f, PadButton.SQUARE)));
+		for (float t = 0; t < 2f; t += DT) {
+			r.tick(in, far.pos);
+			far.update(DT);
+		}
+		assertEquals(PadButton.TRIANGLE, ZeusBolt.CHARGE_BUTTON);
+		assertEquals(0, r.magic.zeus.lastLevel, "□ 홀드 = 차지 아님: moves " + r.moves);
+		assertEquals(2.5f, r.magic.zeus.lastDrain, 0.01f, "Stage 2 Magic Drain");
 	}
 
 	@Test

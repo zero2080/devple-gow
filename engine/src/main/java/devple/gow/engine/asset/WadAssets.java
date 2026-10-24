@@ -44,8 +44,12 @@ public final class WadAssets implements AutoCloseable {
 		}
 		this.wad = p.wad;
 		this.textures = p.textures;
-		for (MaterialResource m : textures.materials()) {
-			materials.putIfAbsent(m.name(), m);
+		for (int i = 0; i < textures.materials().size(); i++) {
+			MaterialResource m = textures.materials().get(i);
+			if (materials.putIfAbsent(m.name(), m) != null) {
+				// 같은 이름의 두 번째 정의 (R_MIN MAT_body = 석상 돌 텍스처) — GowModel 이 MDL 앞 가장 가까운 정의를 이 별칭으로 가리킨다
+				materials.put(TextureLibrary.materialAlias(m.name(), textures.materialTag(i)), m);
+			}
 		}
 		this.gowModels = p.models;
 		this.matAnims = p.matAnims;

@@ -54,10 +54,21 @@ public final class GowModel {
 		renderFlags = d.limit() >= 0x30 ? d.getLong(0x28) : 0;
 	}
 
-	/** WAD 안의 모든 MDL_ 을 찾아 같은 그룹의 MAT 참조와 메시를 묶는다. */
+	/**
+	 * WAD 안의 모든 MDL_ 을 찾아 같은 그룹의 MAT 참조와 메시를 묶는다.
+	 * 같은 이름의 MAT_ 정의가 여러 개면 참조는 MDL 태그 앞의 가장 가까운 정의로 풀고 (03 문서 §3 이름 해석 규칙), 첫 정의가 아니면
+	 * {@link devple.gow.tools.texture.TextureLibrary#materialAlias} 별칭으로 적는다.
+	 */
 	public static List<GowModel> load(WadFile wad) {
 		List<GowModel> out = new ArrayList<>();
 		List<WadTag> tags = wad.tags();
+		java.util.Map<String, List<Integer>> matDefs = new java.util.HashMap<>();
+		for (int i = 0; i < tags.size(); i++) {
+			WadTag t = tags.get(i);
+			if (t.tag() == WadTagType.RESOURCE && t.hasData() && t.size() >= 4 && t.magic() == 0x08 && t.name() != null) {
+				matDefs.computeIfAbsent(t.name(), k -> new ArrayList<>()).add(i);
+			}
+		}
 		for (int i = 0; i < tags.size(); i++) {
 			WadTag t = tags.get(i);
 			if (t.tag() != WadTagType.RESOURCE || !t.hasData() || t.magic() != MAGIC) {
@@ -86,6 +97,21 @@ public final class GowModel {
 					break;
 				} else if (s.name().startsWith("MAT_")) {
 					m.materials.add(s.name());
+				}
+			}
+			for (int k = 0; k < m.materials.size(); k++) {
+				List<Integer> defs = matDefs.get(m.materials.get(k));
+				if (defs == null || defs.size() < 2) {
+					continue;
+				}
+				int pick = defs.getFirst();
+				for (int d : defs) {
+					if (d < i) {
+						pick = d;
+					}
+				}
+				if (pick != defs.getFirst()) {
+					m.materials.set(k, devple.gow.tools.texture.TextureLibrary.materialAlias(m.materials.get(k), pick));
 				}
 			}
 			out.add(m);

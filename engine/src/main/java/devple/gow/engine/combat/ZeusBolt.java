@@ -13,7 +13,10 @@ import java.util.List;
  * 제우스의 분노 (Thunderbolt, 마법 5). 원작 SCR_*Thunderbolt 0x19FF60–0x1A0FF0 + Arrow/ArrowEmitter 0x222710–0x2249A0 (35 문서 §3).
  * <ul>
  *   <li>던지기 = 영웅 기술의 SCRIPT 이벤트 {@code SCR_ThrowThunderbolt}(BOLTTHROW 0.55, BOLTTHROWL 0.33, AIRBOLTTHROW 0.30) — 기술 인스턴스당 1발</li>
- *   <li>차지: □ 를 누르고 있는 시간 / Charge Time ≥ Ch1·Ch2 Threshold → Ch1/Ch2 이미터 (단계 1·2만, Allow Charging) [버튼 비트 0x10 = □ 추정]</li>
+ *   <li>차지: <b>△</b> 를 누르고 있는 시간 / Charge Time ≥ Ch1·Ch2 Threshold → Ch1/Ch2 이미터 (단계 1·2만, Allow Charging).
+ *       [확실] SCR_ChargeThunderbolt 0x1A07C8 / SCR_TriggerThunderbolt 0x1A0F90 이 패드 현재 워드 (+0x28) &amp; 0x10 을 본다 — Pad_Read 0x17C384
+ *       비트 4 = △ (10 문서 §16). 메시지 741 "제우스의 힘 [L2] 홀드 + [△] 홀드". □ (0x80, 새로 누름) 는 던지기 요청 (0x1A0F20, 큐 최대 2) 이다.
+ *       예전 엔진은 □ 로 차지했다.</li>
  *   <li>MP: 던질 때 Stage Magic Drain (차지 샷은 Ch1/Ch2 Magic Drain 으로 <b>대체</b>, 0x1DCA58)</li>
  *   <li>투사체: Velocity(m/s) × 16 유닛, 수명 #117c872e(5초), 중력 없음(직선), 표적 중심 조준, 이전→현재 위치 선분 스윕 판정</li>
  *   <li>명중: Arrow Damage + Ground Impulse Away; 차지 샷은 Concussion(반경 m × 16) 범위 충격</li>
@@ -48,6 +51,9 @@ public final class ZeusBolt {
 		}
 	}
 
+	/** 차지 버튼 = 패드 비트 0x10 = △ (0x1A07CC, 0x1A0F94) [확실]. */
+	public static final PadButton CHARGE_BUTTON = PadButton.TRIANGLE;
+
 	private final Tweaks tw;
 	private final List<Bolt> bolts = new ArrayList<>();
 	private float charge;
@@ -77,7 +83,7 @@ public final class ZeusBolt {
 		String st = "Stage " + stage + " ";
 		if (!boltMove) {
 			charge = 0;
-		} else if (in != null && in.held(PadButton.SQUARE) && allowCharge(node, st)) {
+		} else if (in != null && in.held(CHARGE_BUTTON) && allowCharge(node, st)) {
 			charge += dt;
 		}
 		if (boltMove && c.activeScript(SCR_THROW) != null && c.moveSerial() != firedSerial) {

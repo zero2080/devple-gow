@@ -8,9 +8,9 @@
 
 ```bash
 ./gradlew :engine:test --tests '*EffectTest*'                                   # 해석·수명 (헤드리스, 5)
-./gradlew :engine:run -PgowFxLog -PgowMagicStage=2 "-PgowScript=LEFT:0.3:0.05,R2:0.6:3,CIRCLE:1.5:0.05" \
+./gradlew :engine:run -PgowFxLog -PgowMagicStage=2 "-PgowScript=LEFT:0.3:0.05,L2:0.6:3,CIRCLE:1.5:0.05" \
     --args="--hero --enemy R_MIN --screenshot shot.png --ticks 150"           # 메두사 Nuke (연습 씬, 단계 2)
-./gradlew :engine:run -PgowGiveAll "-PgowScript=LEFT:0.5:0.1,R2:1.0:3" --args="--game ATHN01A --skip-movies"   # 게임 씬 광선
+./gradlew :engine:run -PgowGiveAll "-PgowScript=LEFT:0.5:0.1,L2:1.0:3,SQUARE:1.4:2" --args="--game ATHN01A --skip-movies"   # 게임 씬 광선
 ```
 - `-PgowFxLog`: 재생마다 `이펙트 goX → 오브젝트 @WAD (길이|반복)` 출력. `-PgowMagicStage=n`: 연습 씬 마법 단계 n + MP 레벨 3.
 - 연습 씬(`--hero`)도 이제 `-PgowScript` (버튼:시작초:누름초) 를 읽는다 (35 §9 와 같은 문법).
@@ -264,3 +264,10 @@ MFX 템플릿 0x48 바이트 (`/TweakTemplates/MFX/nnn/`):
 - ~~포세이돈 매시 미터~~ (§4.1, 35 §4.5). ~~포세이돈 화면 효과 0x195BA8~~ (35 §4.6: 보이는 것은 Fog/000 "360 Lightning" 감산 안개 대체뿐, 틴트 1·카메라 필터 "None"). ~~신들의 분노 GO~~ (35 §4.7): 0x1DAEC0 이 만든 갑옷 GO 8개 (goBreastPlate·goHelmet·견갑·팔찌·정강이, 관절 vertebrae4/head/humerus/radius/tibia) 를 진입 0x1DAB08 이 켜고 부착, goStrikeGrp/goFlashGrp 는 진입 때 한 번 (위치 미지정 → 엔진은 영웅 위치 [추정]), 해제 0x1DABF8 이 끔. +0x44/+0x48 을 읽는 갱신 코드는 없다 [확실]. 남은 것: 카메라 필터 렌더 0x162008, 블레이드 god 판 0x1FA9A0.
 - Concussion No Orient/Link Duration, PlayFX #a4e61bc3 / #71bfa948 / #a6de59b7, Left/Right Weapon 의 정확한 부착 대상.
 - 적 템플릿 번호 충돌 (여러 적 WAD 의 같은 PlayFX 번호) — 마지막 WAD 가 덮음.
+
+## 석화 석상 GO (35 문서 §2.2, 2026-10-24)
+- 적 WAD 의 Sold +0x38 (goMINFreeze, SCR_TurnToRock 0x19F8E0) 은 일반 1회 이펙트, +0x20 (goMINStonedBRK, 0x1E8960) 은 부서지는 물체와 같은 구성의 GO 를
+  `Effect.hold` (act 0 초) 로 소유자 행렬에 세워 두었다가 파괴 때 act 를 0 초부터 재생 (`MagicFx.stoneLook`). Brkb 517 지연 3 초 + Fade 1 초, bit 0x1 파편 물리.
+- 같은 WAD 에 같은 이름 MAT 이 둘 (R_MIN `MAT_body`: 몸 / 석상 돌) — 모델은 MDL 앞쪽 가장 가까운 정의 (`MAT_body@태그` 별칭, `GowModel.load`·`WadAssets`).
+- 연습 씬 (`HeroTestScene`) 도 적 WAD 를 이펙트 라이브러리에 등록한다 (예전엔 R_PERMK·마법 WAD 만).
+

@@ -82,6 +82,10 @@ public final class MagicFx implements AutoCloseable {
 	private ParticleSystem.Emitter beam;
 	private EffectSystem.Effect beamFx, lightningFx;
 	private final Map<Hittable, ParticleSystem.Emitter> stones = new IdentityHashMap<>();
+	/** 석상 GO (Sold +0x20, goMINStonedBRK) — 석화된 적 대신 보이는 돌 조각 모델 (35 문서 §2.2). */
+	private final Map<Hittable, EffectSystem.Effect> statues = new IdentityHashMap<>();
+	/** 띄운 석상 수 / 석화 순간 GO 수 / 부서진 석상 수 (테스트·로그). */
+	public int statuesShown, freezeFxShown, statuesBroken;
 	private Joints heroJoints = (j, out) -> false;
 	private Combatant heroCombat;
 	private Surface surface;
@@ -375,7 +379,131 @@ public final class MagicFx implements AutoCloseable {
 		if (e != null) {
 			ps.emitters().remove(e);
 		}
+		EffectSystem.Effect st = h != null ? statues.get(h) : null;
+		if (st != null && st.hold) { // 부서지는 중인 석상은 Fade 까지 둔다
+			st.stop();
+			statues.remove(h);
+		}
 	}
+
+	/** 적의 석상 이펙트 (없으면 null). */
+	public EffectSystem.Effect statue(Hittable h) {
+		return statues.get(h);
+	}
+
+	/**
+	 * 석화 겉모습 (35 문서 §2.2, {@link devple.gow.engine.combat.EnemyFighter.StoneLook}): 원작은 적 몸 색을 바꾸지 않는다.
+	 * SCR_TurnToRock 이 석화 순간 GO (goMINFreeze) 를, 석화 자세 끝 (진행률 &gt; 0.99) 에 0x1E8960 이 석상 GO (goMINStonedBRK:
+	 * MDL_MINStonedBRK + 돌 텍스처 TXR_Minotaurfile1 = GFX_minotaurstone) 를 소유자 행렬에 만들고 소유자를 숨긴다 [확실].
+	 * 석상은 맞을 때까지 act 0 초 자세 (석화 자세 끝과 같은 포즈) 로 서 있고 [추정: 0x1DDF70 이 파괴 때 애니를 0 초부터 재생],
+	 * 부서지면 Brkb 파괴 act (조각) → 지연 #c3441d8c (3초) 뒤 Fade Time (1초) 동안 흐려지고 사라진다 (41 문서 §1.2).
+	 */
+	public devple.gow.engine.combat.EnemyFighter.StoneLook stoneLook() {
+		return new devple.gow.engine.combat.EnemyFighter.StoneLook() {
+			@Override
+			public void turnToRock(devple.gow.engine.combat.EnemyFighter f, String freezeGo) {
+				EffectSystem.Effect e = fx.play(freezeGo, EffectSystem.Anchor.of(f.world(new Matrix4f(), 1)), -1);
+				if (e != null) {
+					e.scale = 1f / Math.max(e.def.scale(), 1e-3f); // 소유자 행렬 (배율 포함) 을 그대로 쓴다 (0x19FA04)
+					freezeFxShown++;
+				}
+				if (EffectSystem.LOG) {
+					System.out.printf("석화 SCR_TurnToRock → %s %s%n", freezeGo, e != null ? "재생" : "없음");
+				}
+			}
+
+			@Override
+			public boolean statue(devple.gow.engine.combat.EnemyFighter f, String statueGo) {
+				EffectSystem.Effect e = fx.play(statueGo, out -> {
+					f.world(out, 1);
+					return true;
+				}, Float.MAX_VALUE);
+				if (e == null) {
+					if (EffectSystem.LOG) {
+						System.out.printf("석상 %s 없음 → 적 몸 그대로%n", statueGo);
+					}
+					return false;
+				}
+				e.hold = true; // 맞을 때까지 act 0 초 자세
+				e.scale = 1f / Math.max(e.def.scale(), 1e-3f); // 소유자 행렬 복사 (0x1E8A8C–0x1E8AB4)
+				e.jointVisibility = true;
+				f.statueMfx = statueMfx(e.def);
+				statues.put(f, e);
+				ParticleSystem.Emitter dust = stones.remove(f);
+				if (dust != null) {
+					ps.emitters().remove(dust);
+				}
+				statuesShown++;
+				if (EffectSystem.LOG) {
+					System.out.printf("석상 %s 생성 (Brkb %d, 타수 %d)%n", statueGo, f.statueBrkb(), f.statueHpMax());
+				}
+				return true;
+			}
+
+			@Override
+			public void shatter(devple.gow.engine.combat.EnemyFighter f) {
+				EffectSystem.Effect e = statues.get(f);
+				if (e == null) {
+					return;
+				}
+				String bn = String.format("/TweakTemplates/Brkb/%03d/", Math.max(f.statueBrkb(), 0));
+				var dl = tw.rawHash(bn, BRKB_DELAY);
+				float delay = dl.isPresent() ? Float.intBitsToFloat(dl.getAsInt()) : 3f;
+				float fade = Math.max(tw.f(bn, "Fade Time", 1f), 0);
+				var ph = tw.rawHash(bn, BRKB_PHYSICS);
+				e.hold = false;
+				e.setActTime(0); // 0x1DDF70: GO 애니를 0 초부터 (파편이 흩어지는 act)
+				e.setLife(delay + fade);
+				if (ph.isPresent() && (ph.getAsInt() & 1) != 0 && e.def.skeleton() != null) {
+					e.debris = new BreakDebris(e.def.skeleton()); // Brkb +0x30 bit 0x1 (517 = 1): 조각 물리 (41 문서 §1.4)
+					e.debrisSurface = surface;
+				}
+				e.setAnchor(EffectSystem.Anchor.of(f.world(new Matrix4f(), 1)));
+				statuesBroken++;
+				perFrame.add(new Runnable() {
+					@Override
+					public void run() {
+						e.alpha = e.time() > delay && fade > 0 ? Math.max(0, 1 - (e.time() - delay) / fade) : 1;
+						if (e.done()) {
+							perFrame.remove(this);
+							statues.remove(f, e);
+						}
+					}
+				});
+			}
+
+			@Override
+			public void unfreeze(devple.gow.engine.combat.EnemyFighter f) {
+				EffectSystem.Effect e = statues.remove(f);
+				if (e != null) {
+					e.stop(); // 0x1E8AF8: 석상에 0x40C (제거)
+				}
+			}
+		};
+	}
+
+	/**
+	 * 석상 GO 의 CDV 재질 MFX: CDV_MINStonedBRK 는 공 없이 볼록 덩어리 하나 (재질 MFX 22 = R_MIN "Breakable Rock": goRockhitS,
+	 * SND_SWORDHIT_STONE) [확실: 데이터] — 석상을 치면 피 대신 돌 조각·돌 소리.
+	 */
+	public static int statueMfx(devple.gow.tools.fx.EffectLibrary.EffectDef d) {
+		if (d == null || d.skeleton() == null) {
+			return 0;
+		}
+		var cdv = devple.gow.engine.combat.HitVolumes.cdvFor(d.wad(), d.skeleton());
+		if (cdv == null) {
+			return 0;
+		}
+		for (int m : cdv.materialFx) {
+			if (m > 0) {
+				return m;
+			}
+		}
+		return 0;
+	}
+
+	/** Brkb #c3441d8c (+0x20, 파괴 뒤 페이드 지연) / #93191d85 (+0x30 bit 0x1 파편 물리) — 41 문서 §1.1. */
+	private static final int BRKB_DELAY = 0xc3441d8c, BRKB_PHYSICS = 0x93191d85;
 
 	/**
 	 * PlayFX 템플릿 (sub_0019BBE0 / SCR_PlayEffect 0x19A720): Effect Name, Joint Name, 플래그 u16 +0x40
@@ -584,6 +712,9 @@ public final class MagicFx implements AutoCloseable {
 
 	/** 피격 재질 MFX: 맞은 구의 SheetFX → 몸 구 SheetFX → 500/501. */
 	public static int mfxOf(Hittable victim, boolean victimHero) {
+		if (victim instanceof devple.gow.engine.combat.EnemyFighter ef && ef.statueShown() && ef.statueMfx > 0) {
+			return ef.statueMfx; // 석상이 맞는다 (원작은 석상 GO 의 CDV 와 접촉)
+		}
 		var hv = victim.hitVolumes();
 		int m = hv != null ? hv.lastHitFx() : -1;
 		if (m <= 0 && hv != null) {
@@ -987,7 +1118,9 @@ public final class MagicFx implements AutoCloseable {
 		recentSounds.replaceAll((k, v) -> v - dt);
 		recentSounds.values().removeIf(v -> v <= 0);
 		for (Hittable h : enemies) {
-			boolean st = h.petrified();
+			// 회색 먼지는 석상 GO 가 없는 적만 [근사] — 원작에는 없다. 석상 GO 가 있으면 석화 순간 GO + 석상이 대신한다
+			boolean st = h.petrified() && !(h instanceof devple.gow.engine.combat.EnemyFighter ef && ef.statueGo() != null
+					&& fx.library().resolve(ef.statueGo()) != null);
 			ParticleSystem.Emitter e = stones.get(h);
 			if (st && e == null) {
 				stones.put(h, e = ps.add(defs.get("stone"), 0, 0, 0));

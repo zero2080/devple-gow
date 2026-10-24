@@ -330,7 +330,7 @@ HP ≤ 9800 → 잡기 원 → ○ GRAB → 260 MAIMEWGRAB (일반 GrabSync, 같
 - 결과 (쉬움, 결정적): 머리 뜯기 57.5 초 → 메시지 595 77.9 초 → 광선·석화·파괴 83.97 / 84.04 / 86.10 / 93.17 / 96.02 / 98.12 초 (6 번째) →
   MAcdHullOff·DrOffCam·문 불꽃 사라짐·아테나 얼굴 PlayTalk2 99.1 초 (여왕 사망 약 42 초 뒤) → 107.1 초 DMCWall VisOff (문 열림), CheckPoint.
   예전: 200 초 동안 미노타우로스만 다시 나옴 (석상 파괴 0 회 집계). 증거 `work/verify/athn02d_gaze/` (광선, 석화, 파괴, 문 카메라, 불꽃 벽 꺼짐).
-- 남은 차이: 석화된 적은 색이 그대로 (원작 돌 재질, 엔진은 회색 파티클 [근사]), 하피류는 이 구간에 나오지 않음 [미확인], 6 번째 뒤에도 남은
+- 남은 차이: ~~석화된 적은 색이 그대로~~ → 석상 GO 로 바꿔 끼움 (35 §2.2, 2026-10-24; 석상 타수 7 이라 6 번째 파괴 115.6 초, 그 사이 Respawn 이 더 나와 봇은 280 초 안에 문을 못 연다 — 43 문서), 하피류는 이 구간에 나오지 않음 [미확인], 6 번째 뒤에도 남은
   Respawn 이 3 마리를 더 낸다 (조건은 트리거 시점 LevelData1 ≤ 6 — 원작도 같은 데이터).
 - 테스트: `MedusaQueenFightTest.stoneKillCountsOncePerMinotaur` (1046 → LevelData1 2, 0.07 초 차이 두 석상 → LevelData4 2; 대조 0.5 초 제거 = 3),
   `MagicSpellsTest.medusaBeamNeedsSquare`, `BotInputTest`.

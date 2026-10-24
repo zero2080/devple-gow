@@ -5,6 +5,7 @@ import devple.gow.engine.asset.AnimatedModel;
 import devple.gow.engine.game.Tweaks;
 import devple.gow.tools.anim.AnimationSet;
 import devple.gow.tools.anim.Skeleton;
+import devple.gow.tools.combat.CombatFile;
 import devple.gow.tools.combat.CombatFile.Attack;
 import devple.gow.tools.wad.WadFile;
 import org.joml.Matrix4f;
@@ -98,6 +99,47 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 	private float stoneElapsed;
 	private boolean shattered;
 	private Runnable onShatter = () -> { };
+	/** Sold +0x20 석상 GO / +0x38 석화 순간 GO (없으면 null). */
+	private final String statueGo, freezeGo;
+	/** SCR_TurnToRock 을 실행했는지 (석화 순간 GO), 석상이 소유자를 대신하는지 (0x1E8960 → +0x340). */
+	private boolean turnedToRock, statue;
+	private StoneLook stoneLook;
+	/** 석상 GO 의 Breakable 템플릿 (R_MIN 517 "MIN StoneStatue"), 없으면 -1. Hit Points = 석상 타수 (517 = 7). */
+	private final int statueBrkb;
+	private final int statueHpMax;
+	/** 석상 Brkb +0x28 / +0x2A OrbEmitter (517: 771 "MIN Shatter" / 772 "MIN Air Shatter"), 없으면 -1. */
+	private final int statueOrbs, statueAirOrbs;
+	private int statueHp;
+	/** 석상 CDV (CDV_MINStonedBRK) 몸 MFX — 석상을 칠 때의 적중 이펙트 (피 대신 돌). 0 = 모름. */
+	public int statueMfx;
+
+	/** SCR_TurnToRock (Hash127Upper, FREEZEPOSE 160 의 SCRIPT 이벤트 #a9954dfa, 인자 a = 진행률 문턱) [확실]. */
+	public static final int SCR_TURN_TO_ROCK = 0xA9954DFA;
+	/** 0x19F798: 석화 기술 진행률이 이 값을 넘으면 석상 GO 생성 (0x3F7D70A4) [확실]. */
+	public static final float STATUE_AT = 0.99f;
+
+	/**
+	 * 석화 겉모습 (35 문서 §2.2): 원작은 적 몸을 다시 칠하지 않고 **돌 석상 GO 로 바꿔 끼운다**.
+	 * <ol>
+	 *   <li>{@link #turnToRock}: SCR_TurnToRock (0x19F8E0) — 석화 기술 진행률 &gt; 인자 (R_MIN 0.5) 면 Sold +0x38 GO (goMINFreeze) 를
+	 *       소유자 행렬에 1회 생성 (0x227208 / 0x228428), 다음 프레임부터 0x19F798 을 부른다.</li>
+	 *   <li>{@link #statue}: 0x19F798 — 진행률 &gt; 0.99 면 0x1E8960: Sold +0x20 GO (goMINStonedBRK, 돌 텍스처 TXR_Minotaurfile1 의
+	 *       조각 모델 + Brkb 500 "MAI StoneStatue") 를 생성해 소유자 행렬을 복사하고 메시지 0x415 (소유자) 를 보낸 뒤 소유자를 숨긴다
+	 *       (0x1DFA18 / 0x1E0768 → GO 플래그 0x11 / 0x27, 0x131300). 석상은 +0x340.</li>
+	 *   <li>{@link #shatter}: 석상이 맞으면 Brkb 파괴 act (조각이 흩어짐), 소유자 사망 0x405 + Stone Kill 0x416 (0x265C48).</li>
+	 *   <li>{@link #unfreeze}: 돌 지속이 끝나면 0x1E8AF8 — 석상에 0x40C (제거), 소유자를 다시 보이고 석상 행렬을 돌려받는다.</li>
+	 * </ol>
+	 */
+	public interface StoneLook {
+		void turnToRock(EnemyFighter f, String freezeGo);
+
+		/** @return 석상을 띄웠으면 참 (참이면 렌더러는 적 몸을 그리지 않는다) */
+		boolean statue(EnemyFighter f, String statueGo);
+
+		void shatter(EnemyFighter f);
+
+		void unfreeze(EnemyFighter f);
+	}
 
 	/**
 	 * @param ai1         AI1 템플릿 번호 (미노타우로스 Lv1 = 50)
@@ -179,6 +221,18 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 		AiData.Stone stn = ai != null ? ov.apply("stone", ai.stone(tmpl.soldier)) : null;
 		this.freezeMax = stn != null ? stn.resist() : 30f;
 		this.stoneMove = stn != null ? stn.move() : 160;
+		this.statueGo = stn != null ? stn.statue() : null;
+		this.freezeGo = stn != null ? stn.freeze() : null;
+		devple.gow.tools.level.GoBehavior sb = statueGo != null && wad != null ? devple.gow.tools.level.GoBehavior.find(wad, statueGo) : null;
+		this.statueBrkb = sb != null && sb.type().equals("Breakable") ? sb.template() : -1;
+		// Brkb Hit Points (덤프 7.0, 하위 비트 잡음 → 타수로 반올림, 41 문서 §1)
+		this.statueHpMax = statueBrkb >= 0 ? Math.max(1, Math.round(tw.f(String.format("/TweakTemplates/Brkb/%03d/", statueBrkb), "Hit Points", 1f))) : 1;
+		// s16 필드 (덤프 1.0000919 = 0x3F800303 → 하위 16 비트 0x303 = 771), 41 문서 §1.1
+		String bn = statueBrkb >= 0 ? String.format("/TweakTemplates/Brkb/%03d/", statueBrkb) : null;
+		var ob = bn != null ? tw.rawHash(bn, 0xb9a0d2ad) : java.util.OptionalInt.empty();
+		var oa = bn != null ? tw.rawHash(bn, 0x49322803) : java.util.OptionalInt.empty();
+		this.statueOrbs = ob.isPresent() ? (short) ob.getAsInt() : -1;
+		this.statueAirOrbs = oa.isPresent() ? (short) oa.getAsInt() : -1;
 		this.freezeMeter = freezeMax;
 		var sm = tw.rawHash(tmpl.node, 0xb5134762);
 		this.stoneTime = (sm.isPresent() ? sm.getAsInt() : 5000) / 1000f;
@@ -298,10 +352,18 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 			var cur = anim.current();
 			if (cur != null && anim.time() + dt < cur.duration) {
 				anim.update(dt);
+			} else if (cur != null && anim.time() < cur.duration * STATUE_AT + 1e-4f) {
+				// 끝 프레임에 멈춤 (반복 없이) — 진행률이 0.99 를 넘어야 석상이 뜬다 (R_MIN freezePose 는 2 프레임 0.033 초짜리 자세)
+				anim.update(Math.max(0, cur.duration * 0.999f - anim.time()));
 			}
+			stoneLook();
 			if (stoneElapsed >= stoneTime) {
 				stone = false;
 				freezeMeter = freezeMax;
+				if (statue && stoneLook != null) {
+					stoneLook.unfreeze(this); // 0x1E8AF8: 석상 제거 (0x40C), 소유자 다시 보임
+				}
+				statue = turnedToRock = false;
 			}
 			nav.rootMoved = false;
 			if (nav.world() != null) {
@@ -878,6 +940,80 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 		return stoneTime;
 	}
 
+	/** 석화 겉모습 연결 (석상 GO 이펙트, {@link StoneLook}). null 이면 적 몸 그대로 (테스트·헤드리스). */
+	public void setStoneLook(StoneLook l) {
+		stoneLook = l;
+	}
+
+	/** 석상이 이 적을 대신해 보이는 중 (렌더러는 적 몸을 그리지 않는다, 원작 0x1DFA18 / 0x1E0768 숨김). */
+	public boolean statueShown() {
+		return statue;
+	}
+
+	/** SCR_TurnToRock 이 실행됐는지 (석화 순간 GO). */
+	public boolean turnedToRock() {
+		return turnedToRock;
+	}
+
+	public String statueGo() {
+		return statueGo;
+	}
+
+	/** 석상 Breakable 템플릿 번호 (-1 = 없음) — 지연·Fade Time·파편 물리 비트. */
+	public int statueBrkb() {
+		return statueBrkb;
+	}
+
+	/** 석상 남은 타수 / 최대 (Brkb Hit Points). */
+	public int statueHp() {
+		return statueHp;
+	}
+
+	public int statueHpMax() {
+		return statueHpMax;
+	}
+
+	/** 부서진 석상의 OrbEmitter 번호 (Brkb +0x28 지상 / +0x2A 공중, 0x1DDDF0), 없으면 -1. */
+	public int statueOrbEmitter(boolean air) {
+		return air ? statueAirOrbs : statueOrbs;
+	}
+
+	public String freezeGo() {
+		return freezeGo;
+	}
+
+	/**
+	 * 석화 기술 진행률로 SCR_TurnToRock (0x19F8E0) → 0x19F798 단계를 밟는다. 돌 상태에서는 전투 갱신이 멈춰 있으므로 이벤트 창 대신
+	 * 이벤트 인자 (진행률 문턱) 를 직접 본다 [확실: 비교 0x19F9A0 / 0x19F838].
+	 */
+	private void stoneLook() {
+		var mv = combat.move();
+		if (mv == null || mv.id() != stoneMove) {
+			return;
+		}
+		float p = combat.progress();
+		if (!turnedToRock) {
+			CombatFile.Event ev = null;
+			for (CombatFile.Event e : mv.events()) {
+				if (e.type() == 8 && e.hash() == SCR_TURN_TO_ROCK) {
+					ev = e;
+					break;
+				}
+			}
+			if (ev == null || p < ev.start() || ev.a() >= p) {
+				return; // 이벤트 없는 기술 (석상 없음) 이거나 아직 문턱 전
+			}
+			turnedToRock = true;
+			if (freezeGo != null && stoneLook != null) {
+				stoneLook.turnToRock(this, freezeGo);
+			}
+		}
+		if (!statue && p > STATUE_AT && statueGo != null && stoneLook != null) {
+			statue = stoneLook.statue(this, statueGo);
+			statueHp = statueHpMax;
+		}
+	}
+
 	/** 부서짐 콜백 (Stone Kill 보너스 등). */
 	public void onShatter(Runnable r) {
 		onShatter = r;
@@ -889,10 +1025,20 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 			return Result.IGNORED;
 		}
 		if (stone) {
-			// 석상(Brkb, Hit Points 1)은 한 번 맞으면 부서짐 → 소유자 사망 0x405 + Stone Kill 0x416
+			if (statue) {
+				// 석상 = Breakable (0x203AF0 → 0x1DE4D8): hp −= 공격 +0x19 피해 바이트 (최소 1) [확실: 41 문서 §1.2]. 517 "MIN StoneStatue" = 7
+				statueHp -= Math.max(1, attack != null ? attack.damage() : 1);
+				if (statueHp > 0) {
+					return Result.HIT;
+				}
+			}
+			// 석상 hp ≤ 0 (또는 석상이 뜨기 전 석화 자세) → 부서짐: 소유자 사망 0x405 + Stone Kill 0x416
 			stone = false;
 			shattered = true;
 			hp = 0;
+			if (statue && stoneLook != null) {
+				stoneLook.shatter(this); // 석상 Brkb 파괴 act (조각) — 0x1DDF70
+			}
 			onShatter.run();
 			return Result.HIT;
 		}

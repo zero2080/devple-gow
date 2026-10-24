@@ -1539,6 +1539,7 @@ public final class GameScene implements Scene {
 			magicFx.addWad(kind.assets()); // 적 WAD 의 이펙트 GO·PlayFX/MFX 템플릿 (40 문서 §9)
 			combatCamera().addWad(kind.assets().wad()); // 처형 카메라 act (ANM_camera 외부 그룹 MaiCy2 / MaiMin …)
 			magicFx.bind(f.combat(), devple.gow.engine.fx.MagicFx.joints(f), false); // 적 기술 PlayFX·적중 피 (40 문서)
+			f.setStoneLook(magicFx.stoneLook()); // 석화 = 석상 GO 로 바꿔 끼움 (Sold +0x20/+0x38, 35 문서 §2.2)
 		}
 		f.setIncomingScale(hero::incomingScale);
 		EnemyFactory.Kind fk = kind;
@@ -1572,7 +1573,9 @@ public final class GameScene implements Scene {
 		String node = String.format("/TweakTemplates/Bonus/%03d/", hero.ctl.grounded ? 23 : 24);
 		var orbs = k.tweaks().rawHash(node, 0xeed31206);
 		hero.player.addRedOrbs(orbs.isPresent() ? (int) Float.intBitsToFloat(orbs.getAsInt()) : 15);
-		magicFx.effect("shatter", f.pos);
+		if (!f.statueShown()) {
+			magicFx.effect("shatter", f.pos); // 석상이 뜨기 전에 부서짐 → 근사 파편. 석상이면 Brkb 파괴 act 가 조각을 흩뿌린다
+		}
 		session.sound.play("SND_PICKUPS_ORBS_E");
 		if (bridge != null) {
 			bridge.stoneKill(f); // 1046 Stone Kill → 스크립트 (0x265E04, ATHN02D EventSmash1)
@@ -2216,6 +2219,7 @@ public final class GameScene implements Scene {
 			auto.grabTarget = at != null && at.maxHp() < 32767 && waitsForGrab(at);
 			// 메두사의 시선 (원작 조작 L2 + □, 메시지 595): 보유 + MP + 석화 가능한 대상 (게이지 < 60000, 메두사·갑옷병 면역) 이 아직 돌이 아님 [엔진 전용 봇]
 			boolean gazeOwned = hero.player.owned(Weapon.MEDUSA);
+			auto.mp = gazeOwned ? hero.player.mp : -1;
 			auto.gaze = gazeOwned && hero.player.mp >= AutoPlay.GAZE_MP && at != null && !at.dead() && !at.petrified()
 					&& at.freezeMax() < 60000 && !grab.active();
 			auto.selectGaze = gazeOwned && hero.player.selectedMagic != Weapon.MEDUSA;
@@ -2561,7 +2565,13 @@ public final class GameScene implements Scene {
 				if (en.actor() != null && !en.actor().destroyed()) {
 					world.destroy(en.actor()); // DestructionSensor (예: 튜토리얼 메시지)
 					String emitter = en.kind().assets().wad().name().replace(".WAD", "").substring(2) + " Death";
-					emitOrbs(orbTweaks.findTemplate("/TweakTemplates/OrbEmitter/", emitter), f.pos); // 적 사망 0x1DDDF0
+					int so = f.shattered() && f.statueShown() ? f.statueOrbEmitter(!hero.ctl.grounded) : -1;
+					if (so >= 0) {
+						// 부서진 석상: 석상 Breakable 의 OrbEmitter (517 → 771 "MIN Shatter", 공중 772) — 0x1DDDF0 [확실: 템플릿], 소유자 "MIN Death" 대신 [추정]
+						emitOrbs(orbTweaks.findNode(String.format("/TweakTemplates/OrbEmitter/%03d/", so)), f.pos);
+					} else {
+						emitOrbs(orbTweaks.findTemplate("/TweakTemplates/OrbEmitter/", emitter), f.pos); // 적 사망 0x1DDDF0
+					}
 				}
 			}
 		}
@@ -2945,8 +2955,8 @@ public final class GameScene implements Scene {
 		env.applyFog(enemyShader, cam, e.window().height());
 		Matrix4f m = new Matrix4f();
 		for (Enemy en : enemies) {
-			if (en.fighter().shattered()) {
-				continue; // 부서진 석상 (원작은 *stonedbrk 파편 모델) [근사: 숨김]
+			if (en.fighter().shattered() || en.fighter().statueShown()) {
+				continue; // 석상 GO (*StonedBRK) 가 대신 보인다 — 원작 0x1E8960 이 소유자를 숨김 (0x1DFA18 / 0x1E0768)
 			}
 			en.model().setVariant(en.fighter().modelVariant); // BMI 단계별 갑옷 (37 문서 §10)
 			// SCR_NoShadow (0xBFC016FE, Hash127Upper): 스폰 기술 500–504·523 SKSshipDismount 동안 그림자 없음 — 난간 밖·바닥 밑에서 오를 때

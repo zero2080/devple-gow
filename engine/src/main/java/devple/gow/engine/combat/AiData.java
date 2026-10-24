@@ -40,8 +40,13 @@ public final class AiData {
 	 *
 	 * @param resist +0x26C u16 동결 게이지 최대치 (미노타우로스 6000, 사이클롭스 20000, ≥ 60000 = 면역)
 	 * @param move   +0x270 u16 석화 기술 ID (적 160 freezePose, 영웅 120)
+	 * @param statue +0x20 char[24] 석상 GO (goMINStonedBRK) — 석화 기술 진행률 &gt; 0.99 에 소유자 대신 생성 (0x19F798 → 0x1E8960) [확실]
+	 * @param freeze +0x38 char[24] 석화 순간 GO (goMINFreeze) — SCR_TurnToRock 인자 진행률에 소유자 행렬로 1회 생성 (0x19F8E0) [확실]
 	 */
-	public record Stone(int resist, int move) {
+	public record Stone(int resist, int move, String statue, String freeze) {
+		public Stone(int resist, int move) {
+			this(resist, move, null, null);
+		}
 	}
 
 	/**
@@ -289,7 +294,8 @@ public final class AiData {
 		if (base + 0x272 > b.limit()) {
 			return null;
 		}
-		return new Stone(b.getShort(base + 0x26C) & 0xFFFF, b.getShort(base + 0x270) & 0xFFFF);
+		ByteBuffer sb = b.duplicate().position(base).slice().order(ByteOrder.LITTLE_ENDIAN);
+		return new Stone(b.getShort(base + 0x26C) & 0xFFFF, b.getShort(base + 0x270) & 0xFFFF, cstr(sb, 0x20), cstr(sb, 0x38));
 	}
 
 	/** TWK 바이너리에서 hash 키의 블록 값 원시 바이트 (NUL 이후 포함). TweakFile 레코드 규칙 그대로. */

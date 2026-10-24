@@ -35,4 +35,26 @@ public record GoBehavior(String owner, String type, int template, int id) {
 		int id = d.limit() >= 0x28 ? d.getInt(0x24) : 0;
 		return new GoBehavior(owner, sb.toString(), tpl, id);
 	}
+
+	/**
+	 * WAD 안에서 GO 인스턴스 (CXT 0x5C 바이트) 이름이 goName (대소문자 무시) 인 것 바로 뒤 (같은 그룹) 의 비헤이비어. 없으면 null.
+	 * 예: R_MIN gominstonedbrk → Breakable 517 "MIN StoneStatue" (35 문서 §2.2).
+	 */
+	public static GoBehavior find(devple.gow.tools.wad.WadFile wad, String goName) {
+		String last = null;
+		for (devple.gow.tools.wad.WadTag t : wad.tags()) {
+			if (t.tag() != devple.gow.tools.wad.WadTagType.RESOURCE || !t.hasData() || t.name() == null) {
+				continue;
+			}
+			ByteBuffer d = t.data();
+			if (t.magic() == GoInstance.MAGIC && d.limit() == 0x5C) {
+				last = t.name().trim();
+				continue;
+			}
+			if (last != null && last.equalsIgnoreCase(goName) && t.magic() == 0x17 && is(d)) {
+				return parse(last, d.order(java.nio.ByteOrder.LITTLE_ENDIAN));
+			}
+		}
+		return null;
+	}
 }

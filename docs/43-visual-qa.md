@@ -799,6 +799,12 @@ BMI PAND03G (보스 등장 조건 미충족), 분신 크라토스 ATHN08B (가�
 메두사 여왕 뒤 미노타우로스 방 (2026-10-24, 37 §5.2): 봇이 시선 (← 선택, L2 홀드 + □ 홀드) 으로 석화하고 □ 로 부숴 6 번째 파괴 98.1 초 → 문 카메라·아테나 얼굴
 99.1 초 → DMCWall 107.1 초. 고친 것: 광선 = □ 홀드 (0x1972E8), 석상 파괴 1046 전역 이벤트 (0x265E04), 부서진 석상 즉시 제거 (두 번 세기 방지).
 증거 `work/verify/athn02d_gaze/1_beam_91.8s.jpg`, `2_petrified_93.0s.jpg`, `3_shatter_93.4s.jpg`, `4_door_cam_98.8s.jpg`, `5_flame_wall_off_107.5s.jpg`.
+석화 겉모습 (2026-10-24, 35 §2.2): 원작 영상은 석화된 미노타우로스가 온통 회색 돌이고 부수면 돌 덩어리가 튄다. 엔진은 색이 그대로였고 회색 파티클만 냈다.
+원작은 몸을 다시 칠하지 않고 Sold +0x20 석상 GO (goMINStonedBRK: 돌 텍스처 GFX_minotaurstone 조각 모델, Brkb 517 타수 7) 로 바꿔 끼운다 (0x19F8E0 → 0x19F798 → 0x1E8960)
+[확실] → `EnemyFighter.StoneLook` / `MagicFx.stoneLook`. 석상 메시는 같은 이름 MAT_body 의 두 번째 정의를 써야 해서 MAT 이름 해석도 고쳤다.
+같은 재현 (쉬움, 봇): 회색 석상 84.0 초, 첫 파괴 85.8 초 (조각·돌 먼지, 적중 MFX 22 돌), 6 번째 EventSmash1 115.6 초 (예전 98.1 초 — 석상이 한 방이 아니라 □ 4 번). 그 사이 Respawn 이 더 내 6 번째 때 스폰 수 ≠ 없어진 수라
+문 조건 (LevelData1 ≥ 6 && LevelData3 == LevelData4) 이 안 맞고, 봇은 MP 가 바닥나 (미노타우로스 오브는 붉은 오브뿐) 남은 미노타우로스를 보통 공격으로 늦게 잡아 280 초 안에 문이 안 열린다 [봇 한계 — 스크립트·데이터는 그대로].
+증거 `work/verify/athn02d_statue/before_petrified_93.0s.jpg` (예전), `after_statues_84.0s.jpg`, `after_shatter_86.3s.jpg`, `hero_before_petrified.png`, `hero_after_statue.png`, `hero_after_shatter.png`.
 
 이 검증으로 찾아 고친 엔진 버그:
 - **갑판 아래로 떨어짐** (ATHN01A): 위에 있는 적 몸이 영웅을 한 틱에 10–14 아래로 밀면 다음 틱 바닥 질의가 갑판 밑에서 시작해 ATHN01B 로 떨어졌다 → 38 §19 후속.

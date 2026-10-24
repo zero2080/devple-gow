@@ -64,6 +64,8 @@ public final class AutoPlay {
 	private int teleports, visited, deaths, vetoes;
 	/** 영웅 붉은 오브 수 (GameScene 이 매 틱 넣음, 기록용). */
 	public int redOrbs;
+	/** 영웅 MP (로그용, &lt; 0 = 모름). */
+	public float mp = -1;
 	/** 잡기를 기다리는 소품이 가까이 있음 (GameScene, ATHN01F 침대 쌍둥이): 목표에서 R2 대신 ○ (GRAB → MAIXPTBEDMOUNT). */
 	public boolean grabCue;
 	/** 싸우는 대상이 잡기를 기다림 (자세 태그 ≥ 0, 예: 선창 히드라 기절 루프 107 SET_1B0 830) → 콤보 대신 ○ 부터. */
@@ -134,7 +136,7 @@ public final class AutoPlay {
 		lastY = hero.y;
 		lastZ = hero.z;
 		if ((int) (time / 5) != (int) ((time - dt) / 5)) {
-			log(String.format(Locale.ROOT, "t=%.0f 위치 %s 오브 %d %s", time, fmt(new float[]{hero.x, hero.y, hero.z}), redOrbs,
+			log(String.format(Locale.ROOT, "t=%.0f 위치 %s 오브 %d%s %s", time, fmt(new float[]{hero.x, hero.y, hero.z}), redOrbs, mp >= 0 ? String.format(Locale.ROOT, " MP %.0f", mp) : "",
 					enemy != null ? "적 " + fmt(new float[]{enemy.x, enemy.y, enemy.z}) : atGoal ? "목표 대기 " + (int) goalTime : "이동"));
 		}
 		if (time > timeout && !done) {

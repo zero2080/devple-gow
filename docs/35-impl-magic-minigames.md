@@ -91,7 +91,35 @@ TWK `/Player/MedusaHead` 의 일부 값은 덤프가 float 로 잘못 보여준�
   0x416 (1046) 은 전역 스크립트 이벤트다 (0x265E04 → PostEvent 0x1A8C78, 보낸 쪽 = 그 적) — ATHN02D EventSmash1 이 세어 문을 연다
   (`CombatScriptBridge.stoneKill`, 37 문서 §5.2). 부서진 석상의 스크립트 제거는 1046 전달 다음 틱 (`GameScene.SHATTER_DESTROY`).
 - 보너스는 적 WAD 의 Bonus 023 "Stone Kill" (붉은 오브 15, 메시지 33), 공중이면 024 "Air Stone Kill" (30, 34) [확실: 값].
-- `GameScene.stoneKill` 에서 오브를 더한다. 파편 모델 `*stonedbrk` 대신 회색 파편 파티클을 쓴다 [근사].
+- `GameScene.stoneKill` 에서 오브를 더한다. 겉모습은 §2.2 (석상 GO).
+
+### 2.2 석화 겉모습 = 석상 GO 로 바꿔 끼우기 (2026-10-24) [확실: 코드·데이터]
+원작은 석화된 적 몸의 색·재질을 바꾸지 **않는다** (텍스처 CLUT·머티리얼 색 덮어쓰기 없음). 대신 Sold 구조체의 두 GO 이름으로 별도 객체를 만든다.
+
+| 단계 | 원작 | 데이터 (R_MIN, Sold 050) |
+|---|---|---|
+| 석화 기술 160 FREEZEPOSE 의 SCRIPT `#a9954dfa` = Hash127Upper("SCR_TurnToRock") | SCR_TurnToRock 0x19F8E0: 진행률 (+0xCC +0x1C) &gt; 이벤트 인자 (a = 0.5) 면 Sold **+0x38** GO 를 소유자 행렬에 생성 (0x227208 / 0x228428), 이어서 콜백 +0x2C = 0x19F798 | +0x38 `goMINFreeze` (ANM_minfreeze, 0.13 초 1회) |
+| 0x19F798 | 진행률 &gt; 0.99 (0x3F7D70A4) 면 0x1E8960: Sold **+0x20** GO 생성 (0x132648), 메시지 0x415 (인자 = 소유자, 석상 0x25C000 이 +0x30 에 저장), 소유자 월드 행렬 복사, 소유자 숨김 (0x1DFFA8 / 0x1DFA18 / 0x1E0768 → GO 플래그 0x11·0x27, 0x131300), 석상 = 소유자 +0x340. 생성 실패이고 영웅이 아니면 0x405 (사망) | +0x20 `goMINStonedBRK` = MDL_MINStonedBRK (돌 조각 모델) + ANM_minstonedbrk (파괴 act 2.47 초) + CDV_MINStonedBRK + FXC_AID* 먼지 + SEM |
+| 석상 = Breakable | GO 비헤이비어 Breakable 템플릿 **517** "MIN StoneStatue": Hit Points **7**, 지연 #c3441d8c 3 초, Fade Time 1 초, #93191d85 bit 0x1 = 파편 물리, Bonus 023/024 (Stone Kill / Air Stone Kill), OrbEmitter 771/772. 맞을 때마다 hp −= 공격 피해 바이트 (□ = 2, 41 §1.2) | R_MIN TWK |
+| 석상 재질 | 석상 메시의 `MAT_body` 는 몸과 **같은 이름의 두 번째 정의** (TXR_Minotaurfile1 = GFX_minotaurstone, 금 간 회색 돌, 몸과 같은 UV 배치). CDV 재질 MFX 22 "Breakable Rock" (goRockhitS, SND_SWORDHIT_STONE) | R_MIN 태그 순서 |
+| 해제 | 0x1E8AF8 (SCR_UnFreeze 0x19F738 / 0x1D38C8): 석상에 0x40C (제거), 소유자 다시 보임 | |
+
+엔진:
+- `AiData.Stone(resist, move, statue, freeze)` = Sold +0x26C / +0x270 / +0x20 / +0x38. `GoBehavior.find(wad, go)` 로 석상 Breakable 템플릿.
+- `EnemyFighter.StoneLook` (`MagicFx.stoneLook()`): 돌 상태 갱신에서 석화 기술 진행률로 turnToRock → statue (진행률 &gt; 0.99) → shatter / unfreeze.
+  R_MIN freezePose 는 2 프레임 (0.033 초) 자세라 예전 엔진은 진행률 0.5 에서 멈췄다 → 마지막 프레임까지 진행 (0.999).
+- 석상은 `EffectSystem` 이펙트 (`hold` = act 0 초 자세, 석화 자세 끝과 같은 포즈 [추정: 0x1DDF70 이 파괴 때 애니를 0 초부터 재생]). 석상이 떠 있으면
+  `GameScene`/`HeroTestScene` 은 적 몸을 그리지 않고, 적중 MFX 는 석상 CDV 재질 22 (돌 조각·돌 소리).
+- 파괴: 석상 타수 7 (Brkb 517) 이 0 이 되면 hold 를 풀고 파괴 act + 파편 물리 (`BreakDebris`) → 3 초 뒤 1 초 페이드 (41 §1.2). 회색 근사 파티클 (`shatter`) 은
+  석상이 뜨기 전에 부서졌을 때만. 회색 "stone" 먼지는 석상 GO 가 없는 적만 [근사].
+- 같은 이름 MAT 정의 해석: `GowModel.load` 가 MDL 앞쪽 가장 가까운 정의로 풀고 첫 정의가 아니면 `MAT_body@<태그>` 별칭, `WadAssets` 가 같은 별칭을 등록
+  (03 문서 §3 규칙). 예전엔 이름 첫 정의만 써서 석상도 갈색 몸 텍스처였다.
+- 석상 StoneLook 이 없으면 (헤드리스 테스트) 예전처럼 한 번에 부서진다.
+- 부서진 석상의 오브 = 석상 Brkb +0x28 / +0x2A OrbEmitter (517 → 771 "MIN Shatter" / 772 "MIN Air Shatter") [확실: 템플릿], 소유자 "MIN Death" (770) 대신 [추정].
+- [미확인] 두 CLUT 팔레트 (PAL_minotaur, PAL_MAI01F 두 번째 = 회색조) 의 사용처 — 석화 경로 (0x19F8E0·0x1E8960·0x265C48) 에는 CLUT 선택이 없다.
+  [미구현] 석상이 뜨기 전 (진행률 0.99 전) 적중, 석상 생성 실패 시 0x405 사망, 영웅 석화 석상 (R_PERMK goMAIFreeze / stoneherobrk, SCR_TurnToRock a = 0.9).
+- 테스트 `StoneStatueTest` (6). 증거 `work/verify/athn02d_statue/` (before_petrified_93.0s = 예전 색 그대로, after_statues_84.0s = 회색 석상 둘,
+  after_shatter_86.3s = 조각, hero_* = 연습 씬 전후).
 
 ## 3. 제우스의 분노 (`ZeusBolt`) — 0x19FB50–0x1A10A8, Arrow 0x222710 / 0x2249A0
 | 단계 | Arrow Emitter | Magic Drain | Playback | Charge Time | Ch1 (임계·이미터·MP) | Ch2 |
@@ -101,12 +129,14 @@ TWK `/Player/MedusaHead` 의 일부 값은 덤프가 float 로 잘못 보여준�
 | 2 | 2 | 2.5 | 1.75 | 0.75 | 0.375 · 3 · 10 | 0.75 · 5 · 20 |
 
 **흐름**:
-- R2 홀드 → BOLTPULLOUT(60) → AUTO → BOLTTHROW(61) 반복.
+- L2 홀드 → BOLTPULLOUT(60) → AUTO → BOLTTHROW(61) 반복 (마법 = L2, 10 §16).
 - SCR_ThrowThunderbolt 창에서 기술 인스턴스당 1발을 쏜다.
-- 원작 상태 머신 0x29D85A: 큐 최대 2, 버튼 0x10 홀드 시 차지.
+- 원작 상태 머신 0x29D85A (SCR_TriggerThunderbolt 0x1A0E98): □ **새로 누름** (패드 +0x28 & 0x80, 0x1A0F20) = 던지기 요청 (상태 3, 큐 최대 2),
+  단계 Allow Charging 이고 △ **홀드** (+0x28 & 0x10, 0x1A0F94) = 차지 (상태 1). SCR_ChargeThunderbolt 0x1A07CC 도 & 0x10 이 서 있는 동안 차지를 이어 간다 [확실].
 
 **차지**:
-- □ 를 누르고 있는 시간 / Charge Time ≥ Ch2 이면 Ch2, ≥ Ch1 이면 Ch1 [추정: 비트 0x10 = □].
+- **△** 를 누르고 있는 시간 / Charge Time ≥ Ch2 이면 Ch2, ≥ Ch1 이면 Ch1 [확실: 버튼 — 패드 비트 4 = △ (Pad_Read 0x17C384), 메시지 741
+  "제우스의 힘 [L2] 홀드 + [△] 홀드"]. 예전 엔진은 □ 로 차지했다 (`ZeusBolt.CHARGE_BUTTON`, 2026-10-24).
 - 차지 샷의 MP 는 기본 소모를 **대체**한다 (0x1DCA58 한 번).
 - Allow Charging 은 bool 이다 (하위 바이트, 단계 0 = 거짓).
 
@@ -309,7 +339,7 @@ R_PERMK 값 (세 단계 같음): Bright **0 = CameraFilter/000 "None"** (색 전
 | 제우스 | goBolt + goStdBolt 꼬리 (Arrow 템플릿), 명중 goBoltHit | 차지 goBoltChargeUp 미연결 |
 | 하데스 | goDedRed 영혼, goDeadHit, goDeadDie | |
 | 포세이돈 | goLightningAttackMain + goLightningRadius (배율 = 연타 사거리), 연타율 × From Above Bolt Freq 로 goStrikeGrp, 피해 틱 goLightningSingleBolt, Fog/000 안개 대체 (§4.6) | 카메라 필터 렌더 (값이 "None" 이라 보이지 않음) |
-| 석상 먼지 / 파괴 | – (원작 *stonedbrk 파편 모델 미구현) | 회색 파티클 그대로 |
+| 석화 / 석상 / 파괴 | goMINFreeze (SCR_TurnToRock), 석상 goMINStonedBRK (돌 텍스처 조각 모델, Brkb 517 파괴 act + 파편 물리), §2.2 | 석상 GO 가 없는 적의 회색 먼지 |
 
 데이터가 없으면 (WAD 없음·이름 미해석) 예전 파티클로 대신한다. 근사였던 스크린샷 `work/shots/35/*.png` 는 40 문서 §8 로 대체.
 
@@ -322,17 +352,37 @@ R_PERMK 값 (세 단계 같음): Bright **0 = CameraFilter/000 "None"** (색 전
 | `MagicSpellsTest.medusaPetrifiesMinotaurAndShatters` | L2 홀드 + □ 홀드 → 81→82, 정면 150 유닛 미노타우로스 석화 (저항 6000), 옆 적은 그대로, MP 초당 12.5, 돌 지속 5초, □ 공격 → 파괴 + 콜백 |
 | `medusaStoneWearsOff` | 5초 후 해제, 게이지 최대 복귀 |
 | `zeusBoltHitsAtDistanceAndCostsMp` | 25m 표적 명중, 피해 = 8 × 발수, MP = 100 − 5 × 발수 |
-| `zeusChargedShotUsesCh2` | 단계 2 + □ 홀드 0.8초 → Ch2, 소모 20, 피해 65 |
+| `zeusChargedShotUsesCh2` | 단계 2 + △ 홀드 0.8초 → Ch2, 소모 20, 피해 65 |
+| `zeusSquareHoldDoesNotCharge` | 단계 2 + □ 홀드 0.8초 → 일반 샷 (소모 2.5) — □ 는 차지가 아님 |
+| `StoneStatueTest` (6) | Sold +0x20/+0x38 이름, Breakable 517 타수 7, 석상 MAT_body = 돌 텍스처, GO 해석·CDV MFX 22, 석화 → 석화 순간 GO → 석상 → □ 피해 2 × 4 번째에 파괴, 지속 끝 해제 |
 | `hadesSoulsDamageNearbyEnemies` | 영혼 3, MP 75 소모, 근처 두 적 10 단위 피해, 사거리 밖은 무피해 |
 | `MiniGameTest` (6) | 사이클롭스 4 프롬프트 성공 / 무입력 → 242 / 틀린 버튼 즉시 242, 고르곤 180+360 회전 성공 / 무입력 → 261 탈출, 무작위·사분면 |
 | `GrabTest` | 새 RepeatPress 규칙으로도 연타 성공 402 / 무입력 실패 403 |
 | `LightningMashTest` (4) | 포세이돈 매시 미터: ○ 초당 10회 → 연타율 7/15, Max 정지, 손 떼면 5 초 안에 0, Allow Mashing 거짓 → 0, R_PERMK 값 (Damage Freq 12, From Above 20, 1단계 Allow 거짓) |
 
 ## 9. 남은 것
-- 석상 흔들림, `*stonedbrk` 파편 모델, 영웅 석화(적 메두사 EyeAttack).
+- 석상 흔들림, ~~`*stonedbrk` 파편 모델~~ (§2.2), 영웅 석화 석상 (goMAIFreeze / stoneherobrk).
 - 제우스 차지 연출(boltCharge* 애니 혼합, goBoltChargeUp), 연속 입력 큐 2개, rWeapIH 관절 기준 발사 위치.
 - ~~원작 FXC/PTC 이펙트를 GO 단위로 붙이기~~ (40 문서), Wiggle Meter (아이콘 12/13 은 있으나 사용처 미확인).
-- 마법 선택·섬광·차지 버튼 비트(0x10/0x80)의 실제 패드 대응 확인.
+- ~~마법 선택·섬광·차지 버튼 비트(0x10/0x80)의 실제 패드 대응 확인~~ → §10 (2026-10-24).
+
+## 10. 마법 입력 대조 (원작 실행 파일 ↔ 업그레이드 설명) [확실]
+패드 워드 = Pad_Read 0x17C384: 비트 0 L2, 1 R2, 2 L1, 3 R1, 4 (0x10) △, 5 (0x20) ○, 6 ×, 7 (0x80) □ (10 §16). 새로 누름 = 현재 &amp; (현재 ^ 이전) (+0x28 / +0x2C).
+
+| 마법 | 원작 코드 | 메시지 | 엔진 |
+|---|---|---|---|
+| 선택 | 방향키 0x1D7E10 → 0x1D7ED8 (→ 3 포세이돈, ← 4 메두사, ↓ 5 제우스, ↑ 6 하데스) | 594/597/598 | `Magic.select` 같음 |
+| 시전 | L2 = CombatInput 6 (MAGIC 분기) | 597/598/730/751 "[L2]" | `CombatInput` 6 → L2 같음 |
+| 포세이돈 격노 | 연타 ○ (0x20 새로 누름, Mashometer) | 732 "[L2], [○]" | `LightningMash` 같음 |
+| 메두사 광선 | SCR_MedusaHead 0x1972E8 현재 & 0x80 | 734 "L2 홀드 + □ 홀드" | `MedusaGaze` □ 홀드 같음 |
+| 메두사 섬광 | SCR_TriggerMedusaHead 0x197FD8 새로 누름 & 0x10 | 735 "L2 홀드 + △" | △ 같음 |
+| 메두사 Nuke | 0x197FD8 새로 누름 & 0x20 (+ 분기 CIRCLE) | 737 "L2 홀드 + ○ 홀드" | ○ 같음 |
+| 제우스 던지기 | 0x1A0E98 새로 누름 & 0x80 (+ AUTO 분기) | 739 "L2 홀드 + □ 홀드" | AUTO 분기 (□ 요청 큐 미구현) |
+| 제우스 차지 | 0x1A07CC / 0x1A0F94 현재 & 0x10 | 741 "L2 홀드 + △ 홀드" | **□ → △ 로 고침** |
+| 하데스 | L2 | 751/752 | 같음 |
+
+- **방향키 선택 + R2 시전은 원작에 없다**: R2 (비트 1, CombatInput 9) 는 '사용' 버튼 (상자·문·세이브·1024) 이고 영웅 기술 분기에 쓰이지 않는다.
+  엔진도 R2 로 시전하지 않는다 — 40 문서 실행 예의 `R2:` 스크립트 (예전 배치의 흔적) 를 `L2:` 로 고쳤다. 봇 (`BotInput`/`AutoPlay`) 은 제우스를 쓰지 않아 바꿀 것 없음.
 
 ## 9. 아르테미스의 검 (리드, 2026-10-19)
 | 항목 | 구현 | 근거 |

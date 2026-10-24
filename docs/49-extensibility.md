@@ -367,7 +367,7 @@ replace.idle@ANM_MIN=idle2
 | `body.<필드>` | 몸 상자: `half`·`height`·`base` (m), `flags` (비트 1 = 밀기 끔), `joint` |
 | `ride.<필드>` | 점프·줄: `jump`·`zipSpeed`·`zipAccel`·`climb`·`ropeJumpUp`·`ropeJumpOut` |
 | `soldier.<필드>` | 공격 토큰: `cost`·`capacity`·`capA`·`capB` |
-| `stone.<필드>` | 석화: `resist` (≥ 60000 면역), `move` |
+| `stone.<필드>` | 석화: `resist` (≥ 60000 면역), `move`, `statue` (석상 GO, 빈 값 = 없음), `freeze` (석화 순간 GO) |
 
 예 (`mods/hard/ai.properties`):
 

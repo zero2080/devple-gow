@@ -24,6 +24,8 @@ public final class TextureLibrary {
 	private final Map<String, List<Integer>> byName = new HashMap<>();
 	private final List<Entry> textures = new ArrayList<>();
 	private final List<MaterialResource> materials = new ArrayList<>();
+	/** materials 와 같은 순서의 MAT_ 정의 태그 번호 ({@link #materialAlias} 해석용). */
+	private final List<Integer> materialTags = new ArrayList<>();
 
 	public TextureLibrary(WadFile wad) {
 		this.tags = wad.tags();
@@ -39,6 +41,7 @@ public final class TextureLibrary {
 				txrIdx.add(i);
 			} else if (m == MaterialResource.MAGIC) {
 				materials.add(MaterialResource.parse(t));
+				materialTags.add(i);
 			}
 		}
 		for (int i : txrIdx) {
@@ -101,5 +104,19 @@ public final class TextureLibrary {
 
 	public List<MaterialResource> materials() {
 		return materials;
+	}
+
+	/** {@link #materials()} i 번째 정의의 WAD 태그 번호. */
+	public int materialTag(int i) {
+		return materialTags.get(i);
+	}
+
+	/**
+	 * 같은 이름의 MAT_ 정의가 여러 개일 때 두 번째부터 쓰는 별칭 ({@code MAT_body@<태그 번호>}). 첫 정의는 원래 이름 그대로.
+	 * {@link devple.gow.tools.model.GowModel#load} 가 모델 그룹의 MAT 참조를 "앞쪽 가장 가까운 정의" 로 풀 때 같은 별칭을 쓴다.
+	 * 예: R_MIN 의 MAT_body 는 미노타우로스 몸 (TXR_MIN1_Minotaur_file1) 과 석상 MDL_MINStonedBRK 의 돌 (TXR_Minotaurfile1) 두 개 (35 문서 §2.2).
+	 */
+	public static String materialAlias(String name, int tag) {
+		return name + "@" + tag;
 	}
 }
