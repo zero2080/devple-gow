@@ -2325,8 +2325,13 @@ public final class GameScene implements Scene {
 		}
 		messageTimer = wait ? 0 : seconds;
 		messageWait = wait;
+		messageIdle = wait && seconds != 0; // 0x1B9F60: 초 == 0 이면 정지 슬롯을 걸지 않음
 		messageWaitTime = 0;
 		messagePressTime = 0;
+		// 쪽 표시 0x1B96D0 은 어느 갈래든 HUD 리셋 0x1BA150(hud, 1) — 올라온 미터를 내리고 (+0x157C → MeterBar 0) 히트 카운터 이벤트 0 (0x1BA070) [확실].
+		// 정지하지 않는 메시지는 다음 틱 Progress_UpdateHud 가 기술 중·값 변화면 미터를 다시 올린다 (509 는 BOLTPULLOUT 중이라 그대로 떠 있음)
+		hudBinding.hideMeter(v0);
+		v0.event("PS2_HitCounter_Event", 0);
 		devple.gow.engine.combat.AiTargets.globalHold = globalIdle();
 		System.out.println("메시지 " + id + ": " + text.replace('\n', ' ') + (messagePages.size() > 1 ? " (" + messagePages.size() + " 쪽)" : ""));
 	}
@@ -2681,12 +2686,20 @@ public final class GameScene implements Scene {
 	/** 스크립트 Idle(true) (Internal 0xC) 동안 조작 잠금. */
 	private boolean scriptIdle, hudHidden;
 	/**
-	 * 버튼을 기다리는 메시지 (ShowMessage 초 ≤ 0, 원작 0x1B96D0 → 0x1B9F60(gm, 1) → 0x1BF080(슬롯 1, 1) = 전역 정지의 둘째 슬롯) [확실: 코드].
+	 * 버튼을 기다리는 메시지 (ShowMessage 초 ≤ 0, 원작 0x1B96D0 → 0x1B9F60(gm, 1) — 초 &lt; 0 이면 0x1BF080(슬롯 1, 1) = 전역 정지의 둘째 슬롯, 초 0 은 정지 없이
+	 * ○ 만 기다림, {@link #messageIdle}) [확실: 코드].
 	 * 확정 버튼 (한국판 ○ — 0x1B8C00: 0x29DB5C 가 4·5 면 패드 비트 5, 아니면 비트 6 ×) 을 누르면 다음 쪽 / 닫고 1040 (0x410, 인자 = 메시지 번호),
 	 * 슬롯 1 해제. 메시지 500–599 는 버튼 표시를 2.5 초 늦춘다 (+0x1578 → MessageTemplate_Event 10), 그 밖은 바로 (MessageTemplate_Style 1 →
 	 * HUD XButtonOnOff 프레임 1). 예전 엔진은 4 초 뒤 저절로 닫았다 (ATHN02A 아테나 석상 218/322, ATHN01F 쌍둥이 317/319).
 	 */
 	private boolean messageWait, messageButtonLate;
+	/**
+	 * 버튼 대기 메시지가 전역 정지 슬롯 1 을 거는지 — 원작 0x1B9F60 은 GameMgr +0x153C (초) 가 정확히 0 이면 0x1BF080(1, 0) (정지 안 함) ·
+	 * 0x21D970(1) (0x29F458 = 1, 일시정지 풀 때 소리 채널 0 만 다시 묶음 0x21E1C0), 음수일 때만 0x1BF080(1, 1) [확실: 디스어셈블]. 초 0 = 첫 안내
+	 * 500–599 (0x1DBEB0 → 0x21D980, $f12 = 0) · 스크립트 ShowMessage 0 초 62 곳 (궤짝·세이브·아레나 시험 안내 …), −1 = 대사 143 곳 (아테나 석상 218/322,
+	 * 쌍둥이 317/319 …). 초 0 메시지는 ○ 를 기다리되 게임은 계속 돈다 — 제우스의 분노 첫 안내 509 동안 PS2 는 HUD 미터가 떠 있다 (영상 8056, 43 §25).
+	 */
+	private boolean messageIdle;
 	private float messageWaitTime;
 	/** 지금 쪽을 띄우거나 ○ 를 누른 뒤 지난 시간 (자동 플레이의 ○ 간격). */
 	private float messagePressTime;
@@ -2695,9 +2708,9 @@ public final class GameScene implements Scene {
 	/** R2 (1024) 로 버튼 안내 아이콘을 지웠음 — 안내 볼륨을 나갈 때까지 다시 안 띄운다 (아테나 석상 대사 상자 위 R2). */
 	private boolean promptCleared;
 
-	/** 전역 정지 0x29DB58 = 슬롯 0 (스크립트 Idle) 또는 슬롯 1 (버튼을 기다리는 메시지). */
+	/** 전역 정지 0x29DB58 = 슬롯 0 (스크립트 Idle) 또는 슬롯 1 (버튼을 기다리는 메시지 중 초 &lt; 0 인 것, {@link #messageIdle}). */
 	private boolean globalIdle() {
-		return scriptIdle || messageWait;
+		return scriptIdle || messageWait && messageIdle;
 	}
 	/**
 	 * 지난 틱 영웅이 받은 입력이 창 입력이 아닐 때 (디버그 스크립트·봇·AUTO) 그 입력 — R2 사용 버튼 (1024·세이브) 도 같은 입력으로 본다.
@@ -2765,7 +2778,8 @@ public final class GameScene implements Scene {
 			boolean prompt = world.promptActive();
 			if (!prompt) {
 				promptCleared = false; // 볼륨을 나감 → 다음 진입에 다시 표시
-			} else if (!promptCleared && !globalIdle()) {
+			} else if (!promptCleared && !globalIdle() && messageId < 0) {
+				// 아이콘을 다시 고르는 0x21E908 은 메시지·질문 (+0x1528/+0x152C/+0x1530) 이 없을 때만 — 초 0 메시지 (정지 안 함) 동안에도 숨김
 				return devple.gow.engine.ui.MinigameIcon.PROMPT;
 			}
 			var near = nv != null && held == null ? nv.promptItem() : null;
@@ -2773,7 +2787,7 @@ public final class GameScene implements Scene {
 				return near.showPrompt ? devple.gow.engine.ui.MinigameIcon.PROMPT : devple.gow.engine.ui.MinigameIcon.NONE;
 			}
 			// 0x1DC3F8: 세이브 포인트 4 m 안이면 슬롯 0 = 14 (R2) — 가까운 R2 오브젝트 (0x1C3F18) 가 있으면 그 "Show R2" 가 덮는다
-			return nearSavePoint() && !globalIdle() ? devple.gow.engine.ui.MinigameIcon.PROMPT : devple.gow.engine.ui.MinigameIcon.NONE;
+			return nearSavePoint() && !globalIdle() && messageId < 0 ? devple.gow.engine.ui.MinigameIcon.PROMPT : devple.gow.engine.ui.MinigameIcon.NONE;
 		}
 		if (grab.timed() != null) {
 			return grab.timed().iconIndex();

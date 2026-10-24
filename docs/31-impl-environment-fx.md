@@ -58,7 +58,8 @@ SceneFog.end()                   (카메라 필터 · 페이드 · HUD 전, Rend
   층 안개 t = `mix(uFogBand.x, uFogBand.y, 화면 y)` — `FxEnvironment.band(cam)` 이 원작 0x1208C8 처럼 시선 고도각 눈금 (화면 위/아래 = 1 − (φ ± h)/π, 지평선 0.5) 을 준다 [확실].
   Fog_A ≥ 1 ∧ 블렌드 0 단일 안개 = 원작 0x1275E0 경로: 알파 1 (Fog_A 곱 없음), BackPlane 없음 [확실]. 비교: `GOW_FOGBAND=off` (이전: t = 화면 높이 비율).
 - 알파: `uAlphaRef` (CUTOUT 0.75), `uAlphaMax` (가장자리 패스).
-`basic.vert` / `skinned.vert`: `uUvOffset` (UV 스크롤), `uEnvUv` (법선 구면 환경맵 UV, basic 만).
+`basic.vert` / `skinned.vert`: `uUvOffset` (UV 스크롤), `uEnvUv` (법선 구면 환경맵 UV, 둘 다), `uEnvView` (월드 → 카메라 회전 3×3 — `Renderer.envView`, 거울 패스는 반사 포함):
+UV = (0.5 + 0.5·n_v.x, 0.5 − 0.5·n_v.y) (원작 VU 0x0D9, 16 §3.3, 43 §25.2). `uEnvView` 를 안 넣은 셰이더 상태는 예전처럼 월드 법선.
 `particle.vert/frag`: 신규. `uScreen` = 열기 아지랑이 (VU 종류 5): 정점 셰이더가 화면 좌표(noperspective) + aUv 오프셋을 UV 로, 조각 셰이더가 프레임 복사본 `uFrame` (유닛 1) 을 DECAL 로 읽고 알파 = 정점 알파.
 `uFogPass` (0 없음 · 1 장면 깊이 · 2 하늘 단계) · `uFogDst` (1 = 알파 블렌드) 로 미리 곱한 색에 안개 (§3.1). `lensflare.frag` 도 `uFogPass` 1 이면 (1 − F) 배.
 
@@ -89,7 +90,10 @@ SceneFog.end()                   (카메라 필터 · 페이드 · HUD 전, Rend
 - UV 스크롤 / 불투명도: 머티리얼 ANM type 8 / type 3 hdr8. 시간 = `Renderer.setFxTime` (레벨 시간).
 - 텍스처 없는 레이어 색 = header × layer / 0.8.
 - 정점색 체인: `PlacedMesh` 가 체인 c 인스턴스에 `MeshObject.chainColors(c)` (체인 c 의 색 REF) 를 쓴다.
-- `AnimatedModel` (캐릭터) 은 변경하지 않음 (기존 `Blend.of`).
+- 환경맵 (16 §3.3): 레이어 rf & 0x02 (`MaterialFx.ENV_FLAG`) 만 — 예전엔 0x04 도 환경맵으로 봤다. 첫 레이어가 환경맵이면 `MaterialFx.env0` → `Renderer` 가 첫 레이어도 법선 구면 UV
+  (노멀맵 없음). 발리스타 틀 `MAT_M02MetalTrim01b` 가 메시 UV 로 크롬 공의 검은 바깥을 찍던 것 (43 §25.2).
+- `AnimatedModel` (캐릭터 · 자세 GO · 이펙트 GO): 블렌드는 기존 `Blend.of`. 파트마다 `WadAssets.materialFx` 를 받아 첫 레이어 환경맵 · 2·3 번째 레이어 (`drawLayers`, LEQUAL,
+  CUTOUT 은 패스 0 뒤에만) 를 구운 레벨 메시와 같은 규칙으로 그린다 — 예전엔 첫 레이어만이라 밀린 발리스타 틀 · 하데스의 군대 가산 레이어가 빠졌다.
 
 ## 5. 파티클 / 날씨 / 물
 - 날씨 (`fx/Weather`, 16 §1.5) = 원작 경로: 종류 GO 의 PTC (레벨 WAD, 없으면 R_PERMK — `LevelFx` 가 레벨 WAD 옆 R_PERMK 를 필요할 때 읽음) 를
@@ -100,6 +104,13 @@ SceneFog.end()                   (카메라 필터 · 페이드 · HUD 전, Rend
   `GOW_PTCVU=off` 면 근사 이미터 (비는 원작 속도·크기로 맞춤). 확인: ATHN01A/D 가는 사선 빗줄기, DEST01 옅은 모래 안개, PAND00C 떠다니는 점.
 - FXC 이미터: 서브타입 1 원뿔 / 2 전방향은 원작 식, 5–9 볼륨은 로컬 배율 상자 [추정], 4 커브는 0xD 노드의 NCV 커브 위 (16 §2.5, 43 §19 — ATHN05A 불벽),
   3 표면은 메시 표면 미해석으로 생략.
+  - **정의 고르기** (16 §2, 43 §25.1): 같은 이름 FXC_/PTC_/필드/0xD 노드는 오브젝트 태그 앞의 마지막 정의 (`FxResources.emitter/shape/field/geom(이름, LevelObject.tag)`) —
+    `LevelEmitters` · `EffectLibrary` · `curveSamples`. 정의 캐시는 (FXC, PTC) 객체 쌍마다.
+  - **속력 · 생성 거리** (서브타입 1 · 2): × `LevelEmitters.speedScale` = |이미터 월드 · dir| / |dir| (원작 생성 행렬에 이미터 월드 배율이 들어감), 생성 위치 = 원점 + 뽑은 방향 ·
+    lerp(최소, 최대 거리) × 16 × 배율 (`Emitter.coneDistMin/Max`). 레벨 GO 관절 이미터 (`EffectSystem`) 도 같은 배율, 근사 속력 이펙트는 예전 `min(배율, 4)`.
+  - **CPU 동역학** (16 §2.3): `ParticleDef.cpuMotion` (PTC 배치 바이트 0xB bit 0) ∧ `Emitter.cpuMotion` (레벨 이미터 · 레벨 GO 관절 이미터) 이면 VU 레코드 위치 = 처음 위치 + v·t +
+    `fieldAccel`·t²/2 (`ParticleSystem.record`) — 원작 0x15C0F0. 필드 가속 = 소유 GO 의 중력 · 균일 필드 합 (`LevelEmitters.fieldAccel`, 0x12B530) [근사: 상수 가속,
+    소용돌이 · 뉴턴 · 감쇠 · 최대 거리 생략]. 파티클 공간 (0x10/0x20) 이면 가속을 공간 역행렬로.
   **PTC VU 식** (`tools/fx/PtcVu`, `ParticleDef.ptc`): 파티클마다 레코드 {(생성 위치, 0), (생성 속도)} + 고정 난수 씨앗 + 나이(초) 로 식을 계산 →
   색 (0x80 = 1.0, 알파 최대 ≈ 2), 위치, 반폭, 회전, 종류별 모양 (사각형/원반/선/줄기/평면). 블렌드 = flags&3 (0x44 / 0x48 / 0x42), TCC/TFX = flags, `particle.frag uGs` 가 GS 규칙(미리 곱한 색, As/0x80)으로 출력 [확실].
   `GOW_PTCVU=off` 면 이전 근사, `GOW_PTCVU_LOG=1` 이면 식 출력 로그 (+ 레벨의 열기 아지랑이 이미터 위치).

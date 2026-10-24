@@ -234,6 +234,8 @@ public final class EffectLibrary {
 		List<Animation> acts = List.of();
 		List<EmitterDef> em = new ArrayList<>();
 		List<FxResources.Field> fields = new ArrayList<>();
+		// 같은 이름 FXC_/PTC_ 가 오브젝트 그룹마다 다시 정의된다 → 그룹 앞의 마지막 정의 (SEM_ 과 같은 규칙, FxResources#emitter)
+		int objAt = cxtAt.getOrDefault(sk.name, Integer.MAX_VALUE);
 		for (String r : Skeleton.groupRefs(wad, sk.name)) {
 			if (r.startsWith("MDL_") && model == null) {
 				model = r;
@@ -246,14 +248,14 @@ public final class EffectLibrary {
 					acts = List.copyOf(set.groups.getFirst().acts);
 				}
 			} else if (r.startsWith("FXC_")) {
-				FxResources.Emitter e = fx.emitters.get(r);
+				FxResources.Emitter e = fx.emitter(r, objAt);
 				if (e != null) {
-					FxResources.Shape sh = fx.byShape.get(e.shape());
+					FxResources.Shape sh = fx.shape(e.shape(), objAt);
 					if (sh != null) {
 						em.add(new EmitterDef(e, sh, e.header()[1]));
 					}
 				} else if (fx.fields.containsKey(r)) {
-					fields.add(fx.fields.get(r));
+					fields.add(fx.field(r, objAt));
 				}
 			}
 		}

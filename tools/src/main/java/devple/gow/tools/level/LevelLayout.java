@@ -21,8 +21,11 @@ import java.util.Map;
  */
 public final class LevelLayout {
 
-	/** 0x40001 오브젝트 + 그룹 참조. */
-	public record LevelObject(String name, Skeleton skeleton, List<String> refs) {
+	/**
+	 * 0x40001 오브젝트 + 그룹 참조. tag = 오브젝트 리소스의 WAD 태그 번호 — 같은 이름으로 여러 번 정의된 참조 (FXC_/PTC_ …) 는 이 앞의
+	 * 마지막 정의가 이 오브젝트의 것이다 ({@code FxResources#emitter(String, int)}).
+	 */
+	public record LevelObject(String name, Skeleton skeleton, List<String> refs, int tag) {
 
 		public List<String> refs(String prefix) {
 			return refs.stream().filter(r -> r.startsWith(prefix)).toList();
@@ -83,7 +86,7 @@ public final class LevelLayout {
 						refs.add(s.name());
 					}
 				}
-				objects.putIfAbsent(t.name(), new LevelObject(t.name(), new Skeleton(t.name(), t.data()), refs));
+				objects.putIfAbsent(t.name(), new LevelObject(t.name(), new Skeleton(t.name(), t.data()), refs, i));
 			} else if (t.magic() == GoInstance.MAGIC) {
 				instances.add(GoInstance.parse(t.name(), t.data()));
 			}

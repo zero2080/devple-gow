@@ -15,7 +15,9 @@ import java.util.Map;
 
 /**
  * 레벨 오브젝트 그룹의 FXC_ 이미터 → {@link ParticleSystem} 이미터 (16 문서 §2, 31 문서 §4.3).
- * 이미터 월드 = FXC 로컬 행렬 · 관절 월드(헤더 s16 = 관절 번호 [추정]) · 인스턴스.
+ * 이미터 월드 = FXC 로컬 행렬 · 관절 월드 · 인스턴스 — 원작 0x1227C8 → 0x130140: 노드 +0x60 (FXC 헤더 +0x08 s16 관절) 이 −1 이면 노드 로컬 (+0x20 = FXC +0x10),
+ * 아니면 로컬 · 소유 GO 관절 행렬 (0x131618 → 모델 +0x8C, 0x136990) [확실]. FXC/PTC 는 오브젝트 그룹 앞의 마지막 정의 ({@link FxResources#emitter(String, int)}),
+ * CPU 스트림 PTC 는 위치가 속도로 움직인다 ({@link ParticleDef#cpuMotion}), 속력은 이미터 월드 배율 ({@link #speedScale}) — 43 §25.
  * 커브 이미터 (서브타입 4) 는 0xD 방출 지오메트리 노드의 NCV 커브 위에서 낸다 ({@link #curveSamples}, 16 문서 §2.5). 표면 이미터 (3) 는 메시 표면이
  * 미해석이라 아직 만들지 않는다.
  */
@@ -36,7 +38,8 @@ public final class LevelEmitters {
 	 */
 	public static int build(LevelData data, WadAssets assets, ParticleSystem ps, java.util.Set<String> skip) {
 		FxResources fx = new FxResources(data.wad);
-		Map<String, ParticleDef> defs = new HashMap<>();
+		// 정의 객체 (오브젝트별 같은 이름 다른 정의) 마다 따로 — 이름으로 묶으면 처음 정의의 PTC 가 다른 오브젝트에도 쓰인다
+		Map<java.util.List<Object>, ParticleDef> defs = new HashMap<>();
 		int n = 0;
 		float[] p = new float[3];
 		float[] d = new float[3];
@@ -44,8 +47,11 @@ public final class LevelEmitters {
 			if (pl.instance().scale() == 0 || skip.contains(pl.instance().name().toLowerCase(Locale.ROOT))) {
 				continue;
 			}
+			// 같은 이름 FXC_/PTC_/필드가 오브젝트 그룹마다 다시 정의된다 → 이 오브젝트 앞의 마지막 정의 (FxResources#emitter) [확실: 데이터]
+			int at = pl.object().tag();
+			float[] fieldAccel = null;
 			for (String ref : pl.object().refs("FXC_")) {
-				FxResources.Emitter em = fx.emitters.get(ref);
+				FxResources.Emitter em = fx.emitter(ref, at);
 				// 표면 이미터 (3) 는 지오메트리 미해석 → 생략 (원점 한 점에 몰리면 원작과 다르다). 커브 이미터 (4) = 0xD 노드의 NCV 커브 위 (43 문서 §19)
 				if (em == null || em.rate() <= 0 || em.subtype() == 3) {
 					continue;
@@ -57,7 +63,7 @@ public final class LevelEmitters {
 						continue;
 					}
 				}
-				FxResources.Shape sh = fx.byShape.get(em.shape());
+				FxResources.Shape sh = fx.shape(em.shape(), at);
 				if (sh == null) {
 					continue;
 				}
@@ -67,11 +73,25 @@ public final class LevelEmitters {
 				float[] dir = em.subtype() == 1 || em.subtype() == 4 ? em.dir() : new float[]{0, 1, 0};
 				Mat4.transformDir(world, dir[0], dir[1], dir[2], d);
 				float scale = (float) Math.sqrt(world[0] * world[0] + world[1] * world[1] + world[2] * world[2]);
-				ParticleDef def = defs.computeIfAbsent(em.name() + "/" + sh.name(), k -> def(em, sh, assets, scale));
+				ParticleDef def = defs.computeIfAbsent(java.util.List.of(em, sh), k -> def(em, sh, assets, scale));
 				ParticleSystem.Emitter e = ps.add(def, p[0], p[1], p[2]);
 				float l = (float) Math.sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
 				if (l > 1e-6f) {
 					e.dir.set(d[0] / l, d[1] / l, d[2] / l);
+				}
+				if (em.subtype() == 1 || em.subtype() == 2) {
+					float vs = speedScale(world, dir);
+					e.speed = def.speed() * vs;
+					e.speedRnd = def.speedRnd() * vs;
+					e.coneDistMin = em.minDist() * 16 * vs;
+					e.coneDistMax = em.maxDist() * 16 * vs;
+				}
+				e.cpuMotion = true;
+				if (def.cpuMotion()) {
+					if (fieldAccel == null) {
+						fieldAccel = fieldAccel(fx, pl, at);
+					}
+					e.fieldAccel.set(fieldAccel[0], fieldAccel[1], fieldAccel[2]);
 				}
 				// PTC 시스템 행렬 = 소유 관절 월드 (0x10/0x20 이면 파티클이 그 회전/이동 공간에 산다, 0x15BE18) [확실: 코드, 관절 = FXC 관절로 근사]
 				e.space.set(pl.jointWorld()[j]);
@@ -96,6 +116,51 @@ public final class LevelEmitters {
 		return n;
 	}
 
+	/**
+	 * 이미터 속력·생성 거리 배율 = |이미터 월드 · dir| / |dir|: 원작 속도 = (R_dir · (d · 속력 · 16)) · 이미터 월드, 생성 위치도 같은 행렬
+	 * (0x122C88 → 0x1227C8 → 0x122E78) — 이미터 월드 (FXC 로컬 · 관절 월드 · 인스턴스) 의 배율이 들어간다 [확실]. 방 오브젝트 관절 0.5 × FXC 로컬
+	 * 6.63 = 횃불 3.32 → 불꽃이 7.2 가 아니라 23.9/초로 솟는다. 원뿔 퍼짐은 dir 둘레 그대로 (비균일 배율은 dir 방향 늘이기로만) [근사].
+	 *
+	 * @param world 이미터 월드 (행벡터 4×4), dir FXC P 블록 방향 (서브타입 1 · 4, 아니면 +Y)
+	 */
+	static float speedScale(float[] world, float[] dir) {
+		float[] o = new float[3];
+		Mat4.transformDir(world, dir[0], dir[1], dir[2], o);
+		float dl = (float) Math.sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
+		return dl > 1e-6f ? (float) Math.sqrt(o[0] * o[0] + o[1] * o[1] + o[2] * o[2]) / dl : 1;
+	}
+
+	/**
+	 * 오브젝트의 필드 노드 (FXC 0xC) 가속 합 (월드/초²):중력 (종류 3) · 균일 (6) 은 방향 = normalize(dir · 필드 노드 월드 3×3), 크기 = magnitude × 16
+	 * (0x12B530 → 0x130140, 노드 월드 = 로컬 +0x10 · 관절 월드) [확실]. CPU 동역학 파티클만 쓴다 — VU 로 움직이는 PTC 는 내보내기가 가속을 상수 q9 에 굳혔다
+	 * (40 §3.1). 소용돌이·뉴턴 (7 · 36) 은 위치에 따라 달라 생략, 필드별 감쇠·최대 거리 무시 [근사].
+	 */
+	static float[] fieldAccel(FxResources fx, LevelLayout.Placement pl, int at) {
+		float[] a = new float[3];
+		float[] o = new float[3];
+		for (String ref : pl.object().refs("FXC_")) {
+			if (!fx.fields.containsKey(ref)) {
+				continue;
+			}
+			FxResources.Field f = fx.field(ref, at);
+			if (f == null || (f.kind() != 3 && f.kind() != 6)) {
+				continue;
+			}
+			int j = f.joint() >= 0 && f.joint() < pl.jointWorld().length ? f.joint() : 0;
+			float[] w = Mat4.mul(f.local(), pl.jointWorld()[j]);
+			Mat4.transformDir(w, f.dir()[0], f.dir()[1], f.dir()[2], o);
+			float l = (float) Math.sqrt(o[0] * o[0] + o[1] * o[1] + o[2] * o[2]);
+			if (l < 1e-6f) {
+				continue;
+			}
+			float m = f.magnitude() * 16 / l;
+			a[0] += o[0] * m;
+			a[1] += o[1] * m;
+			a[2] += o[2] * m;
+		}
+		return a;
+	}
+
 	/** 커브 표본 수 (구간마다) — 원작은 고른 t 에서 다항식을 바로 계산한다 (표본 사이는 선형 보간 [근사]). */
 	static final int CURVE_SAMPLES_PER_SEGMENT = 8;
 
@@ -106,7 +171,7 @@ public final class LevelEmitters {
 	 * @return {점 xyz…, 접선 xyz…} 또는 노드·커브가 없으면 null
 	 */
 	public static float[][] curveSamples(FxResources fx, LevelData data, FxResources.Emitter em, LevelLayout.Placement pl) {
-		FxResources.Geom g = fx.geoms.get(em.geom());
+		FxResources.Geom g = fx.geom(em.geom(), pl.object().tag());
 		if (g == null) {
 			return null;
 		}

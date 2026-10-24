@@ -261,6 +261,12 @@ public final class Shader implements AutoCloseable {
 		}
 	}
 
+	public void set(String name, org.joml.Matrix3f m) {
+		try (MemoryStack st = MemoryStack.stackPush()) {
+			glUniformMatrix3fv(loc(name), false, m.get(st.mallocFloat(9)));
+		}
+	}
+
 	public void set(String name, Vector4f v) {
 		glUniform4f(loc(name), v.x, v.y, v.z, v.w);
 	}

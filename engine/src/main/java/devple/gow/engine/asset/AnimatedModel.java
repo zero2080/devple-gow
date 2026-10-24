@@ -32,10 +32,11 @@ public final class AnimatedModel implements AutoCloseable {
 	 * @param litColor 동적 라이트 경로의 머티리얼 색 (MAT 헤더 색 × 레이어 rgb, VU qw 76 — {@link WadAssets#litColor})
 	 * @param src     원본 스킨 파트 — 혼합 노드 팔레트 ({@link SkinnedModel.Part#palette}, 05 문서 "범위 밖 슬롯")
 	 * @param postFog 안개 뒤 층 (3·4) 머티리얼 ({@link WadAssets#postFogLayer}) — {@link #sceneFog} 모델만 본다
+	 * @param fx      추가 레이어 · 첫 레이어 환경맵 (구운 레벨 메시와 같은 {@link devple.gow.engine.fx.MaterialFx}, null = 없음) — 자세 GO 도 정적일 때와 같이 그린다
 	 */
 	private record Part(SkinnedMesh mesh, Texture texture, RenderModel.Blend blend, float[] tint, boolean lit,
 						boolean jointLocal, devple.gow.tools.fx.MaterialAnim.Anim matAnim, int[] joints, float[] litColor, boolean late,
-						SkinnedModel.Part src, boolean postFog) {
+						SkinnedModel.Part src, boolean postFog, devple.gow.engine.fx.MaterialFx fx) {
 
 		/** 파트가 쓰는 관절이 모두 숨김이면 그리지 않는다 (ANM u8 가시성, 41 문서 §2). */
 		boolean hiddenBy(boolean[] hidden) {
@@ -198,6 +199,7 @@ public final class AnimatedModel implements AutoCloseable {
 			RenderModel.Blend blend = RenderModel.Blend.OPAQUE;
 			float[] tint = {1, 1, 1, 1};
 			float[] litColor = {1, 1, 1, 0, 0, 0};
+			devple.gow.engine.fx.MaterialFx fx = null;
 			if (mat != null && !mat.layers().isEmpty()) {
 				MaterialResource.Layer l = mat.layers().getFirst();
 				litColor = WadAssets.litColor(mat, l);
@@ -205,9 +207,11 @@ public final class AnimatedModel implements AutoCloseable {
 				// 레벨과 같은 분류 (31 문서): GS 0x44 대부분은 반투명이 아니라 불투명 + 알파 테스트 0.75 (CUTOUT)
 				blend = assets.classify(mat, tex != null);
 				tint = l.rgba();
+				// 추가 레이어 · 첫 레이어 환경맵 (구운 메시와 같은 해석) — 첫 레이어 플립북·UV 는 matAnim 이 맡는다
+				fx = assets.materialFx(mat, p.hasUv, p.hasNormal);
 			}
 			parts.add(new Part(new SkinnedMesh(v, idx), tex, blend, tint, p.hasNormal, p.jointLocal(skeleton), assets.materialAnim(p.material),
-					used.stream().mapToInt(Integer::intValue).toArray(), litColor, late, p, WadAssets.postFogLayer(mat)));
+					used.stream().mapToInt(Integer::intValue).toArray(), litColor, late, p, WadAssets.postFogLayer(mat), fx));
 		}
 	}
 
@@ -248,6 +252,8 @@ public final class AnimatedModel implements AutoCloseable {
 	}
 
 	private final float[] colorScale = {1, 1, 1};
+	/** 환경맵 UV 뷰 회전 (그리기마다 다시, 할당 없이). */
+	private final org.joml.Matrix3f envView = new org.joml.Matrix3f();
 	private float[][] skinOut, skinRows;
 
 	/** 마지막 draw 의 라이트 묶음 (없으면 null) — 디버그 출력용. */
@@ -285,6 +291,7 @@ public final class AnimatedModel implements AutoCloseable {
 		shader.set("uClipPlane", cp != null ? cp[0] : 0f, cp != null ? cp[1] : 0f, cp != null ? cp[2] : 0f, cp != null ? cp[3] : 0f);
 		shader.set("uModel", world);
 		shader.set("uTex", 0);
+		shader.set("uEnvView", devple.gow.engine.render.Renderer.envView(cam, envView));
 		// 동적 라이트 (47 문서): 렌더 플래그 0x800 모델만 (원작 0x15986C), 구 = 관절 AABB [근사]
 		if (!sky && (model.renderFlags & devple.gow.engine.light.LightUniforms.LIT) != 0 && devple.gow.engine.light.LightServer.current() != null) {
 			org.joml.Vector4f sph = devple.gow.engine.light.LightServer.jointSphere(w, world, new org.joml.Vector4f());
@@ -329,6 +336,7 @@ public final class AnimatedModel implements AutoCloseable {
 				(p.texture() != null ? p.texture() : white).bind(0);
 				shader.set("uUseTex", p.texture() != null ? 1 : 0);
 				shader.set("uLit", p.lit() ? 1 : 0);
+				shader.set("uEnvUv", p.fx() != null && p.fx().env0() && p.lit() ? 1 : 0);
 				float[] t = p.tint();
 				float op = alpha;
 				boolean scrolled = false;
@@ -352,8 +360,8 @@ public final class AnimatedModel implements AutoCloseable {
 				float[] lc = p.litColor();
 				shader.set("uLgtMat", lc[0] * colorScale[0], lc[1] * colorScale[1], lc[2] * colorScale[2]);
 				shader.set("uLgtAdd", lc[3], lc[4], lc[5]);
-				// 노멀맵 (원작에 없음, 44 문서): 첫 레이어 텍스처, 불투명·알파 블렌드만
-				boolean nm = (mode == RenderModel.Blend.OPAQUE || mode == RenderModel.Blend.ALPHA)
+				// 노멀맵 (원작에 없음, 44 문서): 첫 레이어 텍스처, 불투명·알파 블렌드만 (환경맵 첫 레이어 제외 — Renderer 와 같음)
+				boolean nm = (mode == RenderModel.Blend.OPAQUE || mode == RenderModel.Blend.ALPHA) && !(p.fx() != null && p.fx().env0())
 						&& devple.gow.engine.render.Renderer.bindNormalMap(shader, p.texture());
 				if (sceneFog) {
 					shader.set("uFogScene", opaque ? 0 : 1);
@@ -381,8 +389,76 @@ public final class AnimatedModel implements AutoCloseable {
 					shader.set("uAlphaRef", 0f);
 					shader.set("uAlphaMax", 0f);
 				}
+				// 추가 레이어: CUTOUT 은 패스 0 (불투명 화소) 뒤에만 — 구운 메시 (Renderer.drawPasses) 와 같은 규칙
+				if (p.fx() != null && !p.fx().layers().isEmpty() && (b != RenderModel.Blend.CUTOUT || pass == 0)) {
+					drawLayers(p, ft, white);
+				}
 			}
 		}
+		shader.set("uEnvUv", 0);
+	}
+
+	/**
+	 * 머티리얼 2·3 번째 레이어를 같은 메시에 LEQUAL 로 레이어 순서대로 덧그린다 (16 문서 §3.3 — 원작은 레이어마다 같은 정점·UV·정점색으로 추가 패스).
+	 * 블렌드·색·환경맵 UV 는 구운 레벨 메시와 같은 {@link devple.gow.engine.fx.MaterialFx.Layer} — 예전에는 자세 GO·캐릭터가 첫 레이어만 그려
+	 * 밀린 발리스타 틀 (MAT_M02MetalTrim01b: 환경맵 + 0x01 레이어) 이 정적일 때와 달랐다 (43 §25).
+	 */
+	private void drawLayers(Part p, float ft, Texture white) {
+		devple.gow.engine.fx.MaterialFx fx = p.fx();
+		glDepthFunc(GL_LEQUAL);
+		glEnable(GL_BLEND);
+		glDepthMask(false);
+		for (devple.gow.engine.fx.MaterialFx.Layer l : fx.layers()) {
+			RenderModel.Blend lb = l.blend();
+			switch (lb) {
+				case ADD -> {
+					glBlendEquation(GL_FUNC_ADD);
+					glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+				}
+				case SUB -> {
+					glBlendEquation(GL_FUNC_REVERSE_SUBTRACT);
+					glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+				}
+				case INV -> {
+					// GS 0x01: (Cd − Cs)·As + Cs
+					glBlendEquation(GL_FUNC_ADD);
+					glBlendFunc(GL_ONE_MINUS_SRC_ALPHA, GL_SRC_ALPHA);
+				}
+				default -> {
+					glBlendEquation(GL_FUNC_ADD);
+					glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+				}
+			}
+			Texture tex = fx.frame(l, Math.max(ft, 0f));
+			(tex != null ? tex : white).bind(0);
+			shader.set("uUseTex", tex != null ? 1 : 0);
+			float[] t = l.tint();
+			shader.set("uTint", new org.joml.Vector4f(t[0] * colorScale[0], t[1] * colorScale[1], t[2] * colorScale[2], t[3]));
+			float[] lc = l.litColor();
+			shader.set("uLgtMat", lc[0] * colorScale[0], lc[1] * colorScale[1], lc[2] * colorScale[2]);
+			shader.set("uLgtAdd", lc[3], lc[4], lc[5]);
+			shader.set("uEnvUv", l.env() && p.lit() ? 1 : 0);
+			float[] uv = ft >= 0 ? fx.uv(l.index(), ft) : null;
+			shader.set("uUvOffset", uv != null ? uv[0] : 0f, uv != null ? uv[1] : 0f);
+			if (sceneFog) {
+				shader.set("uFogScene", 1);
+				shader.set("uFogAdd", lb == RenderModel.Blend.ADD || lb == RenderModel.Blend.SUB ? 1 : 0);
+				shader.set("uFogOff", p.postFog() ? 1 : 0);
+			}
+			p.mesh().draw();
+		}
+		if (sceneFog) {
+			shader.set("uFogScene", 0);
+			shader.set("uFogAdd", 0);
+			shader.set("uFogOff", 0);
+		}
+		shader.set("uEnvUv", 0);
+		shader.set("uUvOffset", 0f, 0f);
+		glDisable(GL_BLEND);
+		glDepthMask(true);
+		glBlendEquation(GL_FUNC_ADD);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glDepthFunc(GL_LESS);
 	}
 
 	private void upload(float[][] mats) {

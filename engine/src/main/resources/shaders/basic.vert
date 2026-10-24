@@ -7,7 +7,8 @@ layout(location = 3) in vec4 aColor;
 uniform mat4 uModel;
 uniform mat4 uViewProj;
 uniform vec2 uUvOffset; // UV 스크롤 (설정 안 하면 0)
-uniform int uEnvUv;     // 1 = 법선 기반 구면 환경맵 UV (반사 레이어)
+uniform int uEnvUv;     // 1 = 법선 기반 구면 환경맵 UV (레이어 rf bit 1 = VU 플래그 2, MaterialFx.ENV_FLAG)
+uniform mat3 uEnvView;  // 월드 → 카메라 회전 (Renderer.envView): 원작 VU 0x0D9–0x0E3 은 법선을 모델·뷰 행렬 행으로 옮긴다
 uniform vec4 uClipPlane; // SCR_Mirror 반사 패스: 월드 평면 (거울 뒤쪽 자름, GL_CLIP_DISTANCE0 켤 때만 쓰임)
 
 out vec3 vNormal;
@@ -44,8 +45,13 @@ void main() {
 	}
 	vUv = aUv + uUvOffset;
 	if (uEnvUv != 0) {
-		vec3 n = normalize(vNormal);
-		vUv = n.xy * 0.5 + 0.5 + uUvOffset;
+		// 구면 환경맵: UV = 0.5 ± 0.5·(카메라 공간 법선).xy (VU 0x0D9: vf16–18.xy = 행 × −0.5/|행|, vf19.xy = 0.5) [확실: 구조 / 근사: 축 부호]
+		vec3 nv = uEnvView * vNormal;
+		if (dot(nv, nv) < 1e-12) {
+			nv = vNormal;   // uEnvView 를 안 넣은 셰이더 상태 (예전 월드 법선)
+		}
+		nv = normalize(nv);
+		vUv = vec2(0.5 + 0.5 * nv.x, 0.5 - 0.5 * nv.y) + uUvOffset;
 	}
 	vColor = aColor;
 	vec4 wp = uModel * vec4(aPos, 1.0);

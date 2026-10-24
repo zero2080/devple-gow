@@ -56,6 +56,18 @@ public final class ParticleSystem implements AutoCloseable {
 		public float[] curve, curveTan;
 		/** 커브 이미터 접선 / 법선 속력 (P+0x24 / P+0x28, dir 에 대한 비), 생성 거리 최소·최대 (×16 월드). */
 		public float tangentSpeed, normalSpeed, distMin, distMax;
+		/**
+		 * 원뿔·전방향 이미터 (FXC 서브타입 1/2) 의 생성 거리 (월드): 위치 = 이미터 원점 + 뽑은 방향 · lerp(최소, 최대) (0x122E78 이 P+0x18/0x1C × 16 을
+		 * 이미터 월드 행렬로 옮긴다 — 배율 포함) [확실]. 둘 다 0 이면 예전 상자 생성 ({@link ParticleDef#box}).
+		 */
+		public float coneDistMin, coneDistMax;
+		/**
+		 * CPU 동역학을 쓰는가 ({@link ParticleDef#cpuMotion} 과 함께): 레벨 배치 이미터 · 레벨 GO 이펙트 (관절 이미터) 는 켠다. 근사 속력을 쓰는 이펙트
+		 * (R_PERMK 물보라 등 — 이미터 행렬 배율을 속력에 넣지 않았다) 는 예전처럼 끈다 [근사].
+		 */
+		public boolean cpuMotion;
+		/** CPU 동역학 파티클의 필드 가속 (월드/초², 소유 GO 의 중력·균일 필드 합 — 0x12B530) [근사: 상수 가속]. */
+		public final Vector3f fieldAccel = new Vector3f();
 		/** LOD (FXC 0xDC/0xE0, ×16 월드): 생성률 × (far − d/16)/(far − near), near &lt; 0 = 끔. */
 		public float lodNear = -1, lodFar = -1;
 		/** followCamera 일 때 상자 중심을 카메라 앞으로 이 거리만큼 (원작 셀/2 − near). */
@@ -357,9 +369,17 @@ public final class ParticleSystem implements AutoCloseable {
 			Vector3f t2 = new Vector3f(up).cross(t1);
 			float spd = Float.isNaN(e.speed) ? d.speed() : e.speed, sr = Float.isNaN(e.speedRnd) ? d.speedRnd() : e.speedRnd;
 			float sp = spd - sr / 2 + rnd.nextFloat() * sr;
-			vx[i] = (t1.x * lx + up.x * ly + t2.x * lz) * sp;
-			vy[i] = (t1.y * lx + up.y * ly + t2.y * lz) * sp;
-			vz[i] = (t1.z * lx + up.z * ly + t2.z * lz) * sp;
+			float wx = t1.x * lx + up.x * ly + t2.x * lz, wy = t1.y * lx + up.y * ly + t2.y * lz, wz = t1.z * lx + up.z * ly + t2.z * lz;
+			vx[i] = wx * sp;
+			vy[i] = wy * sp;
+			vz[i] = wz * sp;
+			if (!e.followCamera && (e.coneDistMin != 0 || e.coneDistMax != 0)) {
+				// 생성 거리 (0x122E78): 원점 + 뽑은 방향 · lerp(최소, 최대) — 상자 생성 대신
+				float dist = e.coneDistMin + rnd.nextFloat() * (e.coneDistMax - e.coneDistMin);
+				px[i] = c.x + wx * dist;
+				py[i] = c.y + wy * dist;
+				pz[i] = c.z + wz * dist;
+			}
 		} else {
 			float[] v = d.velocity();
 			float[] s = d.spread();
@@ -904,6 +924,16 @@ public final class ParticleSystem implements AutoCloseable {
 		rec[0][0] = p0x[i];
 		rec[0][1] = p0y[i];
 		rec[0][2] = p0z[i];
+		Emitter o = owner[i];
+		if (o.cpuMotion && o.def.cpuMotion()) {
+			// CPU 동역학 (0x15C0F0 → 0x12B3F0): 레코드 위치 = 처음 위치 + 속도 · 나이 (+ 필드 가속 · 나이²/2) — 파티클 공간 [확실: 속도 / 근사: 필드는 상수 가속]
+			float t = age[i];
+			Vector3f a = o.local ? o.curInv.transformDirection(nTmp.set(o.fieldAccel)) : nTmp.set(o.fieldAccel);
+			float h = 0.5f * t * t;
+			rec[0][0] += v0x[i] * t + a.x * h;
+			rec[0][1] += v0y[i] * t + a.y * h;
+			rec[0][2] += v0z[i] * t + a.z * h;
+		}
 		if (vu.kind == 9) {
 			// 바닥 무늬 (피 자국·파문): 원작 0x1F8990 은 바닥 충돌(0x11E190) 법선 n 으로 평면 축 A = norm(d × n), B = norm(A × n) 을 만들고
 			// 파티클마다 n 축 임의 회전 (0x183D00) [확실]. 축은 레코드 q1 / q2.
@@ -915,7 +945,7 @@ public final class ParticleSystem implements AutoCloseable {
 			n.normalize();
 			if (!e.local) {
 				// 원작은 위치도 평면 위에 놓는다 (충돌점 + A·u + B·v + n·Offset): 생성 위치를 이미터를 지나는 평면에 투영
-				float h = (p0x[i] - e.pos.x) * n.x + (p0y[i] - e.pos.y) * n.y + (p0z[i] - e.pos.z) * n.z;
+				float h = (rec[0][0] - e.pos.x) * n.x + (rec[0][1] - e.pos.y) * n.y + (rec[0][2] - e.pos.z) * n.z;
 				rec[0][0] -= n.x * h;
 				rec[0][1] -= n.y * h;
 				rec[0][2] -= n.z * h;

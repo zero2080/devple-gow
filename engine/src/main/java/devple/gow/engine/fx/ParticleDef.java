@@ -53,6 +53,16 @@ public record ParticleDef(String name, float rate, float life, float lifeJitter,
 		return ptc != null && ptc.vu() != null && !VU_OFF;
 	}
 
+	/**
+	 * CPU 스트림이 있는 PTC (배치 바이트 PTC+0x97 = 시스템 +0x153 bit0): 원작 파티클 서버 매 프레임 갱신 0x15C0F0 (PTC 서버 vtable 0x2BE5EC) 이
+	 * 블록마다 위치 = 처음 위치 + 속도 · 나이 를 VU 레코드에 다시 쓴다 (0x12B2B8 / 0x12B3F0, 소유 GO 의 필드 노드 0xC 가 있으면 0x12B530 으로 힘을 더한다) [확실].
+	 * VU 프로그램은 그 위치를 그대로 (연산 0 = C0) 쓰므로, 이 처리가 없으면 파티클이 생성 점에 멈춘다 — 레벨 횃불 TFfire/TMfire/hangfire 가 받침 안에
+	 * 갇혀 안 보이던 원인 (43 §25). 전 디스크 PTC 5585 중 739 (횃불 불·연기 대부분).
+	 */
+	public boolean cpuMotion() {
+		return vu() && (ptc.vu().attr[11] & 1) != 0;
+	}
+
 	/** 비교용: 환경 변수 GOW_PTCVU=off 면 이전 근사 렌더. */
 	private static final boolean VU_OFF = "off".equals(System.getenv("GOW_PTCVU"));
 

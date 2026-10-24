@@ -278,7 +278,9 @@ public final class EffectSystem implements AutoCloseable {
 				float[] lt = fx.local();
 				int j = fx.header().length > 0 ? fx.header()[0] : -1;
 				float[] d = fx.subtype() == 1 || fx.subtype() == 8 ? fx.dir() : new float[]{0, 1, 0};
-				if (jointWorld != null && j >= 0 && j < jointWorld.length) {
+				float speedMul = Math.min(s, 4f);
+				boolean jointEmitter = jointWorld != null && j >= 0 && j < jointWorld.length;
+				if (jointEmitter) {
 					// 관절 이미터: (행벡터) FXC 로컬 · 관절 월드 · GO 월드 = 열벡터 GO · 관절 · 로컬 (LevelEmitters 와 같은 곱, 로컬 이동을 자르지 않음)
 					Matrix4f em = new Matrix4f(world).mul(new Matrix4f().set(jointWorld[j])).mul(new Matrix4f().set(lt));
 					em.getTranslation(e.pos);
@@ -287,6 +289,15 @@ public final class EffectSystem implements AutoCloseable {
 					Vector3f ld = em.transformDirection(new Vector3f(d[0], d[1], d[2]));
 					if (ld.lengthSquared() > 1e-8f) {
 						e.dir.set(ld).normalize();
+					}
+					// 레벨 GO (Animator · 하늘): 속력은 이미터 월드 행렬 배율로 (0x122C88 → 0x122E78, LevelEmitters 와 같은 규칙) + CPU 동역학 [확실]
+					float dl = (float) Math.sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+					if (fx.subtype() == 1 || fx.subtype() == 2) {
+						speedMul = dl > 1e-6f ? ld.length() / dl : 1;
+					}
+					e.cpuMotion = true;
+					if (e.def != null && e.def.cpuMotion()) {
+						fieldAccel(jointWorld, e.fieldAccel);
 					}
 				} else {
 					Vector3f lp = new Vector3f(lt[12], lt[13], lt[14]);
@@ -313,12 +324,32 @@ public final class EffectSystem implements AutoCloseable {
 				if (emitterRate != null) {
 					e.rate *= (float) emitterRate.applyAsDouble(ed);
 				}
-				e.speed = def.param(act, ed, 4, ct, fx.speed()) * 16 * Math.min(s, 4f) * speedScale;
-				e.speedRnd = def.param(act, ed, 5, ct, fx.speedRnd()) * 16 * Math.min(s, 4f) * speedScale;
+				e.speed = def.param(act, ed, 4, ct, fx.speed()) * 16 * speedMul * speedScale;
+				e.speedRnd = def.param(act, ed, 5, ct, fx.speedRnd()) * 16 * speedMul * speedScale;
 				if (fx.subtype() == 1 || fx.subtype() == 8) {
 					e.cone = def.param(act, ed, 3, ct, fx.spread());
 				}
 				e.sizeScale = Math.min(s, 6f);
+			}
+		}
+
+		/**
+		 * 레벨 GO 의 필드 노드 가속 (월드/초²): 중력·균일 필드 방향 = normalize(dir · 필드 로컬 · 관절 · GO 월드), 크기 × 16 — {@code LevelEmitters#fieldAccel}
+		 * 과 같은 규칙 (0x12B530) [확실: 방향·배율 / 근사: 상수 가속]. CPU 동역학 파티클만 쓴다.
+		 */
+		private void fieldAccel(float[][] jointWorld, Vector3f out) {
+			out.zero();
+			for (FxResources.Field f : def.fields()) {
+				if (f.kind() != 3 && f.kind() != 6) {
+					continue;
+				}
+				int fj = f.joint() >= 0 && f.joint() < jointWorld.length ? f.joint() : 0;
+				Vector3f dir = new Matrix4f(world).mul(new Matrix4f().set(jointWorld[fj])).mul(new Matrix4f().set(f.local()))
+						.transformDirection(new Vector3f(f.dir()[0], f.dir()[1], f.dir()[2]));
+				float l = dir.length();
+				if (l > 1e-6f) {
+					out.fma(f.magnitude() * 16 / l, dir);
+				}
 			}
 		}
 

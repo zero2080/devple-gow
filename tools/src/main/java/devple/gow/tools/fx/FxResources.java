@@ -5,6 +5,8 @@ import devple.gow.tools.wad.WadTag;
 import devple.gow.tools.wad.WadTagType;
 
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -46,8 +48,15 @@ public final class FxResources {
 	public record Geom(String name, int joint, float[] local, String curve, String shape) {
 	}
 
-	/** FXC_ 서브타입 0xC 필드 (180 바이트): kind 3 중력, 6 균일, 7 소용돌이, 36 뉴턴 [이름 추정]. */
-	public record Field(String name, float[] local, int kind, float magnitude, float[] dir, float attenuation, float minDist, float maxDist) {
+	/**
+	 * FXC_ 서브타입 0xC 필드 (180 바이트): kind 3 중력, 6 균일, 7 소용돌이, 36 뉴턴 [이름 추정]. joint = 노드 헤더 +0x08 s16 (관절).
+	 * 원작 0x12B530: 종류 (노드 +0x80 &amp; 0xF) 3·6 은 방향 = normalize(dir · 필드 노드 월드 3×3) (0x130140 = 로컬 · 관절 월드), 크기 = magnitude × 16 [확실].
+	 */
+	public record Field(String name, float[] local, int kind, float magnitude, float[] dir, float attenuation, float minDist, float maxDist, int joint) {
+	}
+
+	/** 같은 이름 정의 하나와 그 WAD 태그 번호. */
+	private record At<T>(int tag, T value) {
 	}
 
 	/**
@@ -167,6 +176,7 @@ public final class FxResources {
 		}
 	}
 
+	/** 이름 → 처음 정의 (같은 이름이 여러 번이면 {@link #emitter(String, int)} 로 오브젝트별 정의를 찾는다). */
 	public final Map<String, Emitter> emitters = new LinkedHashMap<>();
 	public final Map<String, Field> fields = new LinkedHashMap<>();
 	/** 방출 지오메트리 (0xD) 모양 이름 (+0x70) → 노드. */
@@ -175,6 +185,17 @@ public final class FxResources {
 	public final Map<String, Shape> shapes = new LinkedHashMap<>();
 	/** 모양 이름(+0x54) → PTC. */
 	public final Map<String, Shape> byShape = new LinkedHashMap<>();
+
+	/**
+	 * 같은 이름의 정의 전부 (태그 순). 레벨 WAD 는 오브젝트 그룹마다 자기 FXC_/PTC_ 를 그룹 바로 앞에 다시 정의한다 — 이름은 같고
+	 * 로컬 행렬이 다르다 (ATHN05B FXC_TFfireemit10: roofaccessroom (666, −171, −812) / sarcherbalconyareab (349, −50, 557), 전 레벨 배치 이미터
+	 * 3893 중 1514 개가 처음 정의와 자리가 다르다). WAD 순차 적재에서 오브젝트가 참조를 풀 때 보이는 것은 그 앞의 마지막 정의다
+	 * (MAT_·TXR_·SEM_ 과 같은 규칙, 03 문서 §3 · 40 문서 §1) [확실: 데이터 / 추정: 레지스트리가 마지막 등록을 돌려준다].
+	 */
+	private final Map<String, List<At<Emitter>>> emitterDefs = new HashMap<>();
+	private final Map<String, List<At<Field>>> fieldDefs = new HashMap<>();
+	private final Map<String, List<At<Geom>>> geomDefs = new HashMap<>();
+	private final Map<String, List<At<Shape>>> shapeDefs = new HashMap<>();
 
 	public FxResources(WadFile wad) {
 		List<WadTag> tags = wad.tags();
@@ -188,20 +209,61 @@ public final class FxResources {
 			if ((m & 0xFFFF) == 0x1E) {
 				int sub = m >>> 16;
 				if (sub >= 1 && sub <= 10 && t.size() >= 0xE4) {
-					emitters.putIfAbsent(t.name(), emitter(t.name(), sub, d));
+					Emitter e = emitter(t.name(), sub, d);
+					emitters.putIfAbsent(t.name(), e);
+					emitterDefs.computeIfAbsent(t.name(), k -> new ArrayList<>()).add(new At<>(i, e));
 				} else if (sub == 0xC && t.size() >= 0x88) {
-					fields.putIfAbsent(t.name(), new Field(t.name(), floats(d, 0x10, 16), d.getInt(0x54), d.getFloat(0x58), floats(d, 0x5C, 3),
-							d.getFloat(0x68), d.getFloat(0x80), d.getFloat(0x84)));
+					Field f = new Field(t.name(), floats(d, 0x10, 16), d.getInt(0x54), d.getFloat(0x58), floats(d, 0x5C, 3),
+							d.getFloat(0x68), d.getFloat(0x80), d.getFloat(0x84), d.getShort(8));
+					fields.putIfAbsent(t.name(), f);
+					fieldDefs.computeIfAbsent(t.name(), k -> new ArrayList<>()).add(new At<>(i, f));
 				} else if (sub == 0xD && t.size() >= 0x88) {
 					Geom g = new Geom(t.name(), d.getShort(8), floats(d, 0x10, 16), EnvScript.cstr(d, 0x58, 24), EnvScript.cstr(d, 0x70, 24));
 					geoms.putIfAbsent(g.shape(), g);
+					geomDefs.computeIfAbsent(g.shape(), k -> new ArrayList<>()).add(new At<>(i, g));
 				}
 			} else if (m == 0x13 && t.size() >= 0xA0) {
 				Shape s = shape(t.name(), d, material(tags, i));
 				shapes.putIfAbsent(t.name(), s);
 				byShape.putIfAbsent(s.shape(), s);
+				shapeDefs.computeIfAbsent(s.shape(), k -> new ArrayList<>()).add(new At<>(i, s));
 			}
 		}
+	}
+
+	/** 이미터 이름 → 태그 번호 {@code before} (오브젝트 0x40001 리소스) 앞의 마지막 정의, 없으면 처음 정의. 이름이 없으면 null. */
+	public Emitter emitter(String name, int before) {
+		return nearest(emitterDefs.get(name), before);
+	}
+
+	/** 필드 이름 → {@code before} 앞의 마지막 정의 (없으면 처음). */
+	public Field field(String name, int before) {
+		return nearest(fieldDefs.get(name), before);
+	}
+
+	/** 모양 이름 (FXC +0x54 = PTC +0x54) → {@code before} 앞의 마지막 PTC 정의 (없으면 처음). */
+	public Shape shape(String shapeName, int before) {
+		return nearest(shapeDefs.get(shapeName), before);
+	}
+
+	/** 커브 이미터 모양 이름 (+0x6C = 0xD 노드 +0x70) → {@code before} 앞의 마지막 노드 (없으면 처음). */
+	public Geom geom(String shapeName, int before) {
+		return nearest(geomDefs.get(shapeName), before);
+	}
+
+	private static <T> T nearest(List<At<T>> l, int before) {
+		if (l == null || l.isEmpty()) {
+			return null;
+		}
+		T best = l.getFirst().value();
+		for (At<T> a : l) {
+			if (a.tag() < before) {
+				best = a.value();
+			} else {
+				break;
+			}
+		}
+		return best;
 	}
 
 	private static Emitter emitter(String name, int sub, ByteBuffer d) {

@@ -496,9 +496,12 @@ public final class WadAssets implements AutoCloseable {
 	}
 
 	/** 플립북 프레임 / 머티리얼 ANM / 2·3번째 레이어가 있으면 MaterialFx, 없으면 null. */
-	private MaterialFx materialFx(MaterialResource mat, boolean hasUv, boolean hasNormal) {
+	MaterialFx materialFx(MaterialResource mat, boolean hasUv, boolean hasNormal) {
 		MaterialAnim.Anim anim = matAnims.get(mat.name());
 		Texture[] frames = hasUv ? textureFrames(mat.layers().getFirst().texture()) : null;
+		// 첫 레이어 환경맵 (VU 플래그 2): 발리스타 손잡이 틀 MAT_M02MetalTrim01b (rf 0x86, 크롬 공 TXR_entities02_file330 — 원 밖은 검정) 을
+		// 메시 UV 로 찍어 틀이 검게 나왔다 (43 §25) [확실: 마이크로코드 0x0D9 / 텍스처가 구면 반사 사진]
+		boolean env0 = hasNormal && (mat.layers().getFirst().renderFlags() & MaterialFx.ENV_FLAG) != 0;
 		List<MaterialFx.Layer> layers = new ArrayList<>();
 		for (int i = 1; i < mat.layers().size(); i++) {
 			MaterialResource.Layer l = mat.layers().get(i);
@@ -511,14 +514,14 @@ public final class WadAssets implements AutoCloseable {
 			};
 			float[] tint = layerTint(mat, l, t != null);
 			tint[3] *= l.param38() * mat.param28();
-			// 레이어 렌더 플래그 bit1 (0x02) = 조명+환경맵 VU 프로그램 → 법선 있는 메시에서 구면 환경맵 UV [추정]
-			boolean env = (l.renderFlags() & 0x02) != 0 || (l.renderFlags() & 0x04) != 0;
+			// 레이어 렌더 플래그 bit1 (0x02) = 환경맵 VU 경로 → 법선 있는 메시에서 구면 환경맵 UV (MaterialFx.ENV_FLAG). bit2 (0x04) 는 머티리얼 색 (환경맵 아님)
+			boolean env = (l.renderFlags() & MaterialFx.ENV_FLAG) != 0;
 			layers.add(new MaterialFx.Layer(i, t, textureFrames(l.texture()), b, tint, env, litColor(mat, l)));
 		}
-		if (anim == null && frames == null && layers.isEmpty()) {
+		if (anim == null && frames == null && layers.isEmpty() && !env0) {
 			return null;
 		}
-		return new MaterialFx(frames, anim, layers);
+		return new MaterialFx(frames, anim, layers, env0);
 	}
 
 	@Override

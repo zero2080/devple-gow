@@ -12,6 +12,8 @@ uniform mat4 uJoints[128];
 uniform mat4 uModel;
 uniform mat4 uViewProj;
 uniform vec2 uUvOffset; // UV 스크롤 (설정 안 하면 0)
+uniform int uEnvUv;     // 1 = 법선 구면 환경맵 UV (basic.vert 와 같은 식, 레이어 rf bit 1)
+uniform mat3 uEnvView;  // 월드 → 카메라 회전
 uniform vec4 uClipPlane; // SCR_Mirror 반사 패스: 월드 평면 (GL_CLIP_DISTANCE0 켤 때만 쓰임)
 
 out vec3 vNormal;
@@ -51,6 +53,14 @@ void main() {
 		vLgt = ln > 1e-12 ? vuLight(vNormal * inversesqrt(ln)) : min(uLgtAdd + uLgtMat * uLgtAmb + 1.0 / 128.0, vec3(255.0 / 128.0));
 	}
 	vUv = aUv + uUvOffset;
+	if (uEnvUv != 0) {
+		vec3 nv = uEnvView * vNormal;
+		if (dot(nv, nv) < 1e-12) {
+			nv = vNormal;
+		}
+		nv = normalize(nv);
+		vUv = vec2(0.5 + 0.5 * nv.x, 0.5 - 0.5 * nv.y) + uUvOffset;
+	}
 	vColor = aColor;
 	vec4 wp = uModel * vec4(p.xyz, 1.0);
 	vWorldPos = wp.xyz;

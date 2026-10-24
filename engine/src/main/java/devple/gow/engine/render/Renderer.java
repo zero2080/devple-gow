@@ -60,6 +60,7 @@ public final class Renderer implements AutoCloseable {
 		white.bind(0);
 		basic.set("uTex", 0);
 		basic.set("uViewProj", cam.viewProj(engine.window().aspect()));
+		basic.set("uEnvView", envView(cam, new org.joml.Matrix3f()));
 		basic.set("uTint", new Vector4f(1, 1, 1, 1));
 		basic.set("uUseTex", 0);
 		basic.set("uLit", 1);
@@ -139,7 +140,7 @@ public final class Renderer implements AutoCloseable {
 					tint = tint.clone();
 					tint[3] *= fx.opacity(ft, 1f);
 				}
-				drawLayer(p, tex, mode, tint, sc, false, true, p.litColor());
+				drawLayer(p, tex, mode, tint, sc, env0(p), true, p.litColor());
 				if (fx != null && !fx.layers().isEmpty()) {
 					glDepthFunc(GL_LEQUAL);
 					for (MaterialFx.Layer l : fx.layers()) {
@@ -191,16 +192,16 @@ public final class Renderer implements AutoCloseable {
 				if (b == RenderModel.Blend.CUTOUT) {
 					if (pass == 0) {
 						basic.set("uAlphaRef", 0.75f);
-						drawLayer(p, tex, RenderModel.Blend.OPAQUE, tint, sc, false, true, p.litColor());
+						drawLayer(p, tex, RenderModel.Blend.OPAQUE, tint, sc, env0(p), true, p.litColor());
 						basic.set("uAlphaRef", 0f);
 					} else {
 						basic.set("uAlphaMax", 0.75f);
-						drawLayer(p, tex, RenderModel.Blend.ALPHA, tint, sc, false, true, p.litColor());
+						drawLayer(p, tex, RenderModel.Blend.ALPHA, tint, sc, env0(p), true, p.litColor());
 						basic.set("uAlphaMax", 0f);
 						continue;   // 레이어는 패스 0 에서 이미 그렸다
 					}
 				} else {
-					drawLayer(p, tex, b, tint, sc, false, true, p.litColor());
+					drawLayer(p, tex, b, tint, sc, env0(p), true, p.litColor());
 				}
 				if (fx != null && !fx.layers().isEmpty()) {
 					glDepthFunc(GL_LEQUAL);
@@ -217,6 +218,23 @@ public final class Renderer implements AutoCloseable {
 		basic.set("uUvOffset", 0f, 0f);
 		basic.set("uFogAdd", 0);
 		basic.set("uEnvUv", 0);
+	}
+
+	/** 첫 레이어 환경맵 (VU 플래그 2, 법선 있는 파트) — {@link MaterialFx#env0}. */
+	private static boolean env0(RenderModel.Part p) {
+		return p.fx() != null && p.fx().env0() && p.lit();
+	}
+
+	/**
+	 * 환경맵 UV 의 뷰 회전 (월드 → 카메라, 3×3): 원작 VU 0x0D9 는 모델·뷰 행렬 행으로 법선을 옮긴다. 셰이더 uEnvView (basic.vert / skinned.vert).
+	 * 거울 패스는 반사 행렬을 곱한 뷰.
+	 */
+	public static org.joml.Matrix3f envView(Camera cam, org.joml.Matrix3f out) {
+		Matrix4f v = new Matrix4f().lookAt(cam.eye, cam.target, cam.up);
+		if (cam.mirror != null) {
+			v.mul(cam.mirror);
+		}
+		return v.get3x3(out);
 	}
 
 	/** @param base 머티리얼 첫 레이어 (노멀맵은 이것에만, 44 문서) */

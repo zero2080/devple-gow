@@ -180,7 +180,8 @@ GS ALPHA 블렌드 식 `((A - B) * C >> 7) + D` (A,B,D: 0=Cs 1=Cd 2=0, C: 0=As 1
 ## 6.1 추가 해석 (16 문서 §3)
 - 애니메이션 프레임(frames > 1)은 MAT 그룹의 ANM type 9 키가 고른다 (TXR/MAT 필드 무관). UV 스크롤은 ANM type 8.
 - 0x44 머티리얼 대부분은 **불투명 + 알파 테스트(≥ 0.75)** 이고, 정렬(반투명) 대상은 p28/p38 ≠ 1, TXR bit18, 0x48/0x42 뿐 (0x1537C8, 0x165998).
-- 레이어 바이트 0x01 = `(Cd−Cs)·As+Cs` → GL `ONE_MINUS_SRC_ALPHA, SRC_ALPHA`. renderFlags bit19 = 깊이 쓰기 끔, bit7 = 텍스처, bit1/bit2 = 환경/조명 VU 프로그램.
+- 레이어 바이트 0x01 = `(Cd−Cs)·As+Cs` → GL `ONE_MINUS_SRC_ALPHA, SRC_ALPHA`. renderFlags bit19 = 깊이 쓰기 끔, bit7 = 텍스처, bit1 (0x02) = 환경맵 VU 경로 (법선 →
+  카메라 공간 구면 UV, 첫 레이어 포함), bit2 (0x04) = 머티리얼 색 (16 §3.3, 43 §25.2 — 발리스타 틀 `MAT_M02MetalTrim01b` rf 0x86 의 크롬 공 텍스처).
 
 ## 7. 미해결 질문
 - **폭 8 픽셀 PSMT8 (flags=0)** 13개(`TXR_rope022` 8x8, `TXR_miscRopeSection2` 8x32): 선형·스위즐·다른 전송 사각형(1x16…16x1) 어느 것도 상위 밉과 맞지 않음. 현재는 스위즐 식으로 읽고 범위 밖은 인덱스 0.

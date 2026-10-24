@@ -113,7 +113,9 @@ class AnimRecordsTest {
 
 	/**
 	 * 생성률: FBFemit2GE (링크 4) 는 원작 채널 id 4 = 타입 10 → 0 → 150/초 (프레임 1–13) → 0, FBSemit4GE (3) 50, FXC_GE (5) 100.
-	 * 예전 항목 번호 배치는 디스크립터 4 를 "타입 11" 로 보아 채널이 비었다 (불꽃 본체가 안 나옴). 링크 22–25 (폭발 이미터) 는 채널 13 개 밖이라 곡선 없음.
+	 * 예전 항목 번호 배치는 디스크립터 4 를 "타입 11" 로 보아 채널이 비었다 (불꽃 본체가 안 나옴).
+	 * 폭발 이미터 FXC_emitter11 / emitter12 / Demitter11sub / Demitter11 은 같은 이름이 WAD 에 여러 번 정의된다 — 이 오브젝트 앞의 정의는 링크 7–10
+	 * (프레임 14 에 600 / 500 / 600 / 1000 → 625 한 번: 불덩이가 성문에 닿는 순간의 파편) 이다. 예전 (처음 정의) 은 다른 오브젝트의 링크 22–25 라 채널 밖 → 폭발이 없었다 (43 §25).
 	 */
 	@Test
 	void gateFireballRatesUseChannelIds() throws Exception {
@@ -122,18 +124,21 @@ class AnimRecordsTest {
 		EffectLibrary.EffectDef d = lib.resolve("gogateexplosion");
 		Animation a = d.anim();
 		float flame = -1, smoke = -1, ge = -1;
+		java.util.Map<String, Float> burst = new java.util.HashMap<>();
 		for (EffectLibrary.EmitterDef e : d.emitters()) {
 			switch (e.fxc().name()) {
 				case "FXC_FBFemit2GE" -> flame = d.rate(a, e, 0.2f);
 				case "FXC_FBSemit4GE" -> smoke = d.rate(a, e, 0.2f);
 				case "FXC_GE" -> ge = d.rate(a, e, 0.2f);
 				default -> {
-					assertTrue(e.channel() >= a.channels.size(), e.fxc().name() + " 링크 " + e.channel());
+					assertTrue(e.channel() >= 7 && e.channel() <= 10 && e.channel() < a.channels.size(), e.fxc().name() + " 링크 " + e.channel());
 					assertEquals(0f, d.rate(a, e, 0.2f), 1e-6f);
+					burst.put(e.fxc().name(), (float) Math.round(d.rate(a, e, 14 / 30f)));
 				}
 			}
 			assertEquals(0f, d.rate(a, e, 0.8f), 1e-6f, e.fxc().name() + " 끝나면 0");
 		}
+		assertEquals(java.util.Map.of("FXC_emitter11", 600f, "FXC_emitter12", 500f, "FXC_Demitter11sub", 600f, "FXC_Demitter11", 1000f), burst);
 		assertEquals(150f, flame, 1e-3f);
 		assertEquals(50f, smoke, 1e-3f);
 		assertEquals(100f, ge, 1e-3f);

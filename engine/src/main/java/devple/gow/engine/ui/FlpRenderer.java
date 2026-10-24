@@ -243,6 +243,13 @@ public final class FlpRenderer implements AutoCloseable {
 			}
 			switch (h.type()) {
 				case 1 -> drawMeshRef(flp.meshRefs.get(h.index()), m, col);
+				case 5 -> {
+					// 아이콘 클립 안의 동적 라벨 — L2Button (clip 359) 의 'L2' 클립 358 = 라벨 _level0/:StaticTextL2, 값 "L2" 는 FLP_HUDK 루트 프레임 0
+					// 액션의 SetVariable (L1/R1/L2/R2/L3/R3 · + = ( / 1–4 · R) [확실: FLP 덤프]. 예전엔 메시 (틀) 만 그려 배지에 글자가 없었다 (영상 8056 "L2")
+					FlpFile.DynamicLabel dl = flp.dynamicLabels.get(h.index());
+					String s = dl.variable() != null && player != null ? player.getVariable(dl.variable()) : null;
+					drawText(dl, s == null || s.isEmpty() ? dl.placeholder() : s, m, col);
+				}
 				case 7 -> drawStatic(flp.clips.get(h.index()), 0, m, col);
 				default -> {
 				}
@@ -332,6 +339,11 @@ public final class FlpRenderer implements AutoCloseable {
 						drawMeshRef(font.glyphMeshes().get(g), mul(m, s, 0, 0, s, x, base), tc);
 					}
 				} else if (r instanceof String icon && drawIcons) {
+					if (ttf != null) {
+						// 아이콘 안의 라벨 (배지 글자) 도 같은 공유 글자 묶음을 쓰므로 앞 글자를 이 라벨 변환·색으로 먼저 그린다
+						tint.set(tc[0], tc[1], tc[2], tc[3]);
+						ttf.flush(shader, m, tint);
+					}
 					drawIcon(icon, x, base, h, ascent, m, col);
 				}
 				x += advance(font, ttf, r, h);
