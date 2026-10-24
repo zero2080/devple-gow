@@ -780,11 +780,13 @@ public final class LevelScene implements Scene {
 				if (lc != null) {
 					devple.gow.engine.light.LightUniforms.apply(e.renderer().basic(), litFlags.get(key), lc, 1f);
 				}
+				e.renderer().setMaterialTimes(matTimes.get(key));
 				if (MODEL_PASSES) {
 					e.renderer().draw(i.model(), tmp);
 				} else {
 					e.renderer().drawPass(i.model(), tmp, pass);
 				}
+				e.renderer().setMaterialTimes(null);
 				if (lc != null) {
 					devple.gow.engine.light.LightUniforms.off(e.renderer().basic());
 				}
@@ -1144,9 +1146,18 @@ public final class LevelScene implements Scene {
 		}
 		if (m != null) {
 			m.hiddenJoints = hidden;
+			m.matTimes = matTimes.get(key);
 			m.draw(cam, e.window().aspect(), tmp.identity(), joints, e.renderer().white(), -1f, 1f);
 			m.hiddenJoints = null;
+			m.matTimes = null;
 		}
+	}
+
+	/** 스크립트 재질 애니 시간 (소유 GO 소문자 → 재질 이름 → 시간, {@code nav.Platforms#materialTimes}) — 자세·정지 그리기 모두. */
+	private volatile Map<String, Map<String, Float>> matTimes = Map.of();
+
+	public void setMaterialTimes(Map<String, Map<String, Float>> times) {
+		matTimes = times != null ? times : Map.of();
 	}
 
 	private devple.gow.engine.asset.AnimatedModel posedModel(String key) {
@@ -1260,7 +1271,10 @@ public final class LevelScene implements Scene {
 				}
 				String key = i.name().toLowerCase(Locale.ROOT);
 				if (!i.sky() && !fx.hidden(i) && !removed.contains(key) && !posed.containsKey(key) && !culled(key) && inMainView(key)) {
+					Map<String, Float> mt = matTimes.get(key);
+					e.renderer().setMaterialTimes(mt);
 					e.renderer().drawPass(i.model(), tmp, pass);
+					e.renderer().setMaterialTimes(null);
 				}
 			}
 		}

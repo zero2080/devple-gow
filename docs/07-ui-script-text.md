@@ -240,7 +240,7 @@ FSCommand 목록: `PS2_MemoryCard_Select 0..4`, `PS2_MoveScroll 0..4`, `PS2_Bonu
 | 06–09 | u16 | set … |
 | 0A–0D | u16 | 엔진 함수 호출, 반환형 {float,int,bool,string} |
 | 0E | u16 | push_string (코드 영역 기준 오프셋) |
-| 0F / 10 | s16 | jump_if / jump (다음 명령 기준) |
+| 0F / 10 | s16 | jump_if (pop 이 **거짓**이면 점프, 0x16F570) / jump (다음 명령 기준) |
 | 11 / 12 | – | true / false |
 | 13–1D | – | neg, add, sub, mul, div (int/float 교대), mod |
 | 1E–23 | – | 형변환 |

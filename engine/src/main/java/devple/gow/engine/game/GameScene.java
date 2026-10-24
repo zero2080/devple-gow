@@ -134,6 +134,8 @@ public final class GameScene implements Scene {
 	private final java.util.Set<String> otherHidden = java.util.concurrent.ConcurrentHashMap.newKeySet();
 	/** 다른 슬롯 레벨 Animator 오브젝트 자세 (이름 → 관절 월드, 숨김 관절) — 렌더 스레드가 otherScene 에 건다. */
 	private final Map<String, Object[]> otherPosed = new java.util.concurrent.ConcurrentHashMap<>();
+	/** 다른 슬롯 레벨의 스크립트 재질 애니 시간 (소유 GO → 재질 → 시간, {@link devple.gow.engine.nav.Platforms#materialTimes}). */
+	private volatile Map<String, Map<String, Float>> otherMaterialTimes = Map.of();
 	/** 표시 중인 메시지 번호 (-1 없음): 닫힐 때 이벤트 1040(번호) 를 플레이어가 보낸다 (원작 0x1B8ECC/0x1B8F98/0x1B9170). */
 	private int messageId = -1;
 	/** 열린 질문 메시지 번호 (Internal 0xB, −1 = 없음), 선택지 수, 지금 선택 (1 부터). */
@@ -611,8 +613,13 @@ public final class GameScene implements Scene {
 		world = new ScriptWorld(level.data(), session.scriptHost, listener());
 		nav = new SceneNav(level.data(), col, hero, world, session.scriptHost, orbTweaks, navHost());
 		if (AutoPlay.ON) {
-			auto = new AutoPlay(levelName);
-			auto.plan(world, col);
+			if (session.autoCarry != null) { // 경로 중 이음 전환 (덧붙는 레벨 → 숙주): 같은 경로를 이어서
+				auto = session.autoCarry;
+				session.autoCarry = null;
+			} else {
+				auto = new AutoPlay(levelName);
+				auto.plan(world, col);
+			}
 		}
 		buildRopeVisuals();
 		ph = devple.gow.engine.core.PerfMonitor.phase(". script+nav", ph);
@@ -1025,6 +1032,15 @@ public final class GameScene implements Scene {
 			}
 
 			@Override
+			public void neighbourSpawn(ScriptListener.SpawnRequest r) {
+				if (boss != null) {
+					System.out.printf("이웃 스폰 생략: %s (보스 레벨)%n", r.source().name()); // 보스 레벨 쫄은 BossFight 가 맡는다
+					return;
+				}
+				spawn(r, true);
+			}
+
+			@Override
 			public void neighbourVisible(List<String> objects, boolean show) {
 				for (String o : objects) {
 					String k = o.toLowerCase(java.util.Locale.ROOT);
@@ -1227,9 +1243,13 @@ public final class GameScene implements Scene {
 				switch (t.kind()) {
 					case WARP -> goToLevel(t.target(), new Arrival(LevelLink.Kind.WARP, levelName, null, 0));
 					case SEAMLESS -> {
-						// LoadCheck: 원작은 "현재 레벨" 표시만 바꾼다. 이웃 레벨 바닥이 발밑에 있을 때만 그 레벨로 넘어간다
-						// (좌표계가 다른 Warp 짝 레벨에서 허공으로 떨어지지 않도록, 36 문서 §3)
-						if (otherCol != null && !Float.isNaN(otherCol.groundHeight(p.x, p.y + 32, p.z, 600))) {
+						// LoadCheck: 원작은 "현재 레벨" 표시만 바꾼다 (0x1BCA10: 슬롯이 적재돼 있으면 상태 10 + 현재 레벨 이름 0x29DAE8 복사) — 두 슬롯의
+						// 스크립트·GO 는 그대로 살아 있다. 엔진은 현재 레벨 것 (R2 오브젝트·적 생성·Creator) 만 다루므로, 이웃 레벨 바닥이 발밑에 있고 (좌표계가
+						// 다른 Warp 짝 레벨에서 허공으로 떨어지지 않도록, 36 문서 §3) 지금 레벨 바닥은 발밑에 없을 때만 넘어간다. 두 레벨이 같은 바닥을
+						// 겹쳐 가진 곳 (ATHN02B 가 가진 ATHN02C 발리스타 방 바닥) 의 LoadCheck (ATHN02C LoadCheckB2) 로 넘어가 버리면 ATHN02C 의 회전판 레버·
+						// 발리스타 크랭크가 이웃 것이 되어 R2 가 먹지 않았다 (43 문서 §14). 겹친 바닥을 벗어나면 이음 규칙 (다른 슬롯 바닥만) 이 넘긴다
+						if (otherCol != null && !Float.isNaN(otherCol.groundHeight(p.x, p.y + 32, p.z, 600))
+								&& Float.isNaN(col.groundHeight(p.x, p.y + STEP, p.z, 64))) {
 							goToLevel(t.target(), new Arrival(LevelLink.Kind.SEAMLESS, levelName, new float[]{p.x, p.y, p.z}, hero.ctl.yaw));
 						}
 					}
@@ -1264,16 +1284,15 @@ public final class GameScene implements Scene {
 					}
 					return;
 				}
-				if (boss != null) {
-					boss.objectEvent(e);
-				} else if (bridge != null) {
-					bridge.objectEvent(e);
+				boolean handled = boss != null ? boss.objectEvent(e) : bridge != null && bridge.objectEvent(e);
+				if (!handled) {
+					objectEventToGo(e);
 				}
 			}
 
 			@Override
 			public void spawnEnemy(SpawnRequest r) {
-				spawn(r);
+				spawn(r, false);
 			}
 
 			@Override
@@ -1394,12 +1413,15 @@ public final class GameScene implements Scene {
 		if (leaving) {
 			return;
 		}
-		if (auto != null) { // 자동 플레이: 다음 레벨이면 성공으로 끝, 아니면 막는다
+		if (auto != null && !(auto.routing() && a.kind() != LevelLink.Kind.WARP)) { // 자동 플레이: 다음 레벨이면 성공으로 끝, 아니면 막는다
 			if (auto.allow(wad, hero.ctl.position)) {
 				leaving = true;
 				pendingEngine.window().requestClose();
 			}
 			return;
+		}
+		if (auto != null) {
+			session.autoCarry = auto; // 경로 중 이음 전환: 새 씬이 이어 받음
 		}
 		leaving = true;
 		System.out.println("레벨 전환 → " + wad + " (" + a.kind() + ", " + a.from() + " 에서)");
@@ -1470,17 +1492,24 @@ public final class GameScene implements Scene {
 	 *       (사망 → DestructionSensor 로 스크립트가 진행되도록)</li>
 	 * </ol>
 	 * 이전에는 2·3 도 첫 적 종류로 생성해 ATHN01B 등에 엉뚱한 해골 병사가 나왔다.
+	 *
+	 * @param neighbour 다른 슬롯 레벨 스크립트의 SpawnEnemy ({@link SceneNav.Host#neighbourSpawn}) — 이미 올린 적 종류의 템플릿만 (레벨 템플릿·대역 없음),
+	 *                  그 적의 스크립트 이벤트·제거는 이웃 스크립트 세계로 (43 문서 §14.5)
 	 */
-	private void spawn(ScriptListener.SpawnRequest r) {
+	private void spawn(ScriptListener.SpawnRequest r, boolean neighbour) {
 		int tpl = r.templateId();
 		// 보스 리소스 (레벨 WAD 안) 가 먼저 (37 문서)
 		if (boss != null && boss.silent(tpl)) {
 			return; // 소리 전용 가짜 적 (FakeBHAsnd 등)
 		}
-		EnemyFactory.Kind bossKind = boss != null ? boss.kindFor(tpl) : null;
+		EnemyFactory.Kind bossKind = boss != null && !neighbour ? boss.kindFor(tpl) : null;
 		// 레벨 템플릿 종류(키 "레벨:오브젝트")는 레벨 WAD 의 모든 AI1 을 가지므로 1단계에서 뺀다
 		EnemyFactory.Kind kind = bossKind != null ? bossKind : kinds.entrySet().stream().filter(e -> !e.getKey().contains(":") && e.getValue() != null
 				&& e.getValue().hasTemplate(tpl)).map(Map.Entry::getValue).findFirst().orElse(null);
+		if (kind == null && neighbour) {
+			System.out.printf("이웃 스폰 생략: %s 템플릿 %d (올린 적 종류에 없음)%n", r.source().name(), tpl);
+			return;
+		}
 		if (kind == null) {
 			kind = levelTemplateKind(tpl);
 		}
@@ -1570,13 +1599,39 @@ public final class GameScene implements Scene {
 			}
 		}
 		enemies.add(new Enemy(f, em, r.actor(), kind));
-		if (boss != null) {
+		if (neighbour) {
+			if (r.actor() != null) {
+				neighbourActors.add(r.actor());
+			}
+			neighbourBridge().attach(f, r.actor());
+		} else if (boss != null) {
 			boss.onSpawn(f, r.actor(), r.templateId(), arena());
 		} else {
 			bridge.attach(f, r.actor());
 		}
-		System.out.printf("적 스폰: %s (템플릿 %d, 순찰 %s) at (%.0f, %.0f, %.0f)%n", kind.assets().wad().name(), r.templateId(),
-				r.patrol(), f.pos.x, f.pos.y, f.pos.z);
+		System.out.printf("%s스폰: %s (템플릿 %d, 순찰 %s) at (%.0f, %.0f, %.0f)%n", neighbour ? "이웃 적 " : "적 ", kind.assets().wad().name(),
+				r.templateId(), r.patrol(), f.pos.x, f.pos.y, f.pos.z);
+	}
+
+	/** 이웃 스크립트가 만든 적의 스크립트 액터 (제거·피해 이벤트는 그 세계로). */
+	private final java.util.Set<devple.gow.engine.script.ScriptActor> neighbourActors =
+			java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+	private devple.gow.engine.boss.CombatScriptBridge neighbourBridge;
+	private ScriptWorld neighbourBridgeWorld;
+
+	/** 이웃 스크립트 세계의 전투 다리 (이웃이 바뀌면 새로). */
+	private devple.gow.engine.boss.CombatScriptBridge neighbourBridge() {
+		ScriptWorld nw = nav != null ? nav.neighbour() : null;
+		if (neighbourBridge == null || neighbourBridgeWorld != nw) {
+			neighbourBridge = new devple.gow.engine.boss.CombatScriptBridge(nw);
+			neighbourBridgeWorld = nw;
+		}
+		return neighbourBridge;
+	}
+
+	/** 적 액터가 속한 스크립트 세계 (이웃이 만든 적이면 그 이웃 세계 — 다른 슬롯이 바뀌었으면 떨어져 나간 그 세계라 무해). */
+	private ScriptWorld worldOf(devple.gow.engine.script.ScriptActor a) {
+		return neighbourActors.contains(a) && neighbourBridgeWorld != null ? neighbourBridgeWorld : world;
 	}
 
 	/** 석상 파괴 보너스 (Bonus 023 "Stone Kill" / 공중 024 "Air Stone Kill": #eed31206 붉은 오브, #2af48b79 메시지). */
@@ -2304,6 +2359,9 @@ public final class GameScene implements Scene {
 		} else {
 			bridge.tick();
 		}
+		if (neighbourBridge != null && neighbourBridgeWorld != null && nav.neighbour() == neighbourBridgeWorld) {
+			neighbourBridge.tick(); // 이웃 스크립트가 만든 적의 피해 1039
+		}
 		if (target != null && (boss == null || !boss.claimsGrab(target))) {
 			Enemy te = enemies.stream().filter(x -> x.fighter() == target).findFirst().orElse(null);
 			boolean was = grab.active();
@@ -2347,7 +2405,13 @@ public final class GameScene implements Scene {
 				otherPosed.put(b.owner, new Object[]{b.joints(), b.hidden()});
 			}
 		}
+		level.setMaterialTimes(nav.navWorld.platforms().materialTimes()); // 스크립트 재질 애니 ("$", Platforms.MatClock)
+		otherMaterialTimes = nav.neighbourPlatforms().materialTimes();
 		breakables.update(hero.combat, world, this::onBreak);
+		if (!arrows.shots().isEmpty()) {
+			arrows.update(dt, new ArrowShots.Targets(breakables, world, this::onBreak, enemies.stream().map(Enemy::fighter).toList(), hero.combat,
+					col, otherCol, nav.navWorld.platforms(), nav.neighbourPlatforms(), magicFx != null ? magicFx.effects() : null));
+		}
 		combatCameraTick();
 		cameraRig.setHeroState(heroStateBits(), enemies.stream().anyMatch(en -> !en.fighter().dead() && en.fighter().brain() != null
 				&& en.fighter().brain().state() == devple.gow.engine.combat.AiBrain.State.COMBAT));
@@ -2601,7 +2665,7 @@ public final class GameScene implements Scene {
 			if (f.dead() && f.deadTime() == 0 && !wasDead || (f.dead() && en.actor() != null && !en.actor().destroyed()
 					&& (f.deadTime() > 0.5f || shatterGone))) {
 				if (en.actor() != null && !en.actor().destroyed()) {
-					world.destroy(en.actor()); // DestructionSensor (예: 튜토리얼 메시지)
+					worldOf(en.actor()).destroy(en.actor()); // DestructionSensor (예: 튜토리얼 메시지) — 이웃 스크립트가 만든 적은 이웃 세계에서
 					String emitter = en.kind().assets().wad().name().replace(".WAD", "").substring(2) + " Death";
 					int so = f.shattered() && f.statueShown() ? f.statueOrbEmitter(!hero.ctl.grounded) : -1;
 					if (so >= 0) {
@@ -2741,6 +2805,51 @@ public final class GameScene implements Scene {
 				return f == null ? null : new float[]{f.y(), f.tri().info() != null ? f.tri().info().sheetFx() : 0};
 			}
 		});
+	}
+
+	/** 스크립트 EventTransmitter → 레벨 GO 이벤트 (원작 GO 메시지 처리, 43 문서 §14). */
+	public static final int EVENT_RESET = 1015, EVENT_ARROW = 1020;
+	/** GO 화살 이미터 발사체 (발리스타 goBigarrow). */
+	private final ArrowShots arrows = new ArrowShots();
+
+	/**
+	 * 1015 = PushPull 리셋 (0x266040 → 0x2100E0: 크랭크 되감기 → 다시 잡힘, 레버 −4), 1020 = 화살 이미터 (Creator 비헤이비어, 0x267698 → 0x222710)
+	 * [확실: 디스어셈블]. 예: ATHN02C 회전판 레버 Gunlever-EventTmid, 발리스타 BigGun1Crank-EvtArrow / EvtReset.
+	 */
+	private void objectEventToGo(ScriptListener.ObjectEvent e) {
+		if (e.actor() != null || e.objectName() == null || nav == null) {
+			return;
+		}
+		String go = e.objectName();
+		if (e.event() == EVENT_RESET) {
+			var it = nav.items.byOwner(go);
+			if (it != null) {
+				System.out.println("오브젝트 리셋 1015: " + it);
+				nav.navigator.scriptReset(it);
+			}
+		} else if (e.event() == EVENT_ARROW) {
+			Integer emitter = level.data().arrowEmitters.get(go);
+			if (emitter == null) {
+				return;
+			}
+			String node = String.format(java.util.Locale.ROOT, "/TweakTemplates/ArrowEmitter/%03d/", emitter);
+			String joint = orbTweaks.s(node, "Aim Joint", null);
+			var ps = nav.navWorld.platforms();
+			float[] aim = ps.jointWorld(go, joint);
+			if (aim == null) { // 몸이 없는 GO: 배치 관절 (애니 전)
+				for (var p : level.data().layout.placements()) {
+					if (p.instance().name().equalsIgnoreCase(go)) {
+						var sk = p.object().skeleton();
+						for (int j = 0; j < sk.joints.size(); j++) {
+							if (sk.joints.get(j).name().equalsIgnoreCase(joint)) {
+								aim = p.jointWorld()[j];
+							}
+						}
+					}
+				}
+			}
+			arrows.fire(orbTweaks, emitter, aim, ps.family(go), magicFx != null ? magicFx.effects() : null);
+		}
 	}
 
 	/** 부서지는 물체 (41 문서): 정적 메시 숨김 → 물체 GO 파괴 애니·먼지·소리, Brkb OrbEmitter 오브. */
@@ -2889,9 +2998,33 @@ public final class GameScene implements Scene {
 			if ((otherFloorTime += dt) > 0.25f) { // 이음매에서 오가며 바뀌지 않도록 잠깐 머문 뒤
 				goToLevel(otherName, new Arrival(LevelLink.Kind.WALK, levelName, new float[]{p.x, p.y, p.z}, hero.ctl.yaw));
 			}
+		} else if (otherCol != null && otherName.equals(hostLevel) && c0.grounded && !insideOwnVolumes(p)
+				&& !Float.isNaN(otherCol.groundHeight(p.x, p.y + STEP, p.z, 64))) {
+			// 덧붙는 레벨 (ATHN02D 메두사 방) 의 자기 ENV 볼륨 (방 MedusaRipZone · 마법 단상 · 문) 을 벗어나 숙주 (ATHN02C) 바닥으로 → 숙주가 현재 레벨.
+			// 원작은 두 슬롯의 스크립트·GO 가 모두 살아 있어 숙주의 SpawnEnemy (BalistaEnems 해골병)·R2 오브젝트 (회전판 레버·발리스타 크랭크)·Creator
+			// (세이브 포인트·상자) 가 그대로 동작하는데, 엔진은 현재 레벨 것만 다룬다. 예전엔 숙주로 넘어가지 않아 미노타우로스 방 남쪽 출구 (MAcdHullOff)
+			// 뒤 통로의 해골병이 나오지 않고 발리스타 레버·크랭크·세이브 제단이 동작하지 않았다 (43 문서 §14) [근사: 엔진 구조 — 현재 레벨 기준]
+			if ((otherFloorTime += dt) > 0.1f) {
+				goToLevel(otherName, new Arrival(LevelLink.Kind.WALK, levelName, new float[]{p.x, p.y, p.z}, hero.ctl.yaw));
+			}
 		} else {
 			otherFloorTime = 0;
 		}
+	}
+
+	/** 발 p 가 이 레벨의 ENV 볼륨 (스크립트 영역) 안인가 — 덧붙는 레벨의 "자기 영역" (발 + 20 높이에서). 볼륨이 없으면 참. */
+	private boolean insideOwnVolumes(Vector3f p) {
+		boolean any = false;
+		for (devple.gow.tools.level.LevelData.PlacedVolume v : level.data().volumes) {
+			if (!v.hull().name.startsWith("ENV_")) {
+				continue;
+			}
+			any = true;
+			if (v.contains(p.x, p.y + 20, p.z)) {
+				return true;
+			}
+		}
+		return !any;
 	}
 
 	/** 영웅 몸 구 벽 밀어내기 (두 슬롯 정적 시트 + 문·창살·회전방 CDV): 발 위치 p 의 x·z 를 고친다. */
@@ -3160,6 +3293,7 @@ public final class GameScene implements Scene {
 		if (otherScene != null) {
 			otherScene.setRemoved(otherHidden); // 이웃 스크립트 Vis 숨김 (SceneNav.Host.neighbourVisible)
 			otherPosed.forEach((k, v) -> otherScene.poseInstance(k, (float[][]) v[0], (boolean[]) v[1]));
+			otherScene.setMaterialTimes(otherMaterialTimes);
 			otherScene.renderNeighbour(e, cam);
 		}
 	}

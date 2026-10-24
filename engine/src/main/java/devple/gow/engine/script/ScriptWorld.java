@@ -759,12 +759,13 @@ public final class ScriptWorld {
 
 	private void created(ScriptActor a) {
 		for (ScriptEntity e : entities) {
-			if (e.type() != 2) {
+			// Filter 는 모든 모드에 (원작 통지 0x1AE15C: 센서 목록마다 Filter == 오브젝트 그룹 또는 0 일 때만 메시지 1) [확실: 디스어셈블]
+			if (e.type() != 2 || !passes(e, a)) {
 				continue;
 			}
 			boolean ok = switch (e.mode()) {
 				case 2 -> a.spawner != null && a.spawner.owner == e.owner;
-				case 3 -> passes(e, a);
+				case 3 -> true;
 				case 4 -> inVolume(e, a);
 				default -> false;
 			};
@@ -782,13 +783,16 @@ public final class ScriptWorld {
 		a.destroyed = true;
 		actors.remove(a);
 		for (ScriptEntity e : entities) {
-			if (e.type() != 3) {
+			// Filter 는 모든 모드에 (원작 제거 통지 0x1AE1D0: 센서 목록마다 Filter == 오브젝트 그룹 (+0x2A) 또는 0 일 때만 메시지 6 → 0x1AA870) [확실].
+			// 예전 엔진은 모드 3 에만 걸어 ATHN02C EnemyBalistaZone-DestructionSensor1 (모드 4, Filter 98) 이 부서진 문 Marker27 (그룹 27) 에도 발동해
+			// LevelData21 이 −1 이 되었다 (작살 석문 조건 LevelData21 == 0 이 영영 거짓, 43 문서 §14)
+			if (e.type() != 3 || !passes(e, a)) {
 				continue;
 			}
 			boolean ok = switch (e.mode()) {
 				case 1 -> a.name.equals(e.ownerName());
 				case 2 -> a.spawner != null && a.spawner.owner == e.owner;
-				case 3 -> passes(e, a);
+				case 3 -> true;
 				case 4 -> inVolume(e, a);
 				default -> false;
 			};

@@ -67,6 +67,13 @@ public final class SceneNav {
 		 */
 		default void neighbourVisible(List<String> objects, boolean show) {
 		}
+
+		/**
+		 * 이웃 레벨 스크립트의 SpawnEnemy — 원작은 두 슬롯 스크립트가 같은 세계에서 돌아 이웃 레벨의 적도 나온다 (예 ATHN02C 복도 사다리 위 ATHN02B
+		 * ClimbWallEnemies1 해골병, 지금 레벨은 ATHN02C 그대로 — 43 문서 §14).
+		 */
+		default void neighbourSpawn(ScriptListener.SpawnRequest r) {
+		}
 	}
 
 	private final LevelData level;
@@ -97,6 +104,7 @@ public final class SceneNav {
 		navWorld.ropes().addAll(NavRope.of(level));
 		items = Interactables.of(level, levelTweaks);
 		navWorld.setPlatforms(Platforms.of(level, animatorOwners(world), posedOwners(items)));
+		registerMaterialAnimators(world, navWorld.platforms());
 		navigator = new HeroNavigator(hero.ctl, navWorld, new NavAnims(hero.tweaks));
 		navigator.setItems(items);
 		navigator.setListener(new HeroNavigator.Listener() {
@@ -156,6 +164,18 @@ public final class SceneNav {
 	}
 
 	/**
+	 * 소유 GO 에 거는 (모드 1) "$재질" Animator 의 재질 시계를 생성 상태로 등록한다 ({@link Platforms#registerMaterial}): 0x42 재질 (스크립트용 한 번)
+	 * 은 스크립트가 틀 때까지 시간 0 (ATHN02D 남쪽 문 감산 막 p28 0.5), 0x41 은 생성 때부터 반복.
+	 */
+	public static void registerMaterialAnimators(ScriptWorld w, Platforms ps) {
+		for (ScriptEntity e : w.entities()) {
+			if ((e.type() == 5 || e.type() == 6) && e.mode() == 1 && e.ownerName() != null && w.slot(e, 0) instanceof String s && s.startsWith("$")) {
+				ps.registerMaterial(e.ownerName(), s);
+			}
+		}
+	}
+
+	/**
 	 * 상자 → 오브 이미터 (TWK OrbEmitter Instance Name): CSM 종류별 OrbEmitter 템플릿 (+0x90.., {@link Interactables.Item#chestOrb()}, 0x2161A8)
 	 * 의 이름. 템플릿이 없으면 CSM 이름으로 고른다 [근사].
 	 */
@@ -200,6 +220,7 @@ public final class SceneNav {
 			ScriptWorld nw = new ScriptWorld(data, ScriptHost.neighbour(mainHost), neighbourListener);
 			Set<String> owners = animatorOwners(nw);
 			neighbourPlatforms = Platforms.of(data, owners, owners);
+			registerMaterialAnimators(nw, neighbourPlatforms);
 			navWorld.setNeighbourPlatforms(neighbourPlatforms); // 이웃 문·발판 충돌도 자세대로 (43 §13.8 [근사] 해소)
 			nw.start();
 			Vector3f p = world.player() != null ? new Vector3f(world.player().pos[0], world.player().pos[1], world.player().pos[2]) : new Vector3f();
@@ -261,6 +282,11 @@ public final class SceneNav {
 			@Override
 			public void animate(ScriptEntity source, List<String> objects, String anim) {
 				applyAnimator(neighbour, neighbourPlatforms, source, objects, anim);
+			}
+
+			@Override
+			public void spawnEnemy(SpawnRequest r) {
+				host.neighbourSpawn(r);
 			}
 
 			@Override
@@ -456,6 +482,10 @@ public final class SceneNav {
 			if (b.followMoved()) {
 				world.followOwner(b.owner, b.joints());
 				followVolumes(b);
+				Interactables.Item it = items.byOwner(b.owner);
+				if (it != null && it.kind != Interactables.Kind.CHEST) {
+					Interactables.refreshHandles(it, b.skeleton(), b.joints()); // 회전판 위 발리스타 크랭크 손잡이
+				}
 			}
 		}
 		if (neighbour != null) {

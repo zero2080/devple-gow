@@ -87,6 +87,11 @@ public final class LevelData {
 	public final Map<String, RopeDef> ropes = new LinkedHashMap<>();
 	/** GO 인스턴스 이름 → 비헤이비어 (IO_CSM / PushPull / IO_TandF / Breakable). */
 	public final Map<String, GoBehavior> behaviors = new LinkedHashMap<>();
+	/**
+	 * GO 인스턴스 이름 → 화살 이미터 (비헤이비어 "Creator", 템플릿 = /TweakTemplates/ArrowEmitter/&lt;n&gt;/). 한 GO 에 다른 비헤이비어와 같이 있을 수 있다
+	 * (ATHN02C gobiggun1crank = PushPull 202 + Creator 200, PAND03G gologlever = PushPull 15 + Creator 100).
+	 */
+	public final Map<String, Integer> arrowEmitters = new LinkedHashMap<>();
 
 	public LevelData(WadFile wad) {
 		this.wad = wad;
@@ -114,6 +119,10 @@ public final class LevelData {
 				// GO 하나에 비헤이비어가 여럿일 수 있다 (PAND03G gologlever = Creator 100 + PushPull 15 "BMI Log Puller" id 351):
 				// Creator 는 상호작용이 아니므로 다음 비헤이비어가 대신한다
 				GoBehavior nb = GoBehavior.parse(lastGo, d);
+				if (nb.type().equals("Creator")) {
+					// 화살 이미터: 이벤트 1020 → 비헤이비어 정의 +4 (= BHV +0x20 템플릿) 번 ArrowEmitter 발사 (0x267698 → 0x231590 → 0x222710) [확실]
+					arrowEmitters.putIfAbsent(lastGo, nb.template());
+				}
 				GoBehavior old = behaviors.get(lastGo);
 				if (old == null || (old.type().equals("Creator") && !nb.type().equals("Creator"))) {
 					behaviors.put(lastGo, nb);

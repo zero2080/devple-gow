@@ -75,6 +75,26 @@ public final class Renderer implements AutoCloseable {
 		fxTime = t;
 	}
 
+	/**
+	 * 다음 그리기 (한 인스턴스) 의 스크립트 재질 애니 시간 (재질 이름 → 시간, {@code nav.Platforms.MatClock}) — 그 재질은 레벨 시간 대신 이 시간으로.
+	 * null = 없음. 그린 뒤 null 로 되돌린다.
+	 */
+	public void setMaterialTimes(java.util.Map<String, Float> times) {
+		matTimes = times;
+	}
+
+	private java.util.Map<String, Float> matTimes;
+
+	private float partTime(MaterialFx fx) {
+		if (matTimes != null && fx != null && fx.anim() != null) {
+			Float t = matTimes.get(fx.anim().material());
+			if (t != null) {
+				return t;
+			}
+		}
+		return fxTime;
+	}
+
 	public float fxTime() {
 		return fxTime;
 	}
@@ -110,12 +130,13 @@ public final class Renderer implements AutoCloseable {
 				RenderModel.Blend b = p.blend();
 				RenderModel.Blend mode = b == RenderModel.Blend.OPAQUE || b == RenderModel.Blend.CUTOUT ? RenderModel.Blend.ALPHA : b;
 				MaterialFx fx = p.fx();
-				Texture tex = fx == null ? p.texture() : fx.frame(p.texture(), fxTime);
-				float[] sc = fx == null ? null : fx.uv(0, fxTime);
+				float ft = partTime(fx);
+				Texture tex = fx == null ? p.texture() : fx.frame(p.texture(), ft);
+				float[] sc = fx == null ? null : fx.uv(0, ft);
 				float[] tint = p.tint();
 				if (fx != null && fx.anim() != null) {
 					tint = tint.clone();
-					tint[3] *= fx.opacity(fxTime, 1f);
+					tint[3] *= fx.opacity(ft, 1f);
 				}
 				drawLayer(p, tex, mode, tint, sc, false, true, p.litColor());
 				if (fx != null && !fx.layers().isEmpty()) {
@@ -123,7 +144,7 @@ public final class Renderer implements AutoCloseable {
 					for (MaterialFx.Layer l : fx.layers()) {
 						RenderModel.Blend lb = l.blend() == RenderModel.Blend.OPAQUE || l.blend() == RenderModel.Blend.CUTOUT
 								? RenderModel.Blend.ALPHA : l.blend();
-						drawLayer(p, fx.frame(l, fxTime), lb, l.tint(), fx.uv(l.index(), fxTime), l.env() && p.lit(), false, l.litColor());
+						drawLayer(p, fx.frame(l, ft), lb, l.tint(), fx.uv(l.index(), ft), l.env() && p.lit(), false, l.litColor());
 					}
 					glDepthFunc(GL_LESS);
 				}
@@ -158,12 +179,13 @@ public final class Renderer implements AutoCloseable {
 					continue;
 				}
 				MaterialFx fx = p.fx();
-				Texture tex = fx == null ? p.texture() : fx.frame(p.texture(), fxTime);
-				float[] sc = fx == null ? null : fx.uv(0, fxTime);
+				float ft = partTime(fx);
+				Texture tex = fx == null ? p.texture() : fx.frame(p.texture(), ft);
+				float[] sc = fx == null ? null : fx.uv(0, ft);
 				float[] tint = p.tint();
 				if (fx != null && fx.anim() != null) {
 					tint = tint.clone();
-					tint[3] *= fx.opacity(fxTime, 1f);
+					tint[3] *= fx.opacity(ft, 1f);
 				}
 				if (b == RenderModel.Blend.CUTOUT) {
 					if (pass == 0) {
@@ -184,7 +206,7 @@ public final class Renderer implements AutoCloseable {
 					for (MaterialFx.Layer l : fx.layers()) {
 						RenderModel.Blend lb = l.blend() == RenderModel.Blend.OPAQUE || l.blend() == RenderModel.Blend.CUTOUT
 								? RenderModel.Blend.ALPHA : l.blend();
-						drawLayer(p, fx.frame(l, fxTime), lb, l.tint(), fx.uv(l.index(), fxTime), l.env() && p.lit(), false, l.litColor());
+						drawLayer(p, fx.frame(l, ft), lb, l.tint(), fx.uv(l.index(), ft), l.env() && p.lit(), false, l.litColor());
 					}
 					glDepthFunc(GL_LESS);
 				}

@@ -338,14 +338,15 @@ HP ≤ 9800 → 잡기 원 → ○ GRAB → 260 MAIMEWGRAB (일반 GrabSync, 같
 ### 5.3 미노타우로스 방 리스폰·MP 정밀 검사 (2026-10-24)
 **스크립트 (원작 그대로, 교착 없음) [확실: 데이터·코드]**
 - SpawnEnemy MinotaurLevel1AI6/10/9 (모드 1, Filter 25): 슬롯 0 MaximumCount 없음 (무제한), 1 = 3 (+0xB8, 스폰 경로 0x1AC580/0x1AC630/0x1AC850 이
-  읽지 않음), Respawn 참, RefractTime 1, 조건·DelayedEnable = `LevelData1 ≤ 6 && LevelData0 && !GlobalData1`, Delay = LevelData3 == 0 이면 1 / 2 / 1.25 초
-  (처음, FirstMsgDone 1040(141) 이 셋을 발동) 아니면 **7 초** (`jump_if` 는 참이면 점프), Action = LevelData5 = 거짓, LevelData3 += 1.
+  읽지 않음), Respawn 참, RefractTime 1, 조건·DelayedEnable = `LevelData1 ≤ 6 && LevelData0 && !GlobalData1`, Delay = LevelData3 == 0 (처음,
+  FirstMsgDone 1040(141) 이 셋을 발동) 이면 **7 초**, 아니면 (리스폰) AI6 1 / AI10 2 / AI9 1.25 초 — `jump_if` (0x0F) 는 **거짓이면** 점프 (0x16F570,
+  43 §14.2) [확실]. 2026-10-24 앞 판은 참이면 점프로 읽어 처음 1/2/1.25 · 리스폰 7 초로 거꾸로였다. Action = LevelData5 = 거짓, LevelData3 += 1.
 - 제거 메시지 6 (0x1AC630): +0x104 += 1, 보낸 쪽이 있고 Respawn 이면 Trigger (최소 지연 0.25) → 조건은 **죽은 시점** LevelData1 ≤ 6.
 - MinoDestruction1 (DestructionSensor 모드 3): 조건 LevelData5 == 거짓은 제거 때, **Delay 0.5 초** 뒤 LevelData5 = 거짓, LevelData4 += 1.
 - EventSmash1 (1046) 은 지연 없이 LevelData1/4 += 1, LevelData5 = 참 (HulkSmashy 0.51 초 뒤 끔). 문 엔티티는 두 센서의 대상이라 그 발동 때만 조건
   (LevelData1 ≥ 6 && LevelData3 == LevelData4) 을 본다.
-- 결론: 3 마리가 늘 유지되고, 부순 수 ≤ 6 인 동안 죽은 자리마다 7 초 뒤 다시 나온다. 문은 (a) 일곱 번째 파괴 뒤 (더는 안 나옴) 남은 것을 다 잡거나,
-  (b) 6 이상에서 살아 있는 셋을 리스폰 7 초 안에 모두 없애면 열린다. 세는 쪽은 스폰마다 정확히 한 번 (석상 = EventSmash1, 보통 사망 = MinoDestruction1)
+- 결론: 3 마리가 늘 유지되고, 부순 수 ≤ 6 인 동안 죽은 자리마다 1–2 초 뒤 다시 나온다. 문은 (a) 일곱 번째 파괴 뒤 (더는 안 나옴) 남은 것을 다 잡거나,
+  (b) 6 이상에서 살아 있는 셋을 리스폰 1–2 초 안에 모두 없애면 열린다. 세는 쪽은 스폰마다 정확히 한 번 (석상 = EventSmash1, 보통 사망 = MinoDestruction1)
   이라 원작은 교착이 없다. 엔진 카운트도 실측 일치 (LevelData3 == 4, 석상 제거 1046 다음 틱 — §5.2 원인 3).
 
 **엔진 결함 1 — 마법 재생 [확실]**: `MedusaRipZone-RewardPlayer` (FirstMsgDone + 10 초) 의 `call_int Internal:0x12 (10)` 는 GameMgr_OnMessage 0x12
@@ -363,6 +364,9 @@ MP (0x30449C) = min(max(MP + 값/60 × 시간 배율, 0), 최대 MP) 로 더한�
 - 결과 (쉬움, 결정적, 3 회 같음): EventCombat1 62.9 → RewardPlayer 77.9 → 파괴 83.6 / 86.8 / 87.1 / 93.6 / 96.9 / 100.0 초 (6 번째에 LevelData3 == 4)
   → FinalCamOn 100.0, CheckPoint2 108.0, **DMCWall VisOff 109.0 초** (여왕 사망 46 초 뒤, 영상 약 75 초), TurnFaceOffFinal 110.0 (재생 0). 그 뒤 남은
   리스폰 3 회는 원작 데이터대로. 예전: 6 번째 115.6 초, MP 15 고정, 보통 공격으로 셋을 잡아 DMCWall 179.8 초 (실행마다 다름 — 280 초 안에 못 연 적도).
+- **jump_if 수정 뒤 (2026-10-24, 43 §14)**: 첫 셋 74.9 초 (FirstMsgDone 67.9 + 7), 리스폰 1.25–2 초 → 파괴 83.1 / 86.3 / 92.2 / 114.4 / 115.9 / 117.9 /
+  120.6 / 123.2 / 126.3 초 (6 번째에는 살아 있는 리스폰이 있어 LevelData3 ≠ 4, 9 번째에 같아짐) → FinalCamOn 126.3, CheckPoint2 134.3,
+  **DMCWall VisOff 135.3 초** — 머리 뜯기 57.5 초 뒤 약 78 초 (영상 약 75 초에 가까워짐, 앞 판 109.0 초 = 52 초). 문 재질 페이드 ("$doorSub" 등) 는 43 §14.3.
 - 테스트: `MedusaQueenFightTest.minotaurRoomRegeneratesMagicUntilTheDoorOpens`, `GameScriptHostTest.internal12SetsMagicRegeneration`,
   `BotInputTest.stoneTargetStartsWithTriangleAndNeverGrabs`.
 

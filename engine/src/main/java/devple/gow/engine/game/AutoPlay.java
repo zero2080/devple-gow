@@ -161,6 +161,9 @@ public final class AutoPlay {
 			bot.steer(hero, enemy, camYaw, dt);
 			return bot;
 		}
+		if (routeIdx < route.size() && time >= ROUTE_AFTER) {
+			return routeStep(hero, camYaw, dt);
+		}
 		if (cur == null) {
 			cur = pick(hero);
 			legTime = dwell = 0;
@@ -239,6 +242,131 @@ public final class AutoPlay {
 		}
 		bot.walkTo(hero, cur, camYaw);
 		return bot;
+	}
+
+	/**
+	 * -Dgow.auto.route: 싸움이 없을 때 차례로 하는 경로 단계 (';' 구분, 원작에 없음 — 퍼즐 장치 검증용, 43 문서 §14).
+	 * <pre>
+	 *   x,y,z[,반경]       걸어가기 (반경 기본 {@link #ARRIVE} 안), {@link #ROUTE_WALK} 초 안에 못 가면 순간이동 (기록)
+	 *   x,y,z!             순간이동
+	 *   use:fx,fz          (fx, fz) 쪽으로 몸을 돌리고 R2 한 번 (레버·크랭크·버튼 안내 1024)
+	 *   hold:초:fx,fz      R2 를 누른 채 (fx, fz) 쪽으로 스틱 (크랭크 돌리기)
+	 *   push:초:fx,fz      버튼 없이 (fx, fz) 쪽으로 스틱 (사다리·벽 쪽으로 걸어 들어가기)
+	 *   up:초              카메라와 무관하게 스틱 위 (사다리 오르기)
+	 *   mash:초            R2 연타 (들어 올리는 문 TAndF)
+	 *   wait:초            입력 없음
+	 *   btn:이름           버튼 한 번 (PadButton 이름)
+	 * </pre>
+	 */
+	private final List<String> route = parseRoute(System.getProperty("gow.auto.route"));
+	/** gow.auto.route.after=초: 그 전에는 경로 대신 보통 자동 플레이 (보스전·볼륨 방문으로 앞 구간을 진행, 예: 메두사 여왕·미노타우로스 방 → 126 초 문, 43 §14.6). */
+	static final float ROUTE_AFTER = Float.parseFloat(System.getProperty("gow.auto.route.after", "0"));
+	private int routeIdx;
+	private float routeTime;
+
+	static List<String> parseRoute(String s) {
+		List<String> out = new ArrayList<>();
+		if (s != null) {
+			for (String p : s.split(";")) {
+				if (!p.isBlank()) {
+					out.add(p.trim());
+				}
+			}
+		}
+		return out;
+	}
+
+	/** 걸어가기 단계의 순간이동까지 초. */
+	static final float ROUTE_WALK = 6f;
+
+	private BotInput routeStep(Vector3f hero, float camYaw, float dt) {
+		String s = route.get(routeIdx);
+		if (routeTime == 0) {
+			log(String.format(Locale.ROOT, "t=%.2f 경로 %d/%d %s (위치 %s)", time, routeIdx + 1, route.size(), s, fmt(new float[]{hero.x, hero.y, hero.z})));
+		}
+		routeTime += dt;
+		int c = s.indexOf(':');
+		String op = c > 0 ? s.substring(0, c) : "";
+		String[] a = c > 0 ? s.substring(c + 1).split(":") : new String[0];
+		switch (op) {
+			case "use" -> {
+				float[] f = xz(a[0], hero);
+				if (routeTime < 0.25f) {
+					return bot.hold(null, hero, f, null, camYaw, 0.2f); // 몸만 돌리기 (스틱 작게 — 손잡이 앞을 벗어나지 않게)
+				}
+				if (routeTime < 0.35f) {
+					return bot.press(PadButton.USE);
+				}
+				return routeNext(routeTime > 0.6f, bot.press(null));
+			}
+			case "hold", "push" -> {
+				float secs = Float.parseFloat(a[0]);
+				float[] f = a.length > 1 ? xz(a[1], hero) : null;
+				return routeNext(routeTime > secs, bot.hold(op.equals("hold") ? PadButton.USE : null, hero, f, null, camYaw));
+			}
+			case "up" -> {
+				return routeNext(routeTime > Float.parseFloat(a[0]), bot.hold(null, hero, null, new float[]{0, 1}, camYaw));
+			}
+			case "mash" -> {
+				return routeNext(routeTime > Float.parseFloat(a[0]), bot.press((int) (routeTime / 0.075f) % 2 == 0 ? PadButton.USE : null));
+			}
+			case "wait" -> {
+				return routeNext(routeTime > Float.parseFloat(a[0]), bot.press(null));
+			}
+			case "btn" -> {
+				if (routeTime < 0.1f) {
+					return bot.press(PadButton.valueOf(a[0].toUpperCase(Locale.ROOT)));
+				}
+				return routeNext(routeTime > 0.3f, bot.press(null));
+			}
+			default -> {
+				boolean tp = s.endsWith("!");
+				String[] q = (tp ? s.substring(0, s.length() - 1) : s).split(",");
+				float[] p = {Float.parseFloat(q[0]), Float.parseFloat(q[1]), Float.parseFloat(q[2])};
+				if (tp) {
+					teleports++;
+					pendingTeleport = p;
+					log(String.format(Locale.ROOT, "t=%.2f 경로 순간이동 %s", time, fmt(p)));
+					return routeNext(true, bot.press(null));
+				}
+				float d = (float) Math.hypot(p[0] - hero.x, p[2] - hero.z);
+				float arrive = q.length > 3 ? Float.parseFloat(q[3]) : ARRIVE; // x,y,z,반경
+				if (d < arrive && Math.abs(p[1] - hero.y) < 64) {
+					return routeNext(true, bot.press(null));
+				}
+				if (routeTime > ROUTE_WALK) {
+					teleports++;
+					pendingTeleport = p;
+					log(String.format(Locale.ROOT, "t=%.2f 경로 걸어서 못 감 (거리 %.0f, 높이 차 %.0f) → 순간이동 %s", time, d, p[1] - hero.y, fmt(p)));
+					return routeNext(true, bot.press(null));
+				}
+				bot.walkTo(hero, p, camYaw);
+				return bot;
+			}
+		}
+	}
+
+	/** "fx,fz" 또는 "fx,fy,fz" → 월드 점 (y = 영웅 높이). */
+	private static float[] xz(String s, Vector3f hero) {
+		String[] q = s.split(",");
+		return q.length >= 3 ? new float[]{Float.parseFloat(q[0]), Float.parseFloat(q[1]), Float.parseFloat(q[2])}
+				: new float[]{Float.parseFloat(q[0]), hero.y, Float.parseFloat(q[1])};
+	}
+
+	private BotInput routeNext(boolean done, BotInput in) {
+		if (done) {
+			routeIdx++;
+			routeTime = 0;
+			if (routeIdx == route.size()) {
+				log(String.format(Locale.ROOT, "t=%.2f 경로 끝", time));
+			}
+		}
+		return in;
+	}
+
+	/** 경로 단계가 남아 있는지 (GameScene: 경로 중에는 다른 레벨 전환을 막지 않는다). */
+	public boolean routing() {
+		return routeIdx < route.size();
 	}
 
 	private float[] objective;

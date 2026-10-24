@@ -43,6 +43,11 @@ public final class Interactables {
 	public static final int SPEED_MAX = 0xfe467fe6, SPEED_MAX_BACK = 0xb503fbe4, PUSH_REWIND_ACC = 0xb6ba95a3;
 	/** Push 템플릿 +0x108 비트 4 (양방향 크랭크), +0x40 멈춤 자리 허용 (생성자 0x216370 / 기본값 0x216788) [확실]. */
 	static final int PUSH_TWO_WAY = 0x228882E3, PUSH_DETENT_TOL = 0xA4C814E9;
+	/**
+	 * Push 템플릿 +0x108 비트 1 (#4ff66d39): 끝에 닿아도 크랭크 클래스 0x1000 을 끄지 않음 (0x212BB4), 비트 2 (#5529319f): 1015 리셋이 되감지 않고
+	 * 시간 0 으로 바로 (0x212C34) [확실: 생성자 0x216644 / 0x216658 · 사용처]. 값은 하위 비트 (다른 비트 키와 같은 꼴).
+	 */
+	static final int PUSH_KEEP_AT_END = 0x4FF66D39, PUSH_RESET_SNAP = 0x5529319F;
 	/** Push 템플릿 +0x28 상자 최대 속도 (#95b8bfb6, 0x216470) [확실]. */
 	public static final int PUSH_SLIDE_MAX = 0x95B8BFB6;
 
@@ -122,6 +127,23 @@ public final class Interactables {
 		public final Vector3f vel = new Vector3f();
 		public boolean twoWay;
 		public float detentTol = 0.03f;
+		/** Push +0x108 비트 1 / 2 ({@link #PUSH_KEEP_AT_END} / {@link #PUSH_RESET_SNAP}). */
+		public boolean keepAtEnd, resetSnap;
+		/**
+		 * 스크립트 1015 리셋 중 (원작 PushPull +0x29A 비트 8, 0x2100E0): 크랭크류는 잡을 수 없이 되감기 가속으로 0 까지 → 0 에서 다시 잡힘 (0x212C08).
+		 * 레버는 속도 −4 로 0 까지 (0x2101C8 → 0x2127B0).
+		 */
+		public boolean resetting;
+		/**
+		 * 대포 (Push Type 2): cannonKick = 끝까지 감김 → 영웅 발차기 중 (영웅 +0x2D8 0x20000, ANIStartKickBox), cannonFired = 영웅 애니가 슬롯 0x54 에
+		 * 닿음 → 오브젝트 +0x29A 비트 2 (끝 시간을 그대로 두고 100 %).
+		 */
+		public boolean cannonKick, cannonFired;
+
+		/** 대포 (Push Type 2 = 0x212998 모드 3: 끝에서 멈춰 영웅 발차기를 기다림). */
+		public boolean cannon() {
+			return crank && pushType == 2;
+		}
 
 		public TaskProgress.RingParams ringParams() {
 			return new TaskProgress.RingParams(acc, dec, rewindAcc, maxSpeed, maxBack, detentTol, twoWay);
@@ -221,10 +243,13 @@ public final class Interactables {
 					String node = String.format("/TweakTemplates/Push/%03d/", b.template());
 					String label = tw != null ? tw.s(node, "Instance Name", "Push") : "Push";
 					String l = label.toLowerCase(Locale.ROOT);
-					boolean lever = l.contains("crank") || l.contains("lever") || l.contains("leever") || l.contains("puller");
-					// Push "Type" 하위 바이트 (+0x264): 5 = 레버, 6 = 물속 레버, 1–4 = 크랭크류 (0x212398 분기) [확실: 코드 / 이름 표는 데이터]
+					// Push "Type" 하위 바이트 (+0x264): 0·7·8 = 상자 물리, 1–4 = 크랭크류 (1 크랭크, 2 대포 AthnGun/AthensHarpoon, 3 기중기, 4 링), 5 = 레버,
+					// 6 = 물속 레버 — 갱신 0x212398 이 Type 으로만 고르고, 1015 리셋 0x2100E0 (표 0x2B9420) 도 1·2·4 를 같은 크랭크 되감기로 묶는다 [확실: 코드].
+					// 예전 엔진은 이름 (Crank/Lever/Puller) 으로 골라 AthnGun·CoffinLid·HadesHead·Pand04CElevs 등 11 개를 밀기 상자로 다뤘다 (43 문서 §14)
 					int type = tw != null && tw.raw(node, "Type").isPresent() ? tw.raw(node, "Type").getAsInt() & 0xff : -1;
-					boolean crank = lever && (type >= 0 ? type != 5 && type != 6 : l.contains("crank"));
+					boolean lever = type >= 0 ? type >= 1 && type <= 6
+							: l.contains("crank") || l.contains("lever") || l.contains("leever") || l.contains("puller");
+					boolean crank = lever && (type >= 0 ? type <= 4 : l.contains("crank"));
 					Item it = new Item(lever ? Kind.LEVER : Kind.PUSH, p.instance().name(), pos, b.template(), b.id(),
 							lever ? (crank ? "crankIdle" : type == 6 ? "leverPullUW" : "leverpull") : "pushIdle", null, label, r);
 					if (!lever && tw != null) {
@@ -238,6 +263,8 @@ public final class Interactables {
 						it.crank = crank;
 						it.pushType = type;
 						if (tw != null) {
+							it.keepAtEnd = (tw.rawHash(node, PUSH_KEEP_AT_END).orElse(0) & 1) != 0;
+							it.resetSnap = (tw.rawHash(node, PUSH_RESET_SNAP).orElse(0) & 1) != 0;
 							it.twoWay = tw.rawHash(node, PUSH_TWO_WAY).orElse(0) != 0;
 							it.detentTol = Float.intBitsToFloat(tw.rawHash(node, PUSH_DETENT_TOL).orElse(Float.floatToIntBits(0.03f)));
 							it.acc = tw.f(node, "Acc", 1f);
@@ -295,6 +322,34 @@ public final class Interactables {
 	}
 
 	private static final int H_GRAB_DY = 0x25bb317e, H_GRAB_R = 0x2b2d2457, H_GRAB_BACK = 0xb2a8856f;
+
+	/**
+	 * 손잡이 관절 자리를 지금 관절 월드로 다시 (원작 0x1C3918 은 매 질의 관절 행렬을 읽는다): 부모 링크로 움직이는 오브젝트 — ATHN02C 발리스타
+	 * 크랭크 gobiggun1crank 는 회전판 golazysuegroup "Anim" 관절의 자식이라 회전판이 돌면 손잡이도 돈다 [확실: GO 부모 링크 데이터].
+	 */
+	public static void refreshHandles(Item it, devple.gow.tools.anim.Skeleton sk, float[][] jw) {
+		var joints = sk.joints;
+		java.util.List<float[]> fresh = new java.util.ArrayList<>();
+		for (int n = 1; n <= 8; n++) {
+			String want = "handle" + n;
+			for (int j = 0; j < joints.size() && j < jw.length; j++) {
+				if (joints.get(j).name().equalsIgnoreCase(want)) {
+					float[] m = jw[j];
+					float zx = m[8], zz = m[10], l = (float) Math.hypot(zx, zz);
+					if (l > 1e-4f) {
+						fresh.add(new float[]{m[12], m[13], m[14], zx / l, zz / l});
+					}
+				}
+			}
+		}
+		if (!fresh.isEmpty()) {
+			it.handles.clear();
+			it.handles.addAll(fresh);
+		}
+		if (jw.length > 0) {
+			it.pos.set(jw[0][12], jw[0][13], jw[0][14]);
+		}
+	}
 
 	/** 손잡이 관절과 판정 값 (0x200A50 / 0x213A38). 기본값 1 / 2 / 0.3 / 0 (0x200A50). */
 	private static void handles(Item it, LevelLayout.Placement p, Tweaks tw, String node) {

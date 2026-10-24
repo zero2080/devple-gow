@@ -104,6 +104,8 @@
 | 5 | 무조건 (시작 시) | – | – | EventTransmitter: **전역 이벤트** 발행 (`0x1A8D88`) |
 
 "부모" = 오브젝트 +0x2C → +0x54 (스폰한 엔티티의 소유 GO). [확실: 분기 / 추정: 부모 의미]
+DestructionSensor 의 **Filter 는 모든 모드에** 건다 (제거 통지 0x1AE1D0: 센서마다 Filter == 0 또는 제거된 오브젝트 그룹 +0x2A == Filter 일 때만 메시지 6) [확실].
+2026-10-24 앞 판 엔진은 모드 3 에만 걸어 ATHN02C `EnemyBalistaZone-DestructionSensor1` (모드 4, Filter 98) 이 부서진 문 Marker27 (그룹 27) 에도 발동했다 (43 §14).
 
 ## 4. Trigger / Fire [확실]
 

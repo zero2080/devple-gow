@@ -52,6 +52,12 @@ public final class AnimatedModel implements AutoCloseable {
 	 */
 	public boolean[] hiddenJoints;
 
+	/**
+	 * 다음 draw 한 번에 쓸 스크립트 재질 애니 시간 (재질 이름 → 시간, {@code nav.Platforms.MatClock}): 그 재질의 UV·불투명도는 fxTime 대신 이 시간으로.
+	 * {@link #hiddenJoints} 처럼 호출자가 넣고 바로 뒤 null 로.
+	 */
+	public java.util.Map<String, Float> matTimes;
+
 	private final Skeleton skeleton;
 	private List<Part> parts = new ArrayList<>();
 	private final List<Part> base;
@@ -289,13 +295,20 @@ public final class AnimatedModel implements AutoCloseable {
 				float[] t = p.tint();
 				float op = alpha;
 				boolean scrolled = false;
-				if (fxTime >= 0 && p.matAnim() != null) {
-					float[] uv = p.matAnim().uv(0, fxTime);
+				float ft = fxTime;
+				if (matTimes != null && p.matAnim() != null) { // 스크립트 재질 애니 ("$", nav.Platforms.MatClock)
+					Float mt = matTimes.get(p.matAnim().material());
+					if (mt != null) {
+						ft = mt;
+					}
+				}
+				if (ft >= 0 && p.matAnim() != null) {
+					float[] uv = p.matAnim().uv(0, ft);
 					if (uv != null) {
 						shader.set("uUvOffset", uv[0], uv[1]);
 						scrolled = true;
 					}
-					op *= p.matAnim().value("hdr8", fxTime, 1f);
+					op *= p.matAnim().value("hdr8", ft, 1f);
 				}
 				shader.set("uTint", new org.joml.Vector4f(t[0] * colorScale[0], t[1] * colorScale[1], t[2] * colorScale[2], t[3] * op));
 				// 동적 라이트 경로: M = 머티리얼 색 × 물체 색 (qw 76 = 0x154410 의 헤더 × 레이어 × 물체 +0xB0, 47 §3.1)

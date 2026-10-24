@@ -155,7 +155,10 @@ GO 비헤이비어 `tools/level/GoBehavior` (BHV 서버 0x17, GO CXT 다음 리�
 
 ### 3.2 PushPull — 밀기 상자, 크랭크, 레버
 - 붙잡기/놓기 = 이벤트 **1048 / 1049, 인자 0 = BHV id** (PAND05B `pBoxPand05B-EventAttach`: EventArg(0) == 503) [확실: 데이터].
-- 템플릿 TWK `/TweakTemplates/Push/<n>/` (Instance Name, Type, Radius, Acc/Dec, Push Sound). Instance Name 에 Crank/Lever/Puller → LEVER, 그 밖 → PUSH. LEVER 중 Type 5/6 = 레버 (leverpull 한 번), 그 밖 = 크랭크 (누른 채 스틱, Acc/Dec) — §3.4 [확실].
+- 템플릿 TWK `/TweakTemplates/Push/<n>/` (Instance Name, Type, Radius, Acc/Dec, Push Sound). **종류는 Type 하위 바이트로만** (갱신 0x212398, 1015 리셋 0x2100E0) [확실]:
+  1–4 크랭크류 (누른 채 스틱, Acc/Dec — 2 = 대포 AthnGun/AthensHarpoon 은 끝 99 % 에서 차서 발사, 42 §5), 5/6 = 레버 (leverpull 한 번), 0/7/8 = PUSH.
+  2026-10-24 앞 판은 Instance Name (Crank/Lever/Puller) 으로 골라 ATHN02C 발리스타 크랭크 "AthnGun" (Type 2)·CoffinLid·HadesHead·Pand04CElevs 등 11 개가 밀기 상자였다 (43 §14).
+  Type 이 없는 템플릿만 이름으로 [근사].
 - PUSH: 상자 속도·무게·차기 = §3.5 [확실]. 축은 영웅→상자 방향의 주축(x 또는 z)으로만, 상자 반지름(CDV 경계구) 구가 벽에 밀리면 막힘, 상자 밑 바닥 필요 [근사]. 움직인 만큼 소유 GO 의 Marker 이동.
 
 ### 3.3 Marker = 오브젝트 [확실: 데이터]

@@ -154,6 +154,32 @@ public final class Breakables {
 	}
 
 	/**
+	 * 공격이 아닌 피해 (화살 발사체 Damage, {@link ArrowShots}; 원작 Breakable 피해 0x1DDDF0: hp −= 값, ≤ 0 이면 1009 · 오브 · 파괴 애니).
+	 * 부서지면 그 GO 의 Marker 를 파괴하고 onBreak.
+	 *
+	 * @return 이번에 부서졌으면 true
+	 */
+	public boolean damage(Item it, float amount, ScriptWorld world, Consumer<String> onBreak) {
+		if (it == null || it.broken || amount <= 0) {
+			return false;
+		}
+		it.hp -= amount;
+		if (it.hp > 0) {
+			return false;
+		}
+		it.broken = true;
+		if (world != null) {
+			for (ScriptActor m : List.copyOf(world.markers(it.owner))) {
+				world.destroy(m);
+			}
+		}
+		if (onBreak != null) {
+			onBreak.accept(it.owner);
+		}
+		return true;
+	}
+
+	/**
 	 * 영웅 공격 판정. 부서진 물체마다 onBreak(소유 GO 이름) 를 부르고, 그 GO 의 Marker 를 파괴한다.
 	 */
 	public void update(Combatant hero, ScriptWorld world, Consumer<String> onBreak) {

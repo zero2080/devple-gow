@@ -44,8 +44,15 @@
 | 3 시작 시간 | 모드 0x8이 아니면 여기서 시작 | 0 |
 
 - 재생 방식 4·1·2의 이름(왕복·반복·한 번)은 [추정]이다. 데이터: 레버 8/9(정·역 이어서), 회전방 0/1, 재질 10/11/16.
+- **모드 0x12 = 세움** [확실: 0x1AB5E8 → 0x1AB394]: 그 act 를 슬롯 3 시작 시간에 두고 속도 0 (0x100578(시간) + 애니 +0x3C = 0). ATHN02C `LazySueGroup-AniPause`
+  (지연 3 초) 가 회전판을 다음 멈춤 자리 (0 / 3 / 6 초 = LevelData6) 에 세운다. 2026-10-24 앞 판은 0x12 를 0x2 (반복) 로 읽어 회전판이 계속 돌았다 (43 §14.2).
 - 엔진 `Platforms.play(owner, anim, mode, speed, start)`:
-  - `$` 이름은 무시(관절 애니 아님).
+  - `$` 이름 = **재질 애니** [확실: 0x1AB1E4–0x1AB348]: 0x20 버퍼에 "MAT_" + 앞 공백·탭을 건너뛴 이름 (strncpy 0x1C, [0x1F] = 0), 리소스 0x17A7B8 → 대상 GO 모델의
+    재질 목록 (+0xD0) 에서 그 리소스의 인스턴스 → 그 +0x44 애니 제어기에 관절 애니와 같은 모드 규칙으로 act 0 (이름 해시 없음). 못 찾으면 "Can't find material '%s'".
+    엔진 `Platforms.MatClock` (소유 GO × 재질 시계, `materialTimes` → `LevelScene.setMaterialTimes` → 정지 인스턴스 `Renderer.setMaterialTimes`·자세 GO
+    `AnimatedModel.matTimes`), 생성 상태: 재질 ANM act 0x41 은 반복으로 돌고 0x42 는 시간 0 (16 §3.1) — `SceneNav.registerMaterialAnimators` 가 모드 1 "$" Animator
+    대상을 미리 등록해, 0x42 재질이 레벨 시간으로 저절로 한 번 재생되던 것도 막는다. 이음 넘기기 `Platforms.State` anim "$MAT_…". 데이터: 16 레벨 86 개
+    (ATHN02D 남쪽 문 doorFade/doorSub, ATHN01E·PAND01A·PAND03I 말하는 머리, ATHN05B 마법 문, PAND00C 문 글자, 사슬 스크롤 …).
   - 한 번 재생은 끝에서 멈추고, 반복은 감고, 왕복은 속도를 뒤집는다.
 - `EntitySlots` Animator 슬롯 2 기본값을 0 → 1로 고쳤다. 전에는 속도 슬롯이 없는 Animator가 정지했다.
 - **연결 누락 수정**: `GameScene` 스크립트 리스너가 `animate`를 받지 않아, 스크립트가 움직이는 발판·문·회전방이 게임에서 재생되지 않았다.
@@ -84,7 +91,13 @@
 - 템플릿 기본값 (`0x216788`): Acc 1, Dec 1, +0x34 2, +0x38 1, +0x3C 2, +0x40 0.03, +0x108 0. TWK 덤프는 `count` 개수까지만 유효하다 (Push/051 은 6 개 → 나머지 기본값).
 - 엔진 `TaskProgress.ring` / `detent`, `HeroNavigator` (스틱 앞/뒤 = ±입력 [근사: 원작은 영웅 이동 방향 · 크랭크 관절 축 `0x2117E0`]). 원작은 |목표 − f| < 1e-4 에서 붙이고, 엔진은 프레임 사이에 목표를 지나면 붙인다 [근사].
 
-**기중기형 크랭크** (Push Type 3 → 모드 1 = `0x212DE0`, PAND04C "Pand04CElevs"·PAND04G "Pand4GCrane") [확실]: 붙어 있음 — 입력 > 0 → +Acc·dt, < 0 → −Acc·dt (±최대), 없음 → Dec·dt 로 0 쪽. 놓음 — Dec 로 멈춤 (되감지 않음). 시간은 [0, 길이] 에서 멈추고 (`0x212EA0`) 완료가 없다. 엔진 `TaskProgress.crane`. (Type 2 = 대포·작살 AthnGun/AthensHarpoon 은 별개 장치.)
+**기중기형 크랭크** (Push Type 3 → 모드 1 = `0x212DE0`, PAND04C "Pand04CElevs"·PAND04G "Pand4GCrane") [확실]: 붙어 있음 — 입력 > 0 → +Acc·dt, < 0 → −Acc·dt (±최대), 없음 → Dec·dt 로 0 쪽. 놓음 — Dec 로 멈춤 (되감지 않음). 시간은 [0, 길이] 에서 멈추고 (`0x212EA0`) 완료가 없다. 엔진 `TaskProgress.crane`.
+
+**대포 크랭크** (Push Type 2 = AthnGun / AthensHarpoon, ATHN02C 발리스타 `gobiggun1crank` Push 202) [확실: 0x212AD0 · 0x2100E0 / 근사: 차기 시점]:
+감기는 Type 1 과 같은 Acc/Dec 지만 끝에서 멈추고 1023 은 길이 − 0.01 (99 %) 로 보고 → 다 감긴 채 차기 (+0x29A 비트 2, 영웅 ANIStartKickBox) 가 발사 → 100 %
+(BigGun1Crank-EvtTaskProgress100 → 1020 화살) → 스크립트 1015 리셋으로 되감아 0. 엔진 `TaskProgress.cannon / wound / fire / rewind`, `HeroNavigator.cannon`, `Interactables.Item.cannon()`.
+**종류 = Push "Type" 바이트** (+0x264): 0·7·8 밀기 상자, 1 크랭크, 2 대포, 3 기중기, 4 링, 5 레버, 6 물속 레버 — 갱신 0x212398 과 1015 리셋 0x2100E0 (표 0x2B9420)
+이 Type 으로만 고른다 [확실]. 2026-10-24 앞 판은 이름 (crank/lever/puller) 으로 골라 AthnGun·CoffinLid·HadesHead·Pand04CElevs 등 11 개가 밀기 상자였다 (43 §14.2, 38 §3).
 
 **크랭크 입력** (`0x2117E0`) [확실]: 영웅 이동 방향 (수평, 정규화) · 붙잡은 손잡이 관절의 −Z (붙잡을 때 비트 31 이면 +Z). 붙잡기 조건 (`0x1C3918`): 관절 위치 − Z·오프셋·16 에서 영웅이 +Z 쪽 (내적 > 0), 수평 거리 < 반경·16, 높이 차 < +0x24·16, 영웅 정면 · Z < −cos — 즉 영웅이 손잡이를 바라본다. 그래서 −Z ≈ 영웅 정면이고, 엔진은 스틱 방향 · 영웅 정면 (> 0.3 밀기, < −0.3 당기기) 으로 계산한다 [근사: 관절 행렬 대신 영웅 방향]. Type 1 크랭크도 전에는 스틱 크기만 보던 것을 미는 방향으로 바꿨다.
 
@@ -141,12 +154,15 @@
 | `nav/TaskProgressTest.craneCrankIsTwoWayAndBounded` | 기중기형: 끝에서 멈춤·완료 없음·역방향·놓으면 Dec 정지 |
 | `verify/TraversalTest.hiddenObjectsAllRevealed` | 숨김 상태 상호작용 0, PAND00C 링 크랭크 풀이 |
 | `nav/BodyCollisionTest` | ATHN01D 쌍발차기 문 hull 안 → 밀려남, 충돌 끔이면 통과 |
-| `nav/AnimatorModeTest` | 회전방 정방향 → Marker 202 → LevelData:1 참 / 역방향(끝에서 시작) → 거짓 / 0x10 정지·0x11 이어서·0x8 시간 유지 / `$` 무시 |
+| `nav/AnimatorModeTest` | 회전방 정방향 → Marker 202 → LevelData:1 참 / 역방향(끝에서 시작) → 거짓 / 0x10 정지·0x11 이어서·0x8 시간 유지 / `$` = 재질 시계 (관절 그대로), 없는 재질 거짓 |
+| `game/ScriptMaterialAnimTest` | ATHN02D 남쪽 문: 0x42 doorSub 는 스크립트 전 시간 0, 0x41 반복, subShaderAnim1 → 7.667 초에서 멈춤 (p28 0.5 → 0), 이음 넘기기, "MAT_" 이름 규칙 |
+| `game/BallistaPuzzleTest` | ATHN02C 회전판 멈춤 자리 0x12 (3 / 6 / 역 3 초), jump_if 거짓이면 점프, DestructionSensor Filter, 대포 크랭크 99 %·발사·되감기, 화살 → 문 (43 §14) |
 
 ## 7. 남은 것
 
 - ~~1024 실제 버튼~~: R2 [확실], 엔진 반영 (마법 L2, 대시 R1).
 - ~~질문 메뉴 UI·아니오 값~~: 원작 HUD 메뉴 템플릿, 아니오 = 2 (§2).
-- Animator 재생 방식 4/1/2 이름과 0x100A60 내부. 재질 애니(`$…`, 모드 10/11/16)는 미구현.
+- Animator 재생 방식 4/1/2 이름과 0x100A60 내부. ~~재질 애니(`$…`, 모드 10/11/16)는 미구현~~ → §3 `Platforms.MatClock` (모드 10/11 의 재생 방식 1 = 반복 [추정]).
+  대상 GO 모델에 그 재질이 있는지는 보지 않는다 (재질 ANM 이 있으면 시계를 만든다) [근사].
 - ~~발판 애니 렌더 자세~~: 애니가 한 번이라도 돈 오브젝트는 `LevelScene.poseInstance` → 구운 메시 대신 `AnimatedModel`(관절 월드 = 애니 × 인스턴스)로 그린다 (PAND02AA 회전방 벽·레버 확인). 관절 숨김 (byte 트랙) 도 함께 넘긴다 (`Platforms.Body.hidden`, DMC 결계 dogIn/dogOut). 애니 전 자세 = 인스턴스 시작 act (43 §6, `StartPose`).
 - ~~PAND00C 고리 퍼즐 풀이(하네스)~~ (§5). 크랭크 입력은 영웅 정면 근사 (손잡이 관절 행렬·비트 31 쪽 미사용).

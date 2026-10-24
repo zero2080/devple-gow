@@ -172,6 +172,10 @@ public final class Platforms {
 			return joints;
 		}
 
+		public Skeleton skeleton() {
+			return skeleton;
+		}
+
 		/** 현재 act 의 관절 숨김 (u8 가시성 트랙, 41 §1.3) — 애니가 없거나 트랙이 없으면 null. */
 		public boolean[] hidden() {
 			return anim == null ? null : anim.hiddenJoints(skeleton, time);
@@ -282,6 +286,128 @@ public final class Platforms {
 	}
 
 	/**
+	 * 재질 애니 시계 (Animator 슬롯 0 "$이름", 원작 0x1AB0B8 의 '$' 갈래 [확실: 코드]): "MAT_" + 이름 (공백·탭 건너뜀, 모두 31 자) 의 리소스를
+	 * 0x17A7B8 로 찾고, 대상 GO 모델의 재질 목록 (+0xD0) 에서 그 리소스의 인스턴스를 찾아 그 +0x44 애니 제어기에 관절 애니와 같은 모드 규칙
+	 * (0x10 정지 · 0x11 이어 · 0x12 세움 · 0x1 역 · 0x8 시간 유지 · 0x4/0x2 재생 방식) 으로 act 0 을 튼다 (이름 해시 비교 없음).
+	 * 재질 ANM act 플래그 0x41 = 생성 때부터 반복 재생, 0x42 = 스크립트가 틀 때까지 시간 0 (16 §3.1).
+	 * 예 ATHN02D 미노타우로스 뒤 남쪽 문: doorFadeAnim "$M01DoorFade1" (가산 불꽃) · subShaderAnim1 "$doorSub" (감산 p28 0.5 × 색 2 = 검은 막)
+	 * 이 6–7.5 초에 p28 → 0 — 예전에는 무시돼 문이 검은 채 남았다 (43 §14).
+	 */
+	public static final class MatClock {
+		public final String owner;
+		public final String material;
+		final float duration;
+		float time;
+		float rate = 1;
+		boolean playing;
+		boolean loop;
+		boolean pingPong;
+
+		MatClock(String owner, String material, float duration) {
+			this.owner = owner;
+			this.material = material;
+			this.duration = duration;
+		}
+
+		public float time() {
+			return time;
+		}
+
+		public boolean playing() {
+			return playing;
+		}
+	}
+
+	private final List<MatClock> matClocks = new ArrayList<>();
+	/** 재질 애니를 찾을 WAD ({@link #of}) — 처음 "$" 를 만날 때 읽는다. */
+	private devple.gow.tools.wad.WadFile matWad;
+	private java.util.Map<String, devple.gow.tools.fx.MaterialAnim.Anim> matAnims;
+
+	private devple.gow.tools.fx.MaterialAnim.Anim materialAnim(String mat) {
+		if (matAnims == null) {
+			matAnims = matWad != null ? devple.gow.tools.fx.MaterialAnim.load(matWad) : java.util.Map.of();
+		}
+		return matAnims.get(mat);
+	}
+
+	/** "$이름" → "MAT_이름" (원작 0x1AB1E4: 0x20 바이트 버퍼에 "MAT_" + 앞 공백·탭을 건너뛴 이름 strncpy 0x1C, [0x1F] = 0 → 모두 31 자까지). */
+	public static String materialName(String anim) {
+		String n = anim.substring(1).replaceFirst("^[ \\t]+", "");
+		String m = "MAT_" + n;
+		return m.length() > 0x1F ? m.substring(0, 0x1F) : m;
+	}
+
+	private MatClock matClock(String owner, String mat, boolean create) {
+		for (MatClock c : matClocks) {
+			if (c.owner.equalsIgnoreCase(owner) && c.material.equals(mat)) {
+				return c;
+			}
+		}
+		if (!create) {
+			return null;
+		}
+		devple.gow.tools.fx.MaterialAnim.Anim a = materialAnim(mat);
+		if (a == null) {
+			return null; // 원작 "Can't find material '%s'" / "No animation on this object"
+		}
+		MatClock c = new MatClock(owner.toLowerCase(java.util.Locale.ROOT), mat, Math.max(a.duration(), 0));
+		// 생성 때 상태: act 0x41 (반복) 은 바로 돌고, 0x42 (스크립트용 한 번) 는 시간 0 에 서 있다
+		c.loop = a.loop();
+		c.playing = a.loop();
+		matClocks.add(c);
+		return c;
+	}
+
+	/** 스크립트 재질 애니 대상 등록 (생성 상태로, 스크립트가 틀기 전부터 렌더가 이 시계를 쓴다 — 0x42 재질이 레벨 시간으로 저절로 돌지 않게). */
+	public boolean registerMaterial(String owner, String anim) {
+		return owner != null && anim != null && anim.startsWith("$") && matClock(owner, materialName(anim), true) != null;
+	}
+
+	/** 소유 GO (소문자) → 재질 이름 → 재질 애니 시간 (렌더). */
+	public java.util.Map<String, java.util.Map<String, Float>> materialTimes() {
+		if (matClocks.isEmpty()) {
+			return java.util.Map.of();
+		}
+		java.util.Map<String, java.util.Map<String, Float>> out = new java.util.HashMap<>();
+		for (MatClock c : matClocks) {
+			out.computeIfAbsent(c.owner, k -> new java.util.HashMap<>()).put(c.material, c.time);
+		}
+		return out;
+	}
+
+	public List<MatClock> materialClocks() {
+		return matClocks;
+	}
+
+	/** "$" 재질 애니 ({@link #play} 의 '$' 갈래, 모드 규칙은 관절 애니와 같다). */
+	private boolean playMaterial(String owner, String anim, int mode, float speed, float start) {
+		MatClock c = matClock(owner, materialName(anim), true);
+		if (c == null) {
+			return false;
+		}
+		if (mode == 0x10 || mode == 0x11) {
+			c.playing = mode == 0x11;
+			return true;
+		}
+		if (mode == 0x12) {
+			c.time = Math.max(0, Math.min(start, c.duration));
+			c.rate = speed;
+			c.loop = c.pingPong = false;
+			c.playing = false;
+			return true;
+		}
+		boolean keep = (mode & 0x8) != 0;
+		c.rate = (mode & 0x1) != 0 ? -speed : speed;
+		c.pingPong = (mode & 0x4) != 0;
+		c.loop = !c.pingPong && (mode & 0x2) != 0;
+		if (!keep) {
+			c.time = (mode & 0x1) != 0 && start <= 0 ? c.duration : Math.min(start, c.duration);
+		}
+		c.playing = true;
+		return true;
+	}
+
+	/**
 	 * 레벨에서 발판 후보: CDV 볼륨이 있고 ANM 이 있으며 owners(스크립트 Animator 엔티티가 가리키는 GO) 에 든 오브젝트.
 	 */
 	public static Platforms of(LevelData lv, Collection<String> owners) {
@@ -296,6 +422,7 @@ public final class Platforms {
 	 */
 	public static Platforms of(LevelData lv, Collection<String> owners, Collection<String> posed) {
 		Platforms ps = new Platforms();
+		ps.matWad = lv.wad;
 		for (LevelLayout.Placement p : lv.layout.placements()) {
 			String name = p.instance().name();
 			boolean scripted = owners.contains(name) || posed.contains(name);
@@ -405,12 +532,26 @@ public final class Platforms {
 				out.add(new State(b.owner, b.anim != null ? b.anim.name : null, b.time, b.rate, b.playing, b.loop, b.pingPong, b.solid));
 			}
 		}
+		for (MatClock c : matClocks) { // 재질 애니 = anim "$MAT_…"
+			out.add(new State(c.owner, "$" + c.material, c.time, c.rate, c.playing, c.loop, c.pingPong, true));
+		}
 		return out;
 	}
 
 	/** {@link #states()} 를 되살린다 (같은 레벨의 새 Platforms). */
 	public void restore(List<State> states) {
 		for (State s : states) {
+			if (s.anim() != null && s.anim().startsWith("$")) {
+				MatClock c = matClock(s.owner(), s.anim().substring(1), true);
+				if (c != null) {
+					c.time = s.time();
+					c.rate = s.rate();
+					c.playing = s.playing();
+					c.loop = s.loop();
+					c.pingPong = s.pingPong();
+				}
+				continue;
+			}
 			Body b = body(s.owner());
 			if (b == null) {
 				continue;
@@ -442,6 +583,40 @@ public final class Platforms {
 		return null;
 	}
 
+	/** 몸 owner 의 이름이 joint 인 관절의 지금 월드 행렬 (행벡터, 대소문자 무시). 없으면 null. */
+	public float[] jointWorld(String owner, String joint) {
+		Body b = body(owner);
+		if (b == null || b.skeleton == null || joint == null) {
+			return null;
+		}
+		for (int j = 0; j < b.skeleton.joints.size() && j < b.joints.length; j++) {
+			if (b.skeleton.joints.get(j).name().equalsIgnoreCase(joint)) {
+				return b.joints[j];
+			}
+		}
+		return null;
+	}
+
+	/** owner 와 그 부모 링크 조상, 그리고 그 조상에 매달린 다른 몸 (형제) — 쏜 GO 자기 CDV 를 판정에서 뺄 때 (발리스타 ← 회전판). */
+	public java.util.Set<String> family(String owner) {
+		java.util.Set<String> out = new java.util.HashSet<>();
+		Body b = body(owner);
+		if (b == null) {
+			out.add(owner);
+			return out;
+		}
+		java.util.Set<Body> up = new java.util.HashSet<>();
+		for (Body x = b; x != null && up.add(x); x = x.parent) {
+			out.add(x.owner);
+		}
+		for (Body x : bodies) {
+			if (x.parent != null && up.contains(x.parent)) {
+				out.add(x.owner);
+			}
+		}
+		return out;
+	}
+
 	/**
 	 * Animator 엔티티 (SCR AnimName): "!n" = 오브젝트 세트의 n 번째 act [추정: ATHN05D 엘리베이터 "!0" = 유일한 act], 그 밖에는 act 이름.
 	 *
@@ -452,7 +627,7 @@ public final class Platforms {
 	}
 
 	/**
-	 * Animator 효과 (원작 0x1AB0B8) [확실: 코드]: 슬롯 0 이름 ("!n" = n 번째 act, "$…" = 재질 애니 → 여기서는 무시), 슬롯 1 모드 비트,
+	 * Animator 효과 (원작 0x1AB0B8) [확실: 코드]: 슬롯 0 이름 ("!n" = n 번째 act, "$…" = 재질 애니 → {@link MatClock}), 슬롯 1 모드 비트,
 	 * 슬롯 2 속도, 슬롯 3 시작 시간.
 	 * <ul>
 	 *   <li>0x10 = 일시 정지, 0x11 = 이어 재생 (그 밖의 설정 없음)</li>
@@ -461,8 +636,11 @@ public final class Platforms {
 	 * </ul>
 	 */
 	public boolean play(String owner, String animName, int mode, float speed, float start) {
+		if (animName != null && animName.startsWith("$")) {
+			return owner != null && playMaterial(owner, animName, mode, speed, start); // 재질 애니 ({@link MatClock})
+		}
 		Body b = body(owner);
-		if (b == null || b.anims == null || animName != null && animName.startsWith("$")) {
+		if (b == null || b.anims == null) {
 			return false;
 		}
 		if (mode == 0x10 || mode == 0x11) {
@@ -490,6 +668,17 @@ public final class Platforms {
 		}
 		if (a == null) {
 			return false;
+		}
+		if (mode == 0x12) {
+			// 0x12 = 그 act 를 시작 시간 (슬롯 3) 에 세우고 속도 0 (0x1AB5E8 → 0x1AB394: 0x100578(시간) + 애니 +0x3C = 0) [확실: 디스어셈블].
+			// ATHN02C LazySueGroup-AniPause: 회전판을 3 초 뒤 다음 멈춤 자리 (0 / 3 / 6 초) 에 세운다. 예전엔 0x2 (반복) 로 읽어 계속 돌았다
+			b.anim = a;
+			b.time = Math.max(0, Math.min(start, a.duration));
+			b.rate = speed;
+			b.loop = b.pingPong = false;
+			b.playing = false;
+			b.pose();
+			return true;
 		}
 		boolean keep = (mode & 0x8) != 0 && b.anim == a;
 		b.anim = a;
@@ -560,6 +749,24 @@ public final class Platforms {
 		}
 		for (Body b : bodies) {
 			b.updateFollow(); // 부모가 이번 틱 자세를 정한 뒤 (목록 순서 — 부모가 먼저 오는 한 겹 링크만 같은 틱에 맞음)
+		}
+		for (MatClock c : matClocks) {
+			if (!c.playing) {
+				continue;
+			}
+			float d = c.duration;
+			c.time += dt * c.rate;
+			if (c.time > d || c.time < 0) {
+				if (c.loop && d > 0) {
+					c.time = ((c.time % d) + d) % d;
+				} else if (c.pingPong && d > 0) {
+					c.time = c.time > d ? 2 * d - c.time : -c.time;
+					c.rate = -c.rate;
+				} else {
+					c.time = Math.max(0, Math.min(d, c.time));
+					c.playing = false;
+				}
+			}
 		}
 	}
 

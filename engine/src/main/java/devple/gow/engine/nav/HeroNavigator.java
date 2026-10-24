@@ -1950,15 +1950,64 @@ public final class HeroNavigator {
 				continue;
 			}
 			idle(it, dt);
+			if (it.resetting || it.cannonFired) {
+				continue; // 스크립트 1015 리셋·대포 발사 마무리는 끝날 때까지 (idle 이 플래그를 내린다)
+			}
 			if (it.pushType == 4 || it.pushType == 3 ? it.task().speed == 0 : it.task().time <= 0 || it.task().done) {
 				i.remove();
 			}
 		}
 	}
 
+	/**
+	 * 스크립트 이벤트 1015 (EventTransmitter → 오브젝트, 원작 PushPull 메시지 0x266040 → 0x2100E0, 표 0x2B9420) [확실: 디스어셈블]:
+	 * 크랭크·대포·링 (Type 1/2/4) = 잡기 클래스 0x1000 끄고 +0x29A 비트 8 → 되감기 가속 #b6ba95a3 로 0 까지 (템플릿 +0x108 비트 2 면 곧바로 0)
+	 * → 0 에서 다시 잡힘 (0x212C08); 레버·물속 레버 (5/6) = 속도 −4 → 0 에서 다시 잡힘 (0x2127B0); 상자 (0/7/8) = 잡기 클래스 다시 켬.
+	 * 기중기 (3) 는 인자 0 % 자리로 가는 별도 동작 (0x21016C) — 데이터에 1015 를 받는 기중기가 없어 하지 않는다.
+	 * 데이터: ATHN02C Gunlever-EventTmid (회전판 레버, 100 % 3.5 초 뒤), BigGun1Crank-EvtReset (발리스타 크랭크, 100 % 에).
+	 */
+	public void scriptReset(Interactables.Item it) {
+		if (it.kind == Interactables.Kind.PUSH) {
+			it.done = false;
+			return;
+		}
+		if (it.kind != Interactables.Kind.LEVER || it.pushType == 3) {
+			return;
+		}
+		if (it == item && (state == NavState.INTERACT || state == NavState.PUSH)) {
+			release(it); // 붙은 채 리셋 (원작은 클래스 비트가 꺼져 다음 프레임 놓음, 0x1C4D10)
+		}
+		it.resetting = true;
+		it.cannonKick = false;
+		it.cannonFired = false;
+		if (!released.contains(it)) {
+			released.add(it);
+		}
+	}
+
 	/** 영웅이 떨어진 오브젝트 한 프레임: CSM/레버 −4 로 되감기, 크랭크 #b6ba95a3 가속으로 되감기, TAndF 내려옴. */
 	private void idle(Interactables.Item it, float dt) {
 		TaskProgress t = it.task();
+		if (it.resetting) {
+			// 1015 리셋 (scriptReset): 크랭크류 = 되감기 가속 (비트 2 면 곧바로), 레버 = −4
+			Float spd = it.crank ? (it.resetSnap ? null : Math.max(t.speed - it.rewindAcc * dt, -it.maxBack)) : TaskProgress.REWIND_SPEED;
+			send(it, t.rewind(spd, dt));
+			if (t.time <= 0) {
+				it.resetting = false;
+				it.done = false;
+			}
+			return;
+		}
+		if (it.cannonFired) {
+			// 대포 (0x212B80): 놓인 뒤 첫 갱신 — 끝 시간 그대로 비트 2 → 100 %, 크랭크 클래스 끔 (템플릿 +0x108 비트 1 이면 그대로) [확실]
+			it.cannonFired = false;
+			send(it, t.fire());
+			it.done = !it.keepAtEnd;
+			if (it.keepAtEnd) {
+				t.done = false;
+			}
+			return;
+		}
 		if (it.kind == Interactables.Kind.LIFT) {
 			send(it, t.lift(false, false, 0, it.liftParams(), dt));
 		} else if (it.pushType == 4) {
@@ -2011,6 +2060,10 @@ public final class HeroNavigator {
 		TaskProgress t = it.task();
 		switch (it.kind) {
 			case LEVER -> {
+				if (it.cannon()) {
+					cannon(it, in, held, camYaw, dt);
+					return;
+				}
 				if (it.crank) {
 					if (!held || it.done) {
 						release(it);
@@ -2090,6 +2143,45 @@ public final class HeroNavigator {
 				}
 			}
 		}
+	}
+
+	/**
+	 * 대포 크랭크 (Push Type 2, 0x212998 모드 3 — ATHN02C 발리스타 AthnGun, ATHN02B 작살 AthensHarpoon) [확실: 디스어셈블].
+	 * <pre>
+	 * 감기: 크랭크와 같다 — R2 를 누른 채 손잡이 쪽으로 밀면 속도 += Acc·dt (최대 #fe467fe6), 안 밀면 −Dec·dt (0 까지), R2 를 떼면 놓음 (되감김).
+	 * 끝: 오브젝트는 끝 시간에서 속도 0 으로 기다리고 99 % 만 보낸다 (0x212AD0). 영웅 +0x2D8 |= 0x20000 → 애니 슬롯 0x53 ANIStartKickBox (0x1C36D4).
+	 *     이때부터 R2 를 보지 않는다 (0x1C4D7C: 0x20000 경로는 사용 버튼 검사 0x1C4828 을 건너뜀).
+	 * 발사: 영웅 애니가 슬롯 0x54 (ANIKickBoxIdle, 0x53 이 끝나면 다음 슬롯) 가 되면 0x20000 을 지우고 오브젝트 +0x29A 비트 2 → 놓음 (0x1C4DA0 → 0x1C4928
+	 *     → 0x1C4D00 0x1E18F8, 1049). 놓인 오브젝트의 다음 갱신이 끝 시간 그대로 100 % (1023) 를 보내고 크랭크 클래스를 끈다 (0x212B80).
+	 *     스크립트가 1023(100, id) 로 발사 (1020 → 화살 이미터) 와 1015 리셋 (되감기 → 다시 잡힘) 을 한다.
+	 * </pre>
+	 */
+	private void cannon(Interactables.Item it, Input in, boolean held, float camYaw, float dt) {
+		TaskProgress t = it.task();
+		if (it.cannonKick) {
+			if (phaseTime >= clip(anims.get("ANIStartKickBox"), 0.5f) - EPS) {
+				it.cannonKick = false;
+				it.cannonFired = true;
+				release(it); // 슬롯 0x54 에 닿은 프레임: 비트 2 + 놓음 → rewindReleased → idle → fire() (100 %)
+			}
+			return;
+		}
+		if (!held || it.done) {
+			release(it);
+			return;
+		}
+		int input = crankInput(in, camYaw);
+		boolean turning = input > 0;
+		float spd = turning ? Math.min(t.speed + it.acc * dt, it.maxSpeed)
+				: t.time > 0 ? Math.min(Math.max(t.speed - it.dec * dt, 0), it.maxSpeed) : 0;
+		send(it, t.cannon(spd, dt));
+		if (t.wound()) {
+			it.cannonKick = true;
+			phaseTime = 0;
+			body.play(anims.get("ANIStartKickBox"), true);
+			return;
+		}
+		body.play(turning ? anims.get("ANICrankPush") : it.heroAnim, false);
 	}
 
 	/** 놓기 = 원작 0x1E18F8 (1049). 끝나지 않은 오브젝트는 스스로 되감긴다 ({@link #rewindReleased}). */

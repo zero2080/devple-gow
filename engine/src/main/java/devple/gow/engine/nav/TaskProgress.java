@@ -94,6 +94,59 @@ public final class TaskProgress {
 		return emit(time, length, speed, false);
 	}
 
+	/**
+	 * 대포 크랭크 감기 (Push Type 2 = 0x212998 모드 3, ATHN02C AthnGun) [확실: 디스어셈블]: 붙어 있는 동안 속도대로 감다가 끝 (길이) 에 닿으면
+	 * 시간은 끝에 둔 채 속도 0 — 진행 보고는 길이 − 0.01 (0x212AD0, 99 %) 이고 완료하지 않는다. 영웅이 발차기 (슬롯 0x53 → 0x54) 로 비트 2 를 세우고
+	 * 놓아야 {@link #fire()}.
+	 *
+	 * @return 보낼 1023 (끝이면 99 %)
+	 */
+	public Event cannon(float spd, float dt) {
+		if (done) {
+			return null;
+		}
+		speed = spd;
+		time = Math.max(0, Math.min(length, time + speed * dt));
+		if (time >= length - 1e-4f) {
+			time = length;
+			speed = 0;
+			return emit(length - 0.01f, length, 0, false);
+		}
+		return emit(time, length, speed, false);
+	}
+
+	/** 대포가 끝까지 감겨 있는가 (영웅 발차기 대기, 0x212AD0 → 영웅 +0x2D8 |= 0x20000). */
+	public boolean wound() {
+		return !done && length > 0 && time >= length - 1e-4f;
+	}
+
+	/** 대포 발사 마무리 (+0x29A 비트 2 를 본 놓인 뒤 갱신, 0x212B80): 끝 시간 그대로 100 %, 속도 0, 완료. */
+	public Event fire() {
+		time = length;
+		speed = 0;
+		done = true;
+		return emit(length, length, 0, true);
+	}
+
+	/**
+	 * 스크립트 1015 리셋 되감기 한 프레임 (0x2100E0 → 크랭크 0x212C34 / 레버 0x2127B0): spd = 이번 속도 (null = 템플릿 +0x108 비트 2 —
+	 * 시간 0 으로 바로, 0x100578). 0 에 닿으면 속도 0 (다시 잡힘은 호출자가). 완료 상태를 푼다.
+	 */
+	public Event rewind(Float spd, float dt) {
+		done = false;
+		if (spd == null || time <= 0) {
+			time = 0;
+			speed = 0;
+			return emit(0, length, 0, false);
+		}
+		speed = spd;
+		time = Math.max(0, time + speed * dt);
+		if (time <= 0) {
+			speed = 0;
+		}
+		return emit(time, length, speed, false);
+	}
+
 	/** 링 크랭크 TWK (Push 템플릿 +0x2C Acc, +0x30 Dec, +0x34 접근 가속 #b6ba95a3, +0x38 최대, +0x3C 최대(놓음), +0x40 허용, +0x108 비트 4 양방향). */
 	public record RingParams(float acc, float dec, float approach, float max, float maxBack, float tol, boolean twoWay) {
 	}

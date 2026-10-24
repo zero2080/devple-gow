@@ -73,9 +73,12 @@ public final class EscVm {
 					pc += 2;
 				}
 				case 0x0F -> {
+					// 원작 0x16F570: pop 이 0 (거짓) 일 때만 점프 — `bne v0, zero` 가 참이면 점프 없이 다음 명령으로 [확실: 디스어셈블].
+					// 데이터의 if 문이 모두 이 꼴이다 ("if (타이머 > 0) DestroyTimer", "if (GlobalData6 < 2) += 1", LazySueGroup-AniPause 다음 멈춤 자리).
+					// 예전 엔진은 참일 때 점프해 77 개 핸들러 (전 레벨) 의 조건이 뒤집혀 있었다 (43 문서 §14)
 					int off = c.getShort(pc);
 					pc += 2;
-					if (bool(st.pop())) {
+					if (!bool(st.pop())) {
 						pc += off;
 					}
 				}

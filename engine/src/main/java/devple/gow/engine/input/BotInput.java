@@ -154,6 +154,34 @@ public final class BotInput extends Input {
 		ly = (float) Math.cos(a);
 	}
 
+	/**
+	 * 버튼을 누르고 있으면서 스틱 (자동 플레이 경로 단계: 크랭크 돌리기 = R2 + 손잡이 쪽 스틱). p = 스틱을 밀 월드 점 (null = 스틱 없음),
+	 * raw = 카메라와 무관한 스틱 값 {x, y} (p 가 null 일 때, 사다리 "위" 등).
+	 */
+	public BotInput hold(PadButton b, Vector3f hero, float[] p, float[] raw, float camYaw) {
+		return hold(b, hero, p, raw, camYaw, 1f);
+	}
+
+	/** {@link #hold(PadButton, Vector3f, float[], float[], float)} 의 스틱 크기 mag (몸만 돌리기 = 작게). */
+	public BotInput hold(PadButton b, Vector3f hero, float[] p, float[] raw, float camYaw, float mag) {
+		prev.clear();
+		prev.addAll(down);
+		down.clear();
+		lx = ly = 0;
+		if (b != null) {
+			down.add(b);
+		}
+		if (p != null) {
+			float a = (float) Math.atan2(-(p[0] - hero.x), -(p[2] - hero.z)) - camYaw;
+			lx = (float) -Math.sin(a) * mag;
+			ly = (float) Math.cos(a) * mag;
+		} else if (raw != null) {
+			lx = raw[0];
+			ly = raw[1];
+		}
+		return this;
+	}
+
 	/** 멈춰서 버튼 하나만 (null = 아무것도). */
 	public BotInput press(PadButton b) {
 		prev.clear();

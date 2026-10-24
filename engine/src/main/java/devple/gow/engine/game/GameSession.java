@@ -42,6 +42,8 @@ public final class GameSession {
 	public boolean openingPending;
 	/** 직전 Warp 로 떠나온 레벨의 화면 상태 — 원작은 그 레벨을 꺼진 채 메모리에 두므로 바로 Warp 로 돌아오면 그대로 (GameScene.goToLevel, 43 §13.10). */
 	public GameScene.Resident warpLeft;
+	/** -Dgow.auto 경로 (gow.auto.route) 중 이음 전환: 다음 레벨 씬이 같은 자동 플레이를 이어 받는다 (검증 하네스, 엔진 전용). */
+	public AutoPlay autoCarry;
 	/** -Dgow.chain 진행 번호 (48 문서). */
 	int chainIndex;
 

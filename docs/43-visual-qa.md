@@ -767,6 +767,79 @@ ATHN07B (화면 전체), ATHN06B (방 안이 흐린 벽), PAND03I (주황 판) �
 
 **5. BMI 발판 잡아 던지기 460 동기** → 37 문서 §11.6 (BMI 205 / 영웅 002 의 460 쌍, BMI 이벤트 19 창 [0–0.4] 끌기). 엔진 테스트 418, 순회 보고서 같음.
 
+## 14. QA vs PS2 영상 — ATHN02C 첫 발리스타 길 (영상 3126–3406 초, 2026-10-24)
+
+메두사·미노타우로스 방 (ATHN02D) 남쪽 문이 열린 뒤부터 복도 사다리 위 싸움까지. 엔진은 처음부터 끝까지 한 실행으로 (`--game ATHN02D --arrive ATHN02C`, 쉬움,
+봇 + `gow.auto.route` §14.6, 결정적 — r8–r13 여섯 번 같은 시각). 영상 시트 `v3126_3406` (스크래치, 커밋 안 함), 엔진 증거 `work/verify/athn02c_route/` (§14.7).
+
+### 14.1 원작 길 · 스크립트 [확실: 스크립트·데이터 / 영상 대조는 섬네일]
+| 영상 | 원작 (스크립트) | 엔진 (게임 시각) |
+|---|---|---|
+| 3126 | ATHN02D 9 번째 EventSmash1 → FinalCamOn, 문 얼굴 MAtalkingHead01 Talk02 + 재질 Animator 넷 ("$M01AphroFront", "$SubScrollTex1", "$doorSub", "$M01DoorFade1", 지연 0.5) 이 6–7.5 초에 p28 → 0, MAcdHullOff, DMCWall-group669 VisOff | FinalCamOn 126.3, 재질 시계 126.8 → 문 페이드 132.8–134.3, DMCWall 135.3 초 (37 §5.3), `01`→`04` |
+| 3142–3208 | 통로 (LoadCheckD) → BalistaEnemSpawner: 해골병 SkellyLevel2 둘 (템플릿 22, 리스폰) | 136–177 초 싸움, `05` |
+| 3225–3258 | 사다리 굴 (x −808, y 955 → 1216) | `up` 178–186 초, `06` |
+| 3274 · 3324 · 3340 | 회전판 레버 `gogunlever` (Push 012 "newLeever" Type 5, 과제 140): 1023 → LevelData1 = 100 → `LazySueGroup-AniFor` (모드 8) 3 초 → Marker320 이 GunMidZone (LevelData3) → `AniPause` (모드 0x12, 시작 = LevelData6 = 3) → 3.5 초 뒤 `Gunlever-EventTmid` 1015 (레버 되감기) | 레버 190.8, 정지 193.8 초, `07` |
+| 3291 | 세이브 제단 Creator `SaveGameZone` "savepoint" (−424, 1216, 1489) → "제우스께서 … 저장하시겠습니까?" → 예 → 메모리카드 덮어쓰기 질문 (영상) | 첫 질문까지 `14` (봇이 저장 메뉴에 답하지 못해 메모리카드 화면은 안 봄) |
+| 3307 | 발리스타 크랭크 `gobiggun1crank` (Push 202 "AthnGun" Type 2 대포, 과제 320): R2 누른 채 감기 → 99 % → 차기 → 100 % → `EvtTaskProgress100` → `EvtArrow` 1020 (Creator 200 = ArrowEmitter/200 "athensgun" → Arrow/099: Velocity 60 × 16 = 960/초, Damage 10000, 중력 없음, Aim Joint "arrowjoint") + 장전 카메라 ReloadCntrCam 6.5 초 + 1015 되감기 | 감기 198.8–203.1, 발사 203.1, 문 파괴 203.4 초, `08` `09` |
+| 3357–3373 | breakableDoor01 (Brkb 950, HP 10000) 파괴 → Marker27 → DestructionSensor1 → LevelData14. 복도 끝 문장 돌문 = LiftDoor1Grp (IO_TandF, 과제 2, 손잡이는 동쪽) | `10` (206 초, 발리스타 카메라에서 같은 돌문) |
+| 3390 | door1 바로 동쪽 북벽 사다리 (x −176..−144, y 1216 → 1361, z 1739) → 위층 방 (ATHN02B 바닥과 겹침, LoadCheckB5) | 223–229 초, `11` |
+| 3406–3456 | ATHN02B `ClimbwallSpawner1` → `ClimbWallEnemies1` 해골병 셋 (템플릿 23, 벽 타고 오르기 500/523) | 229 초부터 (§14.5 수정 뒤), `12` `13` |
+
+그 뒤 (엔진으로 몰지 않음, 스크립트 읽기 [확실: 데이터] / 원작 화면 미대조): 돌문 LiftDoor1 을 동쪽에서 R2 연타로 올리면 LevelData13 = 진행률 (100 이면 DrsOpenCams·
+HallDrOpenCams). door1 이 부서진 뒤 가운데 자리에서 다시 쏘면 — LevelData13 == 0 && LevelData21 == 0 → `HarpoonStoneDoor` VisOn + AniFor (작살이 돌문에 박힘,
+MainDoorCam), LevelData21 > 0 (EnemyBalistaZone 에 든 그룹 98 적 수) → 적을 쏨, LevelData13 == 100 → LastDoorCam → breakableDoor02 (Marker28) → LevelData15 →
+HallwayMinos 미노타우로스 넷·doorsGroup·음악. 끝 자리 (남쪽) 에서 쏘면 BreakSecret (Marker321) → BrokenWall.
+
+### 14.2 엔진 결함과 수정
+1. **jump_if (0x0F) = 거짓이면 점프** [확실: 0x16F570 — 0x16F5A4 `bne v0, zero` 가 참이면 건너뛰고 거짓일 때만 pc += 오프셋]. 엔진은 참이면 점프였다 —
+   77 개 핸들러 (29 레벨). 여기서는 `LazySueGroup-AniPause` 슬롯 3·4 (다음 멈춤 자리 LevelData6 = 0 / 3 / 6) 와 ATHN02D MedusaRmEnemies 지연 (처음 7 초, 리스폰 1 / 2 / 1.25 초 — 앞 판은 거꾸로, 37 §5.3).
+2. **Animator 모드 0x12 = 그 시간에 세움** [확실: 0x1AB5E8 → 0x1AB394] — 0x2 (반복) 로 읽어 회전판이 계속 돌았다 (42 §3).
+3. **PushPull 종류 = TWK Type 바이트** [확실: 0x212398 · 0x2100E0] — 이름 규칙이라 "AthnGun" (Type 2) 이 밀기 상자였다 (38 §3.2, 11 개). Type 2 대포 크랭크:
+   끝에서 99 % (길이 − 0.01, 0x212AD0) → 차기 (+0x29A 비트 2) 가 발사 → 100 % → 1015 되감기 (42 §5) [근사: 차기 시점 = ANIStartKickBox 길이].
+4. **오브젝트 이벤트 1015 / 1020** [확실: 0x2100E0 / 0x267698 → 0x231590 → 0x222710]: 1015 = R2 오브젝트 리셋 (되감기), 1020 = GO 의 Creator 비헤이비어 (ArrowEmitter)
+   발사 → `ArrowShots` (Velocity·Damage·Gravity·Aim Joint 원작 값, 맞음 = 이전→현재 선분 vs 부서지는 물체 구·적·정적·움직이는 CDV [근사]).
+5. **DestructionSensor Filter 는 모든 모드** [확실: 0x1AE1D0] — EnemyBalistaZone 센서 (모드 4, Filter 98) 가 Marker27 에도 발동해 LevelData21 = −1 → 작살 석문 조건이 영영 거짓 (13 §3.2).
+6. **부모 링크 손잡이**: 크랭크·발리스타는 회전판 "Anim" 관절의 자식 GO — 손잡이 관절을 매 틱 자세로 다시 (`Interactables.refreshHandles`, 원작 0x1C3918 은 매 질의 관절 행렬) [확실: 데이터].
+7. **재질 Animator "$"** (§14.3) [확실: 0x1AB0B8 '$' 갈래].
+8. **두 슬롯 현재 레벨** (§14.4) · **이웃 SpawnEnemy** (§14.5) [근사: 엔진 구조].
+
+### 14.3 남쪽 문 재질 페이드 (영상 3126 의 열린 통로)
+엔진은 Animator 슬롯 0 "$이름" 을 무시해 미노타우로스 뒤에도 문이 감산 막 `MAT_doorSub` (색 2 × p28 0.5, 텍스처 없음) 으로 통로를 검게 덮었다 (`01`, 137 초 — 영웅이 검은
+막을 지나감). 원작은 "MAT_" + 이름 재질 인스턴스의 애니 제어기를 관절 애니 규칙으로 튼다 (42 §3). 문 재질 ANM: doorSub · M01AphroFront · SubScrollTex1 = act 0x42 (스크립트가
+틀 때까지 시간 0), M01DoorFade1 = 0x41 (불꽃 UV 반복), 넷 다 7.667 초, hdr8 (p28) 트랙이 키 180–225 (6–7.5 초) 에 0.5 / 0.9 → 0. 엔진 `Platforms.MatClock` → 렌더가
+그 재질만 시계 시간 (정지 인스턴스 `Renderer.setMaterialTimes`, 자세 GO `AnimatedModel.matTimes`), 이음 넘기기 포함. 결과: 132 초 얼굴 (`02`) → 134.5 초 통로 보임 (`03`)
+→ 영상 3126 과 같은 회색 통로·벽 횃불 (`04`). `ScriptMaterialAnimTest`.
+
+### 14.4 두 슬롯 — 엔진의 현재 레벨 [근사: 엔진 구조]
+원작은 두 슬롯 레벨의 스크립트·GO 가 모두 살아 있고 LoadCheck 는 "현재 레벨 이름" 만 바꾼다 (0x1BCA10, 36 §2). 엔진은 현재 레벨의 R2 오브젝트·Creator (세이브 제단·상자) 만 다룬다.
+- **덧붙는 레벨 → 숙주**: ATHN02D (자기 바닥 없음) 가 현재인 채 남쪽 출구를 나가면 ATHN02C 의 해골병·레버·크랭크·제단이 동작하지 않았다 → 자기 ENV 볼륨 밖 + 숙주 바닥 0.1 초면 숙주로 WALK 전환
+  (`GameScene.insideOwnVolumes`). 경로 봇은 전환을 넘어 이어진다 (`GameSession.autoCarry`).
+- **LoadCheck 는 현재 레벨 바닥이 발밑에 없을 때만**: ATHN02C `LoadCheckB2` 는 회전판 북쪽 가장자리의 얇은 볼륨 (크랭크 뒤에 서면 닿음) 인데 ATHN02B 도 그 바닥을 가져 발사 순간
+  ATHN02B 로 넘어가 레버·크랭크가 이웃 것이 되었다 (R2 무반응). 겹친 바닥을 벗어나면 WALK 규칙 (다른 슬롯 바닥만) 이 넘긴다.
+- 렌더 확인: 전환 뒤 통로가 검던 것 (`01`) 은 위 §14.3 (전환과 무관). ATHN02C 를 바로 시작하면 ATHN02D 의 `MAmagicIcon` (icon360, 남쪽 출구) 이 검은 번개 무늬로 보인다
+  — 정상 흐름에서는 미노타우로스 뒤 VisOffAfterSmash 로 꺼진다 [미확인: 아이콘 재질].
+
+### 14.5 이웃 (다른 슬롯) 스크립트의 SpawnEnemy [근사: 엔진 구조]
+사다리 위 방은 두 레벨 바닥이 겹치고 그 적은 ATHN02B 스크립트가 낸다 (ClimbWallEnemies1, LoadCheckB5 는 위 규칙으로 넘어가지 않음). 엔진은 이웃 SpawnEnemy 를 버려 영상 3406 의
+싸움이 없었다 → `SceneNav.Host.neighbourSpawn` → `GameScene.spawn(r, neighbour)`: 이미 올린 적 종류의 템플릿만 (보스 레벨이 현재면 생략), 피해 1039·제거는 이웃 세계
+(`CombatScriptBridge` 따로, `worldOf`). 결과 229 초 해골병 셋 + 리스폰 (`12` `13`). 이웃 음악 (MusicGrpAth2C5Start) 은 아직 안 튼다.
+
+### 14.6 경로 하네스 [엔진 전용]
+`-Dgow.auto.route` (`AutoPlay.routeStep`, 단계: `x,y,z[,반경]` 걷기 (6 초 넘으면 순간이동, 기록) · `use:fx,fz` (몸 돌리고 R2) · `hold:초:fx,fz` (R2 + 스틱) · `push:초:fx,fz` ·
+`up:초` · `mash:초` · `wait:초` · `btn:이름`), `-Dgow.auto.route.after=초` (그 전에는 보통 자동 플레이 — 메두사·미노타우로스). 이번 실행:
+`after=128`, `-1230,960,1900;-1250,960,1820,20;-1250,960,1700,20;-860,960,1680;push:1.5:-700,1680;up:8.4;-700,1216,1682,5;use:-688,1682;wait:9;-527,1216,1682,6;use:-480,1682;hold:8:-480,1682;wait:12;-300,1216,1682,10;-160,1216,1700,6;push:1.2:-160,1760;up:7;-160,1361,1790,10;-150,1361,1900,10;-150,1361,2000,10;wait:20`.
+
+### 14.7 증거 (`work/verify/athn02c_route/`, 커밋 안 함)
+`01_before_door_black_137.0s` (수정 전 검은 막) · `02_door_face_before_fade_132.0s` · `03_door_faded_134.5s` · `04_corridor_137.0s` · `05_legionnaire_fight_170.0s` ·
+`06_ladder_shaft_179.0s` · `07_lever_turntable_rotating_191.0s` · `08_crank_winding_200.0s` · `09_door1_break_204.0s` · `10_hallway_emblem_door_206.0s` ·
+`11_hallway_ladder_225.0s` · `12_upper_fight_232.0s` · `13_climbwall_legionnaires_245.0s` · `14_save_altar_dialog`.
+시험: `BallistaPuzzleTest` (멈춤 자리 3 / 6 / 역 3 초, jump_if, Filter, 대포 크랭크, 화살 → 문 → LevelData14), `ScriptMaterialAnimTest`, `AnimatorModeTest` ("$" 재질 시계).
+
+### 14.8 남은 것 · 미확인
+- 위층 방 남쪽 돌무더기 위 해골병 둘 (−138, 1366, 1882) 을 봇이 80 초 동안 못 잡고 죽음 (r13 315 초) [미확인: 봇 한계 / 적 위치·충돌].
+- 3291 메모리카드 덮어쓰기 화면, 3357 회전판 위 높은 카메라 — 엔진으로 안 봄. 돌문 R2 · 둘째 발사 (작살 석문 / door2) · HallwayMinos · BreakSecret · 짚라인 — 몰지 않음.
+- 뒤 시트 (3420–4698): 3420–3456 복도 해골병 싸움만 (§14.5). 3474 이후 (상자, 우리, 바깥 ATHN02B …) 는 다루지 않음.
+
 ## 시연 녹화 (-Dgow.record, -Dgow.bot) [엔진 전용]
 
 - `-Dgow.record=DIR` 로직 틱 `gow.record.every`(기본 2 = 30fps) 번마다 `DIR/f000000.jpg` 저장, `gow.record.secs` 초 뒤 종료. 녹화 중에는 lockstep (프레임당 틱 하나) 이라 렌더 속도와 무관하게 영상 시간이 게임 시간과 같다.

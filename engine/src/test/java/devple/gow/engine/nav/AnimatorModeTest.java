@@ -60,7 +60,11 @@ class AnimatorModeTest {
 		assertTrue(room.time() > t);
 		assertTrue(ps.play("gospinroom1", "!0", 0x8, 1, 0), "0x8 시간 유지");
 		assertTrue(room.time() > t);
-		assertFalse(ps.play("gospinroom1", "$chiansYo", 0, 1, 0), "$ = 재질 애니 (관절 아님)");
+		float jt = room.time();
+		assertTrue(ps.play("gospinroom1", "$chiansYo", 0, 0.9f, 0), "$ = 재질 애니 (MAT_chiansYo 시계, 0x1AB0B8 '$' 갈래)");
+		assertEquals(jt, room.time(), 1e-6f, "관절 애니는 그대로");
+		assertNotNull(ps.materialTimes().get("gospinroom1").get("MAT_chiansYo"));
+		assertFalse(ps.play("gospinroom1", "$noSuchMaterial", 0, 1, 0), "재질 ANM 이 없으면 원작도 \"Can't find material\"");
 	}
 
 	private static void run(ScriptWorld w, Platforms ps, float sec) {
