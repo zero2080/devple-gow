@@ -209,6 +209,8 @@ public final class HeroNavigator {
 	/** 영웅이 놓은 뒤 되감기는 중인 CSM/레버 (원작: 오브젝트가 스스로 −4 로 되감음). */
 	private final java.util.List<Interactables.Item> released = new java.util.ArrayList<>();
 	private final Vector3f pushAxis = new Vector3f();
+	/** 밀기: 잡은 점 (손잡이·옆면) 의 높이 − 상자 위치 높이 (없으면 NaN) — 붙은 동안 영웅 높이 차 판정 (0x1C4674). */
+	private float grabHeight = Float.NaN;
 	/** 상황 동작 영웅 애니 단계 ({@link #PH_GRAB} → {@link #PH_MAIN} → {@link #PH_FINISH}) 와 그 단계 시간, TAndF 마지막 누름 뒤 시간. */
 	private int phase;
 	private float phaseTime, sincePress;
@@ -318,6 +320,10 @@ public final class HeroNavigator {
 
 	/** @return true = 이번 틱 이동을 처리함 (기본 이동·중력 생략) */
 	public boolean update(Input in, float camYaw, float dt) {
+		if (DEBUG_PUSH && state != dbgState) {
+			System.out.printf("[내비 상태] %s → %s 위치 %s 땅 %s%n", dbgState, state, body.position(), body.grounded());
+			dbgState = state;
+		}
 		stateTime += dt;
 		cooldown -= dt;
 		if (state != NavState.AIR) {
@@ -1910,6 +1916,10 @@ public final class HeroNavigator {
 			case PUSH -> {
 				state = NavState.PUSH;
 				charging = false;
+				pushVy = 0;
+				if (DEBUG_PUSH) {
+					System.out.printf("[밀기 잡음] %s 상자 %s 영웅 %s 손잡이 %s%n", it.owner, it.pos, p, handle == null ? "-" : java.util.Arrays.toString(handle));
+				}
 				kickAnimTime = -1;
 				if (handle != null && Math.abs(handle[3]) + Math.abs(handle[4]) > 1e-3f) {
 					// 잡은 손잡이 관절 (handle1/2, 0x1C3918) 을 향해 서고 그 축이 상자 국소 축 — 영웅 = 손잡이에서 몸 반 깊이 바깥 (0x1C4638: 붙잡기 관절
@@ -1918,7 +1928,9 @@ public final class HeroNavigator {
 					pushAxis.set(-handle[3], 0, -handle[4]).normalize();
 					p.x = handle[0] + handle[3] * BODY;
 					p.z = handle[2] + handle[4] * BODY;
+					grabHeight = handle[1] - it.pos.y;
 				} else {
+					grabHeight = Float.NaN;
 					// Push 템플릿 Radius 도 손잡이 관절도 없는 상자 (합성 시험 상자뿐): 영웅→상자 방향의 주축 (x 또는 z), 상자 경계구 반지름 + 몸 반 너비 뒤 [근사]
 					if (Math.abs(to.x) > Math.abs(to.z)) {
 						pushAxis.set(Math.signum(to.x), 0, 0);
@@ -2287,6 +2299,7 @@ public final class HeroNavigator {
 	 */
 	private void push(Input in, float camYaw, float dt) {
 		Interactables.Item it = item;
+		lastDt = dt;
 		if (!in.held(PadButton.USE)) {
 			detachPush(it);
 			return;
@@ -2307,6 +2320,9 @@ public final class HeroNavigator {
 			}
 			boxFriction(it, dt);
 			follow(moveBox(it, dt));
+			if (grabTooFar(it)) {
+				detachPush(it);
+			}
 			return;
 		}
 		if (charging) {
@@ -2339,6 +2355,10 @@ public final class HeroNavigator {
 			it.vel.zero(); // 붙은 동안 상자 속도 0 (0x2119F8) — 놓아도 미끄러지지 않는다
 		}
 		follow(moved);
+		if (grabTooFar(it)) {
+			detachPush(it);
+			return;
+		}
 		if (!kicking) {
 			kickAnimTime = -1;
 			String a = anims.get("ANIPushI");
@@ -2358,21 +2378,62 @@ public final class HeroNavigator {
 	 */
 	private void follow(Vector3f moved) {
 		Vector3f p = body.position();
-		p.add(moved.x, 0, moved.z);
-		NavWorld.Floor f = world.floor(p.x, p.y + 16, p.z, 32);
-		if (f != null) {
+		Vector3f to = new Vector3f(p).add(moved.x, 0, moved.z);
+		if (world.blockMove(p, to, FOOT, NavWorld.moveExclude(NavWorld.HERO_BODY_EXCLUDE)) && item != null) {
+			// 원작은 영웅의 실제 이동량 (영웅 +0x100, 영웅 쪽 충돌 뒤) 으로 붙은 상자를 옮긴다 (0x2119A8) — 영웅이 벽·높은 단의 앞면에 막히면
+			// 상자도 그만큼만 간다. 예전 엔진은 영웅 쪽 충돌 없이 상자 이동량을 그대로 따라가 계단 단 앞면 안으로 들어가 빠졌다
+			Vector3f back = new Vector3f(to.x - p.x - moved.x, 0, to.z - p.z - moved.z);
+			if (back.lengthSquared() > 1e-8f) {
+				item.pos.add(back);
+				listener.pushMoved(item, back);
+			}
+		}
+		p.x = to.x;
+		p.z = to.z;
+		NavWorld.Floor f = world.floor(p.x, p.y + 16, p.z, 4000);
+		if (f != null && (p.y - f.y() <= 16 && pushVy == 0 || p.y + pushVy * lastDt <= f.y())) {
 			p.y = f.y();
+			pushVy = 0;
+		} else {
+			// 발밑 16 보다 깊은 단 (ATHN06B 석상 단 789 → 계단 765) · 낭떠러지: 중력으로 떨어진다 — 예전 엔진은 바닥을 못 찾으면 높이를 그대로 둬
+			// 계단 위 허공을 걸어 석상과 같은 높이에 머물렀다
+			pushVy = Math.max(pushVy - GRAVITY * lastDt, -FALL_MAX);
+			p.y += pushVy * lastDt;
 		}
 	}
 
+	/** 밀기 중 영웅 낙하 속도 (원작 +0xE0 의 y, 0x1C47B0) 와 이번 틱 dt. */
+	private float pushVy, lastDt = 1f / 60;
+
+	static final boolean DEBUG_PUSH = System.getProperty("gow.debug.push") != null;
+	private NavState dbgState;
+
+	/** 밀기 놓기 높이 차 (0x1C46B0: 0x42000000) [확실]. */
+	static final float PUSH_DETACH_DY = 32f;
+
+	/**
+	 * 0x1C4674 – 0x1C46C4: 밀기 (모드 1) 동안 영웅 높이와 잡은 점 − 반 키 (17.6) 의 차가 32 를 넘으면 놓는다 (0x1E18F8) [확실] — 붙은 상자는 바닥을 따르지 않고
+	 * 떠 있으므로 (0x2119A8 은 수평 이동량만) 계단 아래로 끌고 내려가면 영웅이 내려간 만큼 벌어져 놓이고, 놓인 상자는 중력으로 떨어진다 ({@link #boxFall}).
+	 */
+	private boolean grabTooFar(Interactables.Item it) {
+		return !Float.isNaN(grabHeight) && Math.abs(body.position().y - (it.pos.y + grabHeight - Interactables.GRAB_UP)) > PUSH_DETACH_DY;
+	}
+
 	private void detachPush(Interactables.Item it) {
+		if (DEBUG_PUSH) {
+			System.out.printf("[밀기 놓음] %s 상자 %s 영웅 %s 잡은높이 %.1f%n", it.owner, it.pos, body.position(), grabHeight);
+		}
 		listener.pushDetach(it);
 		charging = false;
 		kickAnimTime = -1;
-		if (it.vel.lengthSquared() > 0 && !sliding.contains(it)) {
-			sliding.add(it);
+		if (!sliding.contains(it)) {
+			sliding.add(it); // 미끄러지거나 (차기) 떠 있으면 떨어진다 — 멈추고 바닥에 닿으면 slideBoxes 가 뺀다
 		}
 		end();
+		if (pushVy < 0) {
+			leave(new Vector3f(), pushVy, "ANIFall"); // 단을 내려가다 놓이면 떨어지는 채로 (공중 상태가 착지시킨다)
+			pushVy = 0;
+		}
 	}
 
 	/** 상자 최대 속도 = 템플릿 #95b8bfb6 × 16 (0x211BD8: 넘으면 그 크기로 자름). */
@@ -2393,14 +2454,67 @@ public final class HeroNavigator {
 		}
 	}
 
-	/** 상자 둘레 점 벽 판정 구 반경 (유닛) [근사]. */
+	/** 상자 둘레 점 벽 판정 구 반경 (유닛) [근사] — Push 템플릿이 없는 합성 상자만. */
 	static final float BOX_PROBE_R = 6f;
+	/** 상자 몸 +0x130 의 y (0x20FA50: 6.4) — 위 둘레 높이 +0x140 = 몸 높이 × 16 − 6.4 (0x20FA84). */
+	static final float BOX_LIFT = 6.4f;
+	/**
+	 * 상자 벽 질의가 지나가는 면 (0x210BBC – 0x210BEC: 0x3309F4 = 0x08030042 | GO +0x258 &amp; 0x04300000) — 물·Death·AIBlock·ClimbGuide·CombatGuide
+	 * [확실], NoPushPullCollision [추정: +0x258 비트 26 이 밀기 상자에 켜짐].
+	 */
+	static final long BOX_WALL_EXCLUDE = SurfaceAttr.fromRecord(0x08030042, 0, 0) | SurfaceAttr.NO_PUSH_PULL_COLLISION.bit();
+	/** 아래 둘레 점 (GO + 6.4, 0x210C48 – 0x210D08 순서): −z 가운데, +x−z, +x, −x−z, −x, +x+z, −x+z, +z — 반 너비 단위 (x, z). */
+	private static final float[][] BOX_BASE = {{0, -1}, {1, -1}, {1, 0}, {-1, -1}, {-1, 0}, {1, 1}, {-1, 1}, {0, 1}};
+	/** 위 높이 모서리 (0x210D2C – 0x210D84): −x−z, +x−z, −x+z, +x+z. */
+	private static final float[][] BOX_TOP = {{-1, -1}, {1, -1}, {-1, 1}, {1, 1}};
 
 	/**
-	 * 상자를 속도만큼 옮긴다 (밑에 바닥, 앞쪽 벽이면 막힘). 원작 상자 벽 판정 0x210DC8 → 0x210AE8 은 상자 몸 (Push 템플릿 Radius·16 반 너비,
-	 * {@link Interactables.Item#boxHalf}) 둘레 — 모서리 넷·변 가운데 넷 — 에서 벽 질의 0x1E1F28 을 한다 [확실: 코드 / 근사: 엔진은 그 점들의 작은 구가
-	 * 벽에 닿으면 막음 (원작은 밀어냄)]. 예전 엔진은 CDV 경계 구 0.8·r (ATHN05B 발리스타 44) 하나라 폭 84 인 방 문 (x −480) 에 걸려 영상 7731 처럼
-	 * 복도로 밀고 나가지 못했다 (반 너비 28.2, 43 §22). 템플릿이 없으면 예전 구.
+	 * 상자 몸 벽 밀어내기 (원작 0x210DC8 → 0x210AE8) [확실: 코드]: 몸 (Push Radius·16 반 너비, GO 축) 둘레 12 점 — 물리 위치 (GO + 6.4) 높이의 옆면
+	 * 가운데 넷 · 모서리 넷, 그 위 +0x140 (몸 높이 − 6.4) 높이의 모서리 넷 — 마다 중심 → 그 점 선분을 벽 (법선 y &lt; 0.5) 에 던져 (0x1E1F28 → 0x11E190), 맞으면 그 점이 벽 면에 오도록
+	 * 위치를 면 법선으로 되민다 (위치 −= N·((끝 − 맞은 점)·N)). 앞 점의 보정이 다음 점에 이어진다. 그래서 벽에서 떨어지는 쪽으로는 늘 움직이고 벽 안으로는 못 들어간다.
+	 * 예전 엔진은 둘레 점의 작은 구가 벽에 닿기만 하면 그 틱 이동을 막아, 벽감에 선 ATHN06B 석상 (옆 벽에 몸이 닿음) 을 당겨 꺼낼 수 없었다 (영상 9036 → 9051 은 끌어냄).
+	 * @return 밀려났는지
+	 */
+	private boolean boxWalls(Interactables.Item it, Vector3f c) {
+		float[] m = it.goMatrix;
+		Vector3f ax = m != null ? new Vector3f(m[0], m[1], m[2]) : new Vector3f(1, 0, 0);
+		Vector3f ay = m != null ? new Vector3f(m[4], m[5], m[6]) : new Vector3f(0, 1, 0);
+		Vector3f az = m != null ? new Vector3f(m[8], m[9], m[10]) : new Vector3f(0, 0, 1);
+		// 중심 = 상자 물리 위치 = GO 위치 + 위·6.4 (+0x130, 0x2119A8 이 붙은 상자 새 자리에 더함) — c 는 관절 0 기준인 아이템 위치라
+		// 그 차이만큼 옮겨 질의하고 되돌린다. 바닥 높이 둘레 점이 발밑 단의 윗모서리를 스치지 않는다
+		Vector3f go = m != null ? new Vector3f(m[12] - it.pos.x, m[13] - it.pos.y, m[14] - it.pos.z) : new Vector3f();
+		go.fma(BOX_LIFT, ay);
+		c.add(go);
+		float h = it.boxHalf, top = Math.max(0f, it.boxHeight - BOX_LIFT);
+		boolean hit = false;
+		for (float[] p : BOX_BASE) {
+			hit |= boxProbe(c, new Vector3f(ax).mul(p[0] * h).fma(p[1] * h, az));
+		}
+		Vector3f up = new Vector3f(ay).mul(top);
+		Vector3f t = new Vector3f(c).add(up);
+		for (float[] p : BOX_TOP) {
+			hit |= boxProbe(t, new Vector3f(ax).mul(p[0] * h).fma(p[1] * h, az));
+		}
+		c.set(t).sub(up).sub(go);
+		return hit;
+	}
+
+	/** 0x1E1F28: 중심 c → c + off 가 벽에 맞으면 c −= N·((c + off − 맞은 점)·N). */
+	private boolean boxProbe(Vector3f c, Vector3f off) {
+		Vector3f end = new Vector3f(c).add(off);
+		devple.gow.engine.level.LevelCollision.Hit h = world.wallSegment(c, end, BOX_WALL_EXCLUDE);
+		if (h == null) {
+			return false;
+		}
+		Vector3f n = h.tri().n();
+		float d = end.sub(h.point()).dot(n);
+		c.fma(-d, n);
+		return true;
+	}
+
+	/**
+	 * 상자를 속도만큼 옮긴다 (밑에 바닥, 벽은 밀어냄 {@link #boxWalls}). 예전 엔진은 CDV 경계 구 0.8·r (ATHN05B 발리스타 44) 하나라 폭 84 인 방 문 (x −480) 에 걸려
+	 * 영상 7731 처럼 복도로 밀고 나가지 못했다 (반 너비 28.2, 43 §22). 템플릿이 없으면 예전 구.
 	 * @return 옮긴 양
 	 */
 	private Vector3f moveBox(Interactables.Item it, float dt) {
@@ -2410,39 +2524,93 @@ public final class HeroNavigator {
 		}
 		Vector3f cand = new Vector3f(it.pos).add(delta);
 		java.util.Set<String> self = world.family(it.owner);
-		NavWorld.Floor f = world.floor(cand.x, it.pos.y + 16, cand.z, 32, self);
-		NavWorld.Floor f0 = world.floor(it.pos.x, it.pos.y + 16, it.pos.z, 32, self);
 		boolean blocked;
 		if (it.boxHalf > 0) {
 			blocked = false;
-			float h = it.boxHalf, py = cand.y + Math.max(BOX_PROBE_R + 2f, it.boxHeight * 0.5f);
-			for (int sx = -1; sx <= 1 && !blocked; sx++) {
-				for (int sz = -1; sz <= 1 && !blocked; sz++) {
-					if (sx == 0 && sz == 0) {
-						continue;
+			Vector3f want = new Vector3f(cand);
+			if (boxWalls(it, cand)) {
+				// 0x2113A0 – 0x211424: 밀려난 쪽 (수평) 으로 들어가던 속도 성분을 없앤다
+				Vector3f n = new Vector3f(cand).sub(want).setComponent(1, 0);
+				if (n.lengthSquared() > 1e-8f) {
+					n.normalize();
+					float vd = it.vel.dot(n);
+					if (vd < 0) {
+						it.vel.fma(-vd, n);
 					}
-					Vector3f c = new Vector3f(cand.x + sx * h, py, cand.z + sz * h);
-					Vector3f probe = new Vector3f(c);
-					blocked = world.collideSphere(probe, BOX_PROBE_R) && probe.distance(c) > 0.5f;
 				}
+				cand.y = it.pos.y;
 			}
 		} else {
 			Vector3f c = new Vector3f(cand).add(0, it.radius * 0.5f, 0);
 			Vector3f probe = new Vector3f(c);
 			blocked = world.collideSphere(probe, it.radius * 0.8f) && probe.distance(c) > 0.5f;
 		}
-		if (f == null || blocked) {
+		NavWorld.Floor f = world.floor(cand.x, it.pos.y + 16, cand.z, 32, self);
+		NavWorld.Floor f0 = world.floor(it.pos.x, it.pos.y + 16, it.pos.z, 32, self);
+		if (blocked) {
 			it.vel.zero();
 			return delta.zero();
 		}
-		// 바닥 높이 변화만큼 (상자 위치 = 루트 관절 — 발리스타는 바닥 480 아래 474.5: 예전처럼 바닥 높이로 맞추면 첫 밀기에 5.5 떠올랐다)
-		delta.y = f0 != null ? f.y() - f0.y() : f.y() - it.pos.y;
+		float rest = restDy(it, f0);
+		delta.set(cand.x - it.pos.x, 0, cand.z - it.pos.z);
+		if (delta.lengthSquared() < 1e-10f) {
+			return delta.zero();
+		}
+		// 원작 붙은 상자는 바닥을 따르지 않고 수평 이동량만 받는다 (0x2119A8, 영웅이 32 넘게 내려가면 놓임 — grabTooFar) [확실]. 엔진은 바닥에 놓인 상자가
+		// 비탈·낮은 턱 (±16) 은 따라가게 둔다 (ATHN05B 발리스타 복도 내리막 480 → 444, 43 §22) [근사]. 그보다 깊은 단 (ATHN06B 석상 단 789 → 계단 765) 이나
+		// 낭떠러지 위로는 떠서 가고, 놓이면 떨어진다 (boxFall). 예전 엔진은 발밑 ±16 에 바닥이 없으면 막아 석상을 계단으로 끌어내릴 수 없었다
+		if (f != null && f0 != null && Math.abs(it.pos.y - rest - f0.y()) < 1f) {
+			delta.y = f.y() + rest - it.pos.y;
+		}
 		it.pos.add(delta);
 		listener.pushMoved(it, delta);
 		return delta;
 	}
 
-	/** 놓였거나 차인 상자: 마찰로 멈출 때까지 (원작 상자 갱신 0x212398 은 붙잡기와 무관하게 매 프레임). */
+	/**
+	 * 상자 위치 (관절 0) 높이 − 놓인 바닥 높이: 처음 물을 때 지금 자리 (놓여 있음) 의 발밑 ±16 바닥으로 잰다 — 상자 위치 = 루트 관절이라 발리스타는
+	 * 바닥 480 아래 474.5 (−5.5). f0 = 이미 구한 발밑 바닥 (없으면 여기서).
+	 */
+	private float restDy(Interactables.Item it, NavWorld.Floor f0) {
+		if (Float.isNaN(it.restDy)) {
+			NavWorld.Floor f = f0 != null ? f0 : world.floor(it.pos.x, it.pos.y + 16, it.pos.z, 32, world.family(it.owner));
+			it.restDy = f != null ? it.pos.y - f.y() : 0f;
+		}
+		return it.restDy;
+	}
+
+	/** 상자 최대 낙하 속도 (0x211B70: 0xC4480000 = −800) [확실]. */
+	static final float BOX_FALL_MAX = 800f;
+
+	/**
+	 * 붙잡히지 않은 상자의 중력 (0x211A10: 공중이면 v.y −= GlobGame Gravity 50·16·dt, 최저 −800 → 0x1E5F90 이 바닥에 내려놓음) [확실: 값 / 근사: 바닥 = 발밑 첫 면].
+	 * @return 아직 공중인지
+	 */
+	private boolean boxFall(Interactables.Item it, float dt) {
+		java.util.Set<String> self = world.family(it.owner);
+		float rest = restDy(it, null);
+		float bottom = it.pos.y - rest;
+		NavWorld.Floor f = world.floor(it.pos.x, bottom + 1, it.pos.z, 4000, self);
+		if (f != null && bottom - f.y() < 0.05f) {
+			it.fallVy = 0;
+			return false;
+		}
+		if (DEBUG_PUSH && it.fallVy == 0) {
+			System.out.printf("[상자 낙하] %s %s 바닥 %s%n", it.owner, it.pos, f == null ? "없음" : String.valueOf(f.y()));
+		}
+		it.fallVy = Math.max(it.fallVy - GRAVITY * dt, -BOX_FALL_MAX);
+		float dy = it.fallVy * dt;
+		if (f != null && bottom + dy <= f.y()) {
+			dy = f.y() - bottom;
+			it.fallVy = 0;
+		}
+		Vector3f d = new Vector3f(0, dy, 0);
+		it.pos.add(d);
+		listener.pushMoved(it, d);
+		return it.fallVy != 0;
+	}
+
+	/** 놓였거나 차인 상자: 마찰로 멈추고 바닥에 닿을 때까지 (원작 상자 갱신 0x212398 은 붙잡기와 무관하게 매 프레임). */
 	private void slideBoxes(float dt) {
 		for (java.util.Iterator<Interactables.Item> i = sliding.iterator(); i.hasNext(); ) {
 			Interactables.Item it = i.next();
@@ -2452,7 +2620,8 @@ public final class HeroNavigator {
 			}
 			boxFriction(it, dt);
 			moveBox(it, dt);
-			if (it.vel.lengthSquared() == 0) {
+			boolean air = boxFall(it, dt);
+			if (it.vel.lengthSquared() == 0 && !air) {
 				i.remove();
 			}
 		}

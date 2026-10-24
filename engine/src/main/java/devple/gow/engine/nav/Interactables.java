@@ -166,10 +166,15 @@ public final class Interactables {
 		 */
 		public float boxHalf, boxHeight;
 		/**
-		 * GO 행렬 (관절 0 월드, 열 우선 16) — 손잡이 관절이 없는 밀기 상자의 옆면 잡을 곳 ({@link #faceGrab}) 을 이 축으로 놓는다 (원작 GO +0x50).
-		 * null = 모름 (축 = 월드 x·z, 위치 = {@link #pos}).
+		 * GO 월드 행렬 (원작 GO +0x50, 행 벡터 16: 0–2 x 축 · 4–6 y 축 · 8–10 z 축 · 12–14 위치) — 손잡이 관절이 없는 밀기 상자의 옆면 잡을 곳
+		 * ({@link #faceGrab}) 과 상자 벽 둘레 (0x210AE8) 를 이 축·위치로 놓는다. null = 모름 (축 = 월드 x·z, 위치 = {@link #pos}).
+		 * {@link #pos} 는 관절 0 이라 GO 위치와 다를 수 있다 (ATHN06B 석상1: 관절 0 이 GO 보다 0.7 아래, ATHN05B 발리스타: 5.5 아래).
 		 */
 		public float[] goMatrix;
+		/** GO = 이 행렬 · 관절 0 월드 (처음 GO · 처음 관절 0⁻¹) — 몸이 움직이면 {@link #refreshHandles} 가 GO 행렬을 다시 만든다. */
+		float[] goFromJoint0;
+		/** 밀기 상자: {@link #pos} (관절 0) 높이 − 놓인 바닥 높이 (처음 옮길 때 잼, ATHN05B 발리스타 −5.5), 떨어지는 속도 (원작 +0xE0 의 y, 붙잡히지 않을 때만). */
+		public float restDy = Float.NaN, fallVy;
 		public final Vector3f vel = new Vector3f();
 		public boolean twoWay;
 		public float detentTol = 0.03f;
@@ -445,13 +450,17 @@ public final class Interactables {
 		}
 		if (jw.length > 0) {
 			it.pos.set(jw[0][12], jw[0][13], jw[0][14]);
-			it.goMatrix = jw[0].clone();
+			it.goMatrix = it.goFromJoint0 != null ? devple.gow.tools.anim.Mat4.mul(it.goFromJoint0, jw[0]) : jw[0].clone();
 		}
 	}
 
 	/** 손잡이 관절과 판정 값 (0x200A50 / 0x213A38). 기본값 1 / 2 / 0.3 / 0 (0x200A50). */
 	private static void handles(Item it, LevelLayout.Placement p, Tweaks tw, String node) {
 		handles(it, p.object().skeleton(), p.jointWorld(), tw, node);
+		if (p.jointWorld().length > 0) {
+			it.goMatrix = p.instance().matrix();
+			it.goFromJoint0 = devple.gow.tools.anim.Mat4.mul(it.goMatrix, devple.gow.tools.anim.Mat4.invertAffine(p.jointWorld()[0]));
+		}
 	}
 
 	/** {@link #handles(Item, LevelLayout.Placement, Tweaks, String)} 를 배치 밖 GO 에 (Creator 상자: R_PERMK chest 의 handle1, 38 §21). */

@@ -136,6 +136,11 @@ class HeroNavigatorTest {
 		quad(out, v(x0, y0, zw), v(x1, y0, zw), v(x1, y1, zw), v(x0, y1, zw), at);
 	}
 
+	/** x = xw 의 벽 (법선 +x), z0..z1, y0..y1. */
+	static void wallX(List<LevelCollision.Tri> out, float xw, float z0, float z1, float y0, float y1, SurfaceAttr... at) {
+		quad(out, v(xw, y0, z1), v(xw, y0, z0), v(xw, y1, z0), v(xw, y1, z1), at);
+	}
+
 	/** 내비게이터 + 단순 물리 한 틱. */
 	static void tick(HeroNavigator nav, Body b, NavWorld w, Pad in) {
 		if (!nav.update(in, 0, DT) && !nav.active()) {
@@ -1138,6 +1143,98 @@ class HeroNavigatorTest {
 			tick(nav, b, w, in);
 		}
 		assertTrue(box.pos.z > -70 + 16 * 0.8f - 1, "벽에서 멈춤 " + box.pos);
+	}
+
+	/**
+	 * 상자 벽 밀어내기 (0x210AE8 → 0x1E1F28): 몸 둘레 점마다 중심 → 점 선분이 벽을 넘으면 그 점이 벽 면에 오도록 되민다 — 벽에서 떨어지는 쪽은 늘 간다.
+	 * ATHN06B 석상은 옆 벽에 몸이 닿은 벽감 (반 너비 16) 에 서 있어, 둘레 점 작은 구가 벽에 닿으면 막던 예전 엔진에서는 끌어낼 수 없었다 (영상 9036 → 9051 끌어냄).
+	 */
+	@Test
+	void boxWallsPushOutSoABoxCanLeaveATightNiche() {
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -400, -400, 400, 400, 0, SurfaceAttr.GROUND);
+		wallZ(t, -57, -40, 40, 0, 100, SurfaceAttr.GROUND); // 벽감 뒤
+		wallX(t, -16.5f, -57, -20, 0, 100, SurfaceAttr.GROUND); // 옆 벽: 몸 옆면에서 0.5
+		wallX(t, 16.5f, -57, -20, 0, 100, SurfaceAttr.GROUND);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		Body b = new Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		Interactables items = new Interactables();
+		Interactables.Item box = items.add(new Interactables.Item(Interactables.Kind.PUSH, "gostatue2", v(0, 0, -40), 710, 0, "pushIdle", null,
+				"Athens06B Statu", 52f));
+		box.boxHalf = 16;
+		box.boxHeight = 32;
+		nav.setItems(items);
+		Pad in = new Pad();
+		in.down.add(PadButton.USE);
+		tick(nav, b, w, in);
+		assertEquals(NavState.PUSH, nav.state());
+		for (int i = 0; i < 60; i++) {
+			in.ly = -1; // 카메라 0: 스틱 아래 = +z — 뒷걸음으로 끌어냄
+			in.down.add(PadButton.USE);
+			tick(nav, b, w, in);
+		}
+		assertTrue(box.pos.z > -40 + 20, "벽감에서 끌려 나옴 " + box.pos);
+		assertEquals(0f, box.pos.x, 1e-3f);
+		for (int i = 0; i < 180; i++) {
+			in.ly = 1; // 다시 벽감 뒤 벽까지 밂
+			in.down.add(PadButton.USE);
+			tick(nav, b, w, in);
+		}
+		assertEquals(-57 + 16, box.pos.z, 0.6f, "뒷면이 뒤 벽 면에서 멈춤 (밀어내기)");
+		assertEquals(box.pos.z + 16 + HeroNavigator.BODY, b.pos.z, 0.5f, "영웅은 상자 앞면 + 9.6");
+	}
+
+	/**
+	 * 붙은 상자는 바닥을 따르지 않는다 (0x2119A8: 수평 이동량만) — 발밑 16 보다 깊은 단 위로는 떠서 가고, 영웅 높이가 잡은 점 − 17.6 에서 32 넘게 벌어지면
+	 * 놓이며 (0x1C4674), 놓인 상자는 중력으로 떨어진다 (0x211A10: −50·16, 최저 −800). 영웅도 붙은 채 중력으로 단을 내려간다 (0x1C47B0).
+	 * ATHN06B 석상은 단 789 → 계단 764 를 이렇게 내려간다 (영상 9040 → 9051: 위층 벽감의 석상이 아래 바닥에). 예전 엔진은 발밑 ±16 에 바닥이 없으면 막았다.
+	 */
+	@Test
+	void attachedBoxHoversOverADeepStepAndFallsWhenReleased() {
+		for (float step : new float[]{24, 40}) {
+			List<LevelCollision.Tri> t = new ArrayList<>();
+			floor(t, -400, -400, 400, 0, step, SurfaceAttr.GROUND); // 윗단 (z ≤ 0)
+			floor(t, -400, 0, 400, 400, 0, SurfaceAttr.GROUND); // 아랫단
+			wallZ(t, 0, -400, 400, 0, step, SurfaceAttr.GROUND); // 단 앞면
+			NavWorld w = new NavWorld(LevelCollision.of(t));
+			Body b = new Body();
+			b.pos.set(0, step, -10);
+			HeroNavigator nav = new HeroNavigator(b, w, null);
+			Interactables items = new Interactables();
+			Interactables.Item box = items.add(new Interactables.Item(Interactables.Kind.PUSH, "gostatue2", v(0, step, -40), 710, 0, "pushIdle", null,
+					"Athens06B Statu", 52f));
+			box.boxHalf = 16;
+			box.boxHeight = 32;
+			nav.setItems(items);
+			Pad in = new Pad();
+			in.down.add(PadButton.USE);
+			tick(nav, b, w, in);
+			assertEquals(NavState.PUSH, nav.state());
+			for (int i = 0; i < 150 && nav.state() == NavState.PUSH; i++) {
+				in.ly = -1;
+				in.down.add(PadButton.USE);
+				tick(nav, b, w, in);
+			}
+			if (step == 24) {
+				// 영웅 0 ↔ 잡은 점 24 + 16 − 17.6 = 22.4: 붙은 채 상자가 단 너머로 떠서 간다
+				assertEquals(NavState.PUSH, nav.state());
+				assertEquals(0f, b.pos.y, 1e-3f, "영웅은 아랫단에");
+				assertTrue(box.pos.z > 16, "상자가 단 너머 " + box.pos);
+				assertEquals(24f, box.pos.y, 1e-3f, "붙은 상자는 떠 있다");
+			} else {
+				// 영웅 0 ↔ 40 + 16 − 17.6 = 38.4 > 32: 영웅이 단에서 떨어지는 사이 놓인다 — 상자는 윗단에 남는다
+				assertNotEquals(NavState.PUSH, nav.state());
+				assertTrue(box.pos.z < 0, "상자는 윗단 " + box.pos);
+				assertEquals(40f, box.pos.y, 1e-3f);
+			}
+			in.ly = 0;
+			in.down.clear();
+			for (int i = 0; i < 60; i++) {
+				tick(nav, b, w, in); // 놓기 → 떨어짐
+			}
+			assertEquals(step == 24 ? 0f : 40f, box.pos.y, 1e-3f, "놓인 상자는 아래 바닥으로 떨어진다");
+		}
 	}
 
 	/** 원작 0x1C4258 / 0x215DF0: 쌍발차기 문 (CSM 44, 비트 #fb908478 = 0) 은 R1 한 번 — 영웅 doorKick 0.9 초 동안 붙어 있고 문 애니 0.9 초가 100 %. */

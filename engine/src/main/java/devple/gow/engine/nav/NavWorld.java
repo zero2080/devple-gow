@@ -181,6 +181,26 @@ public final class NavWorld {
 	}
 
 	/**
+	 * 벽만 보는 선분 질의 — 밀기 상자 벽 질의 0x1E1F28 의 접촉 거름 0x1E1EC0 은 법선 y ≥ 0.5 인 면 (바닥) 을 지나간다 [확실: 코드].
+	 * 면 속성이 exclude 에 걸리는 면도 지나간다. 처음 만나는 벽, 없으면 null.
+	 */
+	public LevelCollision.Hit wallSegment(Vector3f from, Vector3f to, long exclude) {
+		Vector3f d = new Vector3f(to).sub(from);
+		float len = d.length();
+		if (len < 1e-5f) {
+			return null;
+		}
+		LevelCollision.Hit best = null;
+		for (LevelCollision c : statics) {
+			LevelCollision.Hit h = c.raycast(from, d, len, t -> (t.attrs() & exclude) == 0 && t.n().y < 0.5f);
+			if (h != null && (best == null || h.distance() < best.distance())) {
+				best = h;
+			}
+		}
+		return best;
+	}
+
+	/**
 	 * 선분 접촉 (원작 0x11E190 접촉 기록 0x2C8F10): t = 선분 비율, 점, 면 법선, 면 재질 SheetFX, 맞은 개체 (정적 시트 = null, CDV GO = 소유 GO 이름).
 	 */
 	public record Contact(float t, Vector3f point, Vector3f normal, int sheetFx, String owner) {

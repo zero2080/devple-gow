@@ -1522,6 +1522,8 @@ Semo03 (크라토스의 과거) → OracleSaved · R2 대화 342 → 출구 Warp
 | 영상 | 원작 (스크립트·데이터) | 엔진 |
 |---|---|---|
 | 8806–8842 | ATHN06A 무덤지기 뒤 세이브 · 상자 둘: 깃털 카드 ("제물이 받아들여졌습니다" 셋째 줄 포함 — 원작도 나옴) · 고르곤의 눈 카드, 카드 위에 미터 없음 (8825 · 8839) | s1: 카드 문구 · 둘째 쪽 자동 넘김 같음 — 고치기 전 카드 위에 HP/MP 미터가 떠 있었다 (§23.2-8) |
+| 9036–9054 | ATHN06B 하피 방: 서쪽 위층 (792) 벽감의 석상2 (Push 710, 방패·창 전사, 뒤에 순환 상자) 를 끌어내 계단 아래 바닥 (736) 으로 | h8 0–24 초: 벽감에서 끌어냄 → 첫 단 (792 → 764) 위로 떠 가다 놓여 떨어짐 → 아래 바닥 — 고치기 전 벽감 옆 벽에 막혀 꿈쩍 않음 (§23.2-10), 계단 첫 단에서 막힘 (§23.2-11) |
+| 9056–9098 | 석상을 바닥을 따라 북쪽 무너진 벽 구멍 (돌무더기 · 부러진 기둥 · 횃불) 앞까지 밀고 R2 다시 잡기 (9072) | h8 24–41 초: 같은 길·같은 구도 (`11` ↔ `12`), 구멍 공 (−3248, 736, −1257) r 32 에 Marker710 → LeftHoleEntry → 6 초마다 석상 흔들림 (Statue2-AnimWobble · 하피 비명) |
 | 9399–9412 | 동영상 a06Mp02 → 줄에 매달린 오라클 (TriggeredEntryCam · PanBackCam) | c1 4–6 초 매달린 오라클 · 카메라 |
 | 9416–9456 | ATHN06C 안뜰 석상 (statuePull1, Push 720) 을 받침에 손을 대고 남쪽으로 민다 | p3: 받침 북쪽 면에 붙어 민다 (`09`) — 고치기 전 72 유닛 뒤에서 허공을 밀었다 (`08`, §23.2-9) |
 | 9676–9694 | 동영상 a06Mp03 ("크레토스! 손이 미끄러져요!", "하지만 서둘러야 해요!") — 덩굴 벽에서 카메라 UprCam21 (Internal 0xD) | 고치기 전 a06Mp03Done 의 카메라 조건이 늘 거짓 (§23.2-2) |
@@ -1563,16 +1565,32 @@ Semo03 (크라토스의 과거) → OracleSaved · R2 대화 342 → 출구 Warp
    0.9·16 = 14.4 라 72 유닛 (영웅 키의 두 배) 뒤에서 허공을 밀었고 (`08`), 영상 9426 – 9456 은 받침에 붙어 민다. 판도라 상자 (r 30 ↔ 14.4) · PAND04EE 테트리스 블록
    (r 64 ↔ 16) · PAND03B 미로 벽 (r 60 ↔ 32) · ATHN06B 석상 (r 52 ↔ 16) 도 같았다 → `Interactables.faceGrab` (GO 행렬 `goMatrix`, 밀면 `refreshHandles` 가 갱신),
    잡은 면이 손잡이와 같은 꼴로 `HeroNavigator.startItem` 에 간다 (38 §3.2).
+10. **상자가 벽에 닿기만 해도 꿈쩍하지 않았다.** 원작 상자 벽 판정 0x210DC8 → 0x210AE8 은 막지 않고 **밀어낸다**: 상자 물리 위치 (GO + 위·6.4, +0x130) 높이의 옆면 가운데
+   넷 · 모서리 넷과 그 위 +0x140 (몸 높이·16 − 6.4) 의 모서리 넷 — 12 점마다 중심 → 점 선분 (0x1E1F28 → 0x11E190, 바닥 면 거름 0x1E1EC0: 법선 y ≥ 0.5 는 지나감) 이
+   벽을 넘으면 위치 −= N·((끝 − 맞은 점)·N), 앞 점의 보정이 다음 점으로 이어지고, 밀려난 쪽으로 들어가던 속도를 없앤다 (0x2113A0) [확실: 코드]. 엔진은 둘레 점의
+   작은 구 (6) 가 벽에 닿으면 그 틱 이동을 통째로 막아, 옆 벽에 몸이 닿아 벽감 (폭 ≈ 32) 에 선 ATHN06B 석상 둘을 끌어낼 수 없었다 (영상 9036 → 9051 은 끌어냄) →
+   `HeroNavigator.boxWalls` · `NavWorld.wallSegment`. 중심은 관절 0 이 아니라 GO 위치 (`Item.goMatrix`, 석상1 관절 0 이 GO 보다 0.7 아래).
+11. **붙은 상자를 계단으로 끌어내릴 수 없었다.** 원작 붙은 상자는 바닥을 따르지 않고 수평 이동량만 받으며 (0x2119A8), 중력은 붙지 않았을 때만 (0x211A10: −50·16,
+   최저 −800) [확실]. 밀기 중 영웅은 중력으로 단을 내려가고 (0x1C47B0), 잡은 점 − 반 키 17.6 과 영웅 높이 차가 32 를 넘으면 놓는다 (0x1C4674 – 0x1C46C4) [확실].
+   그래서 석상을 위층 (789) 에서 계단 (764 …) 으로 끌면 영웅이 내려가는 동안 석상은 단 너머로 떠 가다 놓여 떨어진다. 엔진은 발밑 ±16 에 바닥이 없으면 상자를
+   막고 영웅도 같은 높이에 붙잡아 둬, 하피 구멍 (아래 바닥 북쪽 (−3248, −1257) · 남쪽 (−3056, −1784) 의 공 r 32) 까지 석상을 옮길 길이 없었다 →
+   `moveBox` (놓인 상자만 ±16 비탈·턱을 따름 [근사: ATHN05B 발리스타 내리막 유지], 깊은 단 위는 떠서), `grabTooFar` (32), `boxFall`, `follow` (영웅 중력 ·
+   영웅 쪽 이동 선분 — 막히면 상자도 그만큼 되돌림 [근사: 원작은 영웅의 실제 이동량으로 상자를 옮김]), 공중에서 놓이면 공중 상태로. h8: 끌어냄 → 떨어짐 → 바닥 →
+   구멍 → `Harpies-LeftVolume2-LeftHoleEntry (Statue2-Marker710)` → 하피가 막힌 구멍을 두드리는 6 초 흔들림 (TimerMcGuyverLeft 352 → Statue2-AnimWobble).
+   ATHN05B 발리스타 복도 (r15 앞부분) · ATHN06C 석상 (p3) 은 그대로 [확인: 같은 경로 재실행].
 
 ### 23.3 시험
 `OracleRescueTimerTest` (5: 타이머 표 · 붉은 경고 경과 % · a06Mp03 끝 + 카메라 UprCam21 → 523 · 70 초 모래시계 (다른 카메라면 없음), 70 초 → 오라클 떨어짐 → 6.4 초 뒤
 실패 화면, 접시 → 타이머 지움 · Semo03), `HourglassFailedMenuTest` (3: FLP 모래시계 프레임 5 · 91 · 92 · Off, 실패 메뉴 ○ = 다시 하기, 타자 효과),
 `MessagePagesTest` (오라클 342 두 쪽, 게임 안 메시지 모든 쪽 1..3 줄), `HeroNavigatorTest.handlelessBoxIsGrabbedAtItsSideFace` (옆면 20 안 · 등지면 못 잡음 ·
-붙은 자리 = 면 + 9.6 · 돌아간 GO 축), `NavDataTest.athens06cStatueIsGrabbedAtItsPedestalFace` (ATHN06C 원본: 반 너비 14.4, 예전 자리 z −369 에선 못 잡음).
+붙은 자리 = 면 + 9.6 · 돌아간 GO 축), `NavDataTest.athens06cStatueIsGrabbedAtItsPedestalFace` (ATHN06C 원본: 반 너비 14.4, 예전 자리 z −369 에선 못 잡음),
+`HeroNavigatorTest.boxWallsPushOutSoABoxCanLeaveATightNiche` (옆 벽 0.5 벽감에서 끌어냄 · 뒤 벽 면에서 멈춤),
+`HeroNavigatorTest.attachedBoxHoversOverADeepStepAndFallsWhenReleased` (단 24: 붙은 채 떠서 넘어감 → 놓으면 아래로, 단 40: 영웅이 떨어지는 사이 32 넘어 놓임).
 
 ### 23.4 증거 (`work/verify/athn_oracle_temple/`, 커밋 안 함)
 `01_arena06_hourglass_16_a6` · `02_arena06_hourglass_red_2_a6` · `03_arena06_hourglass_0_white_a6` · `04_oracle_342_typing_c5` · `05_oracle_342_page1_c5` ·
-`06_oracle_342_page2_c5` · `07_oracle_by_exit_door_c5` · `08_statue_push_gap_before_fix` · `09_statue_push_at_pedestal_p3` · `10_video_9336-9506_statue_push`.
+`06_oracle_342_page2_c5` · `07_oracle_by_exit_door_c5` · `08_statue_push_gap_before_fix` · `09_statue_push_at_pedestal_p3` · `10_video_9336-9506_statue_push` ·
+`11_video_9054-9098_06b_statue` · `12_06b_statue_to_hole_h8` · `13_06b_statue_stuck_in_niche_before_fix`.
 
 ## 24. 안개를 파티클 뒤에 — 원작 안개 노드 순서 (층 2 칸 5) 와 장면 깊이 안개 (2026-10-24)
 
