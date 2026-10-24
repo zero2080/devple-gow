@@ -11,7 +11,7 @@ import java.util.Map;
  * 00 f32 push_float   01 s32 push_int    0E u16 push_string(코드 영역 기준 오프셋)
  * 02..05 u16 get_{float,int,bool,string} scope:id   06..09 u16 set_{...} scope:id   (u16 = scope&lt;&lt;12 | id)
  * 0A..0D u16 call → {float,int,bool,string}  scope:func
- * 0F s16 jump_if (pop != 0)   10 s16 jump  (둘 다 다음 명령 기준 상대)
+ * 0F s16 jump_ifnot (pop == 0 이면 점프, 0x16F570)   10 s16 jump  (둘 다 다음 명령 기준 상대)
  * 11 true  12 false  13/14 neg i/f  15..1C add/sub/mul/div (i,f 교대)  1D mod
  * 1E..23 형변환  24 not  25 and  26 or  27 xor
  * 28..37 비교 (lt, le, gt, ge, eq) × (int, float, str|bool)   38 return(pop)   3A.. exit
@@ -107,7 +107,7 @@ public record EscOp(int offset, int code, String text) {
 					case 0x0F, 0x10 -> {
 						int off = code.getShort(p);
 						p += 2;
-						t = (op == 0x0F ? "jump_if " : "jump ") + String.format("@%04x", p + off);
+						t = (op == 0x0F ? "jump_ifnot " : "jump ") + String.format("@%04x", p + off);
 					}
 					default -> t = simple(op);
 				}
