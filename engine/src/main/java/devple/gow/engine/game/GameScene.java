@@ -3406,6 +3406,9 @@ public final class GameScene implements Scene {
 				gi = autoPad;
 			}
 			grab.update(gi, target, te != null ? te.kind().tweaks() : null, dt);
+			if (grab.active()) {
+				grabWalls();
+			}
 			// HP 32767 소품 (ATHN01F 쌍둥이) 은 미니게임 성공 (853 MAIXPTBEDMOUNTWIN → 875) 뒤에도 그대로 — 처형이 아니다
 			// 예전엔 끝나는 틱의 target (가장 가까운 적) 을 죽였다: ATHN02D 여왕 머리 뜯기 (보스 → claimsGrab, 이 경로는 여왕 사망 뒤 영웅 Idle 동안
 			// 결합이 남아 있음) 가 끝나는 순간 막 스폰된 미노타우로스 (68.88 초) 가 HP 0 → 0.5 초 뒤 MinoDestruction1 + 7 초 Respawn 이 한 번 더 돌았다
@@ -4200,8 +4203,32 @@ public final class GameScene implements Scene {
 		return !any;
 	}
 
+	/**
+	 * 결합 (GrabSync) 중 영웅 변위 (루트 모션·끌기) 의 벽 처리. 원작 생물 갱신 0x1EBD78 은 루트 모션 D 의 이동을 변위 (sp+0x3C0) 로 내비게이션 이동
+	 * (지상 0x1EB3D8 / 0x1EAEC8 → 벽 0x1E2100 · 이동 선분 0x1EAB78, 자유 이동 0x1ECD60 → 0x1EA200) 에 넘기므로 결합 중에도 벽을 지나지 않는다
+	 * (37 §11.4) [확실: 경로]. 엔진은 결합 중 장면 물리를 건너뛰어 ({@code GrabSync.align} 이 위치를 정함) 벽 가에서 잡은 해골병을 끄는 동안 영웅이
+	 * 벽 너머 허공으로 나가 떨어졌다 (ATHN05D 엘리베이터 방 서쪽 벽 x −1132, 43 §21.2-7). 수평만 고친다 (수직 = 결합 하한, 사이클롭스 올라탐 그대로).
+	 */
+	private void grabWalls() {
+		grabWalls(hero.ctl.position, hero.ctl.prevPosition, heroBodyExclude(), col, otherCol, nav, nav.navWorld);
+	}
+
+	/** {@link #grabWalls()} 본체: 몸 구 밀어내기 → 이동 선분 (틱 시작 → 지금) 막힘이면 그 앞에서 다시 (최대 3 회, 장면 물리와 같은 순서). */
+	static void grabWalls(Vector3f p, Vector3f prev, long ex, LevelCollision col, LevelCollision otherCol, SceneNav nav,
+			devple.gow.engine.nav.NavWorld nw) {
+		pushWalls(p, ex, col, otherCol, nav);
+		long mx = devple.gow.engine.nav.NavWorld.moveExclude(ex);
+		for (int i = 0; i < 3 && nw.blockMove(prev, p, devple.gow.engine.nav.HeroNavigator.FOOT, mx); i++) {
+			pushWalls(p, ex, col, otherCol, nav);
+		}
+	}
+
 	/** 영웅 몸 구 벽 밀어내기 (두 슬롯 정적 시트 + 문·창살·회전방 CDV): 발 위치 p 의 x·z 를 고친다. */
 	private void pushWalls(Vector3f p, long ex) {
+		pushWalls(p, ex, col, otherCol, nav);
+	}
+
+	static void pushWalls(Vector3f p, long ex, LevelCollision col, LevelCollision otherCol, SceneNav nav) {
 		Vector3f c = new Vector3f(p.x, p.y + 20, p.z);
 		boolean pushed = col.collideSphere(c, 12, ex);
 		if (otherCol != null) {

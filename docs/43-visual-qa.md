@@ -1340,7 +1340,7 @@ a06Mp04 (무덤 파는 노인) → graveDig AOXDI (템플릿 309) · R2 대화 3
 | 8366–8378 | 둥근 발판에 서면 내려감 → 어둠 → Warp | e3 34.5 초 PlayerEntryAtTop → 36.5 MarkerEntry → 39.9 beginFade (FadeOut 0.6) → 41.5 Warp (`01` `02`) — 고치기 전 발판에 서도 그대로 (`before_elevator_stands_on_plate_e1`) (§21.2-1·2) |
 | 8378–8390 | 04A 도착 밝은 홀 → 기둥 복도 → 동영상 | o2 0–9 초 (`03`), 9.1 FadeOut → 10.1 PlayMovie |
 | 8390–8412 | a04Mp01 (오라클 · 하피 · "크레토스! 도착했군요!") | o1 10 초부터 (`--skip-movies` 면 10.27 MovieFinish → FadeIn 2 · SaveGameZone2) |
-| 8416–8420 | 들보 위 구 장식 옆 "아테네 도시 광장" | o2 16.38 초 ZoneReportGroup2 → 구역 4 (`04`) — 같은 자리 |
+| 8416–8420 | 들보 위 구 장식 옆 "아테네 도시 광장" | o2 16.38 초 ZoneReportGroup2 → 구역 4 (`04`) — 같은 자리. 69cfd3e (pelvis 접촉점 · 선분 질의) 위 o3: 16.27 초, 같은 자리 |
 | 8426–8458 | 사다리로 광장 · 분수 옆 달림 · 다시 들보 — 산 시민 없음, 시신 (SuicideBody, ShesDeadJim) | 처음부터 시작한 04A 는 SectionZone 에서 시민 8 명 (o2 24 초) → 레벨 기억 (§21.2-5) |
 | 8462–8470 | 들보 끝 세이브 빛기둥 (SaveGameZone2) → Ω · 메모리카드 | SaveGameZone2 (1690, 137, 705) 생성 (o2 10.27 초) |
 | 8476–8584 | 횃불 절벽 계단 · 절벽 길 해골 (R_SKC 22) 싸움 ≈ 100 초 | d1 10–115 초 (봇, 보통, 115 초 사망) (`09`) |
@@ -1392,10 +1392,17 @@ a06Mp04 (무덤 파는 노인) → graveDig AOXDI (템플릿 309) · R2 대화 3
    [확실: 구조]): 다시 만든 상자는 연 채 (`SceneNav.addChest` → done, `ChestProps.spawn` → chestOpen 끝 자세, 아이템 안 줌), 레벨 기억 (`Memory.opened`) · 세이브
    (`levelOpened.*`) 에도. 예전엔 05C ↔ 05D 이음을 오갈 때마다 연 상자가 닫힌 채 다시 나와 아이템을 또 줄 수 있었다. c2: 05C 에서 깃털 상자 열기 (16.4 초) → 05D 이음
    (24.6) → 05C 이음 (59.0) → 그 상자에 R2 3 초 — 잡히지 않고 열린 채 (`14`), 아이템 1 번.
+7. **잡은 해골병을 끄는 동안 영웅이 벽을 지나 떨어졌다 — 결합 중 벽 처리.** rebase 뒤 엘리베이터 재확인 (e4/e5, 보통) 에서 엘리베이터 방 둘째 무리와 싸우던 봇이
+   서쪽 벽 감실 (x −1148..−1132, z 1216..1245) 에서 R_SKD 를 잡아 끄는 결합 (32.4–34.6 초) 동안 감실 북쪽 벽을 지나 (−1146, 1258) 바닥 없는 바깥으로 나가
+   35.78 초에 떨어졌다. 원작 생물 갱신 0x1EBD78 은 루트 모션 D 의 이동을 변위 (sp+0x3C0) 로 내비게이션 이동 (지상 0x1EB3D8 / 0x1EAEC8 → 벽 0x1E2100 · 이동
+   선분 0x1EAB78) 에 넘긴다 (37 §11.4) [확실: 경로] — 엔진은 결합 중 장면 물리를 건너뛰었다 → `GameScene.grabWalls` (몸 구 밀어내기 + 선분, 수평만).
+   같은 실행 (e6): 감실 안에 남아 (z ≤ 1234) 무리를 끝내고 40.47 초 PlayerEntryAtTop → 45.87 beginFade → 47.47 DownVol2 Warp (e3 와 같은 간격 +5.4 / +7.0 —
+   pelvis 접촉점 (68b8f16) 뒤에도 발판 판정 그대로). 끌리는 적의 벽 처리는 그대로 [근사] (05D 복도에서 적이 05C 웅덩이로 떨어지는 것과 같은 뿌리일 수 있다).
 
 ### 21.3 남은 것 · 미확인
 - 8210–8224: 원작 체크포인트 재시작은 메모리 세이브 (0x22D418) 를 되읽어 레벨을 다시 올린다 (11 §5.3) — 상자 (깃털) 가 닫힌 채로 돌아가 다시 줍는다. 엔진은 영웅만
-  체크포인트로 옮겨 세계가 그대로라 깃털 카드가 다시 나오지 않는다 [미구현: 스냅숏 되읽기].
+  체크포인트로 옮겨 세계가 그대로라 깃털 카드가 다시 나오지 않는다 [미구현: 스냅숏 되읽기]. (69cfd3e 의 FailedScreen 다시 하기는 레벨을 처음 상태로 새로 읽지만
+  보통 사망 (DeadMenu) 은 여전히 자리만 옮긴다.) 연 상자 기억 (§21.2-6) 은 이 재시작에 끼어들지 않는다 (세계를 다시 만들지 않으므로).
 - 05D 복도에서 봇의 공격에 적이 서쪽 벽 (x −1000) 너머 · 항아리 방 아래로 밀려 ATHN05C 웅덩이 바닥 (y 453) 에 떨어진 적이 있다 (r2 105–155 초, c2 55–110 초 —
   봇이 닿지 않는 그 적을 계속 노림) [미해결: 적 넉백 벽 충돌].
 - 항아리 방 → 횃불 복도 (8110–8120) 걷기 이음에서 엔진은 0.4 초 어두워졌다 밝아진다 (t1 15.8–16.7 초, `SceneManager` 전환 페이드) — 원작은 끊김 없음. 이미 적힌
@@ -1404,7 +1411,7 @@ a06Mp04 (무덤 파는 노인) → graveDig AOXDI (템플릿 309) · R2 대화 3
 - 동영상 a04Mp01 · a06Mp01 · a06Mp04 는 원작 PSS 그대로라 대조하지 않았다 (`--skip-movies` 와 o1 재생으로 앞뒤 스크립트만).
 - 06A 구역 제목: 하네스 도착점이 ZoneReportGroup 볼륨 안이라 처음엔 뜨지 않는다 (이음 도착은 "이미 안", 원작은 04D 계단을 걸어 들어오며 뜬다) [엔진 전용].
 - 하피 마당 처치 시간은 봇 (183 초) 과 영상 (≈ 100 초, 메두사의 시선 사용) 이 달라 대조하지 않았다. 무덤 파는 노인 (AOXDI: Ignore Hits · Target Weight 0 ·
-  결정 트리 없음) 을 봇이 때린다 [엔진 전용: 봇이 NPC 를 적 목록에서 고름]. 노인 R2 대화 (335/336, camGraveD) 는 영상에 없다.
+  결정 트리 없음) 을 봇이 때렸다 [엔진 전용] → 69cfd3e 뒤 봇은 Target Weight 0 NPC 를 고르지 않는다. 노인 R2 대화 (335/336, camGraveD) 는 영상에 없다.
 - 레벨 기억이 센서의 한 번 발동 기록을 담지 않아 재방문 광장에서 북쪽 계단 DMC TriggerVol0 에 다시 들어가면 키클롭스 결투가 다시 시작된다 (LevelData0 이 3 에서
   늘어 결계가 안 열림) — 원작이 같은지 미확인 (영상 경로는 그 볼륨에 가지 않는다) [미확인].
 
@@ -1413,14 +1420,14 @@ a06Mp04 (무덤 파는 노인) → graveDig AOXDI (템플릿 309) · R2 대화 3
 `WaterSimTest` (4: 격자 모서리 = 소유 위치 (06A 연못 축 1280 · 05D 물 방), 쌍선형 충격 → −0.99·s, 머티리얼 대소문자, 60 초 최대 &lt; 12),
 `LevelMemoryTest` (3: 광장 재방문 LevelData0 = 3 · Init 건너뜀 · 상자 되살림 · 모드 5 시신 · SectionZone1 시민 없음 (처음이면 있음), 판도라 입구 표 비우기,
 세이브 왕복 + 연 상자), `NeighbourChestTest` (2: 항아리 방 상자 = 05D Creator (CSM 010/011, 아이템 10/11, 05C TWK 에 CSM 011 없음) · 상자 앞 바닥은 05C 에만,
-연 상자가 이음 recreate · 레벨 기억으로 다시 만들어도 끝난 채).
+연 상자가 이음 recreate · 레벨 기억으로 다시 만들어도 끝난 채), `GrabWallTest` (1: 감실 끌기 1 초 — 벽 처리 없이는 바닥 없는 바깥, 있으면 방 안).
 
 ### 21.5 증거 (`work/verify/athn06_oracle_approach/`, 커밋 안 함)
 `01_elevator_descending_e3_36s` · `02_elevator_fade_e3_40.5s` · `03_athn04a_arrival_hall_o2_6s` · `04_zone_title_plaza_beam_o2_16.5s` (영상 8416 과 같은 자리) ·
 `05_water_06a_pool_w4_3s` · `06_water_05d_dark_w3_1s` · `07_athn06a_terrace_chests_h1_0s` · `08_athn06a_title_h1_24s` · `09_athn04d_cliff_fight_d1_10s` ·
 `10_gravedigger_npc_h1_242s` · `11_corridor_jump_camera_j1_1.6s` · `12_jar_room_feather_chest_open_c1_16.8s` · `13_feather_card_c1_17.2s` ·
 `14_chest_stays_open_after_seams_c2_65s`, 고치기 전 `before_elevator_stands_on_plate_e1_50s` · `before_water_spikes_06a_h1_57s` · `before_water_pale_05d_w2_6s` ·
-`before_jar_room_no_chests_r2_12.5s` (횃불 둘 옆이 비었다).
+`before_jar_room_no_chests_r2_12.5s` (횃불 둘 옆이 비었다) · `before_grab_through_wall_e5_33.8s` (벽에 반쯤 묻힌 크레토스) · 고친 뒤 `15_grab_stays_in_room_e6_34s`.
 
 ## 22. QA vs PS2 영상 — ATHN05B 발리스타 복도 · ATHN05BB 감옥 홀 · 제우스 석상 (영상 7351–8066 초, 2026-10-24)
 

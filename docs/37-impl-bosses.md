@@ -610,6 +610,9 @@ SCR: BMITurnOffVents(b) = 배출구 수 −b, 누적 0 (204/207/209/222/227 — 
     엔진은 두 쪽 갱신이 끝난 뒤 끌기를 알게 되므로 그 틱의 루트 모션을 되돌린다 (`HeroController.undoRoot`, `EnemyFighter.undoRootMotion` —
     `BossSync`·`GrabSync`·결합 없는 끌기 모두). 예전 `BossSync` 의 "한 틱 늦음" [근사] 해소.
   - 동기 중 영웅 수직 하한 = 동기 시작 높이 [근사: 원작은 지상 이동이 바닥에 붙임 — BMI 실패 454 는 zero 가 바닥 아래로].
+  - 동기 (`GrabSync`) 중 영웅 수평 변위도 벽 처리: 원작은 위 변위가 내비게이션 이동 (벽 0x1E2100 · 이동 선분 0x1EAB78) 을 거친다 → `GameScene.grabWalls`
+    (몸 구 밀어내기 + 틱 시작 → 지금 선분, 장면 물리와 같은 순서). 예전엔 결합 중 물리를 건너뛰어 벽 가에서 해골병을 끄는 동안 영웅이 벽을 지나
+    바닥 없는 바깥으로 떨어졌다 (ATHN05D 엘리베이터 방, 43 §21.2-7, `GrabWallTest`). 끌리는 적 쪽 벽 처리는 그대로 [근사].
 - 대체 규칙 삭제: `BossSync(IntPredicate)` (Align 없음), `GrabSync` 의 "적 = 영웅 위치·방향" 삭제. 결과 (헤드리스, 두 synchJoint 월드 거리 = 설계 관계와의 차이):
   메두사 MAIMEWGRAB 4.0 (영웅이 루트 회전으로 0 → 150° 돌고 synch 고정), 사이클롭스 MAICYWMini02 5.1 (F1 실패 분기 13), 하피 WingRip 11,
   미노타우로스 maiMin01 36 (적중 거리 40 에서 시작 — 설계 관계는 정면 70.4) → §11.5 (적중 거리 해독: 멀리서 누르면 70.7 에서 잡혀 0.5).
