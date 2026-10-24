@@ -1030,7 +1030,7 @@ public final class Platforms {
 				int[] pm = hh.planeMaterials();
 				int mat = enter < pm.length ? pm[enter] : -1;
 				int fx = mat >= 0 && mat < bd.hull.materialFx.length ? bd.hull.materialFx[mat] : 0;
-				best = new NavWorld.Contact(t0, new Vector3f(from).lerp(to, t0), nw, fx, bd.owner);
+				best = new NavWorld.Contact(t0, new Vector3f(from).lerp(to, t0), nw, fx, bd.owner, bd.planeAttrs[h][enter]);
 			}
 		}
 		return best;

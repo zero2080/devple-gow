@@ -248,6 +248,9 @@ public final class GrabSync {
 		} else if (heroPulls) {
 			float[] y = {partner.yaw};
 			pull.step(SyncPull.target(hero.position, hero.yaw, heroAnim, 1f, partner.animator(), partner.scale), partner.pos, y);
+			// 0x204BF0 의 끌기는 위치를 바로 쓰지 않고 끌리는 쪽 combatant +0x00 (변위) 로 — 그 생물의 이동 단계 (자유 이동 0x1EA200: 몸 질의 · 이동 선분) 를
+			// 거쳐 벽에 막힌다 (37 §11.6) [확실: 경로]. 엔진은 위치를 정한 뒤 같은 벽 처리 [근사: 이벤트 19 끌기의 +0x10 되먹임 (끄는 쪽이 깎인 만큼 따라옴) 없음]
+			partner.settleMotion();
 			partner.yaw = y[0];
 			partner.prevPos.set(partner.pos);
 			pulling = 2;

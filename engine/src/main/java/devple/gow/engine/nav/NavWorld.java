@@ -208,9 +208,13 @@ public final class NavWorld {
 	}
 
 	/**
-	 * 선분 접촉 (원작 0x11E190 접촉 기록 0x2C8F10): t = 선분 비율, 점, 면 법선, 면 재질 SheetFX, 맞은 개체 (정적 시트 = null, CDV GO = 소유 GO 이름).
+	 * 선분 접촉 (원작 0x11E190 접촉 기록 0x2C8F10): t = 선분 비율, 점, 면 법선, 면 재질 SheetFX, 맞은 개체 (정적 시트 = null, CDV GO = 소유 GO 이름),
+	 * 면 표면 속성 (0x2C8F3C 의 bitfield0/1 — 정적 = 삼각형, CDV = 들어간 평면 재질).
 	 */
-	public record Contact(float t, Vector3f point, Vector3f normal, int sheetFx, String owner) {
+	public record Contact(float t, Vector3f point, Vector3f normal, int sheetFx, String owner, long attrs) {
+		public Contact(float t, Vector3f point, Vector3f normal, int sheetFx, String owner) {
+			this(t, point, normal, sheetFx, owner, 0L);
+		}
 	}
 
 	/**
@@ -223,12 +227,45 @@ public final class NavWorld {
 		}
 		float len = from.distance(to);
 		int fx = h.tri().info() != null ? h.tri().info().sheetFx() : 0;
-		return new Contact(len > 0 ? h.distance() / len : 0, h.point(), new Vector3f(h.tri().n()), fx, null);
+		return new Contact(len > 0 ? h.distance() / len : 0, h.point(), new Vector3f(h.tri().n()), fx, null, h.tri().attrs());
 	}
 
 	/** CDV GO 몸체 (이 레벨 + 다른 슬롯 레벨 발판·문, 충돌 켜진 것) 의 가장 가까운 선분 접촉. */
 	public Contact bodyContact(Vector3f from, Vector3f to, long exclude) {
 		return nearer(platforms.segment(from, to, exclude), neighbour.segment(from, to, exclude));
+	}
+
+	/** 몸 질의 선분의 벽 조건: 법선 · 위 &lt; 0.5 이거나 Slide 면 (거름 콜백 0x1E1EC0 — 그 밖의 바닥 면은 0xB 를 돌려 건너뜀) [확실: 디스어셈블]. */
+	public static final float BODY_WALL_NY = 0.5f;
+
+	/**
+	 * 몸 질의 0x1E2100 의 선분 하나 (0x1E1F28 → 0x11E190 가장 가까운 것, 거름 콜백 0x1E1EC0) [확실: 디스어셈블]: 한쪽 면 (시트 면 검사 0x16BDE0) 이고
+	 * 벽 ({@link #BODY_WALL_NY}) 이나 Slide 면만 — 바닥·비탈은 지나간다. 대상 = 정적 시트 + CDV 몸 [근사: CDV 는 가장 가까운 평면 하나만 보고 벽이 아니면 버림].
+	 */
+	public Contact bodySegment(Vector3f from, Vector3f to, long exclude) {
+		Vector3f d = new Vector3f(to).sub(from);
+		float len = d.length();
+		if (len < 1e-5f) {
+			return null;
+		}
+		LevelCollision.Hit best = null;
+		for (LevelCollision c : statics) {
+			LevelCollision.Hit h = c.raycast(from, d, len, t -> (t.attrs() & exclude) == 0 && t.n().dot(d) < 0
+					&& (t.n().y < BODY_WALL_NY || (t.attrs() & SurfaceAttr.SLIDE.bit()) != 0));
+			if (h != null && (best == null || h.distance() < best.distance())) {
+				best = h;
+			}
+		}
+		Contact s = null;
+		if (best != null) {
+			int fx = best.tri().info() != null ? best.tri().info().sheetFx() : 0;
+			s = new Contact(best.distance() / len, best.point(), new Vector3f(best.tri().n()), fx, null, best.tri().attrs());
+		}
+		Contact b = bodyContact(from, to, exclude);
+		if (b != null && b.normal().y >= BODY_WALL_NY && (b.attrs() & SurfaceAttr.SLIDE.bit()) == 0) {
+			b = null;
+		}
+		return nearer(s, b);
 	}
 
 	/** 한쪽 면 선분 질의 (정적 시트, 시작점이 면 앞인 면만 — 원작 0x16BDE0) [확실]: 처음 만나는 면, 없으면 null. */
@@ -259,12 +296,20 @@ public final class NavWorld {
 		}
 		float len = from.distance(to);
 		int fx = best.tri().info() != null ? best.tri().info().sheetFx() : 0;
-		return new Contact(len > 0 ? best.distance() / len : 0, best.point(), new Vector3f(best.tri().n()), fx, null);
+		return new Contact(len > 0 ? best.distance() / len : 0, best.point(), new Vector3f(best.tri().n()), fx, null, best.tri().attrs());
 	}
 
 	/** 정적 시트 + CDV GO 몸체 중 가장 가까운 선분 접촉 (원작 0x11E190 모드 2). */
 	public Contact contact(Vector3f from, Vector3f to, long exclude) {
 		return nearer(staticContact(from, to, exclude), bodyContact(from, to, exclude));
+	}
+
+	/**
+	 * {@link #contact} 의 한쪽 면 판: 정적 시트는 시작점이 면 앞일 때만 ({@link #frontContact}, 원작 시트 면 검사 0x16BDE0), CDV 몸은 들어가는 평면 —
+	 * 원작 0x11E190 그대로. 평균대 단계·붙잡기 (0x1E5A70 · 0x1BFEA8) 가 쓴다 (울타리 뒷면을 잡지 않게 — ARENA06 둘레 울타리는 안쪽 면만 있다).
+	 */
+	public Contact frontContactAll(Vector3f from, Vector3f to, long exclude) {
+		return nearer(frontContact(from, to, exclude), bodyContact(from, to, exclude));
 	}
 
 	public static Contact nearer(Contact a, Contact b) {

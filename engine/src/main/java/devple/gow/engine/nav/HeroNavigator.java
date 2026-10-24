@@ -120,6 +120,21 @@ public final class HeroNavigator {
 	public static final int EVENT_ROPE_GRAB = 0x41B;
 	/** 좁은 길 지상 속도 배율 Sold+0x230 = 1 (0x1EAFB0) [확실: 값 / 추정: +0x2D8 비트 4 = 좁은 길]. */
 	public static final float BALANCE_SPEED = K.get(NavTuning.NARROW_SCALE);
+	/** 좁은 바닥 질의 (0x1E5A70) 선분 거름 0x30042 = Water · Death · AIBlock · ClimbGuide [확실: 0x1E5BEC]. NoPlayerCollision 은 거르지 않는다. */
+	public static final long NARROW_PROBE_EXCLUDE = SurfaceAttr.fromRecord(0x30042, 0, 0);
+	/** 좁은 바닥 질의 바닥 조건 법선 · 위 &gt; 0.1 (0x1E5C84) [확실]. */
+	static final float NARROW_FLOOR_NY = 0.1f;
+	/** 좁은 바닥 질의 최소 깊이 3.2 (d = max(이동, 3.2), 0x1E5AE0) [확실]. */
+	public static final float NARROW_REACH = 3.2f;
+	/** 평균대 붙잡기 선분: 옛 발 − 1.6 (내비 − (바닥 6.4 + 1.6), 0x1BFF60 – 0x1BFF74) 에서 수평 16 (0x1BFF94) [확실]. */
+	public static final float CATCH_DROP = 1.6f, CATCH_REACH = 16f;
+	/** 평균대 매달림 시간 Sold+0x22C 1 초 (0x1C7678 – 0x1C76F4) [확실]. */
+	public static final float BALANCE_HANG_TIME = K.get(NavTuning.BALANCE_HANG);
+	/**
+	 * 평균대 매달림 올라서기 끝 자리 (매달린 자리 → 벽 쪽): R_HERO0 balanceBeamPullUp/PullUp2 zeroJoint z 9.3 → −3.8 = 13.1,
+	 * wallPullup 9.1 → −11.5 = 20.6 [확실: 애니 데이터] (원작은 애니 구동 +0x2D8 0x800000 으로 루트 이동).
+	 */
+	public static final float BALANCE_PULLUP_FORWARD = 13.1f, WALL_PULLUP_FORWARD = 20.6f;
 	/** 짚라인: 목표 Sold+0x160 20 → 320 으로 가속 +0x164 10 → 160 (0x1C6134, 기울기 무관), 끝 0.25 m 앞에서 속도 0 으로 놓음 (0x1C6B1C) [확실: 속도 / 추정: 끝 처리]. */
 	public static final float ZIP_SPEED = K.units(NavTuning.ZIP_SPEED), ZIP_ACCEL = K.units(NavTuning.ZIP_ACCEL);
 	/** 중력 /GlobGame/ "Gravity" 50 → 800 (0x1EBC0C), 최대 낙하 Sold+0xDC 50 → 800 (0x1EBC4C) [확실]. */
@@ -218,6 +233,14 @@ public final class HeroNavigator {
 	/** 매달리기 타이머 (+0x2A4) 와 도는 중 (+0x2D8 0x400). */
 	private float hangTimer = Float.MAX_VALUE;
 	private boolean hangTiming;
+	/**
+	 * 평균대: 좁은 바닥 상태 (+0x174 0x80000 | 0x2000, 0x1BFA70), 마지막 좁은 바닥 질의 비트 (0x2C8BD8) · 바닥 면 (+0x234),
+	 * 평균대 매달림 (+0x2D8 0x40) · 매달린 턱 윗면, 붙잡을 때 면 법선 · 오른쪽 &gt; 0 (+0x2D8 0x8000000 → 올라서기 R).
+	 */
+	private boolean narrowGround, narrowHang, catchRight;
+	private int narrowFlags;
+	private long narrowSurface;
+	private LevelCollision.Tri hangTop;
 	/** 지난 틱 발 위치 (턱 판정의 이번 프레임 이동·하강 판정 = 원작 0x1E3A80 a2 이전 위치). */
 	private final Vector3f lastFeet = new Vector3f();
 	private Vector3f prevFeet;
@@ -304,6 +327,8 @@ public final class HeroNavigator {
 		item = null;
 		charging = false;
 		hasLast = false;
+		narrowHang = false;
+		narrowGround = false;
 		cooldown = 0.3f;
 	}
 
@@ -627,8 +652,8 @@ public final class HeroNavigator {
 	record WallProbe(Vector3f feet, Vector3f n, LevelCollision.Tri tri) {
 	}
 
-	/** 턱 판정 결과: 턱 높이·턱 점, 매달릴 발 위치, 벽 수평 법선, 턱 면 (+0x234 → WallHangTimer). */
-	record Ledge(float y, Vector3f point, Vector3f feet, Vector3f n, LevelCollision.Tri top) {
+	/** 턱 판정 결과: 턱 높이·턱 점, 매달릴 발 위치, 벽 수평 법선, 턱 면 (+0x234 → WallHangTimer), 벽 면 (+0x238 → 매달림 애니 0x1C75F8). */
+	record Ledge(float y, Vector3f point, Vector3f feet, Vector3f n, LevelCollision.Tri top, LevelCollision.Tri wall) {
 	}
 
 	/** 붙는 벽 마스크: 원작 bitfield0 &amp; 0x1008001C (Narrow·Climbable·Ladder·BackPress·NarrowNoBB, 0x1E4988) [확실]. */
@@ -792,7 +817,7 @@ public final class HeroNavigator {
 		np.normalize();
 		Vector3f pos = new Vector3f(wall[0].point()).add(wall[1].point()).mul(0.5f).fma(WALL_OFF, np);
 		pos.y = ledge.y - HANG;
-		return new Ledge(ledge.y, ledge, pos, np, topTri);
+		return new Ledge(ledge.y, ledge, pos, np, topTri, wall[0].tri());
 	}
 
 	/** 좁은 턱 윗면: 첫 수직 선분 적중 면 bitfield0 &amp; 0x10000004 (Narrow·NarrowNoBB, 0x1E3ED4) [확실]. BackPress 는 들지 않는다. */
@@ -831,7 +856,7 @@ public final class HeroNavigator {
 			pos = new Vector3f(w.point()).fma(WALL_OFF, n);
 			pos.y = ledge.y - HANG;
 		}
-		return new Ledge(ledge.y, ledge, pos, n, top);
+		return new Ledge(ledge.y, ledge, pos, n, top, w.tri());
 	}
 
 	/**
@@ -1212,11 +1237,22 @@ public final class HeroNavigator {
 	// ---- 턱 매달리기 ----
 
 	/**
-	 * 턱 매달리기 진입 (원작 0x1C75F8, +0x174 0x10): 애니 0xD ANIWallHangCatch, 타이머 = 턱 면 WallHangTimer (+0x234 면, 0 이면 무한).
-	 * 타이머가 이미 돌고 있으면 (+0x2D8 0x400, 남은 시간 &gt; 0) 이어 간다 — 지상·벽 오르기·물에 닿아야 초기화 (0x1C78A0) [확실].
+	 * 턱 매달리기 진입 (원작 0x1C75F8, +0x174 = (… &amp; ~0x7FF) | 0x10, +0x164 = Sold+0x104) [확실: 디스어셈블].
+	 * <pre>
+	 * 벽 면 (+0x238) 이 Climbable·Ladder (bitfield0 0x18) 가 아니고 턱 윗면 (+0x234) 이 Narrow·NarrowNoBB (0x10000004) 면 <b>평균대 매달림</b> (+0x2D8 0x40):
+	 *   애니 = 윗면 Narrow (0x4) 면 0x30 ANIBalanceCatch ("balancebeamcatch" — 한 손으로 매달림) 아니면 0x33 ANIWallCatch,
+	 *   시간 = Sold+0x22C (크라토스 1 초, 0x1C7678 – 0x1C76F4) — 다 쓰면 떨어진다 (0x1C7B04 → 0x1E9030 모드 2),
+	 *   좌우 이동 없음 (0x1C89D4 → 0x1C8DF0), 올라서기는 스틱 조건 없이 (0x1E9EC0, {@link #pullUpNarrow}).
+	 * 그 밖: 공중 (0x4C) 이면 0xD ANIWallHangCatch, 시간 = 턱 면 WallHangTimer (+0x234 면, 0 이면 무한).
+	 * 타이머가 이미 돌고 있으면 (+0x2D8 0x400, 남은 시간 &gt; 0) 이어 간다 — 지상·벽 오르기·물에 닿아야 초기화 (0x1C78A0).
+	 * </pre>
 	 */
 	private void enterHang(Ledge l) {
-		float limit = l.top() != null && l.top().info() != null ? l.top().info().wallHangTimer() : 0;
+		LevelCollision.Tri wall = l.wall();
+		narrowHang = l.top() != null && narrowLedge(l.top())
+				&& !(wall != null && (wall.has(SurfaceAttr.CLIMBABLE) || wall.has(SurfaceAttr.LADDER)));
+		hangTop = l.top();
+		float limit = narrowHang ? BALANCE_HANG_TIME : l.top() != null && l.top().info() != null ? l.top().info().wallHangTimer() : 0;
 		if (limit == 0 || !hangTiming || hangTimer == 0) {
 			hangTiming = true;
 			hangTimer = limit == 0 ? Float.MAX_VALUE : limit;
@@ -1230,7 +1266,20 @@ public final class HeroNavigator {
 		body.setVy(0);
 		body.setGrounded(false);
 		body.launch().zero();
-		body.play(anims.get("ANIWallHangCatch"), true);
+		body.play(anims.get(hangCatchAnim()), true);
+	}
+
+	/** 매달림 잡기 애니 (0x1C75F8): 평균대 매달림이면 Narrow 윗면 0x30 ANIBalanceCatch / NarrowNoBB 0x33 ANIWallCatch, 그 밖 0xD ANIWallHangCatch. */
+	private String hangCatchAnim() {
+		if (!narrowHang) {
+			return "ANIWallHangCatch";
+		}
+		return hangTop != null && hangTop.has(SurfaceAttr.NARROW) ? "ANIBalanceCatch" : "ANIWallCatch";
+	}
+
+	/** 지금 평균대 매달림인지 (+0x2D8 0x40 — 턱 윗면 Narrow·NarrowNoBB, 0x1C75F8). */
+	public boolean narrowHang() {
+		return state == NavState.LEDGE_HANG && narrowHang;
 	}
 
 	/** 매달리기 타이머 초기화 (+0x2A4 = FLT_MAX, +0x2D8 0x400 끔): 지상·+0x174 2·물 위 (0x80)·벽 오르기 (0x20) (0x1C78A0) [확실]. */
@@ -1250,22 +1299,35 @@ public final class HeroNavigator {
 		if (hangTimer != Float.MAX_VALUE) {
 			hangTimer = Math.max(0, hangTimer - dt);
 			if (hangTimer == 0) {
+				narrowHang = false;
 				leave(new Vector3f(), 0, "ANIFall");
 				return;
 			}
 		}
 		float sx = in.leftX(), sy = in.leftY();
 		if (in.pressed(PadButton.CROSS) || sy > 0.6f) {
-			Vector3f over = new Vector3f(p).fma(-(WALL_OFF + 14), wallN);
-			NavWorld.Floor top = world.floor(over.x, ledgeY + 8, over.z, 24);
-			if (top != null) {
-				p.set(over.x, top.y(), over.z);
-				land("ANIWallPullup");
-				return;
+			if (narrowHang) {
+				if (pullUpNarrow(p)) {
+					return;
+				}
+			} else {
+				Vector3f over = new Vector3f(p).fma(-(WALL_OFF + 14), wallN);
+				NavWorld.Floor top = world.floor(over.x, ledgeY + 8, over.z, 24);
+				if (top != null) {
+					p.set(over.x, top.y(), over.z);
+					land("ANIWallPullup");
+					return;
+				}
 			}
 		}
 		if (in.pressed(PadButton.CIRCLE) || sy < -0.6f) {
+			narrowHang = false;
 			leave(new Vector3f(), 0, "ANIFall");
+			return;
+		}
+		if (narrowHang) {
+			// 0x1C89D4: 평균대 매달림은 좌우 이동이 없고, 매 프레임 0x1C75F8 이 같은 잡기 애니를 다시 고른다 (0x1C7B80 → 0x1C7C18)
+			body.play(anims.get(hangCatchAnim()), false);
 			return;
 		}
 		String a = anims.get("ANIWallHang");
@@ -1285,6 +1347,253 @@ public final class HeroNavigator {
 			a = anims.get("ANIWallHangCatch");
 		}
 		body.play(a, false);
+	}
+
+	/**
+	 * 평균대 매달림에서 올라서기 (× 처리 0x1E9B68 의 0x1E9EB0 – 0x1E9FB8): 지상 상태 (+0x174 0x1), 애니 = 윗면 NarrowNoBB (0x10000000) 면
+	 * 0x34 ANIWallPullup, 아니면 +0x2D8 0x8000000 (붙잡을 때 법선 · 오른쪽 &gt; 0) 이면 0x32 ANIBalancePullupR ("balancebeampullup2"),
+	 * 아니면 0x31 ANIBalancePullupL ("balancebeampullup"), 애니 구동 (+0x2D8 0x800000) [확실: 디스어셈블].
+	 * 엔진은 애니 루트 이동 대신 끝 자리에 둔다 (일반 턱 올라서기와 같은 방식) [근사]: 끝 자리 = 매달린 자리 (벽 + 9.6) 에서 벽 쪽으로
+	 * {@link #BALANCE_PULLUP_FORWARD} / {@link #WALL_PULLUP_FORWARD} 간 곳의 윗면 — 일반 턱의 벽 + 23.6 은 폭 8 들보 (ATHN06B) 너머라 바닥이 없다.
+	 */
+	private boolean pullUpNarrow(Vector3f p) {
+		boolean noBb = hangTop != null && hangTop.has(SurfaceAttr.NARROW_NO_BB);
+		Vector3f over = new Vector3f(p).fma(-(noBb ? WALL_PULLUP_FORWARD : BALANCE_PULLUP_FORWARD), wallN);
+		NavWorld.Floor top = world.floor(over.x, ledgeY + 8, over.z, 24);
+		if (top == null) {
+			return false;
+		}
+		narrowHang = false;
+		p.set(over.x, top.y(), over.z);
+		land(noBb ? "ANIWallPullup" : catchRight ? "ANIBalancePullupR" : "ANIBalancePullupL");
+		return true;
+	}
+
+	// ---- 좁은 바닥 (평균대) 단계 · 평균대 붙잡기 (원작 0x1BFA70 / 0x1BFBF0 / 0x1E5A70) ----
+
+	/** 좁은 바닥 단계 결과 ({@link #narrowStep}). */
+	public enum NarrowStep {
+		/** 다섯 선분 중 하나가 바닥을 찾음 — 발 높이를 그 바닥에 맞췄다. */
+		FLOOR,
+		/** 바닥 없음 — 떨어진다 (붙잡을 면도 없음). */
+		FALL,
+		/** 바닥 없음 → 방금 서 있던 들보 옆면을 붙잡아 매달렸다 ({@link NavState#LEDGE_HANG}). */
+		CAUGHT
+	}
+
+	/**
+	 * 좁은 바닥 상태 (원작 +0x174 0x80000 Narrow / 0x2000 NarrowNoBB, 0x1BFA70): 지상 단계 (0x1EA5F0) 끝에 능력 Balance (+0x2DC 0x2, 크라토스) 이면
+	 * 발밑 면 (+0x234) 으로 정한다 — 지상이고 bitfield0 &amp; 0x4 (Narrow) 면 0x80000|0x2000, 0x10000000 (NarrowNoBB) 면 0x2000, 지상이 아니면 끔 [확실].
+	 * 다음 프레임 지상 단계는 이 상태면 바닥 질의 0x1E3298 대신 {@link #narrowStep} (0x1BFBF0) 을 쓴다 (0x1EA838 – 0x1EA85C).
+	 *
+	 * @param grounded 이번 단계 뒤 지상인가
+	 * @param attrs    발밑 면의 표면 속성 (지상이 아니면 무시)
+	 */
+	public void groundSurface(boolean grounded, long attrs) {
+		narrowGround = grounded && (attrs & (SurfaceAttr.NARROW.bit() | SurfaceAttr.NARROW_NO_BB.bit())) != 0;
+		if (!narrowGround) {
+			narrowFlags = 0;
+		}
+	}
+
+	/** 다음 지상 단계가 좁은 바닥 단계 ({@link #narrowStep}) 인가 (+0x174 0x80000 | 0x2000). */
+	public boolean narrowGround() {
+		return narrowGround;
+	}
+
+	/** 마지막으로 바닥을 찾은 좁은 바닥 질의의 선분 비트 (0x2C8BD8: 1 가운데 · 2 오른앞 · 4 오른뒤 · 8 왼뒤 · 0x10 왼앞). */
+	public int narrowFlags() {
+		return narrowFlags;
+	}
+
+	/** 마지막 좁은 바닥 질의가 찾은 바닥 면의 표면 속성 (+0x234). */
+	public long narrowSurface() {
+		return narrowSurface;
+	}
+
+	/**
+	 * 좁은 바닥 단계 (원작 0x1BFBF0) [확실: 디스어셈블]: 0x1E5A70 다섯 선분 ({@link #narrowProbe}) 이 바닥을 찾으면 그 높이에 서고
+	 * (비트 → 0x2C8BD8), 못 찾으면 떨어지며 (0x1E9030 모드 2) 지난 비트 쪽 들보를 붙잡는다 ({@link #balanceCatch}).
+	 * 0x80000 (Narrow) 이면 가운데가 비었을 때 바깥으로 기우는 균형 동작 (+0x260.x, +0x2BC/+0x2C0 흔들림, 0x1BFC4C – 0x1BFE48) 도 하지만
+	 * 엔진 영웅 이동은 애니 이동량이라 넣지 않았다 [근사].
+	 *
+	 * @param prev 이번 이동 전 발 (원작 +0x110 − 6.4, 발판에 실린 이동 포함 — 0x1E6248 이 먼저 돈다)
+	 * @param feet 이번 이동 뒤 발 (바뀐다: FLOOR 면 바닥 높이, CAUGHT 면 매달린 자리)
+	 */
+	public NarrowStep narrowStep(Vector3f prev, Vector3f feet) {
+		int flags = narrowProbe(prev, feet);
+		if (flags != 0) {
+			narrowFlags = flags;
+			return NarrowStep.FLOOR;
+		}
+		if (balanceCatch(prev, feet)) {
+			return NarrowStep.CAUGHT;
+		}
+		narrowGround = false;
+		return NarrowStep.FALL;
+	}
+
+	/**
+	 * 좁은 바닥 질의 (원작 0x1E5A70) [확실: 디스어셈블].
+	 * <pre>
+	 * d = max(|새 − 옛|, 3.2) (내비 위치 = 발 + 6.4). 시작 = 새 + 위 × max(d − 6.4, 0), 끝 = 새 − 위 × (6.4 + d) (= 발 − d) 에서 수평으로
+	 *   가운데 · 오른쪽 4.8 + 앞 9.6 · 오른쪽 4.8 − 앞 9.6 · 왼쪽 4.8 − 앞 9.6 · 왼쪽 4.8 + 앞 9.6 (비트 1 · 2 · 4 · 8 · 0x10, 오른쪽 = +0x50 × 폭/4,
+	 *   앞 = −+0x70 × 깊이/2) 다섯 선분, 면 거름 0x30042 (Water·Death·AIBlock·ClimbGuide), 대상 = 바닥 질의와 같은 개체 (정적 시트 한쪽 면 + CDV 몸).
+	 * 맞은 면 법선 · 위 &gt; 0.1 이면 그 비트. 처음 맞은 것이 바닥 (+0x234 면 · +0x210 법선 · 발판 +0x240/+0x24C/+0x250), 내비 y = 적중 y + 6.4, 수직 속도 0.
+	 * </pre>
+	 * 평균대 (폭 8) 위를 걸으면 가운데만 맞고, 끝·옆으로 나가도 모서리 선분이 들보에 닿는 동안은 그 높이에 선다.
+	 *
+	 * @return 비트 (0 = 바닥 없음). 바닥이면 feet.y 를 그 높이로.
+	 */
+	int narrowProbe(Vector3f prev, Vector3f feet) {
+		float d = Math.max(prev != null ? feet.distance(prev) : 0, NARROW_REACH);
+		Vector3f f = forward(body.yaw());
+		Vector3f r = rightOf(f);
+		Vector3f start = new Vector3f(feet).add(0, FOOT + Math.max(d - FOOT, 0), 0);
+		int flags = 0;
+		for (int i = 0; i < 5; i++) {
+			float rs = i == 0 ? 0 : i <= 2 ? BODY_W / 4 : -BODY_W / 4;
+			float fs = i == 0 ? 0 : i == 1 || i == 4 ? BODY_W / 2 : -BODY_W / 2;
+			Vector3f end = new Vector3f(feet.x, feet.y - d, feet.z).fma(rs, r).fma(fs, f);
+			NavWorld.Contact c = world.frontContactAll(start, end, NARROW_PROBE_EXCLUDE);
+			if (c == null || c.normal().y <= NARROW_FLOOR_NY) {
+				continue;
+			}
+			if (flags == 0) {
+				feet.y = c.point().y;
+				narrowSurface = c.attrs();
+			}
+			flags |= 1 << i;
+		}
+		return flags;
+	}
+
+	/**
+	 * 몸 질의 0x1E2100 의 아래 단 (지상·공중 0x1EA5F0 → 플레이어 a3 = 1, 0x1E2498 – 0x1E2548) [확실: 디스어셈블]: 내비 위치 (발 + 6.4) 에서 몸 상자
+	 * (+0x120 = 폭 19.2 · 깊이 19.2) 모서리로 선분 — 앞 둘은 0x1E1FE8 (왼앞 · 오른앞 모서리 선분, 두 앞 모서리 사이 선분을 양쪽에서 쏴 맞은 점들의 가운데로
+	 * 선분), 이어 오른뒤 · 왼뒤. 선분 ({@link NavWorld#bodySegment}: 한쪽 면 벽·Slide 만) 이 맞으면 끝점이 그 면 위에 오도록 민다 (0x1E1F28:
+	 * c −= n · (n · (끝 − 충돌점))). 위 단 (발 + 35.2 의 왼앞 · 오른앞 · 뒤 가운데) 은 엔진 몸 구가 맡는다.
+	 * <p>엔진은 좁은 바닥 단계 앞에서만 부른다 [근사: 원작은 지상·공중 이동마다]: 엔진 몸 구 (발 + 20, 반지름 12) 는 발 + 8 보다 낮은 벽을 못 막는데,
+	 * 아레나 바닥 (NarrowNoBB 원판) 둘레 울타리는 바닥 위 8.6 이라 영웅이 원판 가장자리와 울타리 사이 틈 (폭 1 – 4.5) 에 들어가 다섯 선분이 비면
+	 * 떨어졌다 (순회 ARENA06 · 19 · 20 · 26 · 09). 원작은 이 선분이 울타리에서 9.6 떨어뜨려 틈에 들지 않는다. 밀기는 수평만 [근사].
+	 *
+	 * @param feet    발 (x, z 가 밀린다)
+	 * @param exclude 몸 질의 면 거름 (0x3309F4, {@link NavWorld#bodyExclude})
+	 * @return 반환 비트 (0x20 앞 · 4 오른뒤 · 8 왼뒤)
+	 */
+	public int narrowBody(Vector3f feet, long exclude) {
+		Vector3f f = forward(body.yaw());
+		Vector3f r = rightOf(f);
+		float w = BODY_W / 2, d = BODY_W / 2;
+		Vector3f c = new Vector3f(feet).add(0, FOOT, 0);
+		Vector3f fl = new Vector3f(f).mul(d).fma(-w, r), fr = new Vector3f(f).mul(d).fma(w, r);
+		Vector3f bl = new Vector3f(f).mul(-d).fma(-w, r), br = new Vector3f(f).mul(-d).fma(w, r);
+		int flags = 0;
+		boolean front = bodyRay(c, fl, exclude) | bodyRay(c, fr, exclude); // 0x1E1FE8
+		Vector3f pa = new Vector3f(c).add(fl), pb = new Vector3f(c).add(fr);
+		NavWorld.Contact h = world.bodySegment(pa, pb, exclude);
+		if (h != null) {
+			pa.set(h.point());
+		}
+		h = world.bodySegment(pb, pa, exclude);
+		if (h != null) {
+			pb.set(h.point());
+		}
+		front |= bodyRay(c, new Vector3f(pa).add(pb).mul(0.5f).sub(c), exclude);
+		if (front) {
+			flags |= 0x20;
+		}
+		if (bodyRay(c, br, exclude)) {
+			flags |= 0x4;
+		}
+		if (bodyRay(c, bl, exclude)) {
+			flags |= 0x8;
+		}
+		feet.x = c.x;
+		feet.z = c.z;
+		return flags;
+	}
+
+	/** 몸 질의 선분 하나 (0x1E1F28): c → c + off 가 벽에 맞으면 끝점이 그 면 위에 오도록 c 를 민다 (수평만 [근사]). */
+	private boolean bodyRay(Vector3f c, Vector3f off, long exclude) {
+		Vector3f end = new Vector3f(c).add(off);
+		NavWorld.Contact h = world.bodySegment(c, end, exclude);
+		if (h == null) {
+			return false;
+		}
+		Vector3f n = h.normal();
+		float k = n.dot(end.x - h.point().x, end.y - h.point().y, end.z - h.point().z);
+		c.x -= k * n.x;
+		c.z -= k * n.z;
+		return true;
+	}
+
+	/**
+	 * 평균대 붙잡기 (원작 0x1BFEA8 – 0x1C0288: 좁은 바닥 질의가 바닥을 못 찾은 프레임) [확실: 디스어셈블].
+	 * <pre>
+	 * 0x1E9030(2) 로 떨어짐 (공중 0x8, 발판 끊기, 기술 끝 0x209918) 뒤 지난 프레임 비트 (0x2C8BD8) 로 방향 s:
+	 *   앞 비트 (0x12) 가 있으면 앞 (−+0x70), 없으면 뒤 (+0x70); 오른쪽 비트 (0x6) 면 + 오른쪽, 왼쪽 비트 (0x18) 면 − 오른쪽; 수평 정규화.
+	 * a = 옛 내비 − 위 × (6.4 + 1.6) (= 옛 발 − 1.6) → a + s × 16 선분 (거름 0x9030042 | +0x258) 이 맞으면
+	 *   P = 적중점 + 면 법선 × 깊이/2 (9.6), P.y = 옛 내비 y − 키 35.2 (발 = 옛 발 − 35.2 = 손이 옛 발 높이).
+	 *   새 내비 → P 선분 (같은 거름·같은 개체) 이 막히면 그만 (떨어지기만). 아니면 위치 = P, +0x2D8 0x8000000 = 면 법선 · 옛 오른쪽 &gt; 0
+	 *   (올라서기 R/L), 몸 뒤 (+0x70) = 수평 법선 (들보를 봄), 수평 속도 0, +0x174 |= 0x60000000, 턱 질의 0x1E3A80 (새 = 옛 = P) 이 맞으면 매달림 0x1C75F8.
+	 * </pre>
+	 * 위치는 턱 질의가 실패해도 P 그대로다 (0x1C008C: +0x110 = P 가 턱 질의보다 먼저). 즉 평균대 끝·옆으로 걸어 나가거나 발밑 들보가 빠지면
+	 * 방금 서 있던 들보 (또는 뒤의 교차 들보) 옆면을 한 손으로 잡는다 — ATHN06B 들보 홀 (영상 9163.25 · 9207.75).
+	 * 선분은 원작처럼 한쪽 면 (시트 면 검사 0x16BDE0 — 뒷면은 지나감, 예 ARENA06 둘레 울타리는 안쪽 면만 있어 바깥에서는 잡히지 않는다).
+	 * 엔진: 첫 선분은 정적 시트만 ({@link NavWorld#frontSegment}) — 이어지는 턱 질의가 정적 시트만 보므로 [근사: 원작은 CDV 몸도 질의], 막힘 선분은 CDV 몸 포함
+	 * ({@link NavWorld#frontContactAll}: 발밑에서 아직 덜 내려간 무너지는 들보가 P 와의 사이에 있으면 원작처럼 붙잡지 않는다).
+	 */
+	private boolean balanceCatch(Vector3f old, Vector3f feet) {
+		int fl = narrowFlags;
+		Vector3f f = forward(body.yaw());
+		Vector3f r = rightOf(f);
+		Vector3f s = (fl & 0x12) != 0 ? new Vector3f(f) : new Vector3f(f).negate();
+		if ((fl & 0x6) != 0) {
+			s.add(r);
+		}
+		if ((fl & 0x18) != 0) {
+			s.sub(r);
+		}
+		s.y = 0;
+		if (s.lengthSquared() < 1e-6f) {
+			return false;
+		}
+		s.normalize();
+		Vector3f a = new Vector3f(old).sub(0, CATCH_DROP, 0);
+		LevelCollision.Hit h = world.frontSegment(a, new Vector3f(a).fma(CATCH_REACH, s), NavWorld.WALL_PROBE_EXCLUDE);
+		if (h == null) {
+			return false;
+		}
+		Vector3f n = facing(h, a);
+		Vector3f pos = new Vector3f(h.point()).fma(WALL_OFF, n);
+		pos.y = old.y - ROPE_HAND;
+		Vector3f from = new Vector3f(feet).add(0, FOOT, 0), to = new Vector3f(pos).add(0, FOOT, 0);
+		if (world.frontContactAll(from, to, NavWorld.WALL_PROBE_EXCLUDE) != null) {
+			return false;
+		}
+		Vector3f nh = new Vector3f(n.x, 0, n.z);
+		if (nh.lengthSquared() < 1e-6f) {
+			return false;
+		}
+		nh.normalize();
+		catchRight = n.dot(r) > 0;
+		feet.set(pos);
+		body.position().set(pos);
+		body.setYaw(yawOf(new Vector3f(nh).negate()));
+		body.launch().zero();
+		body.setGrounded(false);
+		narrowGround = false;
+		Ledge l = probeLedge(pos, pos, new Vector3f(nh).negate(), null);
+		System.out.printf(java.util.Locale.ROOT, "평균대 붙잡기: 비트 0x%x 방향 (%.2f, %.2f) 면 (%.1f, %.1f, %.1f) → 발 (%.1f, %.1f, %.1f) 턱 %s%n", fl, s.x, s.z,
+				h.point().x, h.point().y, h.point().z, pos.x, pos.y, pos.z, l != null ? String.format(java.util.Locale.ROOT, "%.1f", l.y()) : "없음");
+		if (l == null) {
+			state = NavState.AIR;
+			airJump = false;
+			return false;
+		}
+		enterHang(l);
+		return true;
 	}
 
 	// ---- 줄 ----

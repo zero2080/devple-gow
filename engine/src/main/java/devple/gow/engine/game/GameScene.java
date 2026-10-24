@@ -4790,6 +4790,7 @@ public final class GameScene implements Scene {
 		if (nav.navigator.active()) {
 			return;
 		}
+		Vector3f uncarried = new Vector3f(p);
 		nav.carry(p, hero.ctl.grounded); // 발판에 실려 감
 		// 허공 방지: 지상에서 이동한 결과 아래에 바닥이 전혀 없으면(배 가장자리 밖 등) 수평 이동 취소.
 		// 원작의 보이지 않는 벽 / 바다 데스존을 대신하는 근사 — 아래층 바닥이 있는 낙하는 허용
@@ -4802,8 +4803,31 @@ public final class GameScene implements Scene {
 		// 현재 높이에서만 보면 기술 루트 모션이 한 틱에 STEP 넘게 내려간 때 (ATHN01A 갑판 위 공격 −13.6) 지나친 바닥을 놓쳐 아래층으로 빠진다
 		float g = ground(p.x, Math.max(p.y, hero.ctl.prevPosition.y) + STEP, p.z, 4000);
 		var c0 = hero.ctl;
+		// 좁은 바닥 (평균대) 단계 0x1BFBF0 (38 §24): 지난 단계 끝 발밑이 Narrow·NarrowNoBB (+0x174 0x80000 | 0x2000, 0x1BFA70) 면 바닥 질의 0x1E3298 대신
+		// 다섯 선분 (가운데 + 오른·왼 4.8 × 앞·뒤 9.6, 발 − max(이동, 3.2) 까지) 이 바닥을 찾고, 못 찾으면 떨어지며 지난 비트 쪽 들보 옆면을 붙잡는다
+		// (평균대 붙잡기 → 한 손 매달림 ANIBalanceCatch). 원작 옛 위치 +0x110 은 발판 실림 (0x1E6248) 뒤라 틱 시작 + 실린 만큼
+		devple.gow.engine.nav.HeroNavigator.NarrowStep narrow = null;
+		if (nav != null && c0.grounded && c0.vy <= 0 && nav.navigator.narrowGround()) {
+			Vector3f old = new Vector3f(c0.prevPosition).add(p).sub(uncarried);
+			// 원작은 몸 질의 0x1E2100 (발 + 6.4 높이에서 몸 상자 모서리로 선분 0x1E1F28) 이 바닥 단계보다 먼저 벽 안쪽으로 민다 (0x1EA758 → 0x1EA85C).
+			// 엔진 몸 구 (발 + 20, 반지름 12) 는 바닥 위 8.6 의 ARENA 둘레 울타리를 못 막아, 영웅이 원판 가장자리와 울타리 사이 틈에 서서 다섯 선분이 비면
+			// 떨어지고, 이번 이동이 울타리를 넘은 자리에서 붙잡기가 돌면 P (원판 옆면 + 9.6) 가 울타리 밖이라 35.2 아래로 옮겨진 채 떨어졌다
+			// (순회 ARENA06 · 19 · 20 · 26). 이동 선분 (0x1EAB78, 아래에서 다시 함) 으로 울타리 안에 두고 아래 단 모서리 선분으로 민다 [근사: 좁은 바닥에서만]
+			long bodyEx = heroBodyExclude();
+			nav.navWorld.blockMove(c0.prevPosition, p, devple.gow.engine.nav.HeroNavigator.FOOT, devple.gow.engine.nav.NavWorld.moveExclude(bodyEx));
+			nav.navigator.narrowBody(p, bodyEx);
+			narrow = nav.navigator.narrowStep(old, p);
+			if (narrow == devple.gow.engine.nav.HeroNavigator.NarrowStep.CAUGHT) {
+				hero.combat.stop(); // 0x1E9030 (떨어짐) 의 기술 끝 0x209918 [근사: 공중 허용 기술 플래그 0x4 예외 생략]
+				c0.vy = 0;
+				return;
+			}
+			if (narrow == devple.gow.engine.nav.HeroNavigator.NarrowStep.FALL) {
+				g = ground(p.x, p.y + STEP, p.z, 4000); // 붙잡기 선분만 맞고 턱이 없으면 원작도 P (옛 발 − 35.2) 로 옮긴 채 떨어진다 (0x1C008C)
+			}
+		}
 		boolean steep = false;
-		if (nav != null && c0.grounded && c0.vy <= 0 && (Float.isNaN(g) || p.y - g > 2f)) {
+		if (narrow == null && nav != null && c0.grounded && c0.vy <= 0 && (Float.isNaN(g) || p.y - g > 2f)) {
 			// 원작 바닥 질의 0x1E3298: 선분 = 발 + max(d − 6.4, 0) → 발 − (6.4 + d) (d = max(이번 변위, 3.2)), 처음 맞은 면이 법선 · 위 > 0.1 이면
 			// 그 위에 선다 [확실: 0x1E3308–0x1E3330, 0x1E3568]. 엔진 바닥 (법선 Y ≥ 0.7) 은 그보다 가파른 비탈을 구멍으로 봐서
 			// ATHN02B 사이클롭스 바닥의 945 → 937 경사 띠 (법선 Y 0.696, 폭 8) 를 밟으면 아래 데스존으로 떨어졌다 (자동 플레이)
@@ -4813,8 +4837,11 @@ public final class GameScene implements Scene {
 				g = s;
 				steep = true;			}
 		}
-		if (!Float.isNaN(g) && (p.y - g <= 2f || steep) && c0.vy <= 0) {
-			p.y = g;
+		if (narrow == devple.gow.engine.nav.HeroNavigator.NarrowStep.FLOOR
+				|| narrow == null && !Float.isNaN(g) && (p.y - g <= 2f || steep) && c0.vy <= 0) {
+			if (narrow == null) {
+				p.y = g;
+			}
 			c0.vy = 0;
 			c0.grounded = true;
 		} else {
@@ -4861,6 +4888,17 @@ public final class GameScene implements Scene {
 				pushWalls(p, ex);
 			}
 			nav.navWorld.blockMove(hero.ctl.prevPosition, p, devple.gow.engine.nav.HeroNavigator.FOOT, mx);
+			// 단계 끝 좁은 바닥 상태 (0x1BFA70): 지상이면 발밑 면 (+0x234 — 좁은 바닥 단계는 처음 맞은 선분의 면) 이 Narrow·NarrowNoBB 인가
+			long under = 0;
+			if (c0.grounded) {
+				if (narrow == devple.gow.engine.nav.HeroNavigator.NarrowStep.FLOOR) {
+					under = nav.navigator.narrowSurface();
+				} else {
+					devple.gow.engine.nav.NavWorld.Floor f = nav.navWorld.floor(p.x, p.y + 4, p.z, 8);
+					under = f != null ? f.attrs() : 0;
+				}
+			}
+			nav.navigator.groundSurface(c0.grounded, under);
 		}
 		// 다른 슬롯 레벨 바닥만 밟고 있으면 그 레벨로 (원작은 두 레벨이 같이 상주, 예 SEWR01 → SEWR02)
 		// 스크립트 Idle 중에는 넘기지 않는다 [근사: 엔진 구조]: 엔진의 전환은 씬 (카메라 관리자·스크립트 요청 카메라) 을 새로 만든다. ATHN04A

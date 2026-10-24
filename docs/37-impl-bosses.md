@@ -601,8 +601,8 @@ SCR: BMITurnOffVents(b) = 배출구 수 −b, 누적 0 (204/207/209/222/227 — 
   `Animator.playSerial` 이 새 재생 = 카운터 리셋). 변위 = R(요)·(배율 · D.t), 요 변화 = D 회전의 요.
   - 영웅 (`HeroController.applyRoot`): 전투 기술 중 수평 변위 + **요 회전** (예전: 수평 zero 차이만, 회전 없음, 루프 클립 제외, 첫 프레임 0).
     수직 변위는 `rootDy` 에 남기고 동기 중 (물리 꺼짐) 에만 더한다 (`BossSync`, `GrabSync`).
-  - 적·보스 (`EnemyFighter.rootMotion`): 전투 기술 중 수평 변위 + 요 회전 (예전: 없음 — 적은 기술 중 제자리). 변위는 다음 틱 `EnemyNav` 지상 처리
-    (벽 충돌·바닥) 를 거친다. **수직**: 기술 stateMask & 0x1C == 0 (stateMask 1/3 — 처형 MAI*, 띄우기 등) 이면 원작 0x1ECD60 경로 = 중력 없는 3D 변위
+  - 적·보스 (`EnemyFighter.rootMotion`): 전투 기술 중 수평 변위 + 요 회전 (예전: 없음 — 적은 기술 중 제자리). 변위의 벽 처리는 같은 틱 `EnemyNav.settle`
+    (10 §7.2), 바닥은 다음 틱 `EnemyNav` 지상 처리. **수직**: 기술 stateMask & 0x1C == 0 (stateMask 1/3 — 처형 MAI*, 띄우기 등) 이면 원작 0x1ECD60 경로 = 중력 없는 3D 변위
     (0x1E5F90) + 충돌 0x1EA200 (밀기는 stateMask 비트 2 일 때만, 바닥 아래만 막음) → 엔진 `EnemyNav.free` + 수직 변위 적용. stateMask 7 은 지상 이동이
     바닥에 붙이므로 버린다 (32 문서 §기술 중 루트 모션). BMI 의 자체 zeroJoint 이동 코드는 공용으로 대체.
     `rootHold` = 상대가 끄는 중 (0x1EC058), `rootMotionOff` = 클래스가 위치를 직접 정할 때.
@@ -612,7 +612,7 @@ SCR: BMITurnOffVents(b) = 배출구 수 −b, 누적 0 (204/207/209/222/227 — 
   - 동기 중 영웅 수직 하한 = 동기 시작 높이 [근사: 원작은 지상 이동이 바닥에 붙임 — BMI 실패 454 는 zero 가 바닥 아래로].
   - 동기 (`GrabSync`) 중 영웅 수평 변위도 벽 처리: 원작은 위 변위가 내비게이션 이동 (벽 0x1E2100 · 이동 선분 0x1EAB78) 을 거친다 → `GameScene.grabWalls`
     (몸 구 밀어내기 + 틱 시작 → 지금 선분, 장면 물리와 같은 순서). 예전엔 결합 중 물리를 건너뛰어 벽 가에서 해골병을 끄는 동안 영웅이 벽을 지나
-    바닥 없는 바깥으로 떨어졌다 (ATHN05D 엘리베이터 방, 43 §21.2-7, `GrabWallTest`). 끌리는 적 쪽 벽 처리는 그대로 [근사].
+    바닥 없는 바깥으로 떨어졌다 (ATHN05D 엘리베이터 방, 43 §21.2-7, `GrabWallTest`). 끌리는 적도 같은 틱 벽 처리 (`EnemyFighter.settleMotion`, 10 §7.2) [근사: 이벤트 19 끌기의 +0x10 되먹임 없음].
 - 대체 규칙 삭제: `BossSync(IntPredicate)` (Align 없음), `GrabSync` 의 "적 = 영웅 위치·방향" 삭제. 결과 (헤드리스, 두 synchJoint 월드 거리 = 설계 관계와의 차이):
   메두사 MAIMEWGRAB 4.0 (영웅이 루트 회전으로 0 → 150° 돌고 synch 고정), 사이클롭스 MAICYWMini02 5.1 (F1 실패 분기 13), 하피 WingRip 11,
   미노타우로스 maiMin01 36 (적중 거리 40 에서 시작 — 설계 관계는 정면 70.4) → §11.5 (적중 거리 해독: 멀리서 누르면 70.7 에서 잡혀 0.5).

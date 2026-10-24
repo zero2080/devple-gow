@@ -493,6 +493,29 @@ public final class EnemyNav {
 	}
 
 	/**
+	 * 내비 단계 밖에서 더한 변위 (기술 루트 모션 D · 밀어내기 속도 +0xF0 · 동기 끌기) 의 벽 처리 (10 §7.2) [확실: 경로]. 원작은 이것들을 따로 더하지 않는다:
+	 * 지상 이동 0x1EAEC8 이 속도 +0xE0 = 스틱 속도 + +0xF0 (밀어내기) 로 두고, 생물 갱신 0x1EBD78 이 루트 모션 D (끌리는 쪽은 0x204BF0 이 쓴 combatant +0x00 끌기 변위)
+	 * 를 변위 sp+0x3C0 으로 넘겨, 같은 프레임에 새 위치 = +0x110 + 속도·dt + 변위 (0x1E5F90) 를 몸 질의 0x1E2100 · 바닥 · 이동 선분 0x1EAB78 (자유 이동은
+	 * 0x1EA200 · 0x1EA3D8) 에 통째로 넣는다 — 적이 벽 안에서 프레임을 끝내지 않는다. 엔진은 내비 갱신 ({@link #update}) 뒤에 루트 모션·밀어내기·끌기를 더하므로
+	 * 여기서 같은 몸 구 + 이동 선분 (지난 내비 끝 → 지금) 을 한 번 더 한다. 예전엔 다음 틱에야 막혀 그 사이 (그리는 프레임) 벽 속에 있었다 — 센 넉백 (2000 /초) 이면
+	 * 넉백 내내 벽 15 안쪽 (`KnockbackWallTest`). 지난 내비 끝 ({@code last}) 은 그대로 둔다 — 다음 단계 바닥 질의의 선분 길이 (이번 변위 d, 자유 이동 0x1E3298)
+	 * 와 이동 선분이 이 변위를 포함해야 한다 (빨리 떨어지는 던져진 적). 바닥은 다음 단계가 본다 [근사: 원작은 같은 단계].
+	 */
+	public void settle(Vector3f pos) {
+		if (world == null || mode == Mode.WALL || mode == Mode.ROPE || !hasLast) {
+			return;
+		}
+		float r = bodyRadius();
+		long ex = bodyExclude(free, moveFlags);
+		Vector3f c = new Vector3f(pos.x, pos.y + STEP + r, pos.z);
+		if (world.collide(c, r, ex)) { // 0x1E2100 (몸 질의)
+			pos.x = c.x;
+			pos.z = c.z;
+		}
+		guardMove(new Vector3f(last), pos); // 0x1EAB78 (이동 선분)
+	}
+
+	/**
 	 * 이동 선분 마지막 검사 (0x1EA5F0 끝 0x1EAB78 / 자유 이동 0x1EA200 의 0x1EA3D8, 38 §19) [확실: 디스어셈블]: 지난 위치 → 새 위치가
 	 * 면에 막히면 그 앞 + 0.05 에 두고 몸 질의를 다시 (최대 3 회). 선분 높이 = 발 + 바닥 (+0x130.y). 적 마스크는 NoAICollision 을 지나가므로
 	 * GeneralGuide 막이 (NoAICollision) 가 아니라 갑판 난간 (Ground 벽, ATHN01A 높이 14.6) 이 적을 배 안에 둔다 — 밀려도 난간을 넘지 않는다.

@@ -359,6 +359,7 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 			anim.update(dt);
 			rootMotion();
 			impulseMotion(dt);
+			settleMotion();
 			return;
 		}
 		if (holdAi) {
@@ -420,6 +421,17 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 		}
 		rootMotion();
 		impulseMotion(dt);
+		settleMotion();
+	}
+
+	/**
+	 * 루트 모션·밀어내기를 같은 틱 벽 처리에 (원작 0x1EAEC8 · 0x1EBD78 은 둘 다 내비 이동 0x1EA5F0 / 0x1EA200 안의 변위 — {@link EnemyNav#settle}).
+	 * 동기로 끌린 위치도 {@link devple.gow.engine.combat.GrabSync} 가 같은 처리를 부른다 (0x204BF0 의 끌기 변위 combatant +0x00 도 그 이동 단계에 들어감).
+	 */
+	public void settleMotion() {
+		if (nav.world() != null) {
+			nav.settle(pos);
+		}
 	}
 
 	/**

@@ -1932,4 +1932,192 @@ class HeroNavigatorTest {
 		assertEquals(0x40, f & 0x40);
 		assertEquals(50 - HeroNavigator.ROPE_HAND, feet.y, 1e-3f, "머리 = 천장");
 	}
+
+	/**
+	 * {@link #tick} 에 게임 씬 좁은 바닥 단계를 더한 한 틱 (GameScene.physics 와 같은 순서: 이동 → 좁은 바닥 단계 0x1BFBF0 / 일반 바닥 → 단계 끝 발밑 면 0x1BFA70).
+	 * 걷기 = 60 /초, 일반 바닥은 아래 2 안만 붙인다 (게임 씬과 같은 값).
+	 */
+	static HeroNavigator.NarrowStep narrowTick(HeroNavigator nav, Body b, NavWorld w, Pad in) {
+		Vector3f prev = new Vector3f(b.pos);
+		if (nav.update(in, 0, DT) || nav.active()) {
+			in.down.clear();
+			return null;
+		}
+		Vector3f p = b.pos;
+		float mag = (float) Math.hypot(in.lx, in.ly);
+		if (mag > 0.2f) {
+			float dirYaw = (float) Math.atan2(-in.lx, in.ly);
+			b.yaw = dirYaw;
+			p.add(HeroNavigator.forward(dirYaw).mul(60 * DT));
+		}
+		HeroNavigator.NarrowStep ns = null;
+		if (b.grounded && b.vy <= 0 && nav.narrowGround()) {
+			ns = nav.narrowStep(prev, p);
+			if (ns == HeroNavigator.NarrowStep.CAUGHT) {
+				in.down.clear();
+				return ns;
+			}
+		}
+		float g = w.groundHeight(p.x, p.y + 14, p.z, 4000);
+		if (ns == HeroNavigator.NarrowStep.FLOOR || ns == null && b.grounded && !Float.isNaN(g) && p.y - g <= 2) {
+			if (ns == null) {
+				p.y = g;
+			}
+			b.vy = 0;
+			b.grounded = true;
+		} else {
+			b.vy -= HeroNavigator.GRAVITY * DT;
+			p.y += b.vy * DT;
+			b.grounded = false;
+			if (!Float.isNaN(g) && p.y <= g) {
+				p.y = g;
+				b.vy = 0;
+				b.grounded = true;
+			}
+		}
+		long under = 0;
+		if (b.grounded) {
+			NavWorld.Floor f = w.floor(p.x, p.y + 4, p.z, 8);
+			under = ns == HeroNavigator.NarrowStep.FLOOR ? nav.narrowSurface() : f != null ? f.attrs() : 0;
+		}
+		nav.groundSurface(b.grounded, under);
+		in.down.clear();
+		return ns;
+	}
+
+	/** 높이 16 상자 (윗면 y, 옆면 넷) — 평균대·교차점 (ATHN06B 들보 = Entities_Narrow 윗면·옆면). */
+	static void beam(List<LevelCollision.Tri> t, float x0, float z0, float x1, float z1, float y, SurfaceAttr... at) {
+		floor(t, x0, z0, x1, z1, y, at);
+		quad(t, v(x0, y - 16, z0), v(x0, y, z0), v(x1, y, z0), v(x1, y - 16, z0), at); // z0 면 (법선 −z)
+		wallZ(t, z1, x0, x1, y - 16, y, at); // z1 면 (법선 +z)
+		quad(t, v(x0, y - 16, z1), v(x0, y, z1), v(x0, y, z0), v(x0, y - 16, z0), at); // x0 면 (법선 −x)
+		wallX(t, x1, z0, z1, y - 16, y, at); // x1 면 (법선 +x)
+	}
+
+	/**
+	 * 평균대 붙잡기 (원작 0x1BFBF0 → 0x1BFEA8, 38 §24): 16 × 16 교차점 (Narrow) 에서 −z 로 걸어 나가면 뒤 선분 (9.6 뒤, 비스듬히) 이 교차점에 닿는 동안
+	 * 그 높이에 서 있다가 (z −14.4), 다섯 선분이 다 비면 지난 비트 (뒤 4|8) 쪽 = +z 로 16 선분 → 교차점 −z 면 (z −8) → 발 = 옛 발 − 35.2,
+	 * 면 + 9.6 에 한 손으로 매달림 (ANIBalanceCatch), 몸은 면을 본다. 1 초 (Sold+0x22C) 안에 × 면 balanceBeamPullUp 으로 면 안 3.5 에 올라서고,
+	 * 그대로 두면 떨어진다. 좌우 이동은 없다 (0x1C89D4).
+	 */
+	@Test
+	void walkingOffANarrowCrossingCatchesItsEdge() {
+		for (int mode = 0; mode < 3; mode++) {
+			List<LevelCollision.Tri> t = new ArrayList<>();
+			floor(t, -200, -200, 200, 200, -250, SurfaceAttr.GROUND);
+			beam(t, -8, -8, 8, 8, 0, SurfaceAttr.NARROW);
+			NavWorld w = new NavWorld(LevelCollision.of(t));
+			Body b = new Body();
+			HeroNavigator nav = new HeroNavigator(b, w, null);
+			Pad in = new Pad();
+			nav.groundSurface(true, SurfaceAttr.NARROW.bit());
+			float lastZ = 0;
+			HeroNavigator.NarrowStep ns = null;
+			for (int i = 0; i < 60 && nav.state() != NavState.LEDGE_HANG; i++) {
+				in.ly = 1; // 정면 = −z
+				lastZ = b.pos.z;
+				ns = narrowTick(nav, b, w, in);
+				if (nav.state() != NavState.LEDGE_HANG) {
+					assertEquals(0f, b.pos.y, 1e-3f, "선분 하나라도 교차점에 닿으면 그 높이 " + b.pos);
+				}
+			}
+			assertEquals(HeroNavigator.NarrowStep.CAUGHT, ns);
+			// 뒤 선분은 내비 (발 + 6.4) 에서 발 − 3.2 의 9.6 뒤로 비스듬히 내려가 윗면 (y 0) 을 2/3 지점 (6.4 뒤) 에서 지난다 → z + 6.4 ≥ −8 동안 선다
+			assertTrue(lastZ < -13.4f && lastZ >= -14.4f, "뒤 선분이 교차점 윗면에 닿는 동안 서 있다: 마지막 " + lastZ);
+			assertEquals(NavState.LEDGE_HANG, nav.state());
+			assertTrue(nav.narrowHang(), "윗면 Narrow → 평균대 매달림 (+0x2D8 0x40)");
+			assertEquals("balancebeamcatch", b.anim);
+			assertEquals(-HeroNavigator.HANG, b.pos.y, 1e-3f, "발 = 옛 발 − 35.2 (손 = 교차점 윗면)");
+			assertEquals(-8 - HeroNavigator.WALL_OFF, b.pos.z, 1e-3f, "면 + 9.6");
+			assertEquals(0f, HeroNavigator.forward(b.yaw).x, 1e-4f);
+			assertEquals(1f, HeroNavigator.forward(b.yaw).z, 1e-4f, "몸은 들보를 본다 (+z)");
+			assertEquals(HeroNavigator.BALANCE_HANG_TIME, nav.hangTimer(), 1e-4f, "Sold+0x22C 1 초");
+			in.ly = 0;
+			if (mode == 0) {
+				// 좌우 이동 없음, 1 초가 지나면 떨어진다
+				for (int i = 0; i < 30; i++) {
+					in.lx = 1;
+					narrowTick(nav, b, w, in);
+				}
+				assertEquals(0f, b.pos.x, 1e-4f, "평균대 매달림은 좌우 이동 없음 (0x1C89D4)");
+				assertEquals(NavState.LEDGE_HANG, nav.state());
+				for (int i = 0; i < 40; i++) {
+					in.lx = 0;
+					narrowTick(nav, b, w, in);
+				}
+				assertNotEquals(NavState.LEDGE_HANG, nav.state(), "1 초 뒤 떨어짐 (0x1C7B04)");
+				assertTrue(b.pos.y < -HeroNavigator.HANG, "떨어지는 중 " + b.pos);
+			} else if (mode == 1) {
+				for (int i = 0; i < 30; i++) {
+					narrowTick(nav, b, w, in);
+				}
+				in.down.add(PadButton.CROSS);
+				narrowTick(nav, b, w, in);
+				assertEquals(NavState.GROUND, nav.state(), "× → 올라서기 (0x1E9EC0)");
+				assertEquals("balancebeampullup", b.anim, "법선 · 오른쪽 = 0 → ANIBalancePullupL");
+				assertEquals(0f, b.pos.y, 1e-3f);
+				assertEquals(-8 - HeroNavigator.WALL_OFF + HeroNavigator.BALANCE_PULLUP_FORWARD, b.pos.z, 1e-3f, "면 안 3.5 (애니 앞 13.1)");
+			} else {
+				// 들보 사이가 아직 차 있으면 (바닥 3.2 안) 붙잡지 않고 계속 걷는다
+				List<LevelCollision.Tri> t2 = new ArrayList<>();
+				floor(t2, -200, -200, 200, 200, -250, SurfaceAttr.GROUND);
+				beam(t2, -8, -8, 8, 8, 0, SurfaceAttr.NARROW);
+				beam(t2, -4, -100, 4, -8, -3, SurfaceAttr.NARROW); // 3 아래로 내려앉은 들보 (선분 깊이 3.2 안)
+				NavWorld w2 = new NavWorld(LevelCollision.of(t2));
+				Body b2 = new Body();
+				HeroNavigator nav2 = new HeroNavigator(b2, w2, null);
+				nav2.groundSurface(true, SurfaceAttr.NARROW.bit());
+				for (int i = 0; i < 60; i++) {
+					in.ly = 1;
+					narrowTick(nav2, b2, w2, in);
+				}
+				assertEquals(NavState.GROUND, nav2.state());
+				assertEquals(-3f, b2.pos.y, 1e-3f, "3 아래 들보로 내려섬 " + b2.pos);
+			}
+		}
+	}
+
+	/**
+	 * 평균대 옆으로 걸어 나가기 (0x1E5A70 모서리 선분 · 0x1BFEA8): 동서 들보 (폭 8) 위에서 남쪽 (−z) 으로 비스듬히 걸으면 가운데가 들보를 벗어난 뒤에도
+	 * 뒤쪽 모서리 선분이 들보에 닿는 동안 서 있다가, 다 비면 지난 비트 쪽 (뒤 ± 오른쪽) 으로 들보 남쪽 면을 잡는다. 붙잡기 선분이 아무것도 못 맞히면
+	 * (들보가 16 밖) 그냥 떨어지고, 맞혀도 턱이 없으면 원작처럼 P (옛 발 − 35.2) 로 옮겨진 채 떨어진다.
+	 */
+	@Test
+	void walkingOffABeamSideCatchesTheBeam() {
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -300, -300, 300, 300, -250, SurfaceAttr.GROUND);
+		beam(t, -200, -4, 200, 4, 0, SurfaceAttr.NARROW);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		Body b = new Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		Pad in = new Pad();
+		nav.groundSurface(true, SurfaceAttr.NARROW.bit());
+		HeroNavigator.NarrowStep ns = null;
+		for (int i = 0; i < 120 && nav.state() != NavState.LEDGE_HANG && b.grounded; i++) {
+			in.lx = -0.5f; // 왼쪽 앞 (−x, −z) 비스듬히
+			in.ly = 0.866f;
+			ns = narrowTick(nav, b, w, in);
+		}
+		assertEquals(HeroNavigator.NarrowStep.CAUGHT, ns, "옆으로 나가면 들보를 잡는다 " + b.pos);
+		assertTrue(nav.narrowHang());
+		assertEquals(-HeroNavigator.HANG, b.pos.y, 1e-3f);
+		assertEquals(-4 - HeroNavigator.WALL_OFF, b.pos.z, 1e-3f, "들보 남쪽 면 + 9.6");
+		assertEquals(1f, HeroNavigator.forward(b.yaw).z, 1e-4f, "몸은 들보를 본다");
+		// 붙잡을 면이 16 밖: 그냥 떨어진다 (붙잡기 선분 0x1BFF9C 가 빈다)
+		List<LevelCollision.Tri> t2 = new ArrayList<>();
+		floor(t2, -300, -300, 300, 300, -250, SurfaceAttr.GROUND);
+		floor(t2, -200, -4, 200, 4, 0, SurfaceAttr.NARROW); // 옆면 없는 판
+		NavWorld w2 = new NavWorld(LevelCollision.of(t2));
+		Body b2 = new Body();
+		HeroNavigator nav2 = new HeroNavigator(b2, w2, null);
+		nav2.groundSurface(true, SurfaceAttr.NARROW.bit());
+		ns = null;
+		for (int i = 0; i < 120 && b2.grounded; i++) {
+			in.lx = 0;
+			in.ly = 1;
+			ns = narrowTick(nav2, b2, w2, in);
+		}
+		assertEquals(HeroNavigator.NarrowStep.FALL, ns);
+		assertTrue(b2.pos.y > -2, "옮겨지지 않고 그 자리에서 떨어짐 " + b2.pos);
+	}
 }

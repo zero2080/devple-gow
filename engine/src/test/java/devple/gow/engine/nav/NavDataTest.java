@@ -806,4 +806,112 @@ class NavDataTest {
 		tc.load(c.wad);
 		assertTrue(Interactables.of(c, tc).byOwner("goliftdoor1").showPrompt, "goliftdoor1 Show R2");
 	}
+
+	/**
+	 * 아레나 원판 둘레 울타리 (38 §24.2, 43 §28.3): ARENA06 바닥은 NarrowNoBB 20 각형 원판 (꼭짓점 278.9, 변 가운데 275.5) 이고 울타리는 그 밖 ≈ 280 에
+	 * 안쪽 면만 (y 16 – 29.2, 바닥 위 8.6) 있다. 엔진 몸 구는 이 울타리를 못 막아 영웅이 틈에 서면 다섯 선분이 비어 떨어졌다. 원작 몸 질의 아래 단
+	 * (0x1E2100, 발 + 6.4 모서리 선분 — {@link HeroNavigator#narrowBody}) 은 영웅을 울타리에서 9.6 떨어뜨려 원판 위에 둔다.
+	 */
+	@Test
+	void arenaFenceKeepsTheHeroOnTheNarrowDisc() throws Exception {
+		LevelData lv = level("ARENA06");
+		NavWorld w = new NavWorld(new LevelCollision(lv.sheets));
+		long ex = NavWorld.HERO_BODY_EXCLUDE;
+		double a = Math.toRadians(-9); // 원판 (20 각형) 변 가운데: 가장자리 275.5, 울타리 ≈ 279.9
+		Vector3f out = new Vector3f((float) Math.cos(a), 0, (float) Math.sin(a)), tangent = new Vector3f(-out.z, 0, out.x);
+		// 틈 (원판 가장자리와 울타리 사이) 에서 울타리를 따라 걸으면 바깥 선분은 울타리에, 안쪽 선분 (4.8) 은 원판 윗면 대신 옆면에 닿는다
+		for (boolean body : new boolean[] {false, true}) {
+			HeroNavigatorTest.Body b = new HeroNavigatorTest.Body();
+			b.pos.set(out).mul(279.5f).add(0, 20.6f, 0);
+			b.yaw = (float) Math.atan2(-tangent.x, -tangent.z);
+			HeroNavigator nav = new HeroNavigator(b, w, null);
+			nav.groundSurface(true, SurfaceAttr.NARROW_NO_BB.bit());
+			Vector3f prev = new Vector3f(b.pos);
+			b.pos.fma(2, tangent);
+			if (body) {
+				nav.narrowBody(b.pos, ex);
+			}
+			HeroNavigator.NarrowStep ns = nav.narrowStep(prev, b.pos);
+			if (body) {
+				assertEquals(HeroNavigator.NarrowStep.FLOOR, ns, "몸 질의가 울타리에서 밀어 원판 위 " + b.pos);
+				assertTrue(Math.hypot(b.pos.x, b.pos.z) < 275.5f - 4f, "원판 가장자리 안 " + b.pos);
+			} else {
+				assertEquals(HeroNavigator.NarrowStep.FALL, ns, "몸 질의 없이는 틈에서 다섯 선분이 빈다 (고치기 전 순회 ARENA06) " + b.pos);
+			}
+		}
+		// 바깥으로 곧장 · 비스듬히 걸어도 울타리에서 9.6 (모서리 대각 13.6) 떨어진 원판 위에 남는다
+		for (float turn : new float[] {0, 45}) {
+			HeroNavigatorTest.Body b = new HeroNavigatorTest.Body();
+			b.pos.set(out).mul(240).add(0, 20.6f, 0);
+			HeroNavigator nav = new HeroNavigator(b, w, null);
+			nav.groundSurface(true, SurfaceAttr.NARROW_NO_BB.bit());
+			double t = Math.toRadians(turn);
+			Vector3f dir = new Vector3f(out).mul((float) Math.cos(t)).fma((float) Math.sin(t), tangent);
+			b.yaw = (float) Math.atan2(-dir.x, -dir.z);
+			float maxR = 0;
+			for (int i = 0; i < 90; i++) {
+				Vector3f prev = new Vector3f(b.pos);
+				b.pos.fma(2, dir);
+				w.blockMove(prev, b.pos, HeroNavigator.FOOT, NavWorld.moveExclude(ex));
+				nav.narrowBody(b.pos, ex);
+				assertEquals(HeroNavigator.NarrowStep.FLOOR, nav.narrowStep(prev, b.pos), turn + "° " + i + " " + b.pos);
+				nav.groundSurface(true, nav.narrowSurface());
+				maxR = Math.max(maxR, (float) Math.hypot(b.pos.x, b.pos.z));
+			}
+			assertEquals(20.6f, b.pos.y, 0.05f);
+			assertTrue(maxR < 271f, turn + "°: 울타리 ≈ 279.9 − 9.6, 최대 " + maxR);
+		}
+	}
+
+	/**
+	 * ATHN06B 들보 홀 (43 §23 · §28, 38 §24): 서쪽 끝 교차점 (−3296, 992, −1440) 에서 북쪽 (+z) 무너지는 들보 gofallingbeam23 쪽으로 걸어 나간다.
+	 * 들보 (CDV 관절 1) 가 28.8 넘게 내려간 뒤 (애니 0.9 초, 윗면 ≈ 950) 면 다섯 선분이 비고 붙잡기 선분이 교차점 북쪽 면 (z −1432) 을 맞혀
+	 * 발 = 992 − 35.2, z = −1432 + 9.6 에 한 손으로 매달린다 (영상 9163.25 · 9207.75 의 한 손 매달림).
+	 * 6 만 내려간 때 (0.6 초, 윗면 986) 는 선분 깊이 3.2 밖이라 바닥은 없지만, 새 내비 → P 막힘 선분 (0x1C0074, CDV 몸 포함) 을 그 들보가 막아
+	 * 붙잡지 않고 떨어져 들보 위에 내린다 — 들보째 아래층으로 실려 간다 (영상 9261.9 의 낙하).
+	 */
+	@Test
+	void athens06bBeamHallCatchesTheCrossingWhenTheBeamAheadHasDropped() throws Exception {
+		LevelData lv = level("ATHN06B");
+		for (float t : new float[] {0.9f, 0.6f}) {
+			Platforms ps = Platforms.of(lv, java.util.Set.of("gofallingbeam23"));
+			assertTrue(ps.play("gofallingbeam23", "!0", 8, 1, 0));
+			for (int f = 0; f < Math.round(t * 60); f++) {
+				ps.update(1 / 60f);
+			}
+			Platforms.Support top = ps.floor(-3296, 1000, -1400, 200);
+			assertNotNull(top);
+			NavWorld w = new NavWorld(new LevelCollision(lv.sheets));
+			w.setPlatforms(ps);
+			HeroNavigatorTest.Body b = new HeroNavigatorTest.Body();
+			b.pos.set(-3296, 992, -1440);
+			HeroNavigator nav = new HeroNavigator(b, w, null);
+			nav.groundSurface(true, SurfaceAttr.NARROW.bit());
+			HeroNavigatorTest.Pad in = new HeroNavigatorTest.Pad();
+			HeroNavigator.NarrowStep ns = null;
+			for (int i = 0; i < 60 && ns != HeroNavigator.NarrowStep.CAUGHT && ns != HeroNavigator.NarrowStep.FALL; i++) {
+				in.ly = -1; // 정면 = +z (북쪽)
+				ns = HeroNavigatorTest.narrowTick(nav, b, w, in);
+			}
+			if (t > 0.8f) {
+				assertTrue(top.y() < 992 - HeroNavigator.REACH, "들보 윗면 " + top.y());
+				assertEquals(HeroNavigator.NarrowStep.CAUGHT, ns, "0.9 초: 교차점을 붙잡음 " + b.pos);
+				assertEquals(NavState.LEDGE_HANG, nav.state());
+				assertTrue(nav.narrowHang());
+				assertEquals("balancebeamcatch", b.anim);
+				assertEquals(992 - HeroNavigator.HANG, b.pos.y, 1e-2f);
+				assertEquals(-1432 + HeroNavigator.WALL_OFF, b.pos.z, 1e-2f, "교차점 북쪽 면 + 9.6");
+				assertEquals(-1f, HeroNavigator.forward(b.yaw).z, 1e-3f, "몸은 교차점 (남쪽) 을 본다");
+			} else {
+				assertTrue(top.y() < 992 - HeroNavigator.NARROW_REACH && top.y() > 992 - HeroNavigator.REACH, "들보 윗면 " + top.y());
+				assertEquals(HeroNavigator.NarrowStep.FALL, ns, "0.6 초: 들보가 막아 붙잡지 않음 " + b.pos);
+				assertTrue(b.pos.y > 990, "제자리에서 떨어지기 시작 " + b.pos);
+				for (int i = 0; i < 30 && !b.grounded; i++) {
+					HeroNavigatorTest.narrowTick(nav, b, w, in);
+				}
+				assertTrue(b.grounded, "들보 위에 내림 " + b.pos);
+				assertEquals(top.y(), b.pos.y, 2f);
+			}
+		}
+	}
 }
