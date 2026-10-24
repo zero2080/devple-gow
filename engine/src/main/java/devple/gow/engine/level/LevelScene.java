@@ -792,6 +792,8 @@ public final class LevelScene implements Scene {
 		e.renderer().begin3d(cam);
 		fx.drawBackground(e, cam);
 		fx.beginWorld(e, cam, true);
+		// 안개 앞 반투명 패스 (하늘 GO 파티클부터 이펙트까지) 의 안개 — 원작 안개 노드는 층 2 칸 5 (SceneFog)
+		devple.gow.engine.fx.SceneFog.begin(fx.env(), cam, e.window().width(), e.window().height());
 		// 하늘: 카메라 중심, 깊이 쓰기 끔 → 항상 맨 뒤. 층 1 (SCR_Sky → 0x150738(모델, 1)) 이라 층 2 단계와 무관하게 모든 파트
 		frameCam = cam;
 		int stage = devple.gow.engine.render.DrawStage.set(devple.gow.engine.render.DrawStage.ALL);
@@ -818,8 +820,10 @@ public final class LevelScene implements Scene {
 		renderPosed(e, cam, 0);
 		submitStaticShadows();
 		if (!deferEffects) {
+			devple.gow.engine.fx.SceneFog.armDepth(); // 뷰어: 깊이를 쓰는 지오메트리 끝 → 물·파티클·렌즈플레어는 장면 깊이 안개
 			fx.renderEffects(e, cam);
 			lensFlares.render(cam, e.window().aspect());
+			devple.gow.engine.fx.SceneFog.end();
 		}
 		FxEnvironment.disableFog(e.renderer().basic());
 		if (showCollision || showVolumes) {

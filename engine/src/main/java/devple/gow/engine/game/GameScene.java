@@ -4309,6 +4309,8 @@ public final class GameScene implements Scene {
 			System.out.println("영웅 라이트: " + hero.lastLights() + " 블레이드 " + (hero.bladeLight(0) != null ? hero.bladeLight(0).dyn : -1f));
 		}
 		hero.drawChains(cam, e.window().aspect(), alpha, magicFx.godBladesOn()); // 사슬·궤적 (45 문서 §3)
+		// 깊이를 쓰는 안개 앞 지오메트리 끝 → 이후 물·파티클·이펙트 GO·렌즈플레어는 장면 깊이로 안개 (원작 안개 노드 = 층 2 칸 5, SceneFog)
+		devple.gow.engine.fx.SceneFog.armDepth();
 		if (System.getProperty("gow.nofx") == null) {
 			level.renderEffects(e, cam); // 비·파티클·물은 캐릭터 뒤에 (--no-fx 로 끔: 스크린샷용)
 			LevelScene o = otherScene;
@@ -4317,6 +4319,7 @@ public final class GameScene implements Scene {
 			}
 		}
 		magicFx.render(cam, e.window().aspect(), e.renderer().white());
+		devple.gow.engine.fx.SceneFog.end(); // 카메라 필터·페이드·HUD 는 안개 뒤
 		renderCameraFilter();
 		float[] fc = screenFade.color();
 		e.renderer().overlay(fc[0], fc[1], fc[2], fc[3]); // 스크립트 FadeOut/FadeIn 색 사각형 0x2C8F50 [추정: HUD 아래]

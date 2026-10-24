@@ -185,6 +185,15 @@ public final class WadAssets implements AutoCloseable {
 		return mat != null && !mat.layers().isEmpty() && (mat.layers().getFirst().flags2() & 0x10000000) != 0;
 	}
 
+	/**
+	 * 안개 뒤 층 (3·4) 머티리얼인가: 첫 레이어 flags2 하위 5 비트 (머티리얼 bit 32..36 = 그리기 층, 0 이면 층 2) 의 0x8 · 0x10 [확실: 0x1534BC / 0x160CC0].
+	 * 원작 안개 노드는 층 2 칸 5 (16 §1.2) 라 층 3·4 머티리얼은 안개를 받지 않는다 — 디스크 MAT 130 개 (번개 R_LGHTN · 메두사 머리 R_MEDHD ·
+	 * 썬더볼트 R_THBLT · R_PERMK 빛줄기 …, 레벨 일부). 이펙트 GO 만 이 규칙으로 거른다 ({@code AnimatedModel.sceneFog}).
+	 */
+	public static boolean postFogLayer(MaterialResource mat) {
+		return mat != null && !mat.layers().isEmpty() && (mat.layers().getFirst().flags2() & 0x18) != 0;
+	}
+
 	/** 그림자 합성 뒤에 그리는 머티리얼인가 (첫 레이어, 0x155B50 — {@link devple.gow.engine.render.DrawStage#lateMaterial}, 47 §7.4.2). */
 	public static boolean lateStage(MaterialResource mat) {
 		if (mat == null || mat.layers().isEmpty()) {

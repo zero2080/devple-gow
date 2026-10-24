@@ -13,6 +13,7 @@ GOW_FX=off ./gradlew :engine:run --args="--level gow-rom/ATHN01A.WAD --cam 0" # 
 |-------|------|
 | `LevelFx` | 레벨 씬 훅 묶음: 환경, 파티클, 물, 효과 볼륨 메시 숨김, 4 키 토글 |
 | `FxEnvironment` | SCR_Fog / LayeredFog / FarClip → `basic.frag` 안개 유니폼, 활성 안개 선택, 안개 텍스처 레이어 |
+| `SceneFog` | 안개 앞 반투명 패스 (파티클 버킷 0–5 · 이펙트 GO · 렌즈플레어 · 물) 의 안개 — 프레임당 장면 깊이 사본, PTC 플래그 규칙 (§3.1) |
 | `ParticleSystem` / `ParticleDef` | CPU 시뮬레이션 + 동적 VBO 사각형 (빌보드 / 속도 줄기), 상자·원뿔 생성, LOD |
 | `Weather` | SCR_Weather → 카메라 앞 셀 정육면체 감싸기 이미터 (비/눈/불씨) |
 | `LevelEmitters` | 오브젝트 그룹의 FXC_ + PTC_ → 이미터 (횃불, 화톳불, 불꽃) |
@@ -28,6 +29,10 @@ render  fx.beforeRender(e, cam)                        // FarClip → cam.far, r
               → fx.beginWorld(e, cam, false) 지오메트리 (fx.hidden(i) = 안개/비 볼륨 상자 메시 생략)
               → fx.renderEffects(e, cam)               // 물 → 파티클 (깊이 테스트 O, 쓰기 X)
         FxEnvironment.disableFog(basic)                // 이후 HUD/디버그는 안개 없음
+SceneFog.begin(env, cam, w, h)   (LevelScene.render, 하늘 단계 전)      // §3.1: 하늘 GO 파티클 = 배경 계수
+SceneFog.armDepth()              (GameScene: 사슬 뒤 · 레벨 이펙트 전)   // 깊이를 쓰는 안개 앞 지오메트리 끝 → 첫 사용 때 깊이 복사
+  level.renderEffects · 이웃 슬롯 이펙트 · magicFx.render              // 물 · 파티클 · 렌즈플레어 · 이펙트 GO = 장면 깊이 안개
+SceneFog.end()                   (카메라 필터 · 페이드 · HUD 전, Renderer.beginFrame 도)
 ```
 - 다른 셰이더(스키닝)에도 안개를 쓰려면 `levelScene.fx().env().applyFog(shader, cam, fbHeight)` (같은 `basic.frag`).
 - 하늘: SCR_Sky 규칙대로 **관절 0 월드 위치 → 카메라** (이전: AABB 중심). ATHN01A 하늘 미니어처의 바다면이 눈높이 아래에 와서 바다·원경 배·먼 바위가 보인다.
@@ -43,8 +48,11 @@ render  fx.beforeRender(e, cam)                        // FarClip → cam.far, r
   뒤 인스턴스의 불투명 면이 반투명 면을 덮었다 (ATHN01D 판자 위 구름 반사). 비교 `GOW_PASSORDER=model`. 디버그 `GOW_HIDE=인스턴스,…` (`*`, `sky`).
 
 ## 3. 셰이더 (기존과 호환: 새 유니폼은 기본 0 = 끔)
+`fog.glsl` (안개 공용, `#include` — `Shader.source` 가 펼친다): 안개 유니폼 · `layerColor` · `fogAt(창 깊이, 배경 계수)` · `fogScene()` (장면 깊이 사본).
+`basic.frag` · `particle.frag` · `lensflare.frag` 가 함께 쓴다 (예전 basic.frag 안개 코드를 그대로 옮김 — 같은 결과, §3.1).
 `basic.frag`
-- 안개: `uFogMode` (0/1/2), `uFogBlend`, `uFogColor/1/2`, `uFogStops`, `uFogDepth` (D0, near, far, BackPlane), `uFogScreen`, `uFogAdd` (가산 파트는 기여를 줄임).
+- 안개: `uFogMode` (0/1/2), `uFogBlend`, `uFogColor/1/2`, `uFogStops`, `uFogDepth` (D0, near, far, BackPlane), `uFogScreen`, `uFogAdd` (가산 파트는 기여를 줄임),
+  `uFogScene` (1 = 조각 깊이 대신 장면 깊이 사본 — 이펙트 GO 반투명 파트·물), `uFogOff` (1 = 안개 뒤 층 3·4 머티리얼, 이펙트 GO).
   깊이 d 는 `gl_FragCoord.z` 와 near/far 로 선형화 (정점 셰이더 변경 없음). `alpha = keyA · A8(z')/128` (원작 GS 패스 해석식, 16 §1.2: z' = 16·C·n·(f−d)/((f−n)·d), z' ≥ 0x7FFF → 0, 아니면 (128 − ⌊z'/256⌋); ≈ 1 − D0/d, D0 = CentreZ·10/2048, `FxEnvironment.depthAlpha`), 층 안개 색 = 화면 y 그라디언트,
   배경 패스면 BackPlane_A/128. 텍스처 레이어 `uFogTex` (유닛 1) × 2, 화면 UV 스크롤·회전·배율.
   층 안개 t = `mix(uFogBand.x, uFogBand.y, 화면 y)` — `FxEnvironment.band(cam)` 이 원작 0x1208C8 처럼 시선 고도각 눈금 (화면 위/아래 = 1 − (φ ± h)/π, 지평선 0.5) 을 준다 [확실].
@@ -52,6 +60,25 @@ render  fx.beforeRender(e, cam)                        // FarClip → cam.far, r
 - 알파: `uAlphaRef` (CUTOUT 0.75), `uAlphaMax` (가장자리 패스).
 `basic.vert` / `skinned.vert`: `uUvOffset` (UV 스크롤), `uEnvUv` (법선 구면 환경맵 UV, basic 만).
 `particle.vert/frag`: 신규. `uScreen` = 열기 아지랑이 (VU 종류 5): 정점 셰이더가 화면 좌표(noperspective) + aUv 오프셋을 UV 로, 조각 셰이더가 프레임 복사본 `uFrame` (유닛 1) 을 DECAL 로 읽고 알파 = 정점 알파.
+`uFogPass` (0 없음 · 1 장면 깊이 · 2 하늘 단계) · `uFogDst` (1 = 알파 블렌드) 로 미리 곱한 색에 안개 (§3.1). `lensflare.frag` 도 `uFogPass` 1 이면 (1 − F) 배.
+
+### 3.1 안개 앞 반투명 패스의 장면 깊이 안개 (`fx/SceneFog`, 16 §1.2, 43 §24)
+원작 안개는 층 2 칸 5 의 후처리 노드 (렌더 0x1281C8, 키 0x7100) 라 층 1 · 층 2 지오메트리 · 파티클 버킷 0–5 · 렌즈플레어 위에 깔리고, 파티클 버킷 6 (flags & 0x4040) ·
+층 3 (PTC 0x80000, 블레이드·궤적, 층 3 머티리얼) 은 그 뒤다 [확실]. 안개 패스는 Z 버퍼만 보므로 깊이를 쓰지 않는 파티클은 뒤 장면 깊이의 계수를 받는다.
+- 지오메트리는 예전처럼 셰이더 안 안개 (조각 자신의 깊이 — 불투명이면 후처리와 같은 값). 그 뒤 안개 앞 반투명 패스는 `SceneFog` 가 프레임에 한 번
+  복사한 장면 깊이 (`glCopyTexSubImage2D` → `GL_DEPTH_COMPONENT32F`, 유닛 3) 로 같은 계수 F 와 안개색 (층 띠 · 텍스처 레이어 포함, 화면 좌표) 을 구해
+  자기 색만 바꾼다: 안개 섞기 M(x) = (1−F)x + F·c 와 블렌드가 교환되므로 알파 (0x44) P' = (1−F)·P + F·c·As, 가산·감산 P' = (1−F)·P,
+  안개 가산·감산 모드 (0x58 / 0x52) 면 알파만 P' = P ± F·c·As — 여러 겹도 "파티클을 다 그린 뒤 안개" 와 같다 (`SceneFogTest`).
+  장면 깊이가 지움 값 (배경) 인 화소는 `FxEnvironment.backgroundFactor` (없으면 0).
+- 누가 받나: 파티클 = PTC 가 있고 `SceneFog.preFogFlags` (버킷 ≠ 6 ∧ 층 ≠ 3) 인 정의 (`ParticleSystem.fogFor`) — 레벨 이미터 · 날씨 · 이웃 슬롯 이미터 ·
+  이펙트 파티클. 근사 정의 (PTC 없음, `MagicFx` 의 bolt/soul …) 와 사슬·궤적 (`BladeChainRenderer`, 층 3) 은 안개 없음. 하늘 단계 파티클 (층 1) 은 하늘 지오메트리와
+  같은 배경 계수 (`uFogPass` 2). 이펙트 GO 모델 (`AnimatedModel.sceneFog`: Creator 병사 · 파편 · 마법 GO) = 불투명 조각 깊이 · 반투명 장면 깊이 · 가산 (1−F) ·
+  층 3·4 머티리얼 없음 (예전엔 안개가 아예 없었다). 렌즈플레어 (가산) · 물 (층 2 모델 쪽으로 봄 [근사], 예전 게임 경로는 안개 없음) 도 장면 깊이.
+- 그대로 둔 것 [미수정 — 지오메트리 모양을 바꾸지 않기로]: 층 3 지오메트리 (블레이드, 층 3 머티리얼) 는 원작이 안개 뒤인데 셰이더 안 안개를 받는다,
+  그림자 합성 (원작은 안개 앞 −38 → 안개가 그림자를 옅게) 은 안개 뒤처럼 −38, 반투명 레벨 지오메트리는 뒤 Z 대신 자기 깊이 [근사].
+- 확인: `-Dgow.scenefog=off` (또는 `GOW_SCENEFOG=off`) 면 예전 그대로 — 10 화면에서 예전 빌드와 화소까지 같다 (43 §24).
+- 비용 (1280×720, M 시리즈, 05A 마당, 수직 동기 끔): GPU +0.4–0.9 ms (프레임 2.2 → 2.8 ms), 스왑 전 CPU +0.9 ms — 깊이 복사가 렌더 패스를 나누는 고정 비용
+  (64×64 만 복사 · 32F/24 · 블릿 모두 같음), 프레임 간격 7.8 → 7.3 ms 로 늘지 않음. 안개가 없거나 안개 앞 반투명 패스가 없는 프레임은 복사하지 않는다.
 
 ## 4. 머티리얼 (WadAssets / Renderer)
 - `WadAssets.classify`: 0x48 → ADD, 0x42 → SUB, 0x01 → INV, p28·p38 ≠ 1 · TXR bit18 → ALPHA, 텍스처 없는 0x44 → OPAQUE, 나머지 → **CUTOUT**.

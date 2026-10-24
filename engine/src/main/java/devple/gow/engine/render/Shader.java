@@ -185,15 +185,46 @@ public final class Shader implements AutoCloseable {
 		}
 	}
 
-	private static String load(String res) {
+	/**
+	 * 클래스패스 /shaders/ 소스. {@code #include "파일"} 줄은 그 파일 내용으로 바꾼다 (GLSL 410 에 없는 지시어 — 안개 공용 코드 fog.glsl 을
+	 * basic.frag · particle.frag · lensflare.frag 가 함께 쓴다, 31 문서 §3.1). 같은 파일은 한 번만.
+	 */
+	public static String source(String res) {
+		return expand(res, new java.util.HashSet<>());
+	}
+
+	private static String expand(String res, java.util.Set<String> seen) {
+		String src;
 		try (InputStream in = Shader.class.getResourceAsStream("/shaders/" + res)) {
 			if (in == null) {
 				throw new IllegalArgumentException("셰이더 없음: " + res);
 			}
-			return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+			src = new String(in.readAllBytes(), StandardCharsets.UTF_8);
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
 		}
+		if (!src.contains("#include")) {
+			return src;
+		}
+		StringBuilder out = new StringBuilder(src.length() + 4096);
+		for (String line : src.split("\n", -1)) {
+			String t = line.strip();
+			if (t.startsWith("#include \"") && t.endsWith("\"")) {
+				String inc = t.substring(10, t.length() - 1);
+				if (seen.add(inc)) {
+					out.append(expand(inc, seen));
+				}
+				out.append('\n');
+			} else {
+				out.append(line).append('\n');
+			}
+		}
+		out.setLength(out.length() - 1);
+		return out.toString();
+	}
+
+	private static String load(String res) {
+		return source(res);
 	}
 
 	private static int compile(int type, String src) {

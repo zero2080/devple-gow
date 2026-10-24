@@ -520,6 +520,11 @@ public final class ParticleSystem implements AutoCloseable {
 		shader.use();
 		shader.set("uViewProj", vp);
 		shader.set("uTex", 0);
+		// 안개 (SceneFog): 원작 안개 패스는 층 2 파티클 버킷 0–5 뒤 → 그 파티클만 장면 깊이의 계수 (하늘 단계는 하늘과 같은 배경 계수)
+		fogScene = SceneFog.current();
+		fogPass = fogScene != null ? fogScene.applyParticles(shader, skyPass) : SceneFog.PASS_NONE;
+		fogSet = -1;
+		fogDepthBound = false;
 		glEnable(GL_BLEND);
 		glDepthMask(false);
 		glBindVertexArray(vao);
@@ -623,6 +628,7 @@ public final class ParticleSystem implements AutoCloseable {
 			} else {
 				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 			}
+			fogFor(d, d.blend() != RenderModel.Blend.ADD);
 			glDrawArrays(GL_TRIANGLES, 0, verts);
 		}
 		glBindVertexArray(0);
@@ -630,6 +636,32 @@ public final class ParticleSystem implements AutoCloseable {
 		glDisable(GL_BLEND);
 		glBlendEquation(GL_FUNC_ADD);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	}
+
+	/** 이번 renderAll 의 안개 패스 ({@link SceneFog#applyParticles}) 와 셰이더에 마지막으로 넣은 (uFogPass, uFogDst) 묶음 (−1 = 아직). */
+	private int fogPass, fogSet = -1;
+	private SceneFog fogScene;
+	/** 이번 renderAll 에서 장면 깊이 사본을 묶었는가 (안개 앞 정의를 처음 그릴 때). */
+	private boolean fogDepthBound;
+
+	/**
+	 * 정의 하나의 안개 (16 §1.2 / {@link SceneFog}): 원작 안개 앞 PTC (층 2 버킷 0–5) 만 — 버킷 6 (flags &amp; 0x4040, 열기 아지랑이 포함) ·
+	 * 층 3 (flags 0x80000) · 근사 정의는 안개 없음.
+	 *
+	 * @param alphaBlend 알파 블렌드 (대상 계수 1 − As) — 가산·감산이면 false
+	 */
+	private void fogFor(ParticleDef d, boolean alphaBlend) {
+		int pass = fogPass != SceneFog.PASS_NONE && SceneFog.preFog(d.ptc()) ? fogPass : SceneFog.PASS_NONE;
+		if (pass == SceneFog.PASS_SCENE && !fogDepthBound) {
+			fogScene.bindSceneDepth(shader);
+			fogDepthBound = true;
+		}
+		int key = pass * 2 + (alphaBlend ? 1 : 0);
+		if (key != fogSet) {
+			shader.set("uFogPass", pass);
+			shader.set("uFogDst", alphaBlend ? 1 : 0);
+			fogSet = key;
+		}
 	}
 
 	/** 그리기 정의 목록 (프레임마다 다시). */
@@ -740,6 +772,7 @@ public final class ParticleSystem implements AutoCloseable {
 				glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 			}
 		}
+		fogFor(d, sh.gsBlend() == 0x44);
 		glDepthMask(sh.depthWrite());
 		float texW = tex != null ? tex.width() * 16f : 1024f, texH = tex != null ? tex.height() * 16f : 1024f;
 		float tanHalf = (float) Math.tan(Math.toRadians(cam.fovDeg) / 2);

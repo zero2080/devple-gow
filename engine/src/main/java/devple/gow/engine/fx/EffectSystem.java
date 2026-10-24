@@ -490,8 +490,15 @@ public final class EffectSystem implements AutoCloseable {
 		if (ps == null) {
 			return;
 		}
+		// 이펙트 GO 모델은 원작 층 2 (안개 노드 = 층 2 칸 5 앞) — 불투명은 조각 깊이, 반투명은 장면 깊이로 안개 (SceneFog, AnimatedModel.sceneFog)
+		SceneFog sf = live.isEmpty() ? null : SceneFog.current();
+		boolean fog = sf != null && sf.applyModel(skinned);
 		for (Effect e : live) {
 			e.draw(cam, aspect, white);
+		}
+		if (fog) {
+			skinned.use();
+			FxEnvironment.disableFog(skinned);
 		}
 		ps.render(cam, aspect);
 	}
@@ -515,6 +522,7 @@ public final class EffectSystem implements AutoCloseable {
 			if (gm != null) {
 				try {
 					m = new AnimatedModel(a, gm, d.skeleton(), skinned);
+					m.sceneFog = true;
 				} catch (RuntimeException ex) {
 					m = null;
 				}

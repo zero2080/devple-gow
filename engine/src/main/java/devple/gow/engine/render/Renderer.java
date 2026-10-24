@@ -48,6 +48,7 @@ public final class Renderer implements AutoCloseable {
 	public static final float CLEAR_R = 0f, CLEAR_G = 0f, CLEAR_B = 0f;
 
 	public void beginFrame() {
+		devple.gow.engine.fx.SceneFog.end(); // 지난 프레임의 장면 깊이 안개를 넘기지 않는다
 		glViewport(0, 0, engine.window().width(), engine.window().height());
 		glClearColor(CLEAR_R, CLEAR_G, CLEAR_B, 1f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);

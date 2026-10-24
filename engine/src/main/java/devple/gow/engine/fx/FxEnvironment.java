@@ -183,8 +183,22 @@ public final class FxEnvironment {
 
 	private EnvParams.Fog override;
 
-	/** basic.frag 안개 유니폼 설정. 안개가 없거나 꺼져 있으면 끈다. */
+	/** 이번 프레임에 걸리는 안개가 있는가 (켜짐 + 레벨 안개 또는 대체 안개). */
+	public boolean fogActive() {
+		return enabled && (override != null || fog != null || layered != null);
+	}
+
+	/** basic.frag 안개 유니폼 설정. 안개가 없거나 꺼져 있으면 끈다. 안개 텍스처는 유닛 1. */
 	public void applyFog(Shader s, Camera cam, int fbHeight) {
+		applyFog(s, cam, fbHeight, 1);
+	}
+
+	/**
+	 * fog.glsl 안개 유니폼 설정 (basic.frag · particle.frag · lensflare.frag 공용). 안개가 없거나 꺼져 있으면 끈다.
+	 *
+	 * @param texUnit 안개 텍스처 유닛 (basic = 1, 파티클은 열기 아지랑이 프레임 복사본이 1 이라 {@link SceneFog#FOG_TEX_UNIT})
+	 */
+	public void applyFog(Shader s, Camera cam, int fbHeight, int texUnit) {
 		EnvParams.Fog fog = override != null ? override : this.fog;
 		EnvParams.LayeredFog layered = override != null ? null : this.layered;
 		if (!enabled || (fog == null && layered == null)) {
@@ -223,9 +237,9 @@ public final class FxEnvironment {
 		float scale = layered != null ? layered.texScale() : fog.texScale();
 		Texture t = fogTexture(mat);
 		if (t != null && textured) {
-			t.bind(1);
+			t.bind(texUnit);
 			glActiveTexture(GL_TEXTURE0);
-			s.set("uFogTex", 1);
+			s.set("uFogTex", texUnit);
 			s.set("uFogTexOn", 1);
 			s.set("uFogTexXf", sc[0] * time, sc[1] * time, (float) Math.toRadians(rot * time), scale <= 0 ? 1 : scale);
 			s.set("uFogWidth", (float) fbWidth);

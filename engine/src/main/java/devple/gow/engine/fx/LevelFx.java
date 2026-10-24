@@ -264,12 +264,26 @@ public final class LevelFx implements AutoCloseable {
 		}
 	}
 
-	/** 반투명 효과 패스 (물, 비, 파티클). */
+	/**
+	 * 반투명 효과 패스 (물, 비, 파티클). 둘 다 원작 안개 앞 (층 2) — 장면 깊이 안개 ({@link SceneFog}). 물은 원작 SCR_Water 가 층 2 · 층 3 모델을
+	 * 하나씩 만든다 (0x219548 +0xD4 = 2, 0x2197C0 = 3) — 엔진 반사 수면은 층 2 쪽으로 본다 [근사]. 예전엔 게임 경로에서 안개가 꺼진 뒤라 안개 없음.
+	 */
 	public void renderEffects(Engine e, Camera cam) {
 		particles.setForward(new Vector3f(cam.target).sub(cam.eye));
 		if (env.enabled()) {
-			for (WaterSurface w : waters) {
-				w.render(e.renderer().basic(), e.renderer().white());
+			if (!waters.isEmpty()) {
+				devple.gow.engine.render.Shader basic = e.renderer().basic();
+				basic.use(); // 유니폼은 지금 프로그램에 (뷰어 경로는 앞의 스키닝 그리기가 다른 프로그램을 남긴다)
+				SceneFog sf = SceneFog.current();
+				boolean fog = sf != null && sf.applyModel(basic);
+				basic.set("uFogScene", fog ? 1 : 0);
+				for (WaterSurface w : waters) {
+					w.render(basic, e.renderer().white());
+				}
+				basic.set("uFogScene", 0);
+				if (fog) {
+					FxEnvironment.disableFog(basic);
+				}
 			}
 			particles.render(cam, e.window().aspect());
 			e.renderer().basic().use();

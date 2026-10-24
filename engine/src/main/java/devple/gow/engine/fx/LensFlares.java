@@ -110,6 +110,11 @@ public final class LensFlares implements AutoCloseable {
 		glDepthMask(false);
 		shader.use();
 		shader.set("uTex", 0);
+		// 렌즈플레어 노드 (층 2 칸 5 키 0) 는 안개 노드 (같은 칸 키 0x7100) 앞 → 장면 깊이 안개 (SceneFog)
+		SceneFog sf = SceneFog.current();
+		if (sf == null || !sf.applyScene(shader)) {
+			shader.set("uFogPass", SceneFog.PASS_NONE);
+		}
 		glBindVertexArray(vao);
 		for (Flare f : flares) {
 			Vector4f c = vpm.transform(new Vector4f(f.pos(), 1));

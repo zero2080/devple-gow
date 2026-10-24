@@ -28,11 +28,14 @@ public final class AnimatedModel implements AutoCloseable {
 
 	public static final int MAX_JOINTS = 128;
 
-	/** @param litColor 동적 라이트 경로의 머티리얼 색 (MAT 헤더 색 × 레이어 rgb, VU qw 76 — {@link WadAssets#litColor}) */
-	/** @param src 원본 스킨 파트 — 혼합 노드 팔레트 ({@link SkinnedModel.Part#palette}, 05 문서 "범위 밖 슬롯") */
+	/**
+	 * @param litColor 동적 라이트 경로의 머티리얼 색 (MAT 헤더 색 × 레이어 rgb, VU qw 76 — {@link WadAssets#litColor})
+	 * @param src     원본 스킨 파트 — 혼합 노드 팔레트 ({@link SkinnedModel.Part#palette}, 05 문서 "범위 밖 슬롯")
+	 * @param postFog 안개 뒤 층 (3·4) 머티리얼 ({@link WadAssets#postFogLayer}) — {@link #sceneFog} 모델만 본다
+	 */
 	private record Part(SkinnedMesh mesh, Texture texture, RenderModel.Blend blend, float[] tint, boolean lit,
 						boolean jointLocal, devple.gow.tools.fx.MaterialAnim.Anim matAnim, int[] joints, float[] litColor, boolean late,
-						SkinnedModel.Part src) {
+						SkinnedModel.Part src, boolean postFog) {
 
 		/** 파트가 쓰는 관절이 모두 숨김이면 그리지 않는다 (ANM u8 가시성, 41 문서 §2). */
 		boolean hiddenBy(boolean[] hidden) {
@@ -108,6 +111,12 @@ public final class AnimatedModel implements AutoCloseable {
 	 * 하늘 모델 (SCR_Sky 소유 GO, 0x218778): 동적 조명 플래그 0x800 을 끄고 층 1 로 — 라이트 묶음·그림자를 모으지 않는다 [확실: 0x218778 이 렌더 플래그 &amp;= ~0x800].
 	 */
 	public boolean sky;
+	/**
+	 * 이펙트 GO (EffectSystem): 안개 앞 반투명 패스로 그린다 ({@link devple.gow.engine.fx.SceneFog}, 16 §1.2) — 호출자가 셰이더에 장면 안개를 걸고,
+	 * 파트마다 불투명 = 조각 깊이 (지오메트리와 같음), 반투명 = 장면 깊이 사본 (uFogScene, 원작 안개 패스는 깊이를 쓰지 않는 화소에 뒤 장면 Z 의
+	 * 계수), 가산·뺄셈 = (1 − F) 배 (uFogAdd), 층 3·4 머티리얼 = 안개 없음 (uFogOff). false (캐릭터·레벨 GO) 면 예전 그대로.
+	 */
+	public boolean sceneFog;
 
 	/** 그림자 합성 뒤 단계 ({@link devple.gow.engine.render.DrawStage#LATE}) 에 그릴 파트가 있는가. */
 	public boolean drawsLate() {
@@ -198,7 +207,7 @@ public final class AnimatedModel implements AutoCloseable {
 				tint = l.rgba();
 			}
 			parts.add(new Part(new SkinnedMesh(v, idx), tex, blend, tint, p.hasNormal, p.jointLocal(skeleton), assets.materialAnim(p.material),
-					used.stream().mapToInt(Integer::intValue).toArray(), litColor, late, p));
+					used.stream().mapToInt(Integer::intValue).toArray(), litColor, late, p, WadAssets.postFogLayer(mat)));
 		}
 	}
 
@@ -346,7 +355,17 @@ public final class AnimatedModel implements AutoCloseable {
 				// 노멀맵 (원작에 없음, 44 문서): 첫 레이어 텍스처, 불투명·알파 블렌드만
 				boolean nm = (mode == RenderModel.Blend.OPAQUE || mode == RenderModel.Blend.ALPHA)
 						&& devple.gow.engine.render.Renderer.bindNormalMap(shader, p.texture());
+				if (sceneFog) {
+					shader.set("uFogScene", opaque ? 0 : 1);
+					shader.set("uFogAdd", mode == RenderModel.Blend.ADD || mode == RenderModel.Blend.SUB ? 1 : 0);
+					shader.set("uFogOff", p.postFog() ? 1 : 0);
+				}
 				p.mesh().draw();
+				if (sceneFog) {
+					shader.set("uFogScene", 0);
+					shader.set("uFogAdd", 0);
+					shader.set("uFogOff", 0);
+				}
 				if (nm) {
 					shader.set("uNmOn", 0);
 				}
