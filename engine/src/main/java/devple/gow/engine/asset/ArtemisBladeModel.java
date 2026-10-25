@@ -14,7 +14,8 @@ import java.nio.file.Path;
 
 /**
  * 아르테미스의 검 렌더 ({@code R_BRSRK<단계>.WAD} 의 {@code berserkblade} 스켈레톤 + {@code MDL_berserkBlade}).
- * 오브젝트 루트 = 히어로 오른손 무기 로케이터 {@code rWeapOH} (BER* 애니가 이 관절로 검을 움직인다 [추정]).
+ * 오브젝트 루트 = 히어로 오른손 관절 {@code rWeapIH} — 원작 장착 0x19C240 이 검 GO 를 Hash127Upper("RWEAPIH") 관절에 붙인다
+ * (0x19C388 → 0x138360 관절 찾기 → 0x131460 부착) [확실]. ~~rWeapOH~~ 는 블레이드 사슬 로케이터라 BER* 자세에서 손과 5–15 · 축 40° 넘게 어긋났다 (43 §34).
  */
 public final class ArtemisBladeModel implements AutoCloseable {
 
@@ -45,7 +46,7 @@ public final class ArtemisBladeModel implements AutoCloseable {
 	}
 
 	public void draw(Camera cam, float aspect, Matrix4f heroWorld, Skeleton heroSk, float[][] heroJoints, Texture white) {
-		int i = heroSk.indexOf("rWeapOH");
+		int i = heroSk.indexOf("rWeapIH");
 		if (i < 0) {
 			return;
 		}

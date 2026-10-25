@@ -2080,6 +2080,25 @@ HUD·메시지 상자·구역 제목 (§19.2-5 의 넘겨 띄우기)·이펙트�
 - 이분 (결정적, 같은 빌드 두 번씩 같은 결과): ATHN03C · ATHN05B 모두 68b8f16 = 전 값, 69cfd3e = 후 값 (71ea2e4 · 22d2e77 도 후 값).
 - 실제 세이브 위치 (`~/Library/Application Support/devple-gow`) 는 생기지 않았다. 엔진 테스트 676 통과.
 
+## 34. QA vs PS2 영상 2화 — 아틀라스의 시험: PAND01A 구멍 방 → 위층 · 방패 · 수레 → PAND01D 줄 싸움 · 하데스의 망령 → 세이브 (영상 4050–5189 초, 2026-10-25)
+
+영상 = hoXYXNef60U (2화, 전사 (보통) = `-Dgow.difficulty=1`). 레벨 연결 [확실: 스크립트]: PAND01A (구역 11 "아틀라스의 시험" — ZoneReportGroup (−240, −2, −36),
+아르테미스의 검 방 MAtalkingHead (−240, 10, 126) 다음) ─ 가운데 구멍 방 (네 구역 Section1..4, 해골 HoleSkelly · 고르곤 HoleMedusa 스포너) · 위층 들보 (BBeamZone,
+갑옷 해골 R_SK4 · 궁수 setTimedArchers) · 남쪽 수레 (PushPullBlock) → 누름판 PressPlate (−904, 8, −1532) → 문 ScoobyDoor · 위층 방패 AlcoveShield (−1016, 148, −1728)
+메시지 259 · 방패 문 shieldoor (−1009, 4, −1345) ─ 구멍 바닥 LoadCheckD (−505, −191, −914) ─ PAND01D (줄 해골 RopeSkelly · 동굴 방패 CaveShield 메시지 260 ·
+HoleLoad → PAND01A). 엔진 = origin/main 4fe5fa2 위.
+
+### 34.1 엔진 결함과 수정
+1. **아르테미스의 검 공격이 칼날이 아니라 영웅 앞 구로 맞았다 (영상 4062–4160 · 4245–4265 · 4980–5060, 검으로 싸우는 구간 전부).** BER* 공격 레코드는 부위 10
+   (예 BERCOMBOH1 [0.29–0.35] 피해 5, fl 02) 인데 엔진 영웅 히트박스엔 부위 10 구가 없어 정면 근사 (앞 55, 반지름 55 — 영웅 앞 110 까지, 옆 · 뒤는 못 맞힘) 로 판정했다.
+   원작: 검 GO `berserkblade` 의 `CDV_berserkBlade` (R_BRSRK0..2 같은 값, 구 2 개 r 35.52 · 관절 로컬 (0, 8.73, −88.5) · (0, 0, −34.7), 재질 berserkColl PartType 10)
+   를 장착 0x19C240 이 히어로 관절 **RWEAPIH** 에 붙인다 (0x19C388 Hash127Upper → 0x138360 관절 찾기 → 0x131460 부착, GO +0xF4 |= 0x200) [확실]. 검 관절 idle 배율 0.25
+   가 구에도 걸려 (0x13AAA8) 월드 r 8.88, 손잡이에서 칼날 따라 −8.7 · −22.1 — 메시 (3.8 … −30.4) 와 같은 범위 [확실: 데이터]. → `HitVolumes.forHero(…, brsrk)`
+   (부위 10 구를 rWeapIH 에), `WeaponAttach.berserkBlade`, HeroRig 가 R_BRSRK0 을 읽는다. □□□□ (H1 → H2 → H1 → H4) 의 해골 (R_SKS) 적중: 앞 40 · 60 = 3 (예전 3),
+   앞 75 · 100 = 0 (예전 3), 옆 40 = 2–3 · 뒤 40 = 3 (예전 0) (`ArtemisHitVolumeTest`). 같은 까닭으로 검 렌더도 rWeapOH (블레이드 사슬 로케이터 — BER* 자세에서 손과
+   5–15 · 축 40° 넘게 어긋남) → rWeapIH (`ArtemisBladeModel`): 칼을 손에 쥐고 휘두른다 (영상 4062 · 4200 의 칼 방향).
+2. 하네스 [엔진 전용]: `-Dgow.auto.artemis` — 봇이 검을 보유했는데 들지 않았으면 싸울 때 L1 홀드 + R1 (BERSERKENTER 555) 로 든다 (`BotInput.equipArtemis`).
+
 ## 시연 녹화 (-Dgow.record, -Dgow.bot) [엔진 전용]
 
 - `-Dgow.record=DIR` 로직 틱 `gow.record.every`(기본 2 = 30fps) 번마다 `DIR/f000000.jpg` 저장, `gow.record.secs` 초 뒤 종료. 녹화 중에는 lockstep (프레임당 틱 하나) 이라 렌더 속도와 무관하게 영상 시간이 게임 시간과 같다.

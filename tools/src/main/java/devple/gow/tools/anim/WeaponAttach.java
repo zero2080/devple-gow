@@ -28,19 +28,32 @@ public final class WeaponAttach {
 
 	/** R_WPN WAD 에서 블레이드 한 벌을 읽는다 (CDV/모델이 없으면 해당 필드 null). */
 	public static WeaponAttach blades(WadFile wpn) {
-		Skeleton sk = Skeleton.loadAll(wpn).stream().filter(s -> s.name.equalsIgnoreCase("maiblade")).findFirst().orElse(null);
+		return load(wpn, "maiblade", "MDL_MAIBlade", "CDV_MAIBlade");
+	}
+
+	/**
+	 * 아르테미스의 검 = R_BRSRK&lt;단계&gt;.WAD 의 {@code berserkblade} (CXT 1관절, idle 배율 0.25), {@code MDL_berserkBlade},
+	 * {@code CDV_berserkBlade} (구 2 개 r 35.5 — 관절 로컬 (0, 8.7, −88.5) · (0, 0, −34.7), PartType 10 = BER* 공격 부위; 세 단계 WAD 가 같은 값) [확실: 데이터].
+	 * 원작은 장착 (0x19C240) 때 이 GO 를 히어로 관절 {@code RWEAPIH} 에 붙인다 (0x19C388 Hash127Upper → 0x138360 → 0x131460) [확실].
+	 */
+	public static WeaponAttach berserkBlade(WadFile brsrk) {
+		return load(brsrk, "berserkblade", "MDL_berserkBlade", "CDV_berserkBlade");
+	}
+
+	private static WeaponAttach load(WadFile wad, String skeleton, String model, String cdv) {
+		Skeleton sk = Skeleton.loadAll(wad).stream().filter(s -> s.name.equalsIgnoreCase(skeleton)).findFirst().orElse(null);
 		if (sk == null) {
 			return null;
 		}
 		SkinnedModel sm = null;
-		for (GowModel m : GowModel.load(wpn)) {
-			if (m.name.equalsIgnoreCase("MDL_MAIBlade")) {
+		for (GowModel m : GowModel.load(wad)) {
+			if (m.name.equalsIgnoreCase(model)) {
 				sm = new SkinnedModel(m, 0, 0);
 			}
 		}
 		BallHull hull = null;
-		for (WadTag t : wpn.resources()) {
-			if (t.name().equalsIgnoreCase("CDV_MAIBlade") && t.data() != null && BallHull.is(t.data())) {
+		for (WadTag t : wad.resources()) {
+			if (t.name().equalsIgnoreCase(cdv) && t.data() != null && BallHull.is(t.data())) {
 				hull = new BallHull(t.name(), t.data());
 			}
 		}

@@ -130,7 +130,10 @@ public final class HeroRig implements AutoCloseable {
 				player.artemisEquipped ? Math.min(2, player.level.get(Weapon.ARTEMIS)) : -1));
 		// 원작 CDV 히트 볼륨: CDV_hero + 블레이드(R_WPN<costume>_<level> 의 CDV_MAIBlade, 레벨 무관하게 같은 구) — 34 문서
 		Path wpn = Content.file(rom, "R_WPN" + costume + "_" + Math.max(0, Math.min(5, bladeLevel())) + ".WAD");
-		combat.setHitVolumes(HitVolumes.forHero(assets.wad(), sk, java.nio.file.Files.exists(wpn) ? WadFile.load(wpn) : null));
+		// 아르테미스의 검 구 (CDV_berserkBlade, 부위 10 → rWeapIH): R_BRSRK0..2 가 같은 구라 단계 0 것 (43 §34)
+		Path brsrk = Content.file(rom, "R_BRSRK0.WAD");
+		combat.setHitVolumes(HitVolumes.forHero(assets.wad(), sk, java.nio.file.Files.exists(wpn) ? WadFile.load(wpn) : null,
+				java.nio.file.Files.exists(brsrk) ? WadFile.load(brsrk) : null));
 		blades = devple.gow.engine.asset.BladeModels.load(rom, costume, bladeLevel(), shader);
 		bladesLevelLoaded = bladeLevel();
 		chain = BladeChain.fromTweaks(tweaks);

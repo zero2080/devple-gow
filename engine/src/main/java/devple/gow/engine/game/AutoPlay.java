@@ -79,6 +79,9 @@ public final class AutoPlay {
 	public boolean gaze;
 	/** 시선이 선택 마법이 아님 (← 로 고른다). */
 	public boolean selectGaze;
+	/** 아르테미스의 검을 보유했는데 들지 않았음 (GameScene 이 매 틱, -Dgow.auto.artemis 일 때만) → 싸울 때 L1+R1 로 든다 [엔진 전용 봇, 43 §34]. */
+	public boolean artemis;
+	public static final boolean USE_ARTEMIS = System.getProperty("gow.auto.artemis") != null;
 	/** 시선을 시작할 최소 MP (단계 0 Drain 12.5/초 × 미노타우로스 저항 6000 / 6000/초 ≈ 1 초, 여유 포함). */
 	public static final float GAZE_MP = 15f;
 	private final Set<String> vetoed = new LinkedHashSet<>();
@@ -158,6 +161,7 @@ public final class AutoPlay {
 			bot.stoneTarget = stoneTarget;
 			bot.gaze = gaze;
 			bot.selectGaze = selectGaze;
+			bot.equipArtemis = artemis;
 			bot.steer(hero, enemy, camYaw, dt);
 			return bot;
 		}

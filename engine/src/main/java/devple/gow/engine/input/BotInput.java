@@ -39,6 +39,12 @@ public final class BotInput extends Input {
 	/** 시선이 선택 마법이 아님 → ← (방향키 왼쪽, 0x1D7E10) 를 누른다. */
 	public boolean selectGaze;
 	private float gazeClock, selectClock;
+	/**
+	 * 아르테미스의 검을 든다 (GameScene: -Dgow.auto.artemis + 보유 + 아직 들지 않음) — 묶음 사이에 L1 홀드 0.45 초, 0.2 초에 R1
+	 * (L1+R1 → BERSERKENTER 555, 10 문서 §4). 영상 4062–5060 처럼 검으로 싸우는 구간의 대조용 [엔진 전용 봇].
+	 */
+	public boolean equipArtemis;
+	private float equipClock;
 	/** 시선을 쏠 거리 (유닛): 원뿔 Distance 15 m × 16 = 240 안쪽. 광선을 켜 두는 최대 초. */
 	private static final float GAZE_NEAR = 215f;
 	/**
@@ -73,6 +79,20 @@ public final class BotInput extends Input {
 			if (gazeStep(d, a, dt)) {
 				return;
 			}
+		}
+		if ((equipArtemis || equipClock > 0) && clock == 0) {
+			equipClock += dt;
+			if (equipClock < 0.45f) {
+				down.add(PadButton.L1);
+				if (equipClock >= 0.2f && equipClock < 0.28f) {
+					down.add(PadButton.R1);
+				}
+				return;
+			}
+			if (equipClock < 0.9f) {
+				return; // BERSERKENTER 동안 손대지 않음 (아직 안 들었으면 다음에 다시)
+			}
+			equipClock = 0;
 		}
 		if (d > NEAR && clock == 0) {
 			lx = (float) -Math.sin(a);

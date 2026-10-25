@@ -369,7 +369,7 @@ if owner.HP <= 0 and 큐 비었음: 이벤트 14(사망) 분기 → 큐
 | 2 / 3 | 블레이드 `weaponLeftMat` (CDV_MAIBlade, r 13.2) 왼손 / 오른손(flags 0x200) | COMBO3A–F, COMBO6A, BLOCK360, AIR* … / 미노타우로스 `LeftCollisionMat`(관절 26) = 2 |
 | 7 | 히어로 `rightFootCollsionMat` (발 관절 56·60, r 6.8) | ROPEHOH* |
 | 9 | 히어로 `extra1CollsionMat` (pelvis 기준 정면 z −20, r 27) | GRAB, BRUTAL1, IMPALE, PARRY02 (대부분 dmg 0) |
-| 10 | (아르테미스의 검 — CDV 미확인) | BER* |
+| 10 | 아르테미스의 검 `CDV_berserkBlade` `berserkColl` (R_BRSRK, 구 2 개 r 35.5 × 검 관절 배율 0.25, 검 GO 는 히어로 `rWeapIH` 에 — 0x19C388, 34 §5) | BER* |
 | 11 | 블레이드 `weaponTwinCollisionMat` (같은 구) | COMBO4C/4D, BRUTAL1/3, BLOCKFORWARDFLIP |
 | 4/5/0 | 미확인 (영웅 1회씩, 미노타우로스 0) | |
 

@@ -27,6 +27,8 @@ import java.util.List;
 public final class HitVolumes {
 
 	public static final int PART_BODY = 1, PART_LEFT = 2, PART_RIGHT = 3, PART_TWIN = 11;
+	/** 아르테미스의 검 (CDV_berserkBlade 의 PartType, BER* 공격 레코드 부위). */
+	public static final int PART_ARTEMIS = 10;
 
 	/** 구 하나의 원본 (관절 또는 무기 부착). */
 	private record Src(int joint, float[] local, float radius, int part, float[] attach, int fx) {
@@ -326,6 +328,17 @@ public final class HitVolumes {
 
 	/** 크레토스: CDV_hero + 블레이드 두 자루 (wpn = R_WPN&lt;costume&gt;_&lt;level&gt;.WAD, null 이면 몸만). */
 	public static HitVolumes forHero(WadFile heroWad, Skeleton sk, WadFile wpn) {
+		return forHero(heroWad, sk, wpn, null);
+	}
+
+	/**
+	 * 크레토스 + 아르테미스의 검 (brsrk = R_BRSRK&lt;단계&gt;.WAD, null 이면 없음): CDV_berserkBlade 구 2 개 (PartType 10) 를 히어로 관절
+	 * {@code rWeapIH} 에 — 원작 장착 0x19C240 이 검 GO 를 Hash127Upper("RWEAPIH") 관절에 붙인다 (0x19C388 → 0x138360 → 0x131460) [확실].
+	 * 검 관절 0 의 idle 배율 0.25 가 구에도 걸려 월드 반지름 ≈ 8.9, 손잡이에서 ≈ 31 까지 (0x13AAA8: 중심 · 관절 행렬, 반지름 × 행 길이).
+	 * 예전 엔진은 부위 10 구가 없어 BER* 공격을 정면 근사 구 (앞 55, 반지름 55 — 영웅 앞 110 까지) 로 판정했다 (43 §34).
+	 * 검을 들지 않았을 때는 부위 10 공격 레코드가 없어 (BER* 만 10) 판정에 쓰이지 않는다.
+	 */
+	public static HitVolumes forHero(WadFile heroWad, Skeleton sk, WadFile wpn, WadFile brsrk) {
 		HitVolumes v = new HitVolumes();
 		BallHull h = cdvFor(heroWad, sk);
 		if (h != null) {
@@ -340,6 +353,10 @@ public final class HitVolumes {
 			if (r >= 0) {
 				v.addWeapon(blades, r, true);
 			}
+		}
+		int ih = sk.indexOf("rWeapIH");
+		if (brsrk != null && ih >= 0) {
+			v.addWeapon(WeaponAttach.berserkBlade(brsrk), ih, true); // GO +0xF4 |= 0x200 (0x19C3BC) — 부위 10 은 2 → 3 바꿈 대상 아님
 		}
 		return v;
 	}

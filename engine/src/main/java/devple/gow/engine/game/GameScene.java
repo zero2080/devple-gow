@@ -4035,6 +4035,7 @@ public final class GameScene implements Scene {
 			auto.gaze = gazeOwned && hero.player.mp >= AutoPlay.GAZE_MP && at != null && !at.dead() && !at.petrified()
 					&& at.freezeMax() < 60000 && !grab.active() && gazeStall < 0.4f;
 			auto.selectGaze = gazeOwned && hero.player.selectedMagic != Weapon.MEDUSA;
+			auto.artemis = AutoPlay.USE_ARTEMIS && hero.player.owned(Weapon.ARTEMIS) && !hero.player.artemisEquipped && !auto.gaze;
 			// 광선 조준 (MedusaGaze.aim = 영웅 combatant 대상) 은 봇이 고른 대상 — 가장 가까운 적이 석상이면 광선이 석상 쪽으로 가 산 미노타우로스를
 			// 못 맞혔다 [엔진 전용 봇]
 			botAim = gazeOwned && at != null && !at.dead() ? at : null;
