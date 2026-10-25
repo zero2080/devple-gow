@@ -9,6 +9,12 @@ import devple.gow.tools.content.Region;
 import devple.gow.tools.exe.Elf;
 import devple.gow.tools.exe.R5900;
 import devple.gow.tools.fx.EnvParams;
+import devple.gow.tools.model.GowMesh;
+import devple.gow.tools.model.GowModel;
+import devple.gow.tools.model.MeshObject;
+import devple.gow.tools.model.VertexBatch;
+import devple.gow.tools.model.VifParser;
+import devple.gow.tools.model.VifUnpack;
 import devple.gow.tools.script.EscOp;
 import devple.gow.tools.script.EscScript;
 import devple.gow.tools.texture.MaterialResource;
@@ -19,6 +25,7 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -182,5 +189,60 @@ class DesertSirensQaTest {
 		EnemyFactory.Kind k = EnemyFactory.load(Content.file(rom(), "DEST01.WAD"), pk, 307, "aoxsa");
 		assertEquals(307, k.ai1());
 		assertEquals("MDL_aoXSA", k.model());
+	}
+
+	/**
+	 * V2-32 UV 는 V2-16 과 같은 4.12 정수다 (43 §31.2-5) [확실]: VU1 마이크로프로그램 (MSCAL 0/3/6, STCYCL CL 2/3/4 배치) 은 UNPACK 폭을 모른다 —
+	 * V2-16 은 부호 확장, V2-32 는 그대로 같은 32비트 정수 칸에 들어가고 ITOF12 로 바뀐다. 예전 파서는 V2-32 를 float 비트로 읽어 4096 → 5.7e-42 (≈ 0).
+	 */
+	@Test
+	void v2_32UvIsTheSame4_12IntegerAsV2_16() {
+		VifUnpack pos = new VifUnpack(3, VifUnpack.VL_16, 2, false, true, 3, 1, 2, 4, new int[]{0, 0, 0, 0x8000, 16, 0, 0, 0x8000}, 0, null);
+		int[] raw = {4096, -2048, 21799936, 0x7FFF}; // 1.0, −0.5, 5322.25 (ATHN03A MAT_M01stnBlock05), 7.99976
+		VertexBatch b32 = new VertexBatch(new VifParser.Batch(List.of(
+				new VifUnpack(1, VifUnpack.VL_32, 0, false, true, 3, 1, 2, 2, raw, 0, null), pos), 0, true, 0));
+		assertEquals(1f, b32.uv[0][0]);
+		assertEquals(-0.5f, b32.uv[0][1]);
+		assertEquals(5322.25f, b32.uv[1][0]);
+		VertexBatch b16 = new VertexBatch(new VifParser.Batch(List.of(
+				new VifUnpack(1, VifUnpack.VL_16, 0, false, true, 3, 1, 2, 2, new int[]{4096, -2048, 0, 0x7FFF}, 0, null), pos), 0, true, 0));
+		assertEquals(b16.uv[0][0], b32.uv[0][0]);
+		assertEquals(b16.uv[0][1], b32.uv[0][1]);
+		assertEquals(b16.uv[1][1], b32.uv[1][1]);
+	}
+
+	/**
+	 * 사이렌 문 별 (영상 1500 · 2345 · 2453–2456 의 흰 별): DEST01 MDL_SirenGlow1–3 / SirenEnter1–3 (MAT_lambert13, 가산 텍스처) 의 사각형은 V2-32 UV
+	 * 0..4096 = 0..1. float 비트로 읽으면 UV 가 전부 ≈ 0 이라 텍스처 모서리 화소 (투명) 만 찍혀 별이 보이지 않았다.
+	 */
+	@Test
+	void sirenDoorStarsHaveFullTextureUvs() throws Exception {
+		int models = 0;
+		for (GowModel gm : GowModel.load(wad("DEST01"))) {
+			if (!gm.name.matches("MDL_Siren(Glow|Enter)[123]")) {
+				continue;
+			}
+			float max = 0;
+			for (GowMesh m : gm.meshes) {
+				for (GowMesh.Part p : m.parts) {
+					for (GowMesh.Group g : p.groups()) {
+						for (MeshObject o : g.objects()) {
+							for (VertexBatch vb : o.batches) {
+								assertNotNull(vb.uv, gm.name);
+								for (float[] uv : vb.uv) {
+									for (float f : uv) {
+										assertTrue(f >= 0f && f <= 1f, gm.name + " UV " + f);
+										max = Math.max(max, f);
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+			assertEquals(1f, max, gm.name + " UV 최대");
+			models++;
+		}
+		assertEquals(6, models);
 	}
 }

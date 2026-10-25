@@ -269,6 +269,7 @@ public final class AutoPlay {
 	 *   btn:이름           버튼 한 번 (PadButton 이름)
 	 *   die:               영웅 HP 0 (체크포인트 재시작 검증)
 	 *   break:소유GO       부서지는 물체를 부숨 (지금 레벨, 없으면 다른 슬롯 레벨 것)
+	 *   kill:AI1           그 템플릿의 살아 있는 적을 모두 HP 0 + EV_DEATH (빈 값 = 가장 가까운 적) — 봇이 못 이기는 싸움 건너뛰기
 	 * </pre>
 	 */
 	private final List<String> route = parseRoute(System.getProperty("gow.auto.route"));
@@ -379,6 +380,11 @@ public final class AutoPlay {
 			case "break" -> {
 				// break:소유GO — 부서지는 물체를 부순다 (앞 구간의 마법 파괴 대신, 예 ATHN05C 돌문 gobreakdoorstone Hit Points 99) [엔진 전용]
 				pendingBreak = a[0];
+				return routeNext(true, bot.press(null));
+			}
+			case "kill" -> {
+				// kill:AI1 — 그 템플릿의 살아 있는 적을 모두 HP 0 + EV_DEATH (봇이 못 이기는 싸움을 건너뛰고 뒤 스크립트를 볼 때, 예 DEST01 세이렌 122) [엔진 전용]
+				pendingKill = a.length > 0 && !a[0].isBlank() ? Integer.parseInt(a[0].trim()) : -1;
 				return routeNext(true, bot.press(null));
 			}
 			case "btn" -> {
@@ -590,6 +596,15 @@ public final class AutoPlay {
 		String b = pendingBreak;
 		pendingBreak = null;
 		return b;
+	}
+
+	private Integer pendingKill;
+
+	/** 경로 단계 kill:AI1 — 이번 틱에 죽일 적 템플릿 (한 번, −1 = 가장 가까운 적, 없으면 null). */
+	public Integer takeKill() {
+		Integer k = pendingKill;
+		pendingKill = null;
+		return k;
 	}
 	/**
 	 * gow.auto.deadmenu: 자동 플레이도 죽으면 사망 메뉴 ("YOU ARE DEAD" → 1 초 뒤 ○ = 기본 선택 "마지막 체크포인트에서 다시 시작") 를 거친다 — 영상 8210 화면

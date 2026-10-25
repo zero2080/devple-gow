@@ -131,7 +131,7 @@ NOP, STCYCL, OFFSET, BASE, ITOP, STMOD, MSKPATH3, MARK, FLUSHE/FLUSH/FLUSHA, MSC
 |------|-----|------|------|
 | V4-16 | 0x6D | 위치 x,y,z + w | 정수(+STROW) ÷ 16. w: bit15 = ADC, 하위 15비트 = 스키닝 가중치(4096 = 1.0) |
 | V2-16 | 0x65 | UV | ÷ 4096 (VU ITOF12) — OBJ 는 v 뒤집음 |
-| V2-32 | 0x64 | UV (float) | 비트 그대로 float (`fogMaterial`, 다층 메시) |
+| V2-32 | 0x64 | UV (넓은 범위) | **V2-16 과 같은 정수 ÷ 4096** — ±8 을 넘는 UV (줄·사슬·달빛·반복 무늬·톱니바퀴·`fogMaterial` 등). ~~비트 그대로 float~~ (정정 2026-10-25, 43 §31.2-5: 같은 MSCAL 0/3/6 · 같은 STCYCL 배치라 VU1 이 구분할 수 없고, 81 WAD 의 1369 배치 · 값 182 292 개가 모두 정수 — float 로 읽으면 UV ≈ 0 · 큰 값은 NaN) |
 | V3-8 | 0x6A | 법선 | ÷ 127 |
 | V4-8 (usn) | 0x6E | 정점색 RGBA | 0x80 = 1.0 (PS2 관례) |
 | V4-32 | 0x6C | VU 파라미터 | 주소 0: GIF 태그, 주소 0xF4: 바운딩 구 (x,y,z,r ×16 단위) |

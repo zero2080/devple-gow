@@ -4158,6 +4158,17 @@ public final class GameScene implements Scene {
 			if (auto.takeDie()) {
 				hero.player.hp = 0; // 경로 단계 die: (검증) 이번 틱 끝에 사망 → 체크포인트 재시작
 			}
+			Integer kill = auto.takeKill();
+			if (kill != null) { // 경로 단계 kill: (검증) 적 HP 0 + EV_DEATH — 스크립트 1039 피해와 같은 길 (CombatScriptBridge)
+				for (Enemy en : enemies) {
+					EnemyFighter f = en.fighter();
+					if (!f.dead() && (kill < 0 ? f == target : f.ai1() == kill)) {
+						f.applyDamage(f.hp);
+						f.combat().fire(devple.gow.engine.combat.CombatInput.EV_DEATH, -1, null);
+						System.out.printf("경로 kill: 적 %d at (%.0f, %.0f, %.0f)%n", f.ai1(), f.pos.x, f.pos.y, f.pos.z);
+					}
+				}
+			}
 			String brk = auto.takeBreak();
 			if (brk != null) { // 경로 단계 break: (검증) 부서지는 물체를 부순다 — 공격으로 부술 때와 같은 길 (Marker 파괴 · 숨김 · 충돌 · 오브)
 				Breakables.Item bi = breakables.item(brk);

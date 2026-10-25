@@ -9,7 +9,9 @@ import java.util.List;
  * <pre>
  * V4-16  위치 x,y,z (+STROW 오프셋) / w = bit15 ADC(킥 안 함) | 하위 15비트 스키닝 가중치(4096=1.0)
  * V2-16  UV, 4096 = 1.0 (VU ITOF12)
- * V2-32  UV, float 비트
+ * V2-32  UV, V2-16 과 같은 정수 (4096 = 1.0) — ±8 을 넘는 UV (줄·사슬·달빛·반복 무늬 등). float 비트가 아니다:
+ *        같은 MSCAL 진입점(0/3/6)·같은 STCYCL 배치를 V2-16 과 함께 쓰므로 VU1 프로그램이 둘을 구분할 수 없고,
+ *        81 WAD 의 V2-32 UV 1369 배치 · 값 182 292 개가 모두 정수다 (float 로 그럴듯한 값 0 — 43 문서 §31.2-5)
  * V3-8   법선, 127 = 1.0
  * V4-8   정점 색 RGBA (부호 없음, 0x80 = 1.0)
  * V4-32  GIF 태그 / 바운딩 구(VU 주소 0xF4) 등 파라미터 쿼드워드
@@ -73,13 +75,9 @@ public final class VertexBatch {
 				pos[i][k] = p.get(i, k);
 			}
 			if (uv != null && i < t.count()) {
-				if (t.vl() == VifUnpack.VL_32) {
-					uv[i][0] = t.getFloat(i, 0);
-					uv[i][1] = t.getFloat(i, 1);
-				} else {
-					uv[i][0] = t.get(i, 0) / 4096f;
-					uv[i][1] = t.get(i, 1) / 4096f;
-				}
+				// V2-16 은 부호 확장, V2-32 는 그대로 — 어느 쪽이든 VU 메모리에는 32비트 정수가 들어가고 VU1 이 ITOF12 로 바꾼다 [확실]
+				uv[i][0] = t.get(i, 0) / 4096f;
+				uv[i][1] = t.get(i, 1) / 4096f;
 			}
 			if (normal != null && i < n.count()) {
 				for (int k = 0; k < 3; k++) {
