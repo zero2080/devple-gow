@@ -2971,6 +2971,93 @@ growTimerCode (0x18F474 +0x24 · 0x18F9BC 0x3F73 · +0x28 · +0x2C · 0x209378/0
 그대로 · 템플릿 81 · 기술 10 · 그룹 3 · Action 없음, VomitSpawnTransform 86 · 502 · 그룹 2 · LevelData4 + 1, VomitSpawn 없음), heroSelfHp (+ 0x207084 플래그 7,
 0x19CDB4 슬롯 4). 엔진 시험 752 통과.
 
+## 42. QA vs PS2 영상 3화 — 포세이돈의 시험 물 구간: PAND02D 수영장 · 돌진 문 → PAND02DD 새끼 케르베로스 동굴 → PAND02F 물속 홀 · 나이아드 · 빛줄기 방 → PAND02G 붉은 결계 방 → PAND02H 물속 큰 홀 → PAND02I 기둥 · 화로 방 · 세이브 → PAND00D (영상 3840–5760 초, 2026-10-26)
+
+영상 = HF4CELG5OxQ (3화, 전사 (보통) = `-Dgow.difficulty=1`), 프레임 423×317 (`work/verify/ep3_d/video/v<초>.jpg` 60 장 — 3840–5720, 커밋 안 함).
+엔진 = origin/main fdd299f → 8ab6023 위, 1280×720 lockstep, 스크래치 홈, `--game PAND02D/02DD/02F/02G/02H/02I --skip-movies` + 경로 하네스
+(`-Dgow.auto.route`: 순간이동 · `keys:초:SQUARE` 잠수 · `keys:초:R1` 돌진 충전 · `die:`) 또는 봇, `-Dgow.giveAll` (이제 삼지창 포함).
+
+레벨 [확실: 스크립트 · 충돌]: PAND02D 포세이돈 방 (삼지창 TridentGroup, 메시지 155 · 184 · 526 헤엄치기) 의 수영장 (Water y 240, x 768–1792 · z −3296…−2720) 바닥
+구멍 (960, −2830) → 관 (cam2Tunnel · camUnderWater) → 돌진 문 godashdoorgrp / 1 / 2 (z −3393 · −3847 · −4303, 메시지 525 "R1 을 누르고 있으십시오") → PAND02DD
+얕은 물 동굴 (NoDiving y 8, 새끼 케르베로스 R_CEP 85 × 8 · GrowAdult) → PAND02F (입구 웅덩이 −641, 물속 홀, 나이아드 NyadAI4–7 = R_NYA 템플릿 100 (체력) ·
+101 (마법), 물속 체크포인트 CheckPointGroup6 (−212, −950, 2112) · 7 (10, −1245, 3583), 세이브 (612, −1518, 4766)) → PAND02G (붉은 결계 · 하피 · 군단병, 물 −992)
+→ PAND02H (물속 큰 홀, 빛줄기) → PAND02I (기둥 · 화로 · 어른 케르베로스, 세이브) → LoadyToHub → PAND00D.
+
+### 42.1 장면 대응
+| 영상 (초) | 장면 | 원작 (스크립트 · 데이터) | 엔진 | 결과 |
+|---|---|---|---|---|
+| 3840 | 수영장 구멍 위에서 내려다본 수면 (옅은 하늘색, 바닥 구멍이 비침) | gowaterdynamic SCR_Water 5 개 (관절 1–5) + golocator6, MAT_reflenvmb (TXR_Water1_text 가운데 하늘색 · 바깥 갈색) | 고치기 전: 구멍 위 수면 없음 (어두운 물), 다른 곳은 갈색 얼룩이 흐름 → 고친 뒤 같은 옅은 수면 (`p_pool_3840.jpg`) | 고침 (42.2-3 · 4) |
+| 3850 | 사다리로 물 밖 | camLadderR/L | d1 사다리 근처 | 같은 방 |
+| 3880 | 물속 얼굴 문 + 메시지 525 | dashDoorGrp-volume-EntryMSG, Breakable 문 | 같은 문 · 메시지. 고치기 전: 돌진 없이 얼굴을 지나 헤엄침 → 막고, 충전 돌진 (18 m/s 초과) 에 부서짐 (`dashdoor_*.jpg`) | 고침 (42.2-2) |
+| 3900–3960 | 얕은 물 동굴 · 새끼 케르베로스 불덩이 | PAND02DD CerPupEnemies 85 | dd1 봇: 같은 동굴 · 새끼 · 불덩이 (`dd_pups.jpg`) | 같음 |
+| 4000–4020 | 관 속으로 잠수 (위에서 내려다봄) | cam2Tunnel (아래를 봄) | d3 f024–036 같은 구도 | 같음 |
+| 4200–4340 · 4540–4580 | 물속 홀 · 계단 · 가시 벽 · 돌 더미 | PAND02F/02G 물속 | f1 물속 청록 안개 · 거품 | 비슷 (색 · 안개) |
+| 4260 · 4280 · 4760–4820 · 4980 | 나이아드 (푸른 반투명 형체) 가 물 가운데 떠 있음, 메시지 445, R2 | NyadAI4–7 (자리 243–246, y −948 …) | **엔진은 바닥 (−1282 …) 까지 가라앉아 흰 형체로 누움** (`naiad_floor.jpg`) | 42.3 [미확인] |
+| 4360–4460 | 붉은 결계 방 싸움 | PAND02G | g1 봇 같은 방 · 결계 · 적 (`g_redroom.jpg`) | 같음 |
+| 4860–4940 | 둥근 방 빛줄기 · 매달린 석상 | PAND02F 빛줄기 방 | f1 f098–134 같은 빛줄기 · 석상 (`p_light_4860.jpg`) | 같음 |
+| 5120–5180 | 어두운 물속 큰 홀 | PAND02H | h1 같은 어두운 청색 · 빛줄기 | 같음 (봇은 지상으로 시작 — 42.3) |
+| 5280–5420 · 5560 | 기둥 · 화로 방, 어른 케르베로스, 세이브 | PAND02I | i1 봇 같은 방 · 적 | 같음 |
+| 5680–5720 | 둥근 다이얼 방 | PAND00D (LoadyToHub) | — | 이 구간 끝 (§43 이 이어받음) |
+
+### 42.2 엔진 결함과 수정
+1. **삼지창 전에도 잠수 · 돌진이 됐다.** 원작 [확실: 디스어셈블]: 잠수 (□, 0x1C9CC8 / 0x1C9D18) 는 영웅 +0x2DC 0x20, 돌진 (R1, 0x1C9F58) 은 0x200000 을 본다.
+   AddItem 0x1D8CF0 의 점프 표 0x2B8190 [아이템 − 3] 에서 **아이템 9 (포세이돈의 삼지창, Internal 37 — PAND02D VisTridentPopUp `set_bool Internal:37`) → 0x1D8FDC 가
+   +0x2DC |= 0x200020**, DeductItem 0x1D9168 (0x1D91C8) 이 끄고, 영웅 생성 0x1DC21C 가 보유 비트 0x3044C2 &amp; 0x100 으로 정한다. 엔진은 "처음부터 능력 있음"
+   [추정] 이었다 (38 §11). → `HeroNavigator.diveAbility` (기본 참 = 시험), `HeroRig.update` 가 매 틱 `PlayerState.ITEM_BIT_TRIDENT`, `-Dgow.giveAll` 이 아이템 9 도.
+   영상 2화 3744–3761 (PAND00D 눈 방 웅덩이, 삼지창 전) 도 크레토스는 수면만 헤엄쳐 배수구 위를 지난다 — 같은 규칙.
+2. **PAND02D 돌진 문을 그냥 헤엄쳐 지나갔다 (영상 3880: 얼굴 문 앞에서 R1 안내).** 문 godashdoorgrp* = Breakable (Brkb 0 "No Orbs", HP 1) + CDV 공 하나 (중심 (0, 71, 0.45)
+   반지름 56, 재질 Ground · TakeDamage — NoPlayerCollision 아님). 원작 Breakable 접촉 0x1DE4D8 [확실] (충돌 접촉 0x203AF0 → 0x203CD4 가 부름): 공격 레코드
+   (0x209AB0) 가 없으면 접촉한 생물이 **돌진 중 (+0x2D8 0x80000)** 이고 |속도 +0xE0| × 1/16 &gt; Sold+0x214 (크라토스 **18 m/s**, 0x1DE640) 이면 피해 1000
+   (0x447A0000) → 0x1DDDF0, Brkb +0x30 bit 2 면 진동 (Sold+0x210). 몸이 충돌 인스턴스에 닿아야 오는 접촉이라 공도 몸을 막는다 (공 질의 0x139C20 — 인스턴스 +0x3C 공 수,
+   +0x88 공 월드). 엔진은 (a) 평면 hull 없는 CDV 를 몸에서 뺐고 (41 §2.1), (b) 수영 중 몸 충돌이 정적 시트만 봤고 (`NavWorld.collideSphere`), (c) 돌진 접촉 파괴가 없었다.
+   → (a) `Platforms.breakableBalls` · `pushOutBalls` (Breakable 의 공 CDV = 몸 구 밀어내기, 재질이 몸 제외 마스크면 지나감) [근사: 바닥 · 선분 질의 없음],
+   (b) `HeroNavigator.swim` 이 `collideBodies` 도 (문 · 창살 · 공), (c) `NavTuning.DASH_BREAK` (0x214) · `HeroNavigator.dashContactSpeed` · `swimBodyCenter` ·
+   `Breakables.dashContact` (몸 구와 물체 판정 구가 맞닿고 속도 &gt; 288 → 1000), `GameScene` 이 두 슬롯 물체에. 반쯤 충전 (0.75 초 → 16.5 m/s) 은 못 부수고
+   0.82 초 넘게 충전해야 부서진다. 확인 d4: 문 앞 −3331 에서 멈춤 → 1.2 초 충전 돌진 "파괴: godashdoorgrp" → 둘째 문 0.75 초 돌진은 튕김 → 1.2 초 돌진 "파괴: godashdoorgrp1".
+3. **수면 반사가 갈색 얼룩으로 흘렀다 (영상 3840 은 옅은 하늘색).** 원작 갱신 0x21A888 [확실: 0x21AA0C – 0x21AB3C]: D = 정점 − 카메라 위치 (카메라 관리자 0x29F16C +8 의
+   월드 행렬 행 3, 0x219DC8), 법선 N = (h[x−1] − h[x+1], **4·칸**, h[z−1] − h[z+1]), 반사 R = D − 2N(D·N)/|N|², r = R/|D|, m = √(rx² + (ry+1)² + rz²),
+   ST = 2048 + 2048·(rx, rz)/m (4096 = 1) — **카메라 반사 벡터의 위쪽 축 구면 환경맵**. 위에서 보면 가운데 (밝은 하늘색), 비스듬하면 바깥 고리 (갈색).
+   엔진은 0.5 + 4·법선 + 0.02·격자 번호 [근사] 라 격자를 따라 텍스처 바깥 갈색이 얼룩으로 깔렸다. → `WaterSurface.sphereUv` (법선 y = 4·칸 — 예전 2·칸 의 절반 기울기).
+   메시 만들기 0x21A1D0 의 **물 정의 +0x0C (16 §1.6 의 "플래그 미상") = 1 이면 내접 타원 밖 칸에 ADC 0x8000** (0x21A454 – 0x21A4F0) → `WaterSurface.insideEllipse`
+   (PAND02D 분수 gowaterfountain 8.88 × 8.88 이 둥근 물).
+4. **GO 하나의 SCR_Water 여럿 중 첫째만, 그것도 엉뚱한 자리에 그렸다 (구멍 위 수면이 없었다).** PAND02D gowaterdynamic 그룹에 SCR_Water 인스턴스 5 개 —
+   `EnvScript.owner` 가 "바로 앞 리소스" 라 둘째부터 소유가 " SCR_Water" 가 되어 위치를 못 찾고 버려졌다. 위치는 SCR_Water 0x219D88 이 GO 애니 인스턴스 (+0x104)
+   가 있으면 0x136BD8(인스턴스, 스크립트 +0x46) = **헤더 +0x22 u16 관절** 의 월드 위치 (SCR_GhostTrail 머리 관절과 같은 필드, 38 · GhostTrail) — 다섯 = MDL_WaterDynamic
+   관절 1–5 (1248, −3296) · (1728, −3296) · (768, −2928) · (1248, −2928) · (1728, −2928). 엔진은 관절 0 (1249.7, 292.2) 이었다. → `EnvScript.owner` 가 앞 스크립트를
+   건너뜀, `EnvScript.joint` · `EnvParams.Water.joint`, `LevelFx.ownerPosition(…, joint)`. 전 WAD 에서 소유가 바뀌는 것은 이 다섯뿐 (`MultiScr` 조사).
+5. **물속 체크포인트 · 순간이동 뒤 크라토스가 바닥을 걸어 다녔다.** 원작 세이브 · 체크포인트 되읽기 Load_PlayerBlock 0x1DC130 은 이동 상태 +0x174 (= 스냅숏 +0x40) 를
+   그대로 둔다 [확실, 38 · 43 §26] — 물 0x80 · 0x100 · 0x200 도. 엔진은 `NavState.SWIM` 이름만 저장하고 되읽을 때 지상 / 공중으로 (`reset`) 두어 PAND02F 물속 체크포인트
+   (CheckPointGroup6 · 7) 에서 다시 하면 가라앉아 걸었다. → 스냅숏 · Warp 이동 상태 "SWIM:하위 상태" (`GameScene.navStateName` · `swimState`),
+   `HeroNavigator.restoreWater` (수면 = 위쪽 첫 Water 면, 없으면 다음 수면 질의가 정함 [근사: 원작 스냅숏에 +0x230 이 있는지 미확인]). 하네스 경로 순간이동도 물 상태를 잇는다.
+   확인 f2: CheckPointGroup6 스냅숏 (−205, −950, 2108) → `die:` → "이동 상태 SWIM:DIVE → 물", 잠수 유지.
+6. **수면 질의가 처음 들어간 수면 둘레만 봤다.** 원작 0x1E57D8 [확실]: 새 위치 + (0, 키·0.8 − 바닥 = 21.76) ± d (d = 2·max(이동, 3.2)) 선분이 Water·NoDiving 면에
+   맞으면 +0x230 = 그 높이 — 머리 근처의 수면이 곧 수면이다. 엔진은 "지금 수면 ± 8" 만 따라가 물 높이가 다른 웅덩이 (PAND02F −641 → −1104 · −1184 · −984 · −1091)
+   로 헤엄쳐 오르면 그 위 공기 속을 헤엄칠 수 있었다. → 발 + 28.16 ± d 질의를 더함.
+
+### 42.3 남은 것 · 미확인
+- **나이아드가 바닥에 누워 있다 (영상: 물 가운데 떠 있는 푸른 반투명 형체).** R_NYA 템플릿 100/101 = 이동 능력 Swim (0x10) 만, 결정 트리 100, Sold_100. 생성 위치
+  (자리 243–246, y −948 · −1278 · −1381 · −1469) 는 물 가운데이고 둘레 40 안에 바닥이 없다 (천장 −820 만). 원작 생물 갱신은 Swim 능력이면 이동 뒤 물 상태 0x1C9BB8 을
+  부르지만 (0x1CADD8 · 0x1EBD10), 물 밖 → 물 들어가기 (0x1CA098) 도 머리 근처 수면 질의라 수면 없는 깊은 물속에서는 맞지 않는다 — 원작이 어떻게 띄우는지 (시작 상태 ·
+  결정 트리 · 애니) [미확인]. 색도 엔진은 흰 불투명, 영상은 푸른 반투명 (재질 · 가산) [미확인]. R2 나이아드 상호작용 (310–312 기술, 메시지 445 · 456 · 457) 은 몰지 않았다.
+- 레벨을 물속 Start 로 바로 시작하면 (PAND02H `--game`, 봇) 지상으로 시작해 바닥을 걷는다 — 원작 경로는 헤엄쳐 이어 들어오고 (이음은 이동 상태를 잇는다) 하네스만의 일.
+- `--game PAND02D` 이후 레벨을 `-Dgow.giveAll` 없이 바로 시작하면 삼지창이 없어 잠수 · 돌진이 안 된다 (원작 규칙) — 자동 순회 · 다른 QA 하네스는 giveAll 을 쓸 것.
+- 공 CDV 몸은 Breakable 의 것만 (항아리 ARENA06 반지름 16 도 이제 몸을 막는다) — 비헤이비어 없는 공 CDV (gobarrel* 등) 는 그대로 몸이 아니다 [근사: 원작은 모든 CDV 공이
+  충돌 인스턴스]. 공은 바닥 질의 · 이동 선분 질의에는 없다.
+- 영상의 돌진 문이 부서지는 프레임은 대조하지 않았다 (3880 앞뒤 프레임 없음). 엔진 파편 = Breakable 파괴 act (`dashdoor_after.jpg` f078).
+- 영상 3880 · 4260 메시지 상자는 화면 아래 폭 넓은 양피지, 엔진은 가운데 아래 좁은 상자 — 이 구간에서 고치지 않음 (UI 공통).
+- 수면 바닥의 어두운 얼룩 (d1 f028 · f070) 은 평평한 법선으로 그려도 남아 물 아래 바닥 · 장식으로 본다 [추정].
+
+### 42.4 시험
+`nav/PoseidonWaterTest` (6): tridentGrantsDiveAndDash (점프 표 0x2B81A8 → 0x1D8FDC, 0x200020, 0x1DC220 andi 0x100), noDiveWithoutTrident, surfaceFollowsPoolAboveHead
+(웅덩이 A 0 → B −200), checkpointRestoreKeepsDive (삼지창 없으면 SINK), dashDoorBallBlocksBody (PAND02D 문 셋 · 밀어내기 · 부서진 뒤 통과), dashBreakThreshold
+(0x1DE600 · 0x1DE640 +0x214 · 0x447A, Sold 18 → 288, 반 충전 &lt; 288). `fx/PoseidonWaterFxTest` (4): sphereMapUsesViewReflection, ellipseWaterDropsCorners,
+ellipseAndSphereMapCode (0x21A45C +0xC · 0x8000 · 0x4500 · 0x29F16C), multipleWatersOnOneObject (관절 1–5 · 분수 타원). 엔진 시험 764 개 통과 (8ab6023 위).
+
+### 42.5 증거 (`work/verify/ep3_d/`, 커밋 안 함)
+`video/` (영상 60 장), `eng/p_pool_3840.jpg` (영상 ↔ 고치기 전 구멍 위 수면 없음 ↔ 고친 뒤), `eng/pool_before_uv.jpg` · `pool_after.jpg` (갈색 얼룩 → 옅은 수면),
+`eng/dashdoor_before.jpg` (얼굴 문을 지나 걸음/헤엄) · `dashdoor_after.jpg` (막힘 → 돌진 파괴), `eng/p_light_4860.jpg` (빛줄기 방), `eng/naiad_floor.jpg` (바닥의 나이아드),
+`eng/g_redroom.jpg` · `dd_pups.jpg`.
+
 ## 43. QA vs PS2 영상 3화 — 하데스의 시험: PAND00C 허브 잠수 → PAND03J 폭포 웅덩이 · 통나무 홀 · 세이브 → PAND03A 하데스의 홀 (피 웅덩이 · 제물 제단 · 켄타우로스 · 하데스의 원) → PAND03B 미로 → PAND03A 석상 머리 크랭크 · 붉은 방 세이브 → PAND03C 문 홀 · 굴러오는 불덩이 (영상 5760–7723 초, 2026-10-26)
 
 영상 = HF4CELG5OxQ (3화, 전사 (보통) = `-Dgow.difficulty=1`), 프레임 423×317 (`work/verify/ep3_e/video/v<초>.jpg` — 5770–7680 10 초 간격, 5815–5832 1 초,
