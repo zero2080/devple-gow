@@ -2259,6 +2259,24 @@ DMCdog 문 열림) → LoadCheckDsrt2 → DEST02 (SaveGameZone 세이브 (2433, 
    SoulOff 는 슬롯 0 · 1 을 2 로, SoulOn 은 1 로; DoorSparkle-VisOff · AthenaSparkle2-SparkleOff 도 같은 짝 (예전엔 문이 열린 뒤에도 반짝이가 났을 것).
    확인: 첫 처치 문 카메라에서 꼬리가 길을 따라 휘고 연기 덩이가 남음 (`07`, `07b` — 영상 1493 · 2345 와 같은 짜임), 둘째 처치 문 카메라는 첫 별 옆으로
    영혼이 문으로 (2345 와 같은 구도).
+7. **세이렌 둘레의 흰 빛 줄기 · 사막에 남는 회청색 먼지 덩이 — PlayFX 0x4 (기술 진행에 맞춤 + 창 끝 정지) 와 코드 이펙트의 act 한 바퀴.**
+   ① 세이렌 불덩이 (SIRFIREBALLLEFT/RIGHT, 1.333 초) 는 SCRIPT SCR_PlayEffect 창 0.00–0.70 으로 PlayFX 122–127 (goSIRsum*: 플래그 0x1 Particle ·
+   0x4 · 0x8 Attached, 오른/왼팔 관절, Scale 2) 을 켠다. 이펙트 act 는 5 초이고 FXC_SSAGemit* (커브, 가산 MAT_BHAsmoke7) 는 act 4.0–4.4 초에만 분출한다.
+   엔진은 0x4 를 몰라 매번 5 초를 실시간으로 다 돌려, 던진 뒤 4 초에 세이렌 몸을 덮는 흰 줄기 · 덩이가 났다 (`08a`; 영상 1360 · 1380 · 1400 · 1478 · 2005
+   의 세이렌은 어둡고 손에 작은 빛뿐, `08c`). 원작 [확실: 코드]: 0x19BBE0 의 셋째 키 (해시 0x71BFA948) = 비트 0x4 → 0x19B308–0x19B320 이 이펙트 GO
+   애니 트랙 속도 +0x3C 를 0 으로 (스스로 진행하지 않음), 창이 끝나면 문맥 정지 0x19A4A0 이 Particle 이면 0x2 · 0x4 일 때 이펙트에 정지 비트 (+0x0 |= 1,
+   0x19A5AC–0x19A5D4); 같은 스크립트 · 템플릿 문맥이 살아 있으면 새로 만들지 않고 (0x207408 마스크 6 → 0x19A7F4) 끄지도 않는다. 시간 = 기술
+   진행률 × act 길이 [추정: 데이터 — 같은 goSIRsum* 이 5 초 SIRSUMMON (속도 1.5) 에서는 진행 0.8 의 분출이 TARGET_FX 0.82 와, SIRLITSONG 의
+   goSIRsumbodyG 분출이 SCR_ConcussionBurst 0.80 과 겹치고, 외눈박이 PlayFX act 는 기술 애니와 길이가 같다 (cy2Swipe 3.333, cy2Overhead 7.333)].
+   그래서 불덩이에서는 act 0 → 3.5 초 (창 0.7) 에 꺼져 분출에 닿지 않는다. 수정: `MagicFx.playFx` 가 SCRIPT 창 끝을 받아 Particle + (Looped | 0x4) 면
+   창 끝 · 기술 바뀜에 정지, 0x4 면 `Effect.hold` + 시간 = 진행률 × act, 같은 기술 창 안 같은 템플릿은 이어 쓰기. 확인: 같은 싸움 (r18b) 에서 흰 빛이
+   사라지고 세이렌이 영상처럼 어둡다 (`08b`). 0x4 를 쓰는 다른 PlayFX (전 디스크 76 개 중 0x4: R_CNM 불티 · 구멍, R_CEA 도약, R_CY2 휘두르기 · 내려치기 ·
+   사격, ATHN08 바바리안 · 이블 크레토스) 도 같은 규칙. Particle 이 아닌 0x4 (goBMIRWR1–3, goBARflameThro …) 는 예전대로 실시간 [근사].
+   ② 달리기 먼지: 사막 모래 = SheetFX 40 → MFX 040 (SND_FOOTSTEP_DIRT, Run Dust Name goRunDust). goRunDust = act runDust 0.2 초 반복 · 생성 곡선 최대
+   218/초 · PTC_dustpart 알파 6.3 − 4.9·t (5 %) · 수명 1.3 초. 엔진 `MagicFx.footstep` 은 0.6 초 (세 바퀴 ≈ 60 개) 를 틀어 겹친 먼지가 크레토스 뒤에
+   회청색 덩이로 남았다 (영상 1185 · 1505 · 1832 에는 없음, `09`). 원작 [확실: 흐름]: 0x221A90 (영웅만 — 생물 +0x174 bit 31, 0x1E7E20 다섯째 인자,
+   0x1D6368 만 1) → 0x228558 → 0x228210 이 GO 애니를 0x1007C8(애니, act 0, …, 0x40, 1) 로 틀고 트랙 끝 콜백 셈 (+0x18, 0x2282D0) 이 0 이면 지운다 →
+   act 한 바퀴 [추정: 모드 1 = 한 번]. 수정: `MagicFx.oneAct` = 첫 act 길이 (0.2 초). 확인: 사막 (r17) · ATHN04A 도로 (r20) 에서 먼지가 옅은 한 점으로.
 
 ### 31.3 시험
 `DesertSirensQaTest` — `desertFogHazesCharactersAtCameraDistance` (DEST01 안개 데이터 · 175 → 0.555, 297 → 0.742, 70 → 0), `shadowSubtractionIsUnderTheFog`
@@ -2268,7 +2286,10 @@ DMCdog 문 열림) → LoadCheckDsrt2 → DEST02 (SaveGameZone 세이브 (2433, 
 `sirenDoorStarsHaveFullTextureUvs` (DEST01 별 모델 6 개 UV 0..1 · 최대 1), `sirenSoulGhostTrailIsTheTailJointChain` (인스턴스 둘 · 머리 2 · 꼬리 3–10 ·
 112 · 17, 0x246940 → 0x20D988 · 0.125 · 8 · 플래그 0x20 · +0x34), `ghostTrailTailFollowsTheHeadPath` (+X 300 → 112 뒤 정확, +Z 80 → 48 뒤 Z 다리 ·
 모퉁이 지난 joint8 은 기록이 모퉁이를 현으로 잘라 ≤ 8·(√2 − 1) 더 뒤, 회전 = 머리), `visSlot1SwitchesTheSoulSmokeEmitter` (0x1ABB6C 0x1E · Servers_Create · 영혼/반짝이 Vis 의 슬롯 0·1 짝 ·
-emitter31 관절 1 · 60/초 · 감산 0.7 초).
+emitter31 관절 1 · 60/초 · 감산 0.7 초). `SirenSummonRunDustTest` — `playFxBit4FreezesTheEffectTrackAndStopsAtTheEventEnd` (0x19BCB0–0x19BCC4 해시 ·
+비트 0x4, 0x19B30C/0x19B320 속도 0, 0x19A5AC–0x19A5D0 정지 비트), `sirenSummonGlowIsSyncedToTheFireballAndStopsBeforeTheBurst` (PlayFX 122–127 = 0xD,
+act 5 초 · 창 0.7 안 분출 0 · 4.05 초 > 300/초, SIRfireBall 1.333 · SIRsummon 5, 외눈박이 act = 기술 길이), `runDustPlaysOneActLoop` (MFX 040 →
+goRunDust, 반복 · 수명 무한 → oneAct 0.2, 0x221C7C → 0x228558, 0x228268–0x228270 0x1007C8(…, 0x40, 1)).
 
 도구: 자동 경로 단계 `kill:AI1` (빈 값 = 가장 가까운 적) — 그 템플릿의 살아 있는 적을 HP 0 + EV_DEATH. 봇이 세이렌 (DTre 122 자가 회복 · 불덩이 Arrow 124 · 비명) 을
 쉬움에서도 이기지 못해 (둘째 세이렌에서 사망) 처치 뒤 연출 (DestructionSensor → 문 카메라 · 메시지 415/416/417 · 별 · 문 · 세이브) 을 보려고 쓴다. 피니셔
@@ -2290,23 +2311,20 @@ DEST00@2400,507,1282,0 --skip-movies`, 쉬움): 협곡 → 첫 세이렌 옆 순
   묻히는데 엔진은 좁다 (R_PERMK savepoint, 공용). 모래 날림 (goweatherfxsand) 은 영상이 조금 진함.
 - [미확인] 처치 → 문 카메라 간격 (영상: 영혼이 몸에서 나와 날아간 뒤 약 6 초 — 원작 제거 시점이 MAISIRSOUL 의 SCR_ExplodeDeath @0.84 인지) 은 봇이 피니셔를
   못 해 엔진에서 재현하지 못함.
-- [미확인] 달리기 먼지: 사막 모래 (SheetFX 40 → MFX 040 SND_FOOTSTEP_DIRT · "Run Dust Name" goRunDust, 0x221A90) 에서 엔진은 걸음마다 회청색 덩이가
-  또렷하다 (r17, `--no-fx` · GOW_HIDE=* 에서도 남음 = 이펙트 GO). 영상 1185 · 1505 · 1832 의 달리는 크레토스 뒤에는 보이지 않는다. goRunDust = act runDust
-  0.2 초 반복 · FXC_dustemit 채널 생성률 최대 218/초 · PTC_dustpart (알파 블렌드, MAT_normalsmoke, 색 (94.8, 88.2, 83.5), 알파 6.3 − 4.9·t → 시작 5 %,
-  수명 1.3 초). 엔진은 `MagicFx.footstep` 이 0.6 초 (act 3 바퀴 ≈ 60 개) 틀어 겹친 알파가 커진다 — 원작 수명 (0x221A90 → 0x228558 → 0x227AA8 이펙트
-  인스턴스) 은 따라가지 못함. 공용 (40 §6.3) 이라 바꾸지 않음.
+- ~~[미확인] 달리기 먼지 회청색 덩이~~ → §31.2-7 ②. 남은 것: 엔진은 달리기 (walkBlend2) 반 주기마다 내고, 원작은 기술 발소리 이벤트 (0x206FE0 → 0x221DC0,
+  레지스터 0–3) 마다 걷기에도 낸다 — 먼지 한 점은 아직 영상보다 조금 보인다 [근사].
 - [미확인] 싸움 (봇, 보통, r18 — 영상 1352–1488 · 2005 · 2330 · 2440 과 대조): ① 영상의 블레이드 휘두르기는 손에서 칼끝까지 넓은 주황 불꽃 호 (1352 · 1356 ·
   1484 · 2005) 를 남기는데 엔진은 사슬이 검은 고리 그대로이고 칼 둘레의 좁은 노란 부채 (0x1FC070 사슬 굽힘 부채, `BladeChain.trail`) 와 칼끝 불꽃뿐 —
-  넓은 호는 무기 궤적 띠 0x12DE70 (층 3, 0x23EB58 인스턴스, 호출 0x25DD68 = vtable 0x2C3D54) 쪽으로 보이며 엔진에 없다 [추정]. ② 세이렌 불덩이 소환
-  (SIRfireBallLeft/Right) 때 엔진은 세이렌 둘레에 큰 흰 빛 줄기·덩이 (goSIRsumAG/AG1–3: 커브 이미터 (서브타입 4), 가산 MAT_BHAsmoke7, 색 (68.6, 92.0, 139.7),
-  α 166.5 − 1665·t · 크기 4.8 − 48·t, 수명 0.1 초) 를 내는데 영상은 세이렌 둘레에 흰 빛이 없다 (1478 은 녹황빛 불티) — 가산 겹침 포화 [미확인].
+  넓은 호는 무기 궤적 띠 0x12DE70 (층 3, 0x23EB58 인스턴스, 호출 0x25DD68 = vtable 0x2C3D54) 쪽으로 보이며 엔진에 없다 [추정] — 다른 에이전트 몫.
+  ② ~~세이렌 불덩이 소환 때 흰 빛 줄기·덩이~~ → §31.2-7 ①.
 
 ### 31.5 증거 (`work/verify/desert_sirens/`, 커밋 안 함)
 `01_fog_v1150_before_after` (영상 1150 | 고치기 전 | 고친 뒤), `02_fog_kratos_closeup_v1150_before_after`, `03_entrance_statue_after_seam` (엔진 협곡 → 입구 → 메시지 345 6 장 |
 영상 1060 · 1065 · 1150), `04_door_star_v1500_before_after` (영상 1499 · 1500 · 1502 · 2345 | 고치기 전 | 고친 뒤 | 영상 2453 · 엔진 별 둘 · 영상 2454 · 엔진 별 셋),
 `04b_door_star_socket_zoom_before_after`, `04c_three_stars_v2454_vs_engine`, `05_soul_door_cam_v1490` (영상 1490 · 1491 · 1495 · 1497 | 엔진 kill 뒤),
 `06_door_open_to_save_v2453_2520` (영상 2453 · 2456 · 2510.5 · 2512 · 2512.5 · 2514 · 2520 | 엔진 r16), `07_soul_ghost_trail_smoke_before_after` (영상 1491 ·
-1493 · 2335 · 2345 | 고치기 전 문 카메라 | 고친 뒤 첫·둘째 처치), `07b_soul_trail_zoom_v1493_vs_engine` (영상 1493 | 전 | 후 | 영상 2345 | 후).
+1493 · 2335 · 2345 | 고치기 전 문 카메라 | 고친 뒤 첫·둘째 처치), `07b_soul_trail_zoom_v1493_vs_engine` (영상 1493 | 전 | 후 | 영상 2345 | 후), `08a_siren_fight_summon_glow_before` · `08b_…_after` (r18b, 보통),
+`08c_siren_video_v1360_1400_1356_vs_engine_before`, `09_run_dust_video_before_after` (영상 1185 · 1832 | 고치기 전 덩이 | 고친 뒤).
 
 ## 32. QA vs PS2 영상 2화 — 뿔피리와 크로노스: DEST02 돌 상자 · 부조 → DEST03 뿔피리 · 모래 벽 · 세이렌 → 둘째 뿔피리 · 크로노스 → PAND00A 세이브 · 다리 → PAND00B/00E 모래 길 · 죽어 가는 병사 · 키클롭스 · 크랭크 (영상 2520–3520 초, 2026-10-25)
 

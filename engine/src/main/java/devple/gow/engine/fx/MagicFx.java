@@ -107,6 +107,13 @@ public final class MagicFx implements AutoCloseable {
 	private final java.util.Set<Long> sliced = new java.util.HashSet<>();
 	/** PlayFX 로 켠 이펙트 (전투자별, Remove 플래그가 끈다). */
 	private final Map<Combatant, List<EffectSystem.Effect>> playFxLive = new IdentityHashMap<>();
+	/**
+	 * 전투자별 PlayFX 템플릿 → 살아 있는 문맥 (이펙트 · 기술 serial · 창 끝). 원작 SCR_PlayEffect 0x19A720 은 문맥을 전투자 목록 +0x90 에 넣고 (0x2074B8)
+	 * 같은 스크립트 함수 · 같은 템플릿 번호 (+0xC) 의 살아 있는 문맥을 찾으면 (0x207408, 마스크 6) 새 이펙트를 만들지 않고 그 이펙트 핸들 (+0x30 / +0x6C) 을
+	 * 이어 쓴다 (0x19A7C4 – 0x19A804). 문맥은 이벤트 창이 끝날 때 (정지 0x19A4A0 → 0x207510) 나 이펙트 GO 가 사라질 때 (0x19A368) 목록에서 빠진다 [확실]
+	 * — 그래서 이어 쓰기는 같은 기술의 창이 겹칠 때뿐이다.
+	 */
+	private final Map<Combatant, Map<Integer, FxDriver>> playFxByTemplate = new IdentityHashMap<>();
 	private Vector3f heroPos = new Vector3f();
 	private float heroYaw;
 	private float aimYaw;
@@ -447,7 +454,7 @@ public final class MagicFx implements AutoCloseable {
 				return;
 			}
 			if (e.hash() == SCR_PLAY_EFFECT) {
-				playFx(e.index(), c, joints);
+				playFx(e.index(), c, joints, e.end());
 			} else if (e.hash() == SCR_CONCUSSION_BURST) {
 				concussion(e.index(), joints, null, c);
 			}
@@ -469,6 +476,7 @@ public final class MagicFx implements AutoCloseable {
 		if (l != null) {
 			l.forEach(EffectSystem.Effect::stop);
 		}
+		playFxByTemplate.remove(c);
 		ParticleSystem.Emitter e = h != null ? stones.remove(h) : null;
 		if (e != null) {
 			ps.emitters().remove(e);
@@ -603,9 +611,30 @@ public final class MagicFx implements AutoCloseable {
 	 * PlayFX 템플릿 (sub_0019BBE0 / SCR_PlayEffect 0x19A720): Effect Name, Joint Name, 플래그 u16 +0x40
 	 * (0x1 Particle Effect, 0x2 Looped, 0x8 Attached, 0x20/0x40 Left/Right Weapon, 0x80 Remove, 0x400 Blood Drop),
 	 * Scale X/Y/Z (+0x18), Offset X/Y/Z (+0x24), Rot X/Y/Z (+0x30) [확실: 키·오프셋, 추정: 동작].
-	 * Attached 면 매 프레임 관절을 따라가고, 아니면 발동 순간의 관절 위치에 남는다. Looped 는 기술이 바뀌면 끈다.
+	 * Attached 면 매 프레임 관절을 따라가고, 아니면 발동 순간의 관절 위치에 남는다.
+	 * <p>비트 0x4 (키 해시 0x71BFA948, 0x19BBE0 의 셋째 플래그) = 이펙트 GO 애니를 기술 진행에 맞춘다: 0x19B308 이 트랙 속도 +0x3C 를 0 으로 둔다 [확실] —
+	 * 시간 = 진행률 × act 길이 [추정: 데이터 — 세이렌 SIRSUMMON (5 초 애니, 속도 1.5) 의 goSIRsum* (5 초 act) 은 4.0–4.4 초 분출이 TARGET_FX 0.82 와,
+	 * SIRLITSONG 의 goSIRsumbodyG 분출 (4.0 초) 이 SCR_ConcussionBurst 0.80 과 겹친다].
+	 * <p>SCRIPT 이벤트 창이 끝나면 (또는 기술이 바뀌면) 문맥 정지 0x19A4A0: 같은 템플릿 문맥이 남아 있지 않고 Particle Effect (0x1) 이면 Looped (0x2) 나
+	 * 0x4 일 때만 이펙트에 정지 비트 (+0x0 |= 1) [확실] — 세이렌 불덩이 (SIRfireBall, 창 0.00–0.70) 의 goSIRsum* (0x1|0x4|0x8) 은 진행 0.7 (act 3.5 초) 에서
+	 * 꺼져 4.0 초 분출 (흰 줄기) 까지 가지 않는다 (43 §31.2-7).
 	 */
 	public EffectSystem.Effect playFx(int template, Combatant c, Joints joints) {
+		return playFx(template, c, joints, 1f);
+	}
+
+	/** Hash127Upper 의 PlayFX 플래그 0x4 키 (0x19BBE0, 이름 미상 — 기술 진행에 맞춤). */
+	static final int PLAYFX_SYNC = 0x71BFA948;
+
+	/** PlayFX 문맥 (0x19A720 의 스크립트 이벤트 문맥): 이펙트 · 기술 serial · 창 끝 진행률 (같은 템플릿을 이어 쓰면 늦은 쪽). */
+	private static final class FxDriver {
+		EffectSystem.Effect effect;
+		int serial;
+		float end;
+	}
+
+	/** @param eventEnd SCRIPT 이벤트 창 끝 (진행률, 1 = 기술 끝) */
+	public EffectSystem.Effect playFx(int template, Combatant c, Joints joints, float eventEnd) {
 		String n = String.format("/TweakTemplates/PlayFX/%03d/", template);
 		String name = tw.s(n, "Effect Name", null);
 		if (name == null) {
@@ -628,6 +657,16 @@ public final class MagicFx implements AutoCloseable {
 				});
 			}
 			return null;
+		}
+		// 같은 전투자 · 같은 템플릿의 문맥이 아직 살아 있으면 (같은 기술의 창 안) 새로 만들지 않는다 (0x207408 → 0x19A7F4: 핸들만 이어 씀, 핏방울 등 뒤
+		// 처리도 건너뜀) [확실: 흐름 / 근사: 문맥 수명 = 기술 serial · 창 끝]
+		if (c != null) {
+			Map<Integer, FxDriver> byT = playFxByTemplate.get(c);
+			FxDriver prev = byT != null ? byT.get(template) : null;
+			if (prev != null && !prev.effect.done() && prev.serial == c.moveSerial() && c.progress() <= prev.end) {
+				prev.end = Math.max(prev.end, eventEnd); // 0x19A4A0: 같은 템플릿 문맥이 남아 있으면 끄지 않는다 → 늦게 끝나는 창까지
+				return prev.effect;
+			}
 		}
 		// Left/Right Weapon (0x20/0x40): 블레이드 로케이터 lWeapOH / rWeapOH 기준 [추정], 아니면 Joint Name
 		String jn = left ? "lWeapOH" : right ? "rWeapOH" : tw.s(n, "Joint Name", null);
@@ -653,19 +692,31 @@ public final class MagicFx implements AutoCloseable {
 		EffectSystem.Effect e = fx.play(name, attachedFlag ? live : snapshot(live), -1);
 		if (e != null) {
 			e.scale = ux;
+			FxDriver dv = new FxDriver();
+			dv.effect = e;
 			if (c != null) {
 				List<EffectSystem.Effect> l = playFxLive.computeIfAbsent(c, k -> new ArrayList<>());
 				l.removeIf(EffectSystem.Effect::done);
 				l.add(e);
+				dv.serial = c.moveSerial();
+				dv.end = eventEnd;
+				playFxByTemplate.computeIfAbsent(c, k -> new HashMap<>()).put(template, dv);
 			}
-			if (looped && c != null) {
-				int serial = c.moveSerial();
+			boolean particle = flag(n, "Particle Effect");
+			boolean sync = (tw.rawHash(n, PLAYFX_SYNC).orElse(0) & 0xFF) != 0;
+			if (c != null && (looped || particle && sync)) {
+				if (sync) {
+					e.hold = true; // 트랙 속도 0 (0x19B308) — 시간은 기술 진행률로
+					e.setActTime(c.progress() * e.actDuration());
+				}
 				perFrame.add(new Runnable() {
 					@Override
 					public void run() {
-						if (c.moveSerial() != serial || !c.active()) {
-							e.stop();
+						if (e.done() || c.moveSerial() != dv.serial || !c.active() || c.progress() > dv.end) {
+							e.stop(); // 0x19A4A0: Looped · 0x4 → 정지 비트
 							perFrame.remove(this);
+						} else if (sync) {
+							e.setActTime(c.progress() * e.actDuration());
 						}
 					}
 				});
@@ -855,12 +906,23 @@ public final class MagicFx implements AutoCloseable {
 	/** 바닥 피 자국 횟수 (테스트). */
 	public int bloodSpots;
 
-	/** 발소리 (GameScene): 발밑 SheetFX → MFX "Run Dust Name" (+0x34, 예 Rock → goRunDust) 를 발 위치에 (sub_00221A90) [달리기만]. */
+	/**
+	 * 발소리 (GameScene): 발밑 SheetFX → MFX "Run Dust Name" (+0x34, 예 Rock → goRunDust, 사막 모래 MFX 040) 를 발 위치에 (sub_00221A90 — 영웅만:
+	 * 생물 +0x174 bit 31 = 0x1E7E20 의 다섯째 인자, 0x1D6368 만 1) [달리기만 — 근사: 원작은 기술 발소리 이벤트마다].
+	 * 수명 = act 한 바퀴: 0x228558 → 0x228210 이 GO 애니를 0x1007C8(애니, act 0, …, 1) 로 틀고 트랙마다 끝 콜백 (+0x18 셈, 0x2282D0) 이 0 이 되면 끝낸다
+	 * [확실: 흐름 / 추정: 모드 1 = 한 번]. goRunDust 는 act runDust 0.2 초 (반복 표시라 정의 수명이 무한) — 예전 엔진은 0.6 초 (세 바퀴, 생성 곡선 최대
+	 * 218/초 → 약 60 개) 를 틀어 알파 5 % 먼지가 겹쳐 사막에 회청색 덩이로 남았다 (43 §31.2-7).
+	 */
 	public void footstep(int sheetFx, Vector3f at, float yaw) {
 		String go = sheetFx > 0 ? tw.s(String.format("/TweakTemplates/MFX/%03d/", sheetFx), "Run Dust Name", null) : null;
 		if (go != null && go.startsWith("go")) {
-			fx.play(go, EffectSystem.Anchor.at(at, yaw), 0.6f);
+			fx.play(go, EffectSystem.Anchor.at(at, yaw), oneAct(fx.library().resolve(go), 0.6f));
 		}
+	}
+
+	/** 코드가 한 번 튼 이펙트 GO 의 수명 = 첫 act 한 바퀴 (0x228210 → 0x1007C8 모드 1), act 가 없으면 def. */
+	static float oneAct(devple.gow.tools.fx.EffectLibrary.EffectDef d, float def) {
+		return d != null && d.anim() != null && d.anim().duration > 0 ? d.anim().duration : def;
 	}
 
 	/**
