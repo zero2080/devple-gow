@@ -262,6 +262,7 @@ public final class AutoPlay {
 	 *   stick:초:x,y[:버튼] 카메라와 무관한 스틱 값 (벽에서 뒤로 점프 = 0,-1:CROSS), 버튼은 단계 첫 프레임에 한 번
 	 *   mash:초            R2 연타 (들어 올리는 문 TAndF)
 	 *   crank:초:fx,fz     손잡이 쪽으로 돌아 R2 를 누른 채 스틱을 영웅 정면으로 (손잡이를 밀며 둘레를 도는 Type 1 크랭크, PAND00B 문 크랭크)
+	 *   pull:초:fx,fz      (fx, fz) 쪽으로 돌아 R2 를 누른 채 스틱을 영웅 정면 반대로 (밀기 상자 끌어내기)
 	 *   jump:초:fx,fz      첫 프레임 × + (fx, fz) 쪽으로 스틱 (벽에 뛰어 붙기)
 	 *   post:번호[:인자0]  스크립트 전역 이벤트 (보낸 쪽 = 영웅)
 	 *   cam:이름           CMV 질의 끄고 카메라 요청 (Internal 0x9 false + 0x8), "cam:" = 질의 다시 켬
@@ -348,6 +349,17 @@ public final class AutoPlay {
 					return bot.hold(PadButton.USE, hero, null, null, camYaw);
 				}
 				float[] f = {hero.x - (float) Math.sin(heroYaw) * 100f, hero.y, hero.z - (float) Math.cos(heroYaw) * 100f};
+				return routeNext(routeTime > Float.parseFloat(a[0]), bot.hold(PadButton.USE, hero, f, null, camYaw));
+			}
+			case "pull" -> {
+				// pull:초:fx,fz — crank 와 같이 (fx, fz) 쪽으로 돌아 R2 를 누르고, 누른 채 스틱을 영웅 정면의 반대로 (밀기 상자 끌어내기, DEST02 블록 방) [엔진 전용 QA]
+				if (routeTime < 0.25f) {
+					return bot.hold(null, hero, xz(a[1], hero), null, camYaw, 0.2f);
+				}
+				if (routeTime < 0.5f) {
+					return bot.hold(PadButton.USE, hero, null, null, camYaw);
+				}
+				float[] f = {hero.x + (float) Math.sin(heroYaw) * 100f, hero.y, hero.z + (float) Math.cos(heroYaw) * 100f};
 				return routeNext(routeTime > Float.parseFloat(a[0]), bot.hold(PadButton.USE, hero, f, null, camYaw));
 			}
 			case "post" -> {

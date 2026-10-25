@@ -1864,6 +1864,35 @@ public final class GameScene implements Scene {
 
 	/** Creator 가 만든 그 밖의 오브젝트 (액터 이름 → 이펙트 GO): Animator (모드 3, 같은 Filter) 가 act 를 튼다. */
 	private final Map<String, devple.gow.engine.fx.EffectSystem.Effect> createdObjects = new HashMap<>();
+
+	/** Creator 밀기 상자의 렌더 기준 행렬 (이펙트 Anchor 가 읽음) 과 스크립트 액터 (그룹 = Filter — EntrySensor 의 오브젝트 그룹 판정). */
+	private record CreatedBox(org.joml.Matrix4f world, devple.gow.engine.script.ScriptActor actor) {
+	}
+
+	/** Creator 밀기 상자 (액터 이름 → 렌더 행렬 · 액터): 밀린 몸 ({@link devple.gow.engine.nav.Platforms.Body#goMatrix}) 을 매 틱 따라간다 ({@link #updateCreatedBoxes}). */
+	private final Map<String, CreatedBox> createdBoxes = new HashMap<>();
+
+	/**
+	 * Creator 밀기 상자: 렌더 행렬과 스크립트 액터 위치 = 지금 몸 GO 행렬 (원작 0x211A10 은 GO 위치 자체를 옮기므로 그 GO 의 그룹 103 액터로 판정하는
+	 * TrapDamage-TriggerVol-BoxEntry 같은 EntrySensor 도 옮겨진 상자를 본다). 몸이 없으면 (이음으로 다른 슬롯이 됨) 마지막 자리 그대로.
+	 */
+	private void updateCreatedBoxes() {
+		if (nav == null || createdBoxes.isEmpty()) {
+			return;
+		}
+		for (Map.Entry<String, CreatedBox> en : createdBoxes.entrySet()) {
+			devple.gow.engine.nav.Platforms.Body b = nav.navWorld.platforms().body(en.getKey());
+			if (b == null) {
+				continue;
+			}
+			float[] g = b.goMatrix();
+			en.getValue().world().set(g);
+			devple.gow.engine.script.ScriptActor a = en.getValue().actor();
+			if (!a.destroyed() && (a.pos[0] != g[12] || a.pos[1] != g[13] || a.pos[2] != g[14])) {
+				a.moveTo(g[12], g[13], g[14]);
+			}
+		}
+	}
 	/** Creator 오브젝트 → 만든 레벨 (대문자). 이음으로 씬이 이어지므로 그 레벨이 두 슬롯에서 내려갈 때 지운다 ({@link #releaseLevel}). */
 	private final Map<String, String> createdOwner = new HashMap<>();
 
@@ -1896,13 +1925,40 @@ public final class GameScene implements Scene {
 		if (actor == null) {
 			actor = world.addActor(key, group, new float[]{m[12], m[13], m[14]});
 		}
-		devple.gow.engine.fx.EffectSystem.Effect e = fx.play(def.go(),
-				devple.gow.engine.fx.EffectSystem.Anchor.of(new org.joml.Matrix4f().set(m)), Float.POSITIVE_INFINITY);
+		// Creator 슬롯 3 ≥ 0 = 새 GO 에 PushPull 비헤이비어 (0x1A5298, Interactables.addPush) → 잡고 밀고 올라설 수 있는 상자 (DEST02 PushPullBlock,
+		// 영상 2566–2670: 문 뒤 벽감에서 끌어내 홀을 가로질러 밀고, 올라서서 위층 턱으로). 이음 recreate 면 액터 = 밀린 자리
+		devple.gow.engine.nav.Interactables.Item box = null;
+		int pushTemplate = (int) num(world.slot(source, "unk3"));
+		if (pushTemplate >= 0 && nav != null && def.skeleton() != null) {
+			float[] at = m.clone();
+			at[12] = actor.pos[0];
+			at[13] = actor.pos[1];
+			at[14] = actor.pos[2];
+			box = nav.createPush(key, at, def.skeleton(), ChestProps.cdv(def), pushTemplate, (int) num(world.slot(source, "unk6")));
+			if (box != null) {
+				m = at;
+			}
+		}
+		org.joml.Matrix4f goWorld = new org.joml.Matrix4f().set(m);
+		devple.gow.engine.fx.EffectSystem.Effect e = fx.play(def.go(), box != null ? out -> {
+			out.set(goWorld); // 밀린 몸을 따라 (updateCreatedBoxes)
+			return true;
+		} : devple.gow.engine.fx.EffectSystem.Anchor.of(goWorld), Float.POSITIVE_INFINITY);
 		if (e == null) {
 			return;
 		}
 		e.scale = 1f / Math.max(def.scale(), 1e-3f);
 		e.jointEmitters = true;
+		if (box != null) {
+			// Name1 이 없어 처음 act 를 틀지 않는다 (0x1AD110 → −1, 0x1A5298 의 +0x26 < 0 이면 건너뜀) [확실] — 엔진 이펙트 GO 는 기본 act 를 돌리므로
+			// 0 초에 세운다 [근사: 쉬는 자세 = act 0 초]. 예전엔 부서지는 act "PushPullBlock" (14.1 초) 를 돌려 파편 · 부서진 받침이 상자 둘레에 흩어져 있었다
+			e.hold = true;
+			devple.gow.engine.fx.EffectSystem.Effect was = createdObjects.get(key);
+			if (was != null && was != e) {
+				was.stop(); // 이음 recreate: 예전 몸
+			}
+			createdBoxes.put(key, new CreatedBox(goWorld, actor));
+		}
 		// 처음 act = Name1 (0x1AD110 이 오브젝트 애니에서 Name1 해시 (대문자, 0x1758E0) 와 같은 act 번호를 찾아 GO 생성 0x1A5130 에 넘김) [확실]
 		Object n1 = world.slot(source, "Name1");
 		if (n1 instanceof String s && !s.isEmpty()) {
@@ -1933,6 +1989,10 @@ public final class GameScene implements Scene {
 			return false;
 		}
 		fx.stop();
+		if (createdBoxes.remove(a.name) != null && nav != null) {
+			nav.items.items().removeIf(it -> it.owner.equalsIgnoreCase(a.name)); // Creator 밀기 상자: 잡을 것 · 충돌도
+			nav.navWorld.platforms().setSolid(a.name, false);
+		}
 		world.destroy(a);
 		System.out.println("Creator 오브젝트 제거 (1008): " + a.name);
 		return true;
@@ -3332,6 +3392,7 @@ public final class GameScene implements Scene {
 				if (fx != null) {
 					fx.stop();
 				}
+				createdBoxes.remove(en.getKey());
 				it.remove();
 				created++;
 			}
@@ -4321,6 +4382,7 @@ public final class GameScene implements Scene {
 			}
 		}
 		chests.update(dt);
+		updateCreatedBoxes();
 		updateAnimatorEffects(dt);
 		updateSkyEffects();
 		poseRopes();

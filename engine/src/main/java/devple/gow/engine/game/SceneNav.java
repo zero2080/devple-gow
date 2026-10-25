@@ -678,6 +678,31 @@ public final class SceneNav {
 	}
 
 	/**
+	 * Creator 밀기 상자 ({@link Interactables#addPush}, Creator 슬롯 3 = PushPull 템플릿, 슬롯 6 = id — 0x1A5298): R2 아이템 + 원형 CDV 충돌 몸
+	 * ({@link Platforms#add}) — 밀면 {@code pushMoved} 의 {@link Platforms#shift} 로 몸 · 충돌이 같이 옮겨지고, 위에 설 수 있다. 같은 키가 이미 있으면 그것.
+	 *
+	 * @param inst 새 GO 행렬 ({@link #creatorMatrix}, 행벡터)
+	 * @return 상자 (템플릿이 상자 종류가 아니면 null)
+	 */
+	public Interactables.Item createPush(String key, float[] inst, devple.gow.tools.anim.Skeleton sk, devple.gow.tools.level.BallHull cdv, int template, int id) {
+		Interactables.Item old = items.byOwner(key);
+		if (old != null) {
+			return old.kind == Interactables.Kind.PUSH ? old : null;
+		}
+		float r = cdv != null ? Math.max(12, Math.min(64, cdv.sphere[3])) : 24;
+		Interactables.Item it = items.addPush(key, new Vector3f(inst[12], inst[13], inst[14]), template, id, tweaks, r);
+		if (it == null) {
+			return null;
+		}
+		Interactables.placeCreated(it, sk, inst, tweaks);
+		if (cdv != null) {
+			navWorld.platforms().add(key, sk, inst, cdv);
+		}
+		System.out.printf("Creator 밀기 상자 %s: Push %03d (%s) 반 너비 %.1f 높이 %.1f, 충돌 %s%n", key, template, it.label, it.boxHalf, it.boxHeight, cdv != null);
+		return it;
+	}
+
+	/**
 	 * 이웃 슬롯 레벨의 Creator "chest" → 이웃 R2 상자. 원작은 두 슬롯이 모두 살아 있어 Creator 0x1ACCA8 이 슬롯마다 자기 GO 를 만들고, 잡기 질의 0x1C3F18
 	 * 은 슬롯 구분 없는 충돌 세계 구 질의다 ({@link #neighbourItems}) [확실: 구조]. 예전 엔진은 이웃 상자를 만들지 않아 ATHN05C 항아리 방 (바닥이 05C 에만
 	 * 있다) 의 ATHN05D 상자 둘 (Chest3 CSM 010 고르곤의 눈 · Chest4 CSM 011 불사조 깃털, 영상 8090–8100) 이 보이지도 열리지도 않았다 (43 §21).

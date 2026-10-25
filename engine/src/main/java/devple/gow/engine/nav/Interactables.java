@@ -354,12 +354,7 @@ public final class Interactables {
 					Item it = new Item(lever ? Kind.LEVER : Kind.PUSH, p.instance().name(), pos, b.template(), b.id(),
 							lever ? (crank ? "crankIdle" : type == 6 ? "leverPullUW" : "leverpull") : "pushIdle", null, label, r);
 					if (!lever && tw != null) {
-						it.weight = tw.raw(node, "Weight").isPresent() ? tw.raw(node, "Weight").getAsInt() & 0xffff : 0;
-						it.slideMax = Float.intBitsToFloat(tw.rawHash(node, PUSH_SLIDE_MAX).orElse(Float.floatToIntBits(5f)));
-						// 상자 몸 크기 (0x20F9F8: +0x120 = (Radius·16·2, #044ed4a7·16, Radius·16·2), 0x210AE8 가 그 ½ 로 둘레 점을 잡는다) [확실: 코드]
-						float rad = tw.f(node, "Radius", 0f);
-						it.boxHalf = rad > 0 ? rad * NavTuning.UNITS_PER_METER : 0f;
-						it.boxHeight = Float.intBitsToFloat(tw.rawHash(node, PUSH_BODY_HEIGHT).orElse(Float.floatToIntBits(2f))) * NavTuning.UNITS_PER_METER;
+						boxTemplate(it, tw, node);
 					}
 					if (lever) {
 						float len = animLength(lv, anm, null, -1);
@@ -624,6 +619,56 @@ public final class Interactables {
 
 	private static boolean showR2(Tweaks tw, String node) {
 		return tw != null && (tw.rawHash(node, SHOW_R2).orElse(0) & 1) != 0;
+	}
+
+	/** 밀기 상자 템플릿 값: 무게 등급 · 최대 속도 · 몸 반 너비 / 높이 (Push Type 0·7·8). */
+	private static void boxTemplate(Item it, Tweaks tw, String node) {
+		it.weight = tw.raw(node, "Weight").isPresent() ? tw.raw(node, "Weight").getAsInt() & 0xffff : 0;
+		it.slideMax = Float.intBitsToFloat(tw.rawHash(node, PUSH_SLIDE_MAX).orElse(Float.floatToIntBits(5f)));
+		// 상자 몸 크기 (0x20F9F8: +0x120 = (Radius·16·2, #044ed4a7·16, Radius·16·2), 0x210AE8 가 그 ½ 로 둘레 점을 잡는다) [확실: 코드]
+		float rad = tw.f(node, "Radius", 0f);
+		it.boxHalf = rad > 0 ? rad * NavTuning.UNITS_PER_METER : 0f;
+		it.boxHeight = Float.intBitsToFloat(tw.rawHash(node, PUSH_BODY_HEIGHT).orElse(Float.floatToIntBits(2f))) * NavTuning.UNITS_PER_METER;
+	}
+
+	/**
+	 * Creator 가 만든 밀기 상자. 원작 Creator 생성 0x1ACCA8 → 0x1A5130 이 슬롯 3·4·5·6 을 생성 기록 +0x34/+0x36/+0x38/+0x3A 에 두고, 0x1A5298 이
+	 * 새 GO 의 비헤이비어 목록을 만든다 [확실: 디스어셈블]: 슬롯 3 ≥ 0 → <b>PushPull</b> (클래스 이름 0x29D8EC, 템플릿 = 슬롯 3, id = 슬롯 6), 슬롯 4 ≥ 0 →
+	 * <b>Breakable</b> (0x29D8F0, 템플릿 = 슬롯 4), 슬롯 5 ≥ 0 → <b>IO_CSM</b> (0x29D8F4, 템플릿 = 슬롯 5, 과제 id = 슬롯 6 — 상자), 이름 "goSavePoint" →
+	 * <b>SavePoint</b> (0x29D8F8, 슬롯 6) → 0x1AD978 이 GO 를 만든다. 원형 GO (레벨 원점의 gopushpullblock) 에는 비헤이비어가 없다. 데이터: DEST02
+	 * PushBlock-BlockOnFloor · BlockCreator (PushPullBlock, Push 211 "DesertPush" · Brkb 950), ATHN01D Crate (PushPullBox, Push 030 "HydraPushBox" · Brkb 919),
+	 * PAND04C PushBlock-BlockCreator (Push 098 · Brkb 951) — 모두 상자 종류 (Type 하위 바이트 0).
+	 *
+	 * @param radius 잡기 판정 반경 (CDV 경계 구, 배치 상자와 같은 12..64)
+	 * @return 상자 (템플릿이 없거나 상자 종류가 아니면 null)
+	 */
+	public Item addPush(String owner, Vector3f pos, int template, int id, Tweaks tw, float radius) {
+		String node = String.format("/TweakTemplates/Push/%03d/", template);
+		if (tw == null || tw.raw(node, "Type").isEmpty()) {
+			return null;
+		}
+		int type = tw.raw(node, "Type").getAsInt() & 0xff;
+		if (type >= 1 && type <= 6) {
+			return null; // 크랭크·레버 Creator 는 데이터에 없다
+		}
+		Item it = new Item(Kind.PUSH, owner, pos, template, id, "pushIdle", null, tw.s(node, "Instance Name", "Push"), radius);
+		boxTemplate(it, tw, node);
+		it.showPrompt = showR2(tw, node);
+		return add(it);
+	}
+
+	/**
+	 * 배치 밖 GO (Creator 밀기 상자) 의 자리: 관절 월드 = 원형 스켈레톤 · inst, 아이템 위치 = 관절 0 (배치 상자와 같이), GO 행렬 = inst, 손잡이 관절
+	 * (handle1..8, 없으면 옆면 {@link #faceGrab}).
+	 */
+	public static void placeCreated(Item it, devple.gow.tools.anim.Skeleton sk, float[] inst, Tweaks tw) {
+		float[][] jw = LevelLayout.jointWorld(sk, inst);
+		handles(it, sk, jw, tw, String.format("/TweakTemplates/Push/%03d/", it.template));
+		if (jw.length > 0) {
+			it.pos.set(jw[0][12], jw[0][13], jw[0][14]);
+			it.goMatrix = inst.clone();
+			it.goFromJoint0 = devple.gow.tools.anim.Mat4.mul(it.goMatrix, devple.gow.tools.anim.Mat4.invertAffine(jw[0]));
+		}
 	}
 
 	/** Creator "chest" (unk5 = CSM 템플릿, unk6 = 과제 id [추정: ATHN01D Chest4 unk6 = 1, ChestMessage 가 1023 인자 1 == 1 을 기다림]). */

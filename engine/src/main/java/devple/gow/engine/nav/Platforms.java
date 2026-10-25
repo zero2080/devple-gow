@@ -200,6 +200,11 @@ public final class Platforms {
 			return anim;
 		}
 
+		/** 지금 GO 월드 행렬 (행벡터) = 인스턴스 · 밀린·실려 간 이동 ({@link Platforms#shift} · {@link Platforms#ride}) — Creator 밀기 상자 렌더 기준. */
+		public float[] goMatrix() {
+			return follow != null ? Mat4.mul(inst, follow) : inst;
+		}
+
 		/** 현재 관절 월드 행렬 (Marker 위치 갱신용). */
 		public float[][] joints() {
 			return joints;
@@ -1046,13 +1051,14 @@ public final class Platforms {
 	}
 
 	/**
-	 * 레벨 배치가 아닌 GO 의 정지 충돌 (Creator 가 만든 R_PERMK 상자 gochest, 38 §21): 인스턴스 행렬 inst 에 CDV hull.
-	 * 같은 이름이 있으면 바꾼다.
+	 * 레벨 배치가 아닌 GO 의 충돌 (Creator 가 만든 R_PERMK 상자 gochest, 38 §21 · Creator 밀기 상자 DEST02 PushPullBlock, 43 §32): 인스턴스 행렬 inst 에
+	 * CDV hull. 같은 이름이 있으면 바꾼다. 밀기 상자는 {@link #shift} · {@link #ride} 로 옮겨진다 (바인드 관절 = 처음 관절 월드).
 	 */
 	public Body add(String owner, Skeleton sk, float[] inst, BallHull cdv) {
 		bodies.removeIf(b -> b.owner.equalsIgnoreCase(owner));
 		Body b = new Body(owner, sk, inst, null, cdv);
 		b.scripted = false;
+		b.baseJoints = b.joints;
 		bodies.add(b);
 		return b;
 	}

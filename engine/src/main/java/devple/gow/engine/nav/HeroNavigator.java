@@ -2930,11 +2930,16 @@ public final class HeroNavigator {
 
 	/**
 	 * 상자 위치 (관절 0) 높이 − 놓인 바닥 높이: 처음 물을 때 지금 자리 (놓여 있음) 의 발밑 ±16 바닥으로 잰다 — 상자 위치 = 루트 관절이라 발리스타는
-	 * 바닥 480 아래 474.5 (−5.5). f0 = 이미 구한 발밑 바닥 (없으면 여기서).
+	 * 바닥 480 아래 474.5 (−5.5). f0 = 이미 구한 발밑 바닥 (없으면 여기서). 관절 0 ±16 에 바닥이 없으면 GO 원점 (상자 밑면) 아래로 다시 잰다 —
+	 * Creator 밀기 상자 DEST02 PushPullBlock 은 관절 0 이 GO 원점 위 15.9 (몸 가운데) 라 바닥 위 17.2 였고, 예전엔 0 으로 잡혀 놓으면 몸이 바닥 아래로
+	 * 17 가라앉았다 (43 §32).
 	 */
 	private float restDy(Interactables.Item it, NavWorld.Floor f0) {
 		if (Float.isNaN(it.restDy)) {
 			NavWorld.Floor f = f0 != null ? f0 : world.floor(it.pos.x, it.pos.y + 16, it.pos.z, 32, world.family(it.owner));
+			if (f == null && it.goMatrix != null) {
+				f = world.floor(it.goMatrix[12], it.goMatrix[13] + 16, it.goMatrix[14], 32, world.family(it.owner));
+			}
 			it.restDy = f != null ? it.pos.y - f.y() : 0f;
 		}
 		return it.restDy;

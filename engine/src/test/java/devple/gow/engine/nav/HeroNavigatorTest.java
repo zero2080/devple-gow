@@ -1327,6 +1327,43 @@ class HeroNavigatorTest {
 		}
 	}
 
+	/**
+	 * 43 §32: 관절 0 이 몸 가운데인 상자 (DEST02 Creator PushPullBlock — 관절 0 = GO 원점 위 15.9, 바닥 위 17.2) 도 놓으면 바닥에 얹힌다. 놓인 높이는
+	 * 관절 0 ±16 의 바닥으로 재는데 거기 바닥이 없으면 GO 원점 (밑면) 아래로 다시 잰다 — 예전엔 0 으로 잡혀 놓는 순간 17 가라앉았다 (영상 2670 의 상자 위
+	 * 크라토스가 엔진에서는 바닥 + 16 에 섰다).
+	 */
+	@Test
+	void boxWithACentredRootJointRestsOnTheFloorWhenReleased() {
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -400, -400, 400, 400, 0, SurfaceAttr.GROUND);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		Body b = new Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		Interactables items = new Interactables();
+		Interactables.Item box = items.add(new Interactables.Item(Interactables.Kind.PUSH, "pushblock-blockonfloor", v(0, 17.2f, -40), 211, 0,
+				"pushIdle", null, "DesertPush", 27.5f));
+		box.boxHalf = 16;
+		box.boxHeight = 32;
+		box.goMatrix = new float[]{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1.3f, -40, 1}; // GO 원점 = 밑면 (바닥 위 1.3)
+		nav.setItems(items);
+		Pad in = new Pad();
+		in.down.add(PadButton.USE);
+		tick(nav, b, w, in);
+		assertEquals(NavState.PUSH, nav.state(), "옆면 잡기");
+		for (int i = 0; i < 60; i++) {
+			in.ly = -1;
+			in.down.add(PadButton.USE);
+			tick(nav, b, w, in);
+		}
+		assertTrue(box.pos.z > -40 + 10, "끌려 나옴 " + box.pos);
+		in.ly = 0;
+		in.down.clear();
+		for (int i = 0; i < 60; i++) {
+			tick(nav, b, w, in);
+		}
+		assertEquals(17.2f, box.pos.y, 1e-3f, "바닥에 얹힘 (가라앉지 않음)");
+	}
+
 	/** 원작 0x1C4258 / 0x215DF0: 쌍발차기 문 (CSM 44, 비트 #fb908478 = 0) 은 R1 한 번 — 영웅 doorKick 0.9 초 동안 붙어 있고 문 애니 0.9 초가 100 %. */
 	@Test
 	void csmDoorOnePressRunsWholeKick() {
