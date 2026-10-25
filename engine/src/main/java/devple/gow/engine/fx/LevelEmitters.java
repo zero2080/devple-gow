@@ -44,7 +44,7 @@ public final class LevelEmitters {
 		float[] p = new float[3];
 		float[] d = new float[3];
 		for (LevelLayout.Placement pl : data.layout.placements()) {
-			if (pl.instance().scale() == 0 || skip.contains(pl.instance().name().toLowerCase(Locale.ROOT))) {
+			if (pl.instance().scale() == 0 || skip.contains(pl.instance().name().toLowerCase(Locale.ROOT)) || template(data, pl)) {
 				continue;
 			}
 			// 같은 이름 FXC_/PTC_/필드가 오브젝트 그룹마다 다시 정의된다 → 이 오브젝트 앞의 마지막 정의 (FxResources#emitter) [확실: 데이터]
@@ -117,6 +117,18 @@ public final class LevelEmitters {
 		}
 		System.out.printf(Locale.ROOT, "  fx 이미터 %d (FXC %d, PTC %d)%n", n, fx.emitters.size(), fx.shapes.size());
 		return n;
+	}
+
+	/**
+	 * 컨텍스트 그룹에 없는 배치 = 코드·스크립트가 복사해 쓰는 템플릿 GO (43 §43): 원작 GO 생성 0x1307C8 의 유일한 호출자는 컨텍스트 메서드 0x133E30
+	 * (컨텍스트 +0x8C 목록에 만든다) 이고, 컨텍스트 소속은 WAD 끝 {@code GROUP{ RES CXT_x … RES go… (크기 0) }GROUP} 이다 [확실: 호출 그래프 · 데이터].
+	 * 어느 그룹에도 없는 인스턴스는 전 WAD 에서 화살·명중 효과·보스 효과·적 템플릿뿐 — PAND03J/03I/03G golog · gologshatter 는
+	 * TWK_Arrow_060 의 "GO Name" · "Hit Effect" (BMILogLauncher 통나무 화살), ATHN01B gobha* 히드라 효과, ATHN08A gobar* 아레스 효과 [확실: 데이터].
+	 * 원점에 놓인 그 GO 의 FXC 이미터를 레벨 이미터로 만들면 PAND03J 의 통나무 불꽃·파편 (FWparts · rubbleParti) 이 이웃 PAND03A 홀 원점에서
+	 * 검은 조각 구름과 불덩이로 끝없이 나왔다 (영상 3화 5950–5960 에는 없음). 컨텍스트가 하나도 없는 WAD 는 예전처럼 모두 만든다.
+	 */
+	public static boolean template(LevelData data, LevelLayout.Placement pl) {
+		return !data.layout.contextOf.isEmpty() && !data.layout.contextOf.containsKey(pl.instance().name().toLowerCase(Locale.ROOT));
 	}
 
 	/**

@@ -752,7 +752,7 @@ public final class GameScene implements Scene {
 				auto.plan(world, col);
 			}
 			if (auto != null) {
-				auto.scriptPost = (id, a0) -> world.postEvent(id, a0, 0, 0, world.player());
+				auto.scriptPost = (id, a) -> world.postEvent(id, a[0], a[1], 0, world.player());
 				auto.camera = n -> { // 스크립트처럼 CMV 질의 끔 (Internal 0x9 false) + SwitchCamera, 빈 이름이면 질의 다시 켬
 					cameraRig.setVolumeQuery(n.isEmpty());
 					if (!n.isEmpty()) {

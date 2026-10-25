@@ -265,7 +265,7 @@ public final class AutoPlay {
 	 *   pull:초:fx,fz      (fx, fz) 쪽으로 돌아 R2 를 누른 채 스틱을 영웅 정면 반대로 (밀기 상자 끌어내기)
 	 *   keys:초:B1+B2      버튼 여럿을 함께 누르고 있음 (L1+R1 아르테미스의 검)
 	 *   jump:초:fx,fz      첫 프레임 × + (fx, fz) 쪽으로 스틱 (벽에 뛰어 붙기)
-	 *   post:번호[:인자0]  스크립트 전역 이벤트 (보낸 쪽 = 영웅)
+	 *   post:번호[:인자0[:인자1]]  스크립트 전역 이벤트 (보낸 쪽 = 영웅; 메뉴 "예" = post:1021:1:1011)
 	 *   cam:이름           CMV 질의 끄고 카메라 요청 (Internal 0x9 false + 0x8), "cam:" = 질의 다시 켬
 	 *   wait:초            입력 없음
 	 *   btn:이름           버튼 한 번 (PadButton 이름)
@@ -366,7 +366,7 @@ public final class AutoPlay {
 			case "post" -> {
 				// post:번호[:인자0] — 스크립트 전역 이벤트 (보낸 쪽 = 영웅; 예 post:501:a06Mp03 = 동영상 끝) [엔진 전용: 앞 퍼즐을 건너뛸 때]
 				if (scriptPost != null) {
-					scriptPost.accept(Integer.parseInt(a[0]), a.length > 1 ? (a[1].matches("-?\\d+") ? (Object) Integer.parseInt(a[1]) : a[1]) : 0);
+					scriptPost.accept(Integer.parseInt(a[0]), new Object[]{a.length > 1 ? arg(a[1]) : 0, a.length > 2 ? arg(a[2]) : 0});
 				}
 				return routeNext(true, bot.press(null));
 			}
@@ -442,7 +442,11 @@ public final class AutoPlay {
 	}
 
 	/** 경로 단계 post / cam 의 대상 (GameScene 이 넣음, 없으면 무시). */
-	public java.util.function.BiConsumer<Integer, Object> scriptPost;
+	public java.util.function.BiConsumer<Integer, Object[]> scriptPost;
+
+	private static Object arg(String s) {
+		return s.matches("-?\\d+") ? (Object) Integer.parseInt(s) : s;
+	}
 	public java.util.function.Consumer<String> camera;
 
 	/** "fx,fz" 또는 "fx,fy,fz" → 월드 점 (y = 영웅 높이). */

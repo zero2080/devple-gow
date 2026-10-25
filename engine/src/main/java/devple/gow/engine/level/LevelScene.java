@@ -320,6 +320,11 @@ public final class LevelScene implements Scene {
 			if (gm == null || p.instance().scale() == 0) {
 				continue;
 			}
+			// 컨텍스트 그룹 밖 = 복사용 템플릿 GO (화살 golog · 명중 효과 · 보스 효과 · 밀기 상자 원본, LevelEmitters.template, 43 §43) — 원작은 GO 를 만들지 않는다.
+			// PAND03J golog (통나무 화살) 이 이웃 PAND03A 홀 원점의 피 웅덩이 위에 가로놓여 있었다. AI1 템플릿은 예전 동작대로 둔다 (위 aiTemplateObjects).
+			if (devple.gow.engine.fx.LevelEmitters.template(data, p) && !aiTemplates.contains(p.object().name().toLowerCase(Locale.ROOT))) {
+				continue;
+			}
 			// 시작 자세 (원작 GO 리셋 0x1309C0: 인스턴스 시작 act 를 시작 시간에) — ANM 이 없으면 바인드 자세 그대로
 			devple.gow.tools.level.StartPose sp = devple.gow.tools.level.StartPose.of(p, START_POSE ? animSet(p) : null);
 			TriMesh tm = sp.act() == null ? PlacedMesh.build(gm, p.object().skeleton(), p.jointWorld(), 0)
