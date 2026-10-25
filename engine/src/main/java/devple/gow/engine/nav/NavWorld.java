@@ -26,6 +26,11 @@ public final class NavWorld {
 	/** 다른 슬롯 레벨의 움직이는 오브젝트 (이웃 스크립트 Animator 가 움직임, 43 §13.8) — 바닥·벽 모두 이 레벨 발판과 같은 규칙. */
 	private Platforms neighbour = new Platforms();
 	private final List<NavRope> ropes = new ArrayList<>();
+	/**
+	 * 다른 슬롯 레벨의 줄 — 원작 줄 잡기 질의 (0x1C5CD8: 충돌 월드 0x29C978 에 반경 32 구 질의, 콜백 0x1C5AF0) 는 슬롯 구분이 없어 이웃 레벨 줄도
+	 * 잡힌다 [확실: 코드]. PAND01D 에서 PAND01A rope6 을 타고 돌아 올라감 (영상 5135–5145, 43 §34).
+	 */
+	private final List<NavRope> neighbourRopes = new ArrayList<>();
 
 	public NavWorld(LevelCollision... cols) {
 		for (LevelCollision c : cols) {
@@ -75,6 +80,11 @@ public final class NavWorld {
 
 	public List<NavRope> ropes() {
 		return ropes;
+	}
+
+	/** 다른 슬롯 레벨의 줄 (잡기 질의만 같이 본다, {@link #nearestRope}). */
+	public List<NavRope> neighbourRopes() {
+		return neighbourRopes;
 	}
 
 	/**
@@ -540,11 +550,13 @@ public final class NavWorld {
 	public NavRope nearestRope(Vector3f p, float r) {
 		NavRope best = null;
 		float bd = r;
-		for (NavRope rope : ropes) {
-			float d = rope.distance(p);
-			if (d < bd) {
-				bd = d;
-				best = rope;
+		for (List<NavRope> list : List.of(ropes, neighbourRopes)) {
+			for (NavRope rope : list) {
+				float d = rope.distance(p);
+				if (d < bd) {
+					bd = d;
+					best = rope;
+				}
 			}
 		}
 		return best;

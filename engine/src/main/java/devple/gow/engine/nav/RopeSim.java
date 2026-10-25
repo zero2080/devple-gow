@@ -179,6 +179,20 @@ public final class RopeSim {
 		}
 	}
 
+	/**
+	 * 매단 점을 옮긴다 (월드 유닛). carry 면 노드도 같은 만큼 옮긴다 — 레벨 기억·체크포인트로 소유 GO 가 애니 끝 자세로 되살아나 매단 점이 한 프레임에
+	 * 크게 뛸 때 (원작은 그때 줄을 새로 만들어 0x216FC8 이 그 자리 관절에서 노드를 깐다) [근사]. 아니면 {@link #setAnchor} (노드는 스프링으로 따라옴, 0x217A40).
+	 */
+	public void moveAnchor(Vector3f top, boolean carry) {
+		if (carry) {
+			Vector3f d = new Vector3f(top).div(NavTuning.UNITS_PER_METER).sub(anchor);
+			for (Vector3f q : p) {
+				q.add(d);
+			}
+		}
+		setAnchor(top);
+	}
+
 	/** 노드 수 (원작 +0x54 = 줄 모델 사슬 관절 수). */
 	public int nodes() {
 		return n;

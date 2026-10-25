@@ -105,6 +105,23 @@ public record NavRope(String owner, RopeDef.Type type, int template, float lengt
 		return type == RopeDef.Type.HANG && lengthM > 0 ? lengthM * RopeDef.UNITS_PER_METER : length();
 	}
 
+	/**
+	 * 매단 점을 (x, y, z) 로 옮기고 선분 끝도 같이 평행 이동한다 — 원작 줄 갱신 0x217A40 은 매 프레임 줄 뿌리 관절 (+0x48) 의 월드 이동 ÷ 16 을
+	 * 매단 점 (+0x30) 과 비교해 다르면 쓰고 잠 시간 (+0x378) 을 0 으로 한다 [확실: 코드]. 소유 GO 애니로 내려오는 줄 (PAND01A rope6) 의 잡기 선분도
+	 * 따라간다 (GameScene.followRopeAnchors). 판정 선분 = 매단 점 → 바인드 자세 끝 (곧게 늘어진 줄) [근사, 위 설명과 같음].
+	 *
+	 * @return 옮겼으면 true
+	 */
+	public boolean moveTop(float x, float y, float z) {
+		float dx = x - top.x, dy = y - top.y, dz = z - top.z;
+		if (dx * dx + dy * dy + dz * dz < 1e-6f) {
+			return false;
+		}
+		top.add(dx, dy, dz);
+		end.add(dx, dy, dz);
+		return true;
+	}
+
 	/** 선분 위 매개변수 t ∈ [0, 1] 의 점 (0 = top). */
 	public Vector3f point(float t, Vector3f out) {
 		return out.set(top).lerp(end, Math.max(0, Math.min(1, t)));

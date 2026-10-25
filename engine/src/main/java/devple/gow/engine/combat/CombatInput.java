@@ -42,9 +42,17 @@ public final class CombatInput {
 		return m;
 	}
 
+	/**
+	 * ANY_INPUT 의 버튼 (폴링 표 0x2B9290 [12] = 0x207FE0): 새로 눌린 패드 비트 (+0x28 &amp; (+0x28 ^ +0x2C)) &amp; 0xFF — 비트 0–7 = L2 R2 L1 R1 △ ○ × □
+	 * [확실: 코드]. 예전 엔진은 분기 코드 1–8 (× □ △ ○ L1 L2 L3 R1) 을 돌아 R2 (사용) 가 빠지고 L3 가 들어 있었다 — 싸운 뒤 IDLECOMBAT (M80, ANY_INPUT
+	 * → 기술 끝) 에 선 채 R2 를 누르면 기술이 끝나지 않아 내비게이션 (레버·상자·크랭크 잡기 0x1C3F18) 이 그 R2 를 받지 못했다 (PAND01A 레버, 43 §34).
+	 */
+	private static final PadButton[] PAD_BITS_0_7 = {PadButton.L2, PadButton.R2, PadButton.L1, PadButton.R1, PadButton.TRIANGLE, PadButton.CIRCLE,
+			PadButton.CROSS, PadButton.SQUARE};
+
 	public static boolean anyNewButton(Input in) {
-		for (int c = 1; c <= 8; c++) {
-			if (in.pressed(button(c))) {
+		for (PadButton b : PAD_BITS_0_7) {
+			if (in.pressed(b)) {
 				return true;
 			}
 		}

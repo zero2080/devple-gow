@@ -542,6 +542,18 @@ PAND05B `pBoxPand05B-Marker511` → `semoMovieHaveBox-…-semo08marker511` (Filt
 - 엔진: `nav/RopeSkin`, `GameScene.buildRopeVisuals` / `poseRopes` → `LevelScene.poseInstance` (스키닝). 레벨의 모든 줄에 시뮬레이션을 만들어 매달리지 않아도 그린다.
   `-Dgow.norope` 면 예전 정지 자세, `-Dgow.ropedebug` 노드 출력. 테스트 `RopeSkinTest` (4).
 
+### 17.1 매단 점은 소유 GO 관절을 따른다 (0x217A40) [확실: 디스어셈블] — 43 §34.1-6
+- 줄 갱신 0x217A40 첫머리: 줄 GO 모델 (+0x104) 의 관절 행렬 캐시 시각 (+0x40) 이 이번 프레임 (0x29CA78) 이 아니면 0x136BD8 로 줄 뿌리 관절 (+0x48)
+  행렬을 새로 계산하고, 아니면 +0x8C 캐시에서 읽어 이동 (행 3) × 1/16 (0x3D800000) 을 매단 점 (+0x30) 과 비교 (pceqw) — 다르면 +0x30 에 쓰고 잠 시간
+  +0x378 = 0 (깨움). 그래서 Animator 로 움직이는 줄 GO 는 시뮬레이션 매단 점이 매 프레임 따라간다.
+- PAND01A rope6 (매단 줄, 사슬 2, SCR f3 짧은 사슬): 레버 goleverrope (Push 205 Type 5, id 40) 1023 → LevelData 8 = 100 → rope6-AnimContinue →
+  ANM_rope6 (9.67 초) 가 관절 0 을 y 933 → 277, 끝 256 → −400 (구멍 바닥 PAND01D) 으로 내린다 (영상 4845–4852).
+- 엔진 (예전): `NavRope` 선분 · `RopeSim` 매단 점이 배치 자세에 고정 — 렌더만 발판 몸 애니로 내려오고 줄은 위층 바닥 (146) 위 110 에 남아 잡을 수 없었다.
+  지금: `GameScene.followRopeAnchors` 가 매 프레임 매단 줄 (HANG) 소유 발판 몸 (`Platforms.Body`, 애니 있음) 관절 0 을 읽어 `NavRope.moveTop`
+  (선분 평행 이동) · `RopeSim.moveAnchor` (64 유닛 넘게 한 번에 뛰면 노드째 — 레벨 기억으로 애니 끝 자세에서 되살아날 때 [근사]) 를 부르고, 그런 줄은
+  렌더도 뿌리 = 애니 · 사슬 = 시뮬레이션 (`poseRopes` 의 base = 몸 관절, 발판 자세 덮어쓰기에서 뺌, 0x218168 과 같이). 다른 슬롯 줄도 그 슬롯 발판으로.
+  테스트 `RopeAnchorFollowTest` (2).
+
 ## 18. 좁은 턱 경로·적 줄·GeneralGuide (docs/90 §4 항목 4·5 후속)
 
 ### 18.1 좁은 턱 윗면 = 턱 질의 0x1E3A80 의 0x1E3EE8 – 0x1E4088 (`HeroNavigator.narrowLedge`) [확실: 디스어셈블]
@@ -832,6 +844,10 @@ ATHN01B 에도 선체 천장 (−44 ~ −64, 법선 −0.94 ~ −1) 과 빗면 �
   `Platforms`, 다른 슬롯 레벨이 바뀌거나 비면 (`Host.levelLeft`) 그 상자 몸을 지운다. ATHN05C 항아리 방 (바닥은 05C 에만) 의 ATHN05D 상자 둘 (고르곤의 눈 ·
   불사조 깃털, 영상 8090–8100) 이 예전엔 없었다.
 - 이음 상태: `restoreNeighbourPlatforms` / `restorePlatforms` → 충돌 꺼진 몸 = noCollision, 열린 자세·높이의 TAndF = 끝남 (`SceneNav.restoreItems`).
+- 줄도 같다 [확실: 코드]: 줄 잡기 0x1C5C20 → 0x1C5CD8 이 충돌 세계 0x29C978 에 반경 32 (0x42000000) 구 질의 (콜백 0x1C5AF0) 를 한다 — 슬롯 구분이 없다.
+  PAND01D (현재) 에서 PAND01A rope6 을 잡고 올라간다 (영상 5135–5145). 엔진 (예전): 현재 레벨 줄만 (`NavWorld.ropes`), 이음 때 새 현재 레벨 줄을 데이터에서
+  다시 만들고 매달린 줄만 남겼다 → 내려온 rope6 을 PAND01D 에서 잡을 수 없었다. 지금: `NavWorld.neighbourRopes` (`SceneNav.setOther` 가 이웃 데이터로,
+  `nearestRope` 가 두 목록을 본다), 이음 (`swapSlots`) 은 두 목록 자리만 바꿔 줄 객체 (옮긴 매단 점) · 시뮬레이션이 이어진다 (43 §34.1-7).
 
 ### 23.3 TAndF 물리 들어 올림 (0x214058 / 0x214180) [확실: 코드 / 근사: 영웅 관절 높이 대신 진행 비율]
 - 0x213B28: 상태 0/1/2 마다 템플릿 +0xD4 / +0xEC / +0x104 이름 (#d7f2bea8 연타 · #c5b0169f 완료 …) 의 act 를 문 GO 애니에서 찾아 (0x116AC8) 튼다 — 없으면 (−1)

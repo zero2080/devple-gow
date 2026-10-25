@@ -4394,8 +4394,12 @@ public final class GameScene implements Scene {
 		updateCreatedBoxes();
 		updateAnimatorEffects(dt);
 		updateSkyEffects();
+		followRopeAnchors();
 		poseRopes();
 		for (var b : nav.platformBodies()) {
+			if (animatedRope(b.owner)) {
+				continue; // 애니로 옮겨지는 줄 오브젝트: 뿌리는 애니, 사슬은 시뮬레이션 (poseRopes, 0x218168)
+			}
 			if (b.anim() != null && b.scripted || b.follows()) { // 정지 CDV 오브젝트의 반복 act 는 렌더가 따로 돌린다 (반복 재생 배치). 부모 링크로 옮겨진 몸은 그 자세로
 				level.fx().followOwner(b.owner, b.joints()); // 그 GO 의 배치 이미터도 관절을 따라 (사이렌 영혼의 검은 연기, 43 §31.2-6)
 				level.poseInstance(b.owner, b.drawJoints(), b.hidden()); // 움직인 발판·문·회전방은 애니 자세로 (관절 숨김 포함: DMC 결계, SCR_GhostTrail 꼬리)
@@ -4494,7 +4498,7 @@ public final class GameScene implements Scene {
 		poseRopes(false);
 	}
 
-	/** 잠든 줄은 관절을 갱신하지 않는다 (0x217B38 → 0x218168). */
+	/** 잠든 줄은 관절을 갱신하지 않는다 (0x217B38 → 0x218168). 애니로 옮겨지는 줄은 사슬 밖 관절 (뿌리) 을 애니 자세로. */
 	private void poseRopes(boolean all) {
 		for (RopeVisual v : ropeVisuals) {
 			if (System.getProperty("gow.ropedebug") != null && v.sim().attached() && (lightFrame++ % 60) == 0) {
@@ -4505,7 +4509,53 @@ public final class GameScene implements Scene {
 				System.out.println(sb);
 			}
 			if (all || !v.sim().sleeping()) {
-				level.poseInstance(v.owner(), devple.gow.engine.nav.RopeSkin.pose(v.base(), v.chain(), v.sim().nodePositions(), v.fixed()));
+				devple.gow.engine.nav.Platforms.Body b = animatedRope(v.owner()) ? nav.navWorld.platforms().body(v.owner()) : null;
+				float[][] base = b != null ? b.joints() : v.base();
+				level.poseInstance(v.owner(), devple.gow.engine.nav.RopeSkin.pose(base, v.chain(), v.sim().nodePositions(), v.fixed()));
+			}
+		}
+	}
+
+	/** 한 프레임에 이보다 많이 뛴 매단 점은 노드째 옮긴다 (레벨 기억으로 애니 끝 자세에서 되살아날 때, {@link devple.gow.engine.nav.RopeSim#moveAnchor}). */
+	private static final float ROPE_ANCHOR_JUMP = 64f;
+
+	/** 소유 GO 가 오브젝트 애니 (Animator) 를 가진 매단 줄인가. */
+	private boolean animatedRope(String owner) {
+		for (devple.gow.engine.nav.NavRope r : nav.navWorld.ropes()) {
+			if (r.type() == devple.gow.tools.level.RopeDef.Type.HANG && r.owner().equalsIgnoreCase(owner)) {
+				devple.gow.engine.nav.Platforms.Body b = nav.navWorld.platforms().body(owner);
+				return b != null && b.anim() != null;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * 매단 줄의 매단 점이 소유 GO 의 애니를 따른다 — 원작 줄 갱신 0x217A40 은 매 프레임 소유 GO 의 줄 뿌리 관절 (+0x48) 행렬 (지난 프레임 것이면
+	 * 0x136BD8 로 새로 계산) 의 이동 × 1/16 을 매단 점 (+0x30) 과 비교해 다르면 쓰고 잠 시간 (+0x378) 을 0 으로 한다 [확실: 코드]. PAND01A rope6 은
+	 * 레버 goleverrope (1023 id 40 → LevelData 8 = 100 → rope6-AnimContinue) 로 ANM_rope6 (9.67 초) 이 줄 전체를 656 내려 (뿌리 y 933 → 277,
+	 * 끝 256 → −400) 구멍 바닥 PAND01D 까지 닿게 한다 (영상 4845–4852: 크레토스가 그 줄을 타고 내려감). 예전 엔진은 줄 시뮬레이션·잡기 선분이 배치 자리
+	 * (끝 y 256, 위층 바닥 146 위 110) 에 남아 렌더만 애니로 내려왔고, 내려온 줄을 잡을 수 없었다.
+	 */
+	private void followRopeAnchors() {
+		followRopeAnchors(nav.navWorld.ropes(), nav.navWorld.platforms());
+		followRopeAnchors(nav.navWorld.neighbourRopes(), nav.navWorld.neighbourPlatforms()); // 다른 슬롯 줄 (PAND01D 에서 본 PAND01A rope6)
+	}
+
+	private void followRopeAnchors(List<devple.gow.engine.nav.NavRope> ropes, devple.gow.engine.nav.Platforms platforms) {
+		for (devple.gow.engine.nav.NavRope r : ropes) {
+			if (r.type() != devple.gow.tools.level.RopeDef.Type.HANG) {
+				continue;
+			}
+			devple.gow.engine.nav.Platforms.Body b = platforms.body(r.owner());
+			if (b == null || b.anim() == null || b.joints().length == 0) {
+				continue;
+			}
+			float[] j = b.joints()[0];
+			float jump = (float) Math.sqrt((j[12] - r.top().x) * (j[12] - r.top().x) + (j[13] - r.top().y) * (j[13] - r.top().y)
+					+ (j[14] - r.top().z) * (j[14] - r.top().z));
+			if (r.moveTop(j[12], j[13], j[14])) {
+				nav.navigator.sim(r).moveAnchor(r.top(), jump > ROPE_ANCHOR_JUMP);
 			}
 		}
 	}

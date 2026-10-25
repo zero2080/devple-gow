@@ -2311,7 +2311,8 @@ Gate1 · 병사 MimeGuy-aoXUSAI1 (템플릿 300) 대화 211 / 212 · CycCam 키�
 아르테미스의 검 방 MAtalkingHead (−240, 10, 126) 다음) ─ 가운데 구멍 방 (네 구역 Section1..4, 해골 HoleSkelly · 고르곤 HoleMedusa 스포너) · 위층 들보 (BBeamZone,
 갑옷 해골 R_SK4 · 궁수 setTimedArchers) · 남쪽 수레 (PushPullBlock) → 누름판 PressPlate (−904, 8, −1532) → 문 ScoobyDoor · 위층 방패 AlcoveShield (−1016, 148, −1728)
 메시지 259 · 방패 문 shieldoor (−1009, 4, −1345) ─ 구멍 바닥 LoadCheckD (−505, −191, −914) ─ PAND01D (줄 해골 RopeSkelly · 동굴 방패 CaveShield 메시지 260 ·
-HoleLoad → PAND01A). 엔진 = origin/main 4fe5fa2 위.
+HoleLoad → PAND01A). 엔진 = origin/main 4fe5fa2 위에서 시작, 마지막 확인은 4214de8 위 (fbbc209 · aced5e0 · cc7e2fa · 9f69e4c · 4214de8 뒤 재확인 §34.3).
+검증 = 경로 하네스 (`-Dgow.auto.route`, 순간이동 · `use:` · `hold:` · `jump:` · `kill:33`) + 봇, 1280×720 lockstep 녹화를 영상 프레임 (728×409) 과 나란히.
 
 ### 34.1 엔진 결함과 수정
 1. **아르테미스의 검 공격이 칼날이 아니라 영웅 앞 구로 맞았다 (영상 4062–4160 · 4245–4265 · 4980–5060, 검으로 싸우는 구간 전부).** BER* 공격 레코드는 부위 10
@@ -2351,6 +2352,72 @@ HoleLoad → PAND01A). 엔진 = origin/main 4fe5fa2 위.
    Combatant.update, 기술 중에는 `HeroNavigator.holdRope` (손은 줄 위 자리, 기술 첫 틱에 대상 쪽 줄 방향 [근사]). 엔진만의 "○ = 줄 놓기" 는 지웠다 (원작 ○ =
    ROPEHOHGRAB, 놓기는 × 0.5 초 뒤). d5 (보통, 봇): ROPEHOHA 적중 12 · 해골 ROPEHOHR · 해골 ROPEHOHA 피해 5 → ROPEHOHR1 · ROPELEAP → 둘 다 maiSkb30 → 해골
    death02 로 떨어짐 (`07_rope_fight_d5`). 시험 `RopeCombatTest` · `HeroNavigatorTest.traverseRopeFightHoldsHandsOnRopeAndFacesTarget`.
+6. **레버로 내려온 rope6 을 잡을 수 없었다 (영상 4845–4852: 레버를 당기면 줄이 구멍 바닥까지 내려오고 크레토스가 그 줄을 타고 PAND01D 로 내려감).** 레버
+   goleverrope (Push 205 Type 5, 손잡이 (−374, 168, −1007) 축 +x, R2 한 번) → 1023 (id 40) → leverRope 센서가 LevelData 8 = 100 → RopeAniCam-CamOn
+   (Vis 4 → CMV RopeLockCam1 우선 15 · 애니 카메라, Idle 10 초) · TriggeredBlockers 끔 · rope6-AnimContinue — ANM_rope6 (9.67 초) 이 줄 GO 전체를 656 내린다
+   (뿌리 y 933 → 277, 끝 256 → −400). 원작 줄 갱신 0x217A40 [확실]: 매 프레임 줄 뿌리 관절 (+0x48) 행렬의 이동 × 1/16 을 매단 점 (+0x30) 과 비교해 바뀌면
+   쓰고 깨운다. 엔진은 `NavRope` 선분 · `RopeSim` 매단 점을 배치 자리에 고정해 렌더만 애니로 내려오고, 잡기 선분은 위층 바닥 (146) 위 110 에 남아
+   위층에서 뛰어도 줄을 지나쳐 구멍으로 떨어져 죽었다 (l11). → `GameScene.followRopeAnchors` (매단 줄 소유 발판 몸 관절 0 → `NavRope.moveTop` ·
+   `RopeSim.moveAnchor`), 애니로 옮겨지는 줄은 뿌리 = 애니 · 사슬 = 시뮬레이션으로 그림 (38 §17.1). l13: 18.6 초 위층 (−470, 146, −1008) 에서 뛰어 잡음
+   (y 177) → 아래로 미끄러져 구멍 방 다리 옆 (영상 4852 와 같은 자리) → 23.0 초 LoadCheckD → 이음 PAND01A → PAND01D → 24.75 초 줄 아래 끝
+   (`10_rope6_descent_l13`). 시험 `RopeAnchorFollowTest` (2).
+7. **PAND01D 에서 PAND01A rope6 을 잡고 올라갈 수 없었다 (영상 5135–5145: 수평 줄 기둥 옆 세로 줄을 타고 위로).** 원작 줄 잡기 0x1C5C20 → 0x1C5CD8 =
+   충돌 세계 0x29C978 반경 32 구 질의 (콜백 0x1C5AF0) — 두 슬롯 구분이 없다 [확실]. 엔진은 현재 레벨 줄만 잡고, 이음 때 새 현재 레벨 줄을 데이터에서 다시
+   만들었다. → `NavWorld.neighbourRopes` (`SceneNav.setOther`), `nearestRope` 가 두 목록, `swapSlots` 는 목록 자리만 바꿈 (옮긴 매단 점 · 시뮬레이션이
+   이어짐), 이웃 줄 매단 점도 이웃 발판으로 따름 (38 §23.2). l16 (현재 = PAND01D): 받침 (−506, −416, −994) 에서 × → 이웃 rope6 잡음 → 9 초에 y −212
+   까지 올라감, 수평 줄 기둥 · 횃불이 영상 5135 와 같은 구도 (`11_rope6_climb_back_l16`).
+8. **싸운 뒤 R2 로 레버를 잡지 못했다 (영상 4300 궁수 싸움 → 4845 레버).** 싸움이 끝나면 영웅은 전투 대기 IDLECOMBAT (M85 → M80 반복, ANY_INPUT →
+   기술 끝) 에 서 있다. 원작 ANY_INPUT = 폴링 0x2B9290[12] = 0x207FE0: 새로 눌린 패드 비트 `& 0xFF` (L2 R2 L1 R1 △ ○ × □) 또는 스틱 &gt; 0.5 [확실]. 엔진은
+   분기 코드 1–8 (× □ △ ○ L1 L2 L3 R1) 을 돌아 R2 가 빠지고 L3 가 들어 있어 R2 가 M80 을 끝내지 못했고, 내비게이션 (HeroRig 는 기술 중엔 nav 를 안 돌림)
+   이 R2 를 받지 못했다 (l10: 52–64 초 idleCombat 만 반복). → `CombatInput.anyNewButton` 을 패드 비트 0–7 로 (26 문서). l14: 싸운 뒤 57.75 초 R2 → INTERACT
+   → 61.65 초 RopeAniCam. 시험 `IdleCombatInputTest`.
+
+### 34.2 경로와 장면 대조 (영상 ↔ 엔진 실행)
+엔진 시각은 하네스 실행 안의 초 (장면마다 순간이동으로 시작). "같음" = 구도 · 색 · 장치 동작이 영상 프레임과 맞음.
+
+| 영상 (초) | 장면 | 레벨 · 장치 | 엔진 실행 (초) | 결과 |
+|---|---|---|---|---|
+| 4050–4160 | 구멍 방, 아르테미스의 검 첫 싸움 (해골 · 고르곤 · 32 Hits) | PAND01A Section1..4, HoleSkelly · HoleMedusa | a2 (봇), b2/b3 (□□□□ △△ ○) | 칼 히트 구 고침 (34.1-1), 보라 궤적 b3 2.4–6.9 ↔ v4062/4070 (`14_boa_trail_b3_vs_4062`) |
+| 4205–4285 | 구멍 방 아래 · 위층 길 | PAND01A | a2 | 같음 |
+| 4300 | 레버 방 궁수 싸움 | ArcherRow (R_SK2 ×4, goarcherrow (−352, 0, −960) + 로컬 ÷8 → x −352, z −1043 … −873, 위층 바닥 146) | l3 · l9 (봇이 15 초에 넷 처치) | 궁수 자리 = 데이터. 4845 에서 방이 빈 것은 4300 에 죽인 것 |
+| 4310 | 매달린 줄 끝 추 | rope6 배치 (끝 y 256) | l11 16.7 | 같음 |
+| 4350–4400 | 고르곤 복도 | PressSpawner (−483, 4, −1346): PressArchers ×2 · Medusa 26/27 | c5 7.7 (들어갈 때 스폰) | 같음 (영상도 수레 전에 싸움) |
+| 4415–4505 | 수레를 밀어 누름판에 → 문 | gopushpullblock (Push 099, 반 너비 16) → PressPlate (−904, 8, −1532) → ScoobyDoor | c5: 0.65–6.25 남 · 7.67–22.78 서 · 24.2–30.0 북 (상자 (−904.5, 10.6, −1538)), 28.87 CubeEntry → AnimDown → 29.67 ScoobyDoor-AnimForward | 같음 (`12_cart_to_plate_c5`) |
+| 4640 | 황금 방패 질문 | AlcoveShield (−1016, 148, −1728) 질문 1008 → zeusSheildOFF · AnimShrink → 카드 "제우스의 방패" | v1 · v4 2.8–5.8 | 문구 · 카드 같음, 방패 빛 다름 (§34.4) |
+| 4710–4716 | 사자 부조 방패 홈 | shieldoor (−1009, 4, −1345) | v1 · v4 9.5–11.8 | 같음 (부조 색 · 오른쪽 홈 방패) |
+| 4720–4730 | 문 방 · 복도 | ScoobyDoor 방 | c5 28–34 | 같음 |
+| 4845 | 레버 방 | goleverrope | l11: 0.95 R2 → 4.85 완료 → RopeLockCam1 10 초 (추가 구멍 바닥까지) | 같음 (`09_lever_ropecam_l11`), 고침 34.1-6 · 8 |
+| 4852 | rope6 타고 내려감 | rope6 → LoadCheckD → PAND01D | l13 18.6–24.75 | 고침 (34.1-6) |
+| 4865–4940 | 수평 줄 싸움 | PAND01D gorope1 · RopeSkelly | d5 · d6 | 고침 (34.1-4 · 5), 줄 꼰 무늬 (`15_rope_texture_d6_vs_4880`) |
+| 4958 | 하데스의 방패 카드 | CaveShield 메시지 260 | c (동굴) | 같음 |
+| 5135–5145 | rope6 타고 올라감 | PAND01D → 이웃 PAND01A rope6 | l16 28.6–38.4 | 고침 (34.1-7) |
+| 5182 | 세이브 "아틀라스의 시험" | PAND01A 세이브 포인트 17 | s2 | 고침 (34.1-3) |
+
+### 34.3 다른 에이전트 변경 뒤 재확인
+- fbbc209 (안개 · Vis 슬롯 16 · 재질 ANM 색): 구멍 방 (l13 21.5 ↔ v4852), 수레 복도 · 문 방 (c5 ↔ v4445–4505), 부조 (v4 ↔ v4712), PAND01D (d6 ↔ v4880) 모두 같은 톤.
+  수레 (4440–4510) 와 레버 (4845) 동작 그대로 (c5 · l11).
+- aced5e0 (무조명 추가 레이어 알파): 부조 · 금속 장식 · 황금 방패 얼굴 (FX 끈 v2 에서 얼굴 또렷) 퇴행 없음.
+- cc7e2fa (V2-32 UV): rope6 · gorope1 이 한 색이 아니라 꼰 줄 무늬 (영상과 같음). PAND01B (metalTrack01 · leverSAW · 모래주머니 줄) · PAND01C NewLever 는 이
+  구간 (4050–5189) 에 나오지 않는다 [추정: 영상 5155–5176 은 구멍 방 위층 → 북쪽 등잔 복도 → PAND01A 세이브 포인트 17 (−505, −6, −337), LoadB 볼륨은 지나가기만].
+- 9f69e4c (움직이는 GO 이미터 · Vis 슬롯 1): 방패를 가져가면 zeusSheildOFF 로 빛이 멈춤, 등잔 불꽃 자리 그대로.
+- 4214de8 (표면 이미터): 아르테미스의 검 파란 · 보라 빛과 휘두른 궤적이 영상 4062 · 4070 과 같은 색 (b3).
+
+### 34.4 남은 것 · 미확인
+- 황금 방패 (영상 4640) 빛: 엔진은 FXC_emitter1 (곡선 이미터, rate 1400, PTC_particle4 수명 0.35 · 크기 1600) 의 주황 빛이 방패 얼굴을 덮는다 (FX 를 끄면
+  얼굴이 보임, `13_alcove_shield_glow_vs_4640`). 영상은 얼굴이 또렷하고 가장자리만 빛난다. 레벨 파티클 색 · 알파는 `LevelEmitters.def` 의 [추정] 휴리스틱 [미해결].
+- rope6 아래 끝: 줄 끝까지 미끄러지면 발이 받침 바닥 (−416) 보다 39 아래 (−455) 라 "끝에서 바닥이 있으면 내림" 이 바닥을 못 찾는다 (엔진 줄이 영웅 무게로 늘어남)
+  — 영상은 줄 사이를 뛰어 옮겨 보이지 않는다 [미확인].
+- PAND01D → PAND01A 로 올라간 뒤 현재 레벨: PAND01D 스크립트에 LoadCheck "Pand01A" 가 없다 (HoleLoad 는 LoadWad 만) — 엔진은 현재 = PAND01D 그대로 [미확인].
+- 레버 방 궁수 (ArcherRow, setTimedArchers 의 1019 사격 명령 필터 66–69) 가 엔진에선 걸어와 근접 공격도 한다 — 영상은 4300 에 처치해 비교 못 함 [미확인].
+- 하네스로 본 것: 레버 Idle (10 초) 중 화살에 맞으면 카메라 볼륨 (x −422 … −346) 밖으로 밀려 RopeLockCam1 이 풀린다 (궁수가 살아 있을 때만, 영상과 무관).
+- 이전 항목 그대로: 구멍 방 고르곤 시각 차이 (봇이 느림), 봇이 이웃 슬롯 적을 노림, 다른 내비 상태의 오래된 피격 구, 동굴 분쇄기 60 처치 (봇 85 초에 깔림),
+  ROPEHOHGRAB → MAISKB32 미시험, 줄 위 기술 방향 [근사].
+
+### 34.5 증거 · 시험
+- `work/verify/pandora_atlas/` (커밋 안 함): 01–08 (§34.1-1 … 5), `09_lever_ropecam_l11`, `10_rope6_descent_l13`, `11_rope6_climb_back_l16`, `12_cart_to_plate_c5`,
+  `13_alcove_shield_glow_vs_4640`, `14_boa_trail_b3_vs_4062`, `15_rope_texture_d6_vs_4880`, 영상 프레임 `vid/v4055 … v5182`.
+- 시험: `ArtemisHitVolumeTest`, `MemoryCardFlowTest`, `RopeSimTest`, `RopeCombatTest`, `HeroNavigatorTest.traverseRopeFightHoldsHandsOnRopeAndFacesTarget`,
+  `RopeAnchorFollowTest`, `IdleCombatInputTest` — engine 721 개 통과.
 
 ## 시연 녹화 (-Dgow.record, -Dgow.bot) [엔진 전용]
 
