@@ -221,7 +221,8 @@ class CameraRigTest {
 		rig.update(1 / 60f, hero, 0, false); // 부르지 않은 틱 → 해제 (0x1EF058: 줌 바로 0)
 		rig.apply(c, 1);
 		assertEquals(0, rig.combatWeight());
-		assertEquals(0, c.up.x, 1e-6f);
+		Vector3f f2 = new Vector3f(c.target).sub(c.eye).normalize();
+		assertEquals(0, new Vector3f(f2).cross(0, 1, 0).dot(c.up), 1e-5f, "롤 없음 (위 = 상태 행렬 Y 축, 정면과 같은 수직면)");
 		assertTrue(Math.abs(c.fovDeg - fov0) < 1f, "원래 화각으로 바로: " + c.fovDeg + " / " + fov0);
 	}
 
@@ -279,5 +280,36 @@ class CameraRigTest {
 		b.yaw = -170;
 		CameraRig.blend(a, null, b, 0.5f, out, null);
 		assertEquals(180, Math.abs(out.yaw), 1e-3f, "요는 짧은 쪽 (감김)");
+	}
+
+	/**
+	 * 위 벡터 = 상태 행렬 R(요, 피치) 의 Y 축 (0x1F1108 → 0x1F1000) — 똑바로 내려다보는 카메라 (SEWR01 camStairCase 피치 −90 · 요 −41.2,
+	 * 영상 144–152 나선 계단) 도 뷰 행렬이 유한하다. 예전엔 위 = (0, 1, 0) 고정이라 정면과 평행 → 룩앳 NaN → 화면 전체가 검었다 (43 §30).
+	 */
+	@Test
+	void straightDownCameraKeepsAFiniteView() throws Exception {
+		Vector3f up = CameraRig.up(-41.2f, -90f, new Vector3f());
+		Vector3f yawDir = CameraRig.dir(-41.2f, 0f, new Vector3f());
+		assertEquals(0f, up.y, 1e-5f, "수직 시선의 위 = 수평");
+		assertEquals(1f, up.dot(yawDir), 1e-5f, "화면 위 = 요 쪽 수평 방향");
+		assertEquals(1f, CameraRig.up(30f, 0f, new Vector3f()).y, 1e-6f, "수평 시선은 (0, 1, 0)");
+		Vector3f f = CameraRig.dir(30f, -20f, new Vector3f());
+		assertEquals(0f, CameraRig.up(30f, -20f, new Vector3f()).dot(f), 1e-5f, "위 ⟂ 정면 (룩앳 (0, 1, 0) 과 같은 뷰)");
+
+		LevelData d = load("SEWR01");
+		CameraRig rig = new CameraRig(d);
+		Vector3f hero = new Vector3f(-1950, 660, 497); // 나선 계단 중턱 (camGRPspiral 볼륨)
+		for (int i = 0; i < 240; i++) {
+			rig.update(1 / 60f, hero, 0, false);
+		}
+		assertEquals("camStairCase", rig.current());
+		assertEquals(-90f, rig.pose().pitch, 0.5f);
+		devple.gow.engine.render.Camera c = new devple.gow.engine.render.Camera();
+		rig.apply(c, 1f);
+		org.joml.Matrix4f vp = c.viewProj(4f / 3f);
+		for (int k = 0; k < 16; k++) {
+			assertTrue(Float.isFinite(vp.getRowColumn(k / 4, k % 4)), "뷰 행렬 원소 " + k);
+		}
+		assertEquals(0f, c.up.y, 1e-3f);
 	}
 }

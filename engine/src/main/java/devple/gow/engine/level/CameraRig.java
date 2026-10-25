@@ -675,8 +675,17 @@ public final class CameraRig {
 		p.eye(c.eye);
 		p.forward(c.target).mul(Math.max(1, p.dist)).add(c.eye); // 시선 = 카메라 정면 (대상은 화면 sa/sb 자리)
 		c.fovDeg = p.fovDeg;
-		c.up.set(0, 1, 0);
+		up(p.yaw, p.pitch, c.up);
 		frame(c, p, new Vector3f(prevFrameT).lerp(frameT, alpha), zoomPrev + (zoomCur - zoomPrev) * alpha);
+	}
+
+	/**
+	 * 카메라 위 벡터 = 상태 행렬 R(요, 피치) 의 Y 축 (0x1F1108 → 0x1F1000: 롤 → 피치 X → 요 Y, 롤 +0x94 는 0) [확실: 행렬 구성].
+	 * 정면이 수직이 아니면 룩앳 (0, 1, 0) 과 같은 뷰이고, 피치 ±90 (SEWR01 camStairCase · ATHN03D camTunnel0A2 — 나선 계단을 똑바로 내려다봄,
+	 * 영상 144–152 · 945–948) 에서도 화면 위 = 요 쪽 수평 방향으로 정해진다. 예전엔 늘 (0, 1, 0) 이라 정면과 평행 → 룩앳 행렬 NaN → 화면 전체가 검었다 (43 §30).
+	 */
+	static Vector3f up(float yaw, float pitch, Vector3f out) {
+		return rotate(yaw, pitch, new Vector3f(0, 1, 0), out).normalize();
 	}
 
 	// ---- 대상 프레이밍 줌 (전투 이벤트 11 CAMERA_FRAME, 0x1EF948 → 0x1EF078) ----
@@ -764,8 +773,9 @@ public final class CameraRig {
 		c.fovDeg = verticalFov((float) h);
 		Vector3f f0 = new Vector3f(c.target).sub(c.eye).normalize();
 		Vector3f f1 = new Vector3f(t).sub(c.eye).normalize();
-		org.joml.Quaternionf q0 = new org.joml.Quaternionf().lookAlong(f0, new Vector3f(0, 1, 0));
-		org.joml.Quaternionf q1 = new org.joml.Quaternionf().lookAlong(f1, overUp);
+		// 지금 회전의 위 = 상태 행렬 Y 축 (apply 가 넣은 c.up) — 수직 시선에서도 정의된다 (예전 (0, 1, 0) 은 수직 시선에서 NaN)
+		org.joml.Quaternionf q0 = new org.joml.Quaternionf().lookAlong(f0, new Vector3f(c.up));
+		org.joml.Quaternionf q1 = new org.joml.Quaternionf().lookAlong(f1, new Vector3f(f1).cross(overUp).lengthSquared() > 1e-6f ? overUp : c.up);
 		org.joml.Quaternionf q = q0.slerp(q1, w, new org.joml.Quaternionf()).conjugate(); // 뷰 회전 → 카메라 회전
 		Vector3f f = q.transform(new Vector3f(0, 0, -1)).normalize();
 		q.transform(c.up.set(0, 1, 0)).normalize();

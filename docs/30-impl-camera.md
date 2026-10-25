@@ -334,6 +334,9 @@ FallCam (0x80), LadderCam·LgHangCam·MastCam4 (0x08), camRopes·UprCam14 (0x04)
   (이전 [근사] "리셋 때 T" 의 근거 — PAND03F 가 깨졌던 "(0, 0, T.z)" 는 0x1F1108 눈 이동을 빠뜨린 값).
 - 엔진: `Pose.sa/sb` (+0x88/+0x8C), `Pose.eye` = T − 거리·R·방향(sa, sb), `CameraRig.rotate/unrotate` (0x1F1000 회전 순서: 피치 X → 요 Y), `Shot` 상태 행렬 (`stEye`, `mYaw/mPitch`, `stYaw/stPitch`, 템플릿 플래그),
   `head()` = 머리, 렌더 시선 = 카메라 정면 (대상은 화면 sa/sb 자리). 디버그 `-Dgow.debug.cam2` 매 프레임 기준점·화면 각. 시험 `StartCameraTest.deadZoneFramesHeroBelowCentre`.
+- **위 벡터 = 상태 행렬 R(요, 피치) 의 Y 축** (0x1F1108 → 0x1F1000, 롤 +0x94 = 0) [확실: 행렬 구성] — `CameraRig.up`. 시선이 수직이 아니면 룩앳 (0, 1, 0) 과 같은 뷰이고,
+  피치 ±90 카메라 (SEWR01 camStairCase · ATHN03D camTunnel0A2 — 나선 계단을 똑바로 내려다봄, 피치·요 범위 0) 에서도 화면 위 = 요 쪽 수평 방향으로 정해진다.
+  예전엔 늘 (0, 1, 0) 이라 정면과 평행 → 룩앳 행렬 NaN → 화면 전체가 검었다 (43 §30). 프레이밍 줌 (0x1EF078) 의 지금 회전도 이 위 벡터로.
 
 ### 8.3 볼륨 인트로 IdleCam [확실: 스크립트 데이터]
 ATHN01A `goidlecamgroup` (CAM_IdleCam, 우선순위 50, 0x434FE, ANM_idlecamgroup) 와 `goenemyidlecamgroup` (CAM_Idle2Cam, 51) 의 CMV 는 시작 지점 구 (반지름 119) 를 덮는다.
