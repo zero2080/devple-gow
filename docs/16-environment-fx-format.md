@@ -391,7 +391,18 @@ MFX 적중 배율 0x221810 f12 (1 / 0.125) 는 이미터 인스턴스 +0xB4 = **
   위치 += b̂ · lerp(최소, 최대 거리) · 16 (0x124E2C – 0x124E8C) → 퍼짐 0 이면 속도 = b × (speed − sr/2 + rand·sr) · 16 (b 정규화 안 함, 0x1250C8), 퍼짐 > 0 이면
   b 둘레 원뿔 (0x124EF8, 축 구성 미해석).
 - 엔진: `FxResources.geoms` (0xD), `LevelEmitters.curveSamples` (노드 월드 = 로컬 · 소유 관절 월드, 구간마다 8 표본 — 원작은 t 에서 다항식을 바로 [근사]),
-  `ParticleSystem.spawnOnCurve`. 표면 이미터 (서브타입 3) 는 여전히 만들지 않는다.
+  `ParticleSystem.spawnOnCurve`.
+
+### 2.6 표면 이미터 (서브타입 3) [확실: 0x1252E0 디스어셈블 · 데이터] (43 §33)
+- 이미터 +0x6C 모양 이름 → 0xD 노드 (+0x70) 의 +0x58 이 **`MSH_` 메시** (MESH_EXTRA 0x70, 04 문서 §6 — 삼각형 +6 u16 = 누적 면적 × 65535, 오름차순).
+- 갱신 0x25E5C0: 0x12EDA8 이 노드 월드 (노드 로컬 · 소유 GO 관절) 를 0x29CA68+0xC0 에, 이번 프레임 개수 (0x122B00) 만큼 0x1252E0 → 출생 시각은 1/60 ÷ 개수씩 엇갈림.
+- 0x1252E0: u = 난수 × 65535 보다 누적 면적이 작은 동안 다음 삼각형 → r1, r2 (합 &gt; 1 이면 1 − r 로 접기) → 점 = P0·r1 + P1·r2 + P2·(1 − r1 − r2),
+  N = 정점 법선 같은 무게 합 정규화 → b = N · 법선 속력 (P+0x28) + normalize((난수 − ½)³ × N) · 접선 속력 (P+0x24) (둘 다 0 이면 0, 이미터 방향 P+0x00 은 안 씀) →
+  위치 += b̂ · lerp(최소, 최대)·16 → 속도 = b · (speed − rnd/2 + rand·rnd)·16 (b 정규화 안 함) → 노드 월드로 (위치 이동 포함, 속도 3×3 배율 포함) + 이미터 +0x80 / +0x90.
+- 디스크: R_WPN* 블레이드 불꽃 BDEsparkemit (BDepoly6/3Shape, 관절 1/2), R_BRSRK* 아르테미스의 검 Bglow/Bfire · BBglowemit, R_SK5/R_SKF 눈빛, R_SKB 방패, R_SAT/R_SAF 무기,
+  R_HA* 불, PAND00D · PAND03G · DEST01 일부 (전 WAD 162 개, ATHN 46).
+- 엔진: `MshMesh.cumArea`, `EffectLibrary.Surface` (EmitterDef.surface), `EffectSystem` 이 매 프레임 노드 월드 (GO · 관절 (바인드 / act 자세) · 노드 로컬) 를 두고
+  `ParticleSystem.surfacePoint` / `spawnOnSurface`. 레벨 배치 이미터 (`LevelEmitters`) 의 서브타입 3 은 아직 건너뛴다.
 
 ## 3. 머티리얼 부가 효과
 
@@ -464,6 +475,6 @@ PAND01A `PSambLite` .751 회색 .5 / 8000, `PSFirelite*` (.777,.284,0) .75, 반�
 ## 4. 미해결
 - ~~안개 Z→알파 램프~~, ~~Fog_A ≥ 1 경로~~, ~~층 안개 키 알파·t 눈금~~ (§1.2, §1.3). 남은 것: 0x127918 단계 ③ 의 TEXA 상태 (A8 비트 7), 텍스처 층 안개 0x127240 의 UV 세부.
 - ~~PTC VU1 상수 의미~~, ~~+0x74~~ (읽지 않음), ~~종류 5~~, ~~연산 9/10/13/14~~, ~~0x10/0x20~~ (§2.3–2.4). 남은 것: 연산 6/7 의 주소 공간 (쓰는 PTC 없음), 종류 5 UV 오프셋의 정확한 화소 단위, 레코드 배치 바이트 (+0x8C) 의 4번 이후 속성.
-- ~~FXC 0xD 방출 지오메트리 포맷 (커브)~~ (§2.5). 남은 것: 표면 이미터 (서브타입 3) 의 메시 표면 참조, 커브 퍼짐 원뿔의 축, 노드 헤더 b, 필드 단위.
+- ~~FXC 0xD 방출 지오메트리 포맷 (커브)~~ (§2.5), ~~표면 이미터 (서브타입 3) 의 메시 표면 참조~~ (§2.6). 남은 것: 레벨 배치 표면 이미터, 커브 퍼짐 원뿔의 축, 노드 헤더 b, 필드 단위.
 - SCR_Water 물방울 원점, 0x0C 플래그; SCR_Mirror a/b; ~~SCR_AresSky~~ (§1.7); ~~SCR_LensFlare~~ (46) / ~~GhostTrail~~ (43 §31.2-6: 템플릿 본문 = u32 1 · 오프셋 8 · 관절 이름 char[24] "tail", 인스턴스는 본문 없이 헤더 u16 0x22 = 관절 번호 2) / RopeSkinned / cloth / ThingOnASpring 본문.
 - renderFlags bit16 / 0x400, flags2 의미; 한 레벨 여러 SCR_Fog 의 전환 조건 (ESC).

@@ -398,7 +398,8 @@ R_PERMK 값 (세 단계 같음): Bright **0 = CameraFilter/000 "None"** (색 전
 | 분기 조건 | magic 7 = **보유**(장착 아님) → `CombatOwner.artemisOwned()` 신설. 기존 코드는 "장착" 으로 검사해 전환 자체가 불가능했음 (버그 수정) | 10 문서 §2.3 |
 | 장착 중 기술 | 분기 flags 0x2000 (BER* 콤보) 열림 — `PlayerState.artemisEquipped` | 10 문서 §2.4 |
 | 피해 | 블레이드 레벨 배율 대신 `/Player/BerserkBlade/Stage n Damage Multiplier` 1.75 / 2.25 / 3.0 | 10 문서 §5.3, TWK |
-| 모델 | `R_BRSRK<단계>.WAD` 의 `berserkblade` + `MDL_berserkBlade` 를 `rWeapOH` 에 부착, 장착 중 혼돈의 블레이드 숨김 | 부착 관절 [추정], 스크린샷 `work/artemis.png` 로 손에 쥔 모습 확인 |
+| 모델 | `R_BRSRK<단계>.WAD` 의 `berserkblade` + `MDL_berserkBlade` 를 `rWeapIH` 에 부착 (0x19C388, 43 §34), 장착 중 혼돈의 블레이드 숨김 | [확실], 스크린샷 `work/artemis.png` 로 손에 쥔 모습 확인 |
+| 빛 | 장착 0x19C240 이 GO `goBerserkBlade` (/Player/BerserkBlade "Stage n GO Name") 를 만들고 종류 &lt; 0xB 부품 생성률 배율 +0xB4 = 1 — 표면 이미터 Bglowemit1 (700/초, PTC 0x30 = 검을 따라감) · Bfireemit1 (1000/초, 월드에 남음) 가 칼날 모양 MSH 에서 파랑-보라 가산. BERSERKENTER 의 SCRIPT `SCR_BerserkBladeFX` (0x5968598D) → 0x19C798 이 RWRIST 에 `goMAIBSActive` (뽑을 때 섬광) | [확실: 코드·데이터], `MagicFx.artemisBlade` · `berserkBladeFx`, 43 §33 |
 
 `ArtemisBladeTest`: 장착 → BERCOMBOH1 피해 5 × 1.75, 찌르기 4 × 1.75 → L1+R1 해제.
 

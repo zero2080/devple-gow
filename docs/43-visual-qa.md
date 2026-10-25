@@ -2417,6 +2417,112 @@ Gate1 · 병사 MimeGuy-aoXUSAI1 (템플릿 300) 대화 211 / 212 · CycCam 키�
 `14_pand00b_crank_orbit_engine` · `15_pand00b_demodoors_video_vs_engine` · `16_dest02_gear_v2650-2660_vs_engine_zoom` · `17_pand00b_feather_eye_cards_v3492-3504_vs_engine`,
 `video/` (영상 프레임 183 장).
 
+## 33. QA vs PS2 영상 2화 — 판도라의 사원 입구 홀 · 해 문 → PAND00C 판도라의 반지 (세이브 · 해골 문 · 크랭크 방 · 뮤즈 석상) → PAND01A 아르테미스의 검 (영상 3520–4050 초, 2026-10-25)
+
+영상 = hoXYXNef60U (2화, 전사 (보통) = `-Dgow.difficulty=1`), 프레임 728×409 (`work/verify/temple_entrance/video/v<초>.jpg` 67 장, 커밋 안 함).
+엔진 = origin/main 위 (fbbc209 → d440b08 → 4214de8, 마지막 대조는 aced5e0 · cc7e2fa · 9f69e4c 뒤), 1280×720 lockstep, 스크래치 홈.
+레벨 연결 [확실: 스크립트]: PAND00B (문 크랭크 → DemoDoors → 사원 홀 x 560–1472: Dive 군단병 R_SD2 템플릿 38 + 궁수 R_SK2 33, 9 처치 (LevelData17 == 18) →
+이벤트 201 · 책 gonewbook (CSM 007, 손잡이 (806.7, 10.5, 1230.9) 축 (1, 0), 잡기 반경 12) 메시지 126 네 쪽) → PAND00C (해 문 EntrySide goentryside (600, 0, 1232):
+R2 EvtUseWorld 는 201 이 켠 LevelData21 이 있어야 · 글자 gontrydoorglowletters `$M01..M14sfxLightRayCore` 모드 8 · AnimOpen · 구역 제목 810 "판도라의 반지" (456, 36, 1232) ·
+세이브 SaveGameZone (−936, 481, 1720) · 해골 문 goskulldoor (−241, 0, 1877) SkullDoorCam-nurbsSphere2-NoKeyMsg (1024, GlobalData0 거짓 → 메시지 123, SklDrCam) ·
+반지 1 크랭크 goring1crank (−316, 0, 1953) · Pand1 문 (CAM_Pand1DrCam)) → PAND00D (뮤즈 석상 문 SirenDoor (−1552, 96, 1232), TrigVol-NoKeys → Msg127) → PAND01A
+(MAmagicIcon-EntVol01 (−240, −2, 206), 안쪽 z ≈ 126 → FadeOut 0.7 → 동영상 MagicBZK → 501 → Goto magicGoTo · camera238 · FadeIn 1.3 · TurnFaceOn · 1.5 초 뒤 카드 267
+(MAT_FlashMat267 그림) · 메시지 593 "L1 + R1" · Internal:42 = 아이템 7 (아르테미스 보유) · Internal:35 = 36 (MP 가득) · 얼굴 재질 페이드 (hdr8 7.67 초) · +6 초 Idle 풀림 ·
++7 초 체크포인트 → 굴 · 구역 제목 811 "아틀라스의 시험" (−240, 43, −36) · 세이브 (−505, −6, −337) → §34).
+
+### 33.1 장면 대응
+| 영상 | 원작 (스크립트·데이터) | 엔진 |
+|---|---|---|
+| 3518–3598 | 사원 홀: 초록 상자, Dive 군단병 · 궁수 9 처치 (사람 ≈ 78 초), 따뜻하고 맑은 홀 | 고치기 전 모래 폭풍 안개 (gofog) 가 홀을 덮음 → 고친 뒤 맑은 홀 (§33.2-1) · 관 안개 끔 (§33.2-2). 봇 (블레이드 4 + 마법) 은 9 처치 36 초 |
+| 3602–3606 | SparkleCUcam 해 문 클로즈업 → 책 클로즈업 | 같은 순서 (h11) |
+| 3610–3634 | 메시지 126 네 쪽 ("책의 내용:" 다음 `[*1]` 줄은 주황 기울임) | 고치기 전 흰 보통 글자 → 고친 뒤 주황 기울임 (§33.2-6) |
+| 3634–3642 | 해 문 글자가 빛나다 꺼짐 | 고치기 전 빛나지 않음 → 고친 뒤 같은 빛 · 10 초에 꺼짐 (§33.2-3) |
+| 3646–3650 | 해 문이 먼지 속에 굴러 열림 | 고치기 전 먼지 없음 → 고친 뒤 이웃 슬롯 Animator 먼지 (§33.2-4). 9f69e4c 뒤에도 같음 (h15) |
+| 3655–3662 | 복도 · 구역 제목 810 "판도라의 반지" · 톱니 부조 · 깃발 | 같음 (aced5e0 / cc7e2fa 뒤 톱니 부조 · 깃발 · 횃불 재질 어긋남 없음) |
+| 3686–3690 | 세이브 빛기둥 R2 → 메모리 카드 저장 | 같은 R2 · 빛기둥 · 초록 상자. 방 벽이 영상 (회색 돌) 보다 붉음 [미확인: 순간이동이라 카메라가 다름] |
+| 3700–3760 | 가라앉은 바닥 방 싸움 · 파랑 상자 | 정지 프레임만 — 엔진으로 몰지 않음 |
+| 3770–3810 | 크랭크 · 큰 원통 · 톱니 원판 문 · 눈 광선 · 석상 레버 | 눈 분쇄기 방 (구 · 다이아몬드) 만 순간이동으로 확인 (카메라 다름) |
+| 3820 | 가시 굴 · 피 | 대조 안 함 |
+| 3830 | 해골 문: SklDrCam 클로즈업 · 메시지 123 "문은 잠긴 것 같습니다. / 문에 해골 모양의 빈 공간이 있습니다." | 같은 카메라 · 같은 문구 (skull1) |
+| 3840–3958 | 반지 1 크랭크 방: 크랭크 · 사슬 · 벽의 돌 톱니바퀴 · 왼쪽 아치 문 → 불 굴 | 크랭크 · 사슬 (cc7e2fa 뒤 텍스처 있는 사슬) · 톱니 확인. 하네스 crank 로 돌리기는 끝까지 안 됨 · 카메라 다름 [미확인] |
+| 3870 | PAND00D 뮤즈 석상 문: 메시지 127 세 줄 | 같은 문구 · 비슷한 클로즈업 (muse1) |
+| 3962 | 불 굴로 · 빛 구슬 | 같음 |
+| 3966–3994 | 동영상 MagicBZK (밝은 분홍 얼굴 대화 · 검을 건넴) | `--skip-movies` |
+| 3998 | 카드 267 "[*1]아르테미스의 검 / 을 획득했습니다." | 고치기 전 흰 글자 → 고친 뒤 첫 줄 주황 기울임 |
+| 4001–4010 | 메시지 593 · 불 속 얼굴 → 얼굴이 사라지며 굴이 열림 | 고치기 전 얼굴이 안 보임 (뺄셈 파트가 덮음) → 고친 뒤 같은 어두운 붉은 얼굴 · 페이드 (§33.2-5) |
+| 4014 | L1 + R1: 검을 뽑을 때 손목 옆 보라 빛 | 고치기 전 없음 → goMAIBSActive 섬광 (§33.2-7) |
+| 4018 | 휘두를 때 칼날의 파랑-보라 빛과 보라 자국 | 고치기 전 맨 은빛 검 → 같은 보라 빛 · 자국 (ar12 f52 · f74, §33.2-7) |
+| 4022–4030 | 업그레이드 메뉴: "봉인된 마법" → "아르테미스의 검 레벨 1 / 다음 업그레이드: 검에 파워 증가 / 파워 업 하려면 3750 개 더 필요." (오브 911) | 같은 화면 · 같은 문구 · 3750 · 911 (블레이드에서 ↑ 두 번, menu2) |
+| 4034–4050 | 굴 → 구역 제목 811 "아틀라스의 시험" · 세이브 빛기둥 R2 → 저장 완료 | 같은 제목 · R2 (save1). 빛기둥이 영상은 넓은 세로 기둥, 엔진은 가는 선 + 비스듬한 원뿔 [미확인: 카메라] |
+
+### 33.2 엔진 결함과 수정
+1. **홀이 모래 폭풍 안개에 덮였다 (영상 3518–3598: 맑은 홀).** 안개 설정 0x125970 이 안개 관리자 +0x84 에 프레임 번호 0x3305D8 을 찍고, 렌더 0x1281C8 은 그 값이
+   이번 프레임이 아니면 안개를 그리지 않는다 (0x128210–0x128250, 뷰포트 +0x3A8 = 524287.0) [확실]. SCR_Fog 0x20D428 · SCR_LayeredFog 0x20D6A8 둘 다 0x125970 을 부른다.
+   엔진은 이전 안개를 남겨 PAND00B 모래 길 LayeredFog (gofog, 홀 칸 1/3 에서 꺼짐) 가 홀을 덮었다. `FxEnvironment.selectFog` 는 이번 프레임 걸린 안개가 없으면 안개 없음.
+   PAND00B 크랭크 (1508, 60, 1233) 는 안개, 홀 (800, 80, 1232) 은 없음. (fbbc209)
+2. **(1 뒤) 홀이 파랗게 물들었다 — PAND00C 관 안개.** Vis 효과기 0x1ABAA8 의 슬롯 16 (+0xF8, 엔진 Attr17) 은 0x1B1398 로 부품 타입 0x17 · 0x4 (0x1ABD24–0x1ABD4C) —
+   Servers_Create 0x17D218 의 BhvrServer · ScriptServer — 에 걸리고, SCR_Fog 처리 0x2467A8 은 부품 +0x4 비트 4 가 없으면 안개를 고치지 않는다 [확실]. PAND00C 생성
+   스크립트 fogTubeL3-FogOff 가 CXT_default 파란 관 안개를 끈다. `ScriptWorld.scriptsOff` (Vis 슬롯 16 = 2) → `FxEnvironment` / `LevelFx.setScriptsOff` (안개 고르기 ·
+   SCR_Weather 플랑크톤), `Interactables.behaviourOff` (ATHN01A trapDoorCSM, ATHN02B HarpoonGun, PAND04D 크랭크, PAND04E 레버 — 사용 불가). (fbbc209)
+   9f69e4c 가 같은 Vis 경로의 슬롯 1 (EffectsServer 0x1E) 을 더했다 — 둘이 함께 산다.
+3. **해 문 글자가 빛나지 않았다 (영상 3634–3642).** 머티리얼 ANM 타입 3 트랙 (16 §3.1): p1 = L+1 의 스트림 0–3 = 레이어 L rgba, p1 = 0 의 0–2 = 헤더 색 — 엔진은 hdr8 (p28)
+   만 썼다. 글자 MAT_M01–M14sfxLightRayCore 는 레이어 rgba 0 (보이지 않는 가산) 에 0x42 (스크립트 1회) 트랙 1 → 0 (키 280 부터, 9.33–10 초). `MaterialFx.tint` /
+   `litColor` / `colorTint` (Renderer · AnimatedModel). 아직 아무 스크립트도 틀지 않은 0x42 재질 시계는 NaN (`MaterialFx.times`) → 색 트랙 없이 기본값 (영상 3610–3626 은
+   R2 전 어두운 글자) [근사: 재질 컨트롤러 코드는 따라가지 않음]. (fbbc209)
+4. **해 문이 먼지 없이 열렸다 (영상 3646).** PAND00C EntrySide-AnimOpen 은 PAND00B 홀에서 이웃 슬롯 스크립트로 돈다. `GameScene.startAnimatorEffects` 가 이웃 슬롯 GO 의
+   act 채널 이미터도 켠다 (goentryside act EntrySide, 먼지 이미터 둘 — 이웃 WAD 를 이펙트 표에 더함). (fbbc209)
+5. **불 속 아르테미스 얼굴이 보이지 않았다 (영상 4001–4010).** 키 배정 0x155C40 → 0x155B50 (a3 비트 머티리얼은 구간 위 = 나중, t0 비트는 아래 = 먼저) 이 층마다 반투명
+   단계를 (0x0A000400 / 나머지, 1) → (0x0A000000 / 0x400, 2) → (0x08000000 가산 / 0x02000000 뺄셈, 3 · 4) 로 나눠 **알파 &lt; 뺄셈 &lt; 가산** 순서로 그린다 [확실].
+   PAND01A gomatalkinghead (MDL_MAtalkingHead) 는 SubScrollTex2/3 · darkenMatFade (GS 0x42) 로 굴을 어둡게 하고 얼굴 M01ArtemisFront01 · 불 M01DoorFade2 (0x48) 를 그 위에
+   그린다. 엔진은 파트 순서 (얼굴 → 뺄셈) 로 그려 얼굴이 지워졌다. `RenderModel.translucentRank` (0 알파·가장자리, 1 뺄셈, 2 가산) — `Renderer.drawPasses` · `AnimatedModel`
+   이 패스 1 을 세 번. (d440b08) 영상 3966–3994 의 밝은 분홍 얼굴은 동영상 MagicBZK 이고, 4001–4010 실시간 얼굴은 엔진과 같은 어두운 붉은 색이다.
+6. **`[*1]` 글자가 보통 흰 글자였다 (영상 3610–3634 책 · 3998 카드).** 텍스트 배치 0x1494A8 이 '[' 다음 '*' 면 그 다음 글자 − '0' 을 서체 번호로 (']' 면 0,
+   0x149894–0x1498D8) 글자 레코드 +0x6 에, 그리기 0x148388 이 서체 1 = 고정 색 (0xDC, 0x6E, 0x00) (0x29CCDC), 2 = (0x00, 0xDC, 0xDC) (0x29CCE4) 를 (바이트 + 1) × 부모 색
+   변환 ≫ 8 로, 둘 다 기울임 0.2 (0x29CCE0 / 0x29CCE8 를 부호 바꿔 행렬에) [확실]. 엔진은 "인자 자리" 로 보고 버렸다 (07 문서 정정). `FlpRenderer.tokenize` 의 `Style`,
+   FLP 글리프 행렬 · `TtfFont.setShear`, 줄마다 0 에서. (d440b08)
+7. **아르테미스의 검이 맨 은빛이었다 (영상 4014–4018: 파랑-보라 빛 · 휘두른 자국 · 뽑을 때 섬광).**
+   - 장착 0x19C240 이 /Player/BerserkBlade "Stage n GO Name" = goBerserkBlade (WAD_R_Brsrk) 를 만들어 RWEAPIH 에 붙이고 종류 &lt; 0xB 부품 (이미터) 의 생성률 배율 +0xB4 를 1
+     로 (0x19C3E8–0x19C414) [확실]. 이미터 FXC_Bglowemit1 (700/초) · FXC_Bfireemit1 (1000/초) 은 **표면 이미터 (서브타입 3)** — 칼날 모양 MSH_berzergeomShape1 (노드 로컬
+     배율 (4, 7.4, 5.6) × 관절 0 배율 0.25) 위에서, 색 (25, 29, 78) 가산, 속력 0. PTC_Bglowpart1 은 플래그 0x30 (시스템 행렬 = 검을 따라감, 0x15BE18 [확실]) 이라 칼날의 빛,
+     PTC_Bfirepart1 (0x681, 0x30 없음) 은 월드에 남아 휘두른 자리에 보라 자국.
+   - BERSERKENTER (555) 의 [0, 1] SCRIPT `SCR_BerserkBladeFX` (0x5968598D, Items_RegisterScr 0x19CF28) → 0x19C798 이 영웅 RWRIST 관절 월드로 goMAIBSActive 를 만들어 그 관절에
+     (0x2283A8) — maibsactive (관절 배율 1/32) act 0.93 초가 0.2 초 무렵 표면 이미터 BBglowemit (BBEFXgeomShape, 313/초, PTC_BBglowpart (83, 75, 204) 가산, 반폭 24 − 200t) 와
+     불티 둘을 잠깐 = 뽑을 때 섬광 [확실: 이름·관절 / 추정: 부착].
+   - **표면 생성 0x1252E0** [확실]: 난수 × 65535 (0x125344) 보다 누적 면적 (MSH 삼각형 +6, 04 §6) 이 작은 동안 다음 삼각형 → r1, r2 (합 &gt; 1 이면 1 − r) 무게중심 점 ·
+     보간 법선 정규화 → b = N · 법선 속력 + normalize((난수 − ½)³ × N) · 접선 속력 → 위치 += b̂ · 생성 거리 · 16 → 속도 = b · (속력 ± 랜덤) · 16 → 노드 월드 (0x12EDA8 이
+     0x29CA68+0xC0 에 둔 노드 로컬 · 소유 GO 관절) 로 (16 §2.6). 엔진은 서브타입 3 을 이미터 원점 한 점에서 냈다 (레벨 배치는 아예 건너뜀).
+   - 엔진: `MshMesh.cumArea`, `EffectLibrary.Surface` (EmitterDef.surface), `EffectSystem` 이 매 프레임 노드 월드 (이펙트 월드 · 관절 (바인드 / act 자세) · 노드 로컬) ·
+     `ParticleSystem.surfacePoint` / `spawnOnSurface`, `MagicFx.artemisBlade` (장착 중 goBerserkBlade 를 rWeapIH 에, 메시는 ArtemisBladeModel) · `berserkBladeFx`,
+     `GameScene.setGodBlades` 가 단계 (0–2) 를 넘김. 같은 경로로 혼돈의 블레이드 불꽃 BDEsparkemit (BDepoly6/3Shape, 궤적 중) 도 블레이드 표면에서 나온다. (4214de8)
+8. 하네스 [엔진 전용]: 경로 단계 `crank:초:fx,fz` (R2 를 누른 채 스틱을 영웅 정면으로 — 둘레를 도는 Type 1 크랭크), `keys:초:B1+B2` (L1 + R1), `-Dgow.blades=N`,
+   `-Dgow.debug.task` (1023 기록), `-Dgow.debug.mat` (재질 애니 시작). 업그레이드 메뉴는 `-Dgow.script=SELECT:…,UP:…` 로 (카드는 같은 스크립트의 ○ 로 닫는다).
+
+### 33.3 시험
+`SceneFogTest.noFogWhenNoFogObjectAppliedThisFrame` (0x125A24 / 0x125A2C · 0x20D428 / 0x20D6A8 → 0x125970 · 0x128214–0x12824C, PAND00B 크랭크 안개 / 홀 없음),
+`TempleEntranceTest` (visSlot16TogglesBehaviourAndScriptComponents, pand00cTubeFogIsOffAfterCreation, sunDoorLettersGlowFromTheLayerColourTrack,
+artemisFaceSortsSubtractiveBeforeAdditive), `ScriptMaterialAnimTest` (틀지 않은 0x42 = NaN), `FlpTextStyleTest` (4: 0x149894–0x1498D8 · 0x29CCDC–0x29CCE8, 토큰, 색,
+책 126 · 카드 267), `SurfaceEmitterTest` (4: 0x1252E0 삼각형 · 접기 · 보폭, MSH_berzergeomShape1 누적 면적 = 실제 면적 비례, surfacePoint, goBerserkBlade · goMAIBSActive
+표면 · PTC 0x30, 0x19C3F0–0x19C408 · SCR_BerserkBladeFX → 0x19C798 · BERSERKENTER 이벤트). 엔진 시험 718 개 통과 (4214de8).
+
+### 33.4 남은 것 · 미확인
+- 반지 (3700–3958) 의 싸움 · 크랭크 · 톱니 원판 문 · 눈 광선 · 석상 레버 · 가시 굴은 엔진으로 몰지 않았다 (순간이동 확인은 카메라가 달라 근사 대조). 3840–3958 크랭크를
+  하네스로 끝까지 돌려 아치 문이 열리는 것은 확인 못 함 [미확인].
+- 세이브 방 (3686) 벽이 영상 회색 돌보다 붉다, PAND01A 세이브 빛기둥 (4040) 모양 — 카메라가 달라 판단 보류 [미확인].
+- 아르테미스의 검 숨김 · 해제 (0x1DB788, 영웅 갱신 0x1D6CF0 이 매 프레임) [확실: 코드 / 엔진 미구현]: 장착 (+0xC & 0x20) 이면 GO 가 없을 때 만들고, 영웅 +0x174 가
+  (0x400 & 0x20000 = 수평 줄) 또는 (0x20 & (0x400000 | 0x300000)) 이면 **해제** (0x19C240(0)), SCR_HideBerserkBlade (0x8CACF07D, 0x19C6C0 → 0x29D814 = 1, 끝 0x19C608 이 0)
+  또는 +0x174 & (0x4000 | 0x400 | 0x10 | 0x380 | 0x80000 | 0x20) 또는 +0x2D8 & 0x800000 이면 검 GO 를 숨기고 블레이드를 보인다 (0x201908), 아니면 다시 보인다.
+  잡기 · 오르기 · 줄 · 수영 상태가 나오는 §34 구간에 해당 — 공용 HeroRig 라 이번에 손대지 않았다.
+- 표면 이미터 세부 [근사]: 원작은 한 프레임에 낸 파티클의 출생 시각을 1/60 ÷ 개수씩 엇갈리고 이미터 +0x80 / +0x90 을 더한다 — 엔진은 틱 단위. 레벨 배치 표면 이미터
+  (`LevelEmitters`, ATHN 46 개 등) 는 아직 건너뛴다.
+- 영상 3545 · 3598 의 넓은 붉은 블레이드 호가 엔진 (표면 불꽃 + 궤적 부채꼴) 보다 넓다 [미확인: 45 §3.4 궤적 쪽].
+- 봇 홀 싸움 36 초 vs 영상 ≈ 78 초 (사람) — 결함 아님. 이 구간 정지 프레임에서 길을 따라 걷는 순찰 적은 보지 못했다 (WYP 순찰은 다른 작업).
+
+### 33.5 증거 (`work/verify/temple_entrance/`, 커밋 안 함)
+`engine_hall_book_sundoor.jpg` (h11: 홀 → 책 → 메시지 126 → 해 문 → 구역 제목) · `engine_sundoor_letters_dust.jpg` (h14: 글자 빛 → 꺼짐 → 먼지 속에 굴러 열림) ·
+`engine_artemis_face_msg593_menu.jpg` (ar7: 불 속 얼굴 · 메시지 593 · 업그레이드 메뉴) · `engine_artemis_equip.jpg` (ar10: L1 + R1 → 검) ·
+`artemis_glow_v4014-4018_vs_engine.jpg` (ar12 f52 · f74: 보라 빛 · 자국) · `menu_v4026-4030_vs_engine.jpg` (봉인된 마법 · 아르테미스의 검 3750) ·
+`muse_skull_v3870_v3830_vs_engine.jpg` (메시지 127 · 123 클로즈업), `video/` (영상 프레임 67 장).
+
 ## 34. QA vs PS2 영상 2화 — 아틀라스의 시험: PAND01A 구멍 방 → 위층 · 방패 · 수레 → PAND01D 줄 싸움 · 하데스의 망령 → 세이브 (영상 4050–5189 초, 2026-10-25)
 
 영상 = hoXYXNef60U (2화, 전사 (보통) = `-Dgow.difficulty=1`). 레벨 연결 [확실: 스크립트]: PAND01A (구역 11 "아틀라스의 시험" — ZoneReportGroup (−240, −2, −36),

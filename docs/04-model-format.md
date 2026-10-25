@@ -177,7 +177,7 @@ NOP, STCYCL, OFFSET, BASE, ITOP, STMOD, MSKPATH3, MARK, FLUSHE/FLUSH/FLUSHA, MSC
 - 메시 0x18 의 20바이트 레코드(히어로 500개)는 관절별 바운딩/충돌 구일 가능성 — 미해석.
 
 ## 6. MESH_EXTRA (0x70)
-- `MSH_*` (253개): 파티클 방출면 등에 쓰는 float 메시. `u32 vertexCount, u32 triCount, u32×2 0xFFFFFFFF`, 정점 `{f32 pos[3], f32 normal[3]}`, 삼각형 `{u16 a,b,c, u16 ?}`. 직전/직후의 `FXC_`/`PTC_` 가 참조. 렌더 모델과는 연결되지 않는다. `export` 시 `MSH_*.obj` 로 함께 출력.
+- `MSH_*` (253개): 파티클 방출면 등에 쓰는 float 메시. `u32 vertexCount, u32 triCount, u32×2 0xFFFFFFFF`, 정점 `{f32 pos[3], f32 normal[3]}`, 삼각형 `{u16 a,b,c, u16 누적 면적}` (4번째 = 그 삼각형까지 면적 합 / 전체 × 65535 — 표면 이미터 0x1252E0 이 면적 비례로 고른다, 16 §2.6 · 43 §33 [확실]). 0xD 방출 지오메트리 노드 +0x58 이 이름으로 참조. 렌더 모델과는 연결되지 않는다. `export` 시 `MSH_*.obj` 로 함께 출력.
 - `NCV_*` (1952개): 메시가 아니라 곡선(제어점 배열) 데이터 — 카메라/경로 스플라인으로 추정 (`NCV_Boat1Rail1` 뒤에 `CMV_/CAM_`).
 
 ## 7. 발견 과정 요약
