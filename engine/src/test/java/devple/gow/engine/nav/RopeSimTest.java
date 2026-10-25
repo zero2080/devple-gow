@@ -86,12 +86,12 @@ class RopeSimTest {
 
 	/**
 	 * 양끝 고정 줄 (수평 줄·짚라인, 0x216FC8 / 0x218488 / 0x217748): 길이 = |끝 − 매단 점|, 처음 곧은 선, 끝 노드는 끝점에 고정,
-	 * 매달림 최대 무게 10 (0x216D84) → 가운데 매달리면 처지고, 놓으면 (무게가 줄어) 다시 곧아진다.
+	 * 매달림 최대 무게 10 (0x216D84) → 가운데 매달리면 처지고, 놓으면 (무게가 줄어) 다시 곧아진다. (쉼 길이 = 끝점 거리, 장력 없는 줄)
 	 */
 	@Test
 	void fixedRopeHoldsBothEndsAndSagsUnderHero() {
 		Vector3f top = new Vector3f(0, 320, 0), end = new Vector3f(320, 320, 0);
-		RopeSim r = RopeSim.fixed(top, end, 9);
+		RopeSim r = RopeSim.fixed(top, end, 320, 9);
 		assertTrue(r.isFixed());
 		assertEquals(20f, r.length(), 1e-4f);
 		assertEquals(RopeSim.WEIGHT_FIXED, r.maxWeight(), 0);
@@ -114,5 +114,32 @@ class RopeSimTest {
 			r.update(DT);
 		}
 		assertTrue(320 - r.pointAt(10, new Vector3f()).y < sag * 0.5f, "놓으면 덜 처짐");
+	}
+
+	/**
+	 * 스프링 쉼 길이 = SCR 줄 길이 / (n − 1) (+0x58), 노드 간격 = 끝점 거리 / (n − 1) (+0x5C) — PAND01D gorope1 (SCR 20 m = 320, 끝점 거리 592,
+	 * 103 노드): 미리 당겨진 줄이라 영웅이 가운데 매달려도 거의 곧다 (영상 4865–4940 의 팽팽한 줄). 쉼 길이 = 간격 (예전 엔진) 이면 100 넘게 처졌다.
+	 */
+	@Test
+	void prestretchedTraverseRopeStaysTaut() {
+		Vector3f top = new Vector3f(-472, -357, -976), end = new Vector3f(119.6f, -357.4f, -987.8f);
+		float taut = hangSag(RopeSim.fixed(top, end, 320, 103));
+		float slack = hangSag(RopeSim.fixed(top, end, 0, 103)); // 쉼 길이 = 끝점 거리
+		assertTrue(taut < 30, "SCR 길이로 당긴 줄 처짐 " + taut);
+		assertTrue(slack > 100, "장력 없는 줄 처짐 " + slack);
+		RopeSim r = RopeSim.fixed(top, end, 320, 103);
+		assertEquals(320f / 16 / 102, r.restLength(), 1e-5f, "+0x58 = SCR 길이 / (n − 1)");
+		assertEquals(top.distance(end) / 16, r.length(), 1e-3f, "+0x60 = 끝점 거리");
+	}
+
+	/** 가운데 (길이 절반) 에 영웅이 매달려 5 초 뒤 그 점의 처짐 (월드 유닛). */
+	private static float hangSag(RopeSim r) {
+		float mid = r.length() / 2;
+		r.attach(mid);
+		for (int i = 0; i < 300; i++) {
+			r.setForce(new Vector3f());
+			r.update(DT);
+		}
+		return -357.2f - r.pointAt(mid, new Vector3f()).y;
 	}
 }

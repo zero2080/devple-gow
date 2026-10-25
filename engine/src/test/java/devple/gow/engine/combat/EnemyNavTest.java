@@ -335,7 +335,7 @@ class EnemyNavTest {
 		// 양끝 고정 수평 줄 (SCR f1): 적도 영웅과 같은 줄 오브젝트 시뮬레이션에 매달린다 (0x218200 / 0x2184E8) — 무게 최대 10 으로 처지고 손 = 줄 위 점
 		devple.gow.engine.nav.NavRope nr = new devple.gow.engine.nav.NavRope("gorope8", devple.gow.tools.level.RopeDef.Type.TRAVERSE, 0, 25f,
 				new Vector3f(-200, 130, 60), new Vector3f(200, 130, 60));
-		devple.gow.engine.nav.RopeSim sim = devple.gow.engine.nav.RopeSim.fixed(nr.top(), nr.end(), nr.joints());
+		devple.gow.engine.nav.RopeSim sim = devple.gow.engine.nav.RopeSim.of(nr);
 		EnemyNav.Rope r = new EnemyNav.Rope(nr.top(), nr.end(), EnemyNav.SUB_TRAVERSE, nr.axis(), nr.dirs(), nr);
 		float[] clock = {5f};
 		EnemyNav n = new EnemyNav(AiTemplate.CAP_ROPE, SKEL, 1000);

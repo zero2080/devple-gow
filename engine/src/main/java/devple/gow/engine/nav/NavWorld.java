@@ -506,10 +506,12 @@ public final class NavWorld {
 	/** 원작 전역 0x29DBF8: 줄을 잡은 뒤 시간. 누가 잡든 0 (0x1C5D98), 플레이어 (+0x174 비트 31) 의 줄 갱신만 더한다 (0x1C54B4) [확실]. */
 	private float ropeClock;
 
-	/** 줄 시뮬레이션 (없으면 만든다): 매단 줄 = 매단 점에서 아래로, 양끝 고정 줄 (수평 줄·짚라인) = 두 끝 고정 (0x218488). 줄 오브젝트당 하나 (영웅·적 공용). */
+	/**
+	 * 줄 시뮬레이션 (없으면 만든다): 매단 줄 = 매단 점에서 아래로, 양끝 고정 줄 (수평 줄·짚라인) = 두 끝 고정 (0x218488) + SCR 길이 쉼 길이로 미리 당김
+	 * ({@link RopeSim#of}). 줄 오브젝트당 하나 (영웅·적 공용).
+	 */
 	public RopeSim sim(NavRope r) {
-		return sims.computeIfAbsent(r, k -> k.type() == devple.gow.tools.level.RopeDef.Type.HANG ? new RopeSim(k.top(), k.simLength(), k.joints())
-				: RopeSim.fixed(k.top(), k.end(), k.joints()));
+		return sims.computeIfAbsent(r, RopeSim::of);
 	}
 
 	/** 만든 줄 시뮬레이션을 모두 한 프레임 진행. */

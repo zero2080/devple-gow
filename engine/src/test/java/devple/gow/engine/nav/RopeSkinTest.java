@@ -91,7 +91,7 @@ class RopeSkinTest {
 				assertTrue(chain.length >= 2, lvName + " " + r.owner() + " " + r.type());
 				assertEquals(chain.length, r.joints());
 				if (r.type() != RopeDef.Type.HANG) {
-					RopeSim f = RopeSim.fixed(r.top(), r.end(), r.joints());
+					RopeSim f = RopeSim.of(r);
 					float[][] posed = RopeSkin.pose(pl.jointWorld(), chain, f.nodePositions(), true);
 					assertEquals(r.end().x, posed[chain[chain.length - 1]][12], 1e-2f, "끝 노드 = 끝점");
 				}

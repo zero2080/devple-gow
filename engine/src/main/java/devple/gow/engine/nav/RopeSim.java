@@ -22,9 +22,13 @@ import org.joml.Vector3f;
  * 노드 수는 줄 모델의 사슬 관절 수 (0x216FC8, {@link RopeSkin#chain}) — 엔진도 같다 (47 문서 §5).
  * <p>
  * <b>양끝 고정 줄</b> (SCR f1 = 수평 줄·짚라인, {@link #fixed}) [확실: 0x216FC8 / 0x218488 / 0x217748]: 같은 시뮬레이션에
- * 길이 = |끝점 − 매단 점|, 초기 자세 = 매단 점 → 끝점 곧은 선 (0x217174), 끝 노드 번호 +0x40 = int(길이 / 칸) (= n − 1) 를 끝점 +0x10 (미터) 에
- * 고정 (+0x374 비트 1, 0x218488). 매 단계 적분 뒤 그 노드 위치 = 끝점·속도 0 (0x217758). 매달림은 힘만 나누고 매단 점 스프링은 없음
- * (0x217828 / 0x217944 비트 1 이면 건너뜀). 최대 무게 10 (0x216D84).
+ * 길이 (+0x60) = |끝점 − 매단 점|, 노드 간격 (+0x5C) = 길이 / (n − 1), 초기 자세 = 매단 점 → 끝점 곧은 선 (0x217174), 끝 노드 번호 +0x40 =
+ * int(길이 / 간격) (= n − 1) 를 끝점 +0x10 (미터) 에 고정 (+0x374 비트 1, 0x218488). 매 단계 적분 뒤 그 노드 위치 = 끝점·속도 0 (0x217758).
+ * 매달림은 힘만 나누고 매단 점 스프링은 없음 (0x217828 / 0x217944 비트 1 이면 건너뜀). 최대 무게 10 (0x216D84).
+ * <b>스프링 쉼 길이는 간격이 아니라 SCR 줄 길이 (+0x384 +4) / (n − 1) (+0x58)</b> — 0x216FC8 은 +0x58 · +0x5C 를 SCR 길이로 채운 뒤 양끝 고정이면
+ * +0x5C · +0x60 만 끝점 거리로 다시 쓰고, 단계 0x217478 은 +0x58 (2 배 = 굽힘) 을, 위치·무게·힘 나눔 (0x2184E8 / 0x2177BC / 0x217B5C) 은 +0x5C 를 쓴다.
+ * 출시 데이터의 양끝 고정 줄 8 개 모두 SCR 길이 &lt; 끝점 거리 (비율 0.44–0.86, PAND01D gorope1 320 / 592) → 미리 당겨진 팽팽한 줄 (영상 4865–4940).
+ * 예전 엔진은 쉼 길이 = 간격이라 장력이 없어 가운데가 100 넘게 처졌다 (43 §34).
  */
 public final class RopeSim {
 
@@ -38,7 +42,8 @@ public final class RopeSim {
 	private final Vector3f anchor = new Vector3f();
 	private final Vector3f[] p, v, f;
 	private final float[] m;
-	private final float seg, length;
+	/** 노드 간격 (+0x5C) · 줄 길이 (+0x60) · 스프링 쉼 길이 (+0x58), 미터. 매단 줄은 간격 = 쉼 길이. */
+	private final float seg, length, rest;
 	/** 감쇠 (+0x37C, 만들 때 0.2) 와 정지 시간 (+0x378). 엔진은 레벨 로드 뒤 0.2 초 만에 잠든 상태 (감쇠 = Global Damping) 로 만든다 [추정]. */
 	private float damping = GLOBAL_DAMPING, idle = SLEEP_TIME;
 	/** 영웅 매달림 하나 (원작 슬롯 16 개 중 영웅 몫). */
@@ -56,13 +61,14 @@ public final class RopeSim {
 	 * @param nodes  노드 수 (≥ 2)
 	 */
 	public RopeSim(Vector3f top, float length, int nodes) {
-		this(top, null, length, nodes);
+		this(top, null, length, length, nodes);
 	}
 
-	private RopeSim(Vector3f top, Vector3f end, float length, int nodes) {
+	private RopeSim(Vector3f top, Vector3f end, float length, float restLength, int nodes) {
 		n = Math.max(2, nodes); // 0x2170BC: +0x54 = 사슬 관절 수 그대로 (HDES01E gorope3 등 2 노드 = 매단 점 + 끝)
 		this.length = length / NavTuning.UNITS_PER_METER;
 		seg = this.length / (n - 1);
+		rest = restLength / NavTuning.UNITS_PER_METER / (n - 1); // +0x58 = SCR 길이 / (n − 1) (0x2170D0)
 		anchor.set(top).div(NavTuning.UNITS_PER_METER);
 		p = new Vector3f[n];
 		v = new Vector3f[n];
@@ -87,9 +93,25 @@ public final class RopeSim {
 		}
 	}
 
-	/** 양끝 고정 줄 (수평 줄·짚라인): 길이 = |끝 − 매단 점| (0x2171C8). */
-	public static RopeSim fixed(Vector3f top, Vector3f end, int nodes) {
-		return new RopeSim(top, end, top.distance(end), nodes);
+	/**
+	 * 양끝 고정 줄 (수평 줄·짚라인): 길이 · 간격 = |끝 − 매단 점| (0x2171C8), 스프링 쉼 길이 = restLength / (n − 1) (SCR 줄 길이, +0x58).
+	 *
+	 * @param restLength SCR +0x28 줄 길이 (월드 유닛, {@link NavRope#lengthM} × 16) — 0 이하면 끝점 거리 (장력 없음)
+	 */
+	public static RopeSim fixed(Vector3f top, Vector3f end, float restLength, int nodes) {
+		float span = top.distance(end);
+		return new RopeSim(top, end, span, restLength > 0 ? restLength : span, nodes);
+	}
+
+	/** 줄 정의로: 매단 줄 = 시뮬레이션 길이 (SCR 길이), 양끝 고정 = 끝점 거리 + SCR 길이 쉼 길이 (0x216FC8). */
+	public static RopeSim of(NavRope r) {
+		return r.type() == devple.gow.tools.level.RopeDef.Type.HANG ? new RopeSim(r.top(), r.simLength(), r.joints())
+				: fixed(r.top(), r.end(), r.lengthM() * NavTuning.UNITS_PER_METER, r.joints());
+	}
+
+	/** 스프링 쉼 길이 (m, +0x58). */
+	public float restLength() {
+		return rest;
 	}
 
 	/** 양끝 고정인지. */
@@ -236,12 +258,12 @@ public final class RopeSim {
 		damping = Math.max(GLOBAL_DAMPING, Math.min(1, damping - DAMPING_DECAY * dt));
 	}
 
-	/** 한 단계 (0x217478). */
+	/** 한 단계 (0x217478): 이웃 · 굽힘 스프링의 쉼 길이는 +0x58 ({@link #rest}) 과 그 2 배. */
 	private void step(float h) {
 		for (int i = 0; i + 1 < n; i++) {
-			spring(i, i + 1, seg, K, C);
+			spring(i, i + 1, rest, K, C);
 			if (i + 2 < n) {
-				spring(i, i + 2, 2 * seg, K_BEND, C_BEND);
+				spring(i, i + 2, 2 * rest, K_BEND, C_BEND);
 			}
 		}
 		p[0].set(anchor);
@@ -264,13 +286,13 @@ public final class RopeSim {
 			f[j].fma(1 - frac, force);
 			float wf = endNode >= 0 ? 0 : weight / maxWeight;
 			if (j > 0 && wf > 0) {
-				spring(0, j, 1.1f * j * seg, wf * (1 - frac) * K_ANCHOR, wf * (1 - frac) * C_ANCHOR);
+				spring(0, j, 1.1f * j * rest, wf * (1 - frac) * K_ANCHOR, wf * (1 - frac) * C_ANCHOR); // 0x217840: j × +0x58 × 1.1
 			}
 			if (j + 1 < n) {
 				f[j + 1].fma(frac, force);
 			}
 			if (j + 1 < n && wf > 0) {
-				spring(0, j + 1, 1.1f * (j + 1) * seg, wf * frac * K_ANCHOR, wf * frac * C_ANCHOR);
+				spring(0, j + 1, 1.1f * (j + 1) * rest, wf * frac * K_ANCHOR, wf * frac * C_ANCHOR);
 			}
 		}
 	}

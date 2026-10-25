@@ -2160,6 +2160,14 @@ HoleLoad → PAND01A). 엔진 = origin/main 4fe5fa2 위.
    게임 중에만 올라 셸 불러오기 화면은 기본 그림. 예전 엔진은 이름에 난이도, 시간 줄에 시간만, 날짜 "yyyy/MM/dd HH:mm", 그림 없음이었다 →
    `GameSession.savePoint` (R2 때 가장 가까운 세이브 포인트 번호) · `SaveGame.savePoint` (파일 속성) · `MemoryCardFlow.slotName / slotDate / thumbnails` ·
    `GameScene.saveThumbnails` (`01_save_slot_atlas_s2` ↔ `02_video_5182_save_slot`, 같은 그림·이름·형식).
+4. **PAND01D 수평 줄이 V 자로 처졌다 (영상 4865–4940 · 5115: 팽팽한 곧은 줄 위에 크레토스와 갑옷 해골이 매달려 싸움).** gorope1 (TRAVERSE, 103 관절,
+   매단 점 (−472, −357, −976) → 끝점 (119.6, −357.4, −987.8) 592 유닛) 에 매달리면 엔진은 가운데가 140 넘게 내려가 영웅이 y −500 에 매달렸고, 줄 위 구역
+   FirstRopeZone · SecondRopeZone · ThirdRopeZone · RopeZone6 (y −384 … −398) 에 들지 않아 줄 해골 RopeSkelly1..6 이 나오지 않았다. 원작 0x216FC8 [확실]: +0x58 ·
+   +0x5C 를 SCR 줄 길이 (+0x384 +4 = 20 m) / (n − 1) 로 채운 뒤 양끝 고정이면 +0x5C (노드 간격) · +0x60 (길이) 만 끝점 거리로 다시 쓴다 — 단계 0x217478 의 이웃 ·
+   굽힘 스프링 쉼 길이는 +0x58 (2 배), 줄 위 점 · 무게 · 힘 나눔 (0x2184E8 / 0x2177BC / 0x217B5C) 은 +0x5C. 출시 데이터의 양끝 고정 줄 8 개 모두 SCR 길이 &lt;
+   끝점 거리 (비율 0.44–0.86: ATHN01D/01E 짚라인 · ATHN02B gorope8 · PAND01D gorope1 320/592 · PAND03D · PAND03E · PAND04C · PAND04E) → 미리 당겨진 팽팽한 줄.
+   예전 엔진은 쉼 길이 = 노드 간격이라 장력이 없었다 → `RopeSim.fixed(…, restLength, …)` · `RopeSim.of(NavRope)` (`06_rope_sag_before_d2` ↔ `05_rope_taut_after_d3`:
+   곧은 줄, 영웅 y −395 … −402, 줄 구역 넷 · RopeSpawner 발동, 해골 9 마리가 줄 위 (y −344 / −352) 에 나온다).
 
 ## 시연 녹화 (-Dgow.record, -Dgow.bot) [엔진 전용]
 
