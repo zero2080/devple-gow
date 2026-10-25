@@ -122,6 +122,14 @@ public record MaterialFx(Texture[] frames, MaterialAnim.Anim anim, List<Layer> l
 	}
 
 	private Texture pick(Texture[] fr, Texture base, float t) {
+		return pickFrame(fr, base, anim, t);
+	}
+
+	/**
+	 * 플립북 규칙 (GL 없이): GFX 프레임이 두 장 이상이면 머티리얼 ANM 시간의 프레임 한 장 (ANM 이 없으면 0 번), 아니면 base.
+	 * 원작 GS 는 TEX0 (TW/TH = 2 의 거듭제곱) 로 프레임 한 장만 샘플한다 — 세로 스트립 전체 (예 64×640) 를 붙이는 일은 없다 (43 §30).
+	 */
+	public static <T> T pickFrame(T[] fr, T base, MaterialAnim.Anim anim, float t) {
 		if (fr == null || fr.length <= 1) {
 			return base;
 		}

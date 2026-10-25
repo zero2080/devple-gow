@@ -210,7 +210,7 @@ public final class AnimatedModel implements AutoCloseable {
 				// 레벨과 같은 분류 (31 문서): GS 0x44 대부분은 반투명이 아니라 불투명 + 알파 테스트 0.75 (CUTOUT)
 				blend = assets.classify(mat, tex != null);
 				tint = l.rgba();
-				// 추가 레이어 · 첫 레이어 환경맵 (구운 메시와 같은 해석) — 첫 레이어 플립북·UV 는 matAnim 이 맡는다
+				// 추가 레이어 · 첫 레이어 환경맵 · 첫 레이어 플립북 프레임 (구운 메시와 같은 해석) — 첫 레이어 UV·불투명도·색 트랙은 matAnim 이 맡는다
 				fx = assets.materialFx(mat, p.hasUv, p.hasNormal, model.renderFlags);
 			}
 			parts.add(new Part(new SkinnedMesh(v, idx), tex, blend, tint, p.hasNormal, p.jointLocal(skeleton), assets.materialAnim(p.material),
@@ -341,10 +341,6 @@ public final class AnimatedModel implements AutoCloseable {
 					}
 					glBlendEquation(mode == RenderModel.Blend.SUB ? GL_FUNC_REVERSE_SUBTRACT : GL_FUNC_ADD);
 				}
-				(p.texture() != null ? p.texture() : white).bind(0);
-				shader.set("uUseTex", p.texture() != null ? 1 : 0);
-				shader.set("uLit", p.lit() ? 1 : 0);
-				shader.set("uEnvUv", p.fx() != null && p.fx().env0() && p.lit() ? 1 : 0);
 				float[] t = p.tint();
 				float op = alpha;
 				boolean scrolled = false;
@@ -357,6 +353,13 @@ public final class AnimatedModel implements AutoCloseable {
 				}
 				float ct = Float.isNaN(ft) ? -1f : ft; // 색 트랙 시간 (아직 틀지 않은 0x42 = NaN → 걸지 않음, 43 §33)
 				ft = Float.isNaN(ft) ? 0f : ft;
+				// 첫 레이어 플립북 (GFX frames > 1): 머티리얼 ANM 시간의 프레임 한 장 — 구운 메시 (Renderer) 와 같은 규칙 (43 §30).
+				// 예전에는 세로 스트립 전체 (64×640 → 2 의 거듭제곱 64×1024) 를 붙여 ATHN07 둥근 문 옆 풀 (goentrance MAT_lambert254) 이 줄무늬 우리처럼 보였다
+				Texture tex = p.fx() != null ? p.fx().frame(p.texture(), ft) : p.texture();
+				(tex != null ? tex : white).bind(0);
+				shader.set("uUseTex", tex != null ? 1 : 0);
+				shader.set("uLit", p.lit() ? 1 : 0);
+				shader.set("uEnvUv", p.fx() != null && p.fx().env0() && p.lit() ? 1 : 0);
 				if (p.fx() != null && p.matAnim() != null) { // 색 트랙 (레이어 0 rgba — 첫 레이어 색 = 레이어 rgba 그대로)
 					t = devple.gow.engine.fx.MaterialFx.colorTint(p.matAnim(), p.fx().header(), p.fx().layerRgba(), 0, ct, t, false);
 				}
@@ -375,7 +378,7 @@ public final class AnimatedModel implements AutoCloseable {
 				shader.set("uLgtAdd", lc[3], lc[4], lc[5]);
 				// 노멀맵 (원작에 없음, 44 문서): 첫 레이어 텍스처, 불투명·알파 블렌드만 (환경맵 첫 레이어 제외 — Renderer 와 같음)
 				boolean nm = (mode == RenderModel.Blend.OPAQUE || mode == RenderModel.Blend.ALPHA) && !(p.fx() != null && p.fx().env0())
-						&& devple.gow.engine.render.Renderer.bindNormalMap(shader, p.texture());
+						&& devple.gow.engine.render.Renderer.bindNormalMap(shader, tex);
 				// 안개 (16 §1.2, 43 §31): 원작 안개 노드는 층 2 칸 5 의 후처리라 층 2 캐릭터·자세 GO 도 Z 로 받는다 — 가산·뺄셈 파트는 (1 − F) 배
 				// (Renderer 의 구운 메시와 같음), 층 3 (블레이드) · 층 3·4 머티리얼은 안개 뒤. 장면 깊이 사본은 이펙트 GO 반투명 파트만 (sceneFog)
 				shader.set("uFogScene", sceneFog && !opaque ? 1 : 0);
