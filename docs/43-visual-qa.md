@@ -3075,6 +3075,80 @@ growTimerCode (0x18F474 +0x24 · 0x18F9BC 0x3F73 · +0x28 · +0x2C · 0x209378/0
 (r6 봇), r10 `-Dgow.auto.novol -Dgow.auto.route=wait:1;-616,-380,-980!;wait:2`, r12 `…;-600,-380,-770!;wait:1;crank:20:-600,-832`, r14 `--game PAND02AA`
 `…;-2186,-172,-1605!;wait:2;-2309,-236,-1047!;wait:1;-2300,-236,-890,20;use:-2319,-864;…`. 실제 세이브 위치는 생기지 않았다.
 
+## 41. QA vs PS2 영상 3화 — 포세이돈의 시험: PAND02B 협곡 (해골 군단 · 좁은 턱 · 미노타우로스) → PAND02C 철창 방 · 병사의 쪽지 · 바닥 손잡이 · 크랭크 · 우리 밀기 · 불태우기 → PAND02D 삼지창 (영상 2880–3840 초, 2026-10-26)
+
+영상 = HF4CELG5OxQ (3화, 전사 (보통) = `-Dgow.difficulty=1`), 프레임 423×317 (`work/verify/ep3_c/video/v<초>.jpg` 362 장 — 2880–3840 4 초 간격, 3176–3215 ·
+3310–3370 · 3410–3428 · 3770–3810 1 초 간격, 커밋 안 함). 엔진 = origin/main d975335 위, 1280×720 lockstep, 스크래치 홈, 경로 하네스 (`-Dgow.auto.route`, 순간이동 ·
+`use:` · `crank:` · `hold:` · `pull:` · `mash:` · `kill:25`, `-Dgow.auto.route.nofight`), `--game PAND02C --arrive PAND02B --skip-movies` / `--game PAND02D`.
+
+레벨 [확실: 스크립트 · 배치]: PAND02B (협곡 — DiveEnemies 해골 군단 SkellyLevel3 · 세이렌 열쇠 상자 SirenKey1 · Narrow 벽 · Minos/MinotaurLevel5 템플릿 54 R_MI5)
+→ athn02CWarp (LoadForWarp Pand02C) → PAND02C. PAND02C 퍼즐 (LevelData): 쪽지 deadGuyNote (R2 1024 → Goto noteRead · 430 두 쪽 · camNote) → 바닥 손잡이
+GroundHandle (CSM 017 crankPickUpGround/pickUpCrank, 1023 인자 1 = 123 → LevelData13 · 431) → 크랭크 CageTriggerHandle (R2 1024 GotHandle → HandleOn, Push 013
+Type 1 크랭크 id 230, 1023 → LevelData15 · 18 → CageElevator AnimDriven · cageLower01, 100 % → cagePush01 · fadeOut 0.6 → VisDump02Mp02 동영상 p02Mp02 →
+501 → FadeIn · CamOff CheckPoint) → 우리 gopushpullcage (Push 006 id 221) 를 철창 방 턱에서 아래 복도로 떨어뜨려 오르막을 밀어 올림 (EnemyZoneGroup0–3 해골
+SkellyLevel3 템플릿 25 · Patrol10–14 · 미끄러짐 소리 볼륨) → 판 plateTRIGgrp CageEntry (LevelData10, 함정 · 불 구멍 AnimForward, CagePlate AnimUp) → 레버
+golever (Push 012 id 81, fryAttach · taskP → LevelData11 · 21) → LeftFire/RightFire · CgeFRYing 카메라 (Idle 8 초) · cageBurn02 → +3 초 GearsTrap · CageLift2
+AnimSink (LevelData22) → +4 초 TraproomDoor AnimOpen (LevelData16 = 문 메시지 끝) · lever-VisCheck CheckPoint → LoadZoneFor2D → PAND02D tridentZoom (Idle 4 초,
+camTridentZoom) → 삼지창 TAndF 205 id 141 (camTridentLift, 1023 → GlobalData0 = 100 → 카드 155 · 184 · CheckPoint 3.2) → R2Statue 144 → 세이브.
+
+### 41.1 장면 대응
+| 영상 (초) | 장면 | 원작 (스크립트·데이터) | 엔진 (실행) | 결과 |
+|---|---|---|---|---|
+| 2880–2970 | 모래 마당 · 탑, 낫을 든 해골 군단 (아르테미스의 검) | PAND02B DiveEnemies SkellyLevel3AI1–3 (DiveSpawner 셋) | b1 봇 (`b1s.jpg`): 같은 마당 · 같은 해골 | 같음 |
+| 2944–3024 | 절벽 오르기 · 뮤즈의 열쇠 카드 · 사슬 · 좁은 턱 | SirenKey1 (CSM 022 상자) · Narrow 벽 18 자리 | b2 f4 열쇠 상자 자리만 | [미확인: 몰지 않음] |
+| 3032–3128 | 협곡 길, 가시 철퇴 · 방패의 보라 미노타우로스, 제우스의 분노, 올라타기 처치 | Minos MinotaurLevel5AI1/2 · AI3 (템플릿 54) | b2 f100–116 (`b2s.jpg`): 같은 길 · 같은 모델 | 같음 (싸움 시간 비교 안 함) |
+| 3136–3216 | 어두운 복도 · 화로 → 세이브 빛기둥 R2 · 업그레이드 메뉴 | PAND02C 세이브 · 메뉴 (1 · 2 차에서 대조) | — | 몰지 않음 |
+| 3216–3244 | 병사 석상 부수기 · 우리 방 들어가며 매달린 우리들 (camCUTCGEFLY) | gostatuesoldierbrk 13 · animCUTSCENE1 (10.5 초 Idle) · cageHang RedHang2–18 | c1 · c2 (`c1s.jpg`): 같은 방 · 같은 카메라 | 같음 |
+| 3256–3308 | 복도 싸움 → 포세이돈 문 방 (손잡이가 바닥 고리 옆) | — | c2 f30 | 같음 |
+| 3316–3331 | 쪽지 R2 → 시체 클로즈업 → 벽 쪽지 · 투구, 430 두 쪽 | deadGuyNote → camNote (godeadguynote 관절 1, ANM deadGuyNote 5 초, 0x1000) | c2 f16–26 (`cmpnote.jpg`): 같은 메시지 · 쪽 · 타자, **카메라는 시체 무릎에서 몸통으로만 가고 벽 쪽지에 닿지 않는다** | 41.3 [미확인] |
+| 3340–3349 | "바닥에 손잡이가 있습니다." · 집어 듦 | GroundHandle 431 | c2 f40–46 | 같음 |
+| 3352 | 판을 밟자 양옆 불 구멍이 확 | plateTRIGgrp PlayerEntry → L/RFlamSnd AnimForward | c12 117.4 초 같은 사건 (로그) | 같음 |
+| 3358 | 문 메시지 121 (camPosdoor) | DoorMsg ENV 구 반지름 640 × 배치 0.0625 = 40 | c2 (−340 에서 44 떨어져 안 뜸 = 볼륨 밖) | 데이터대로 (하네스 위치) |
+| 3376–3408 | 손잡이를 크랭크에 끼우고 돌림 → 우리가 복도로 내려옴 | GotHandle · Push 013 Type 1 (손잡이 관절 handle1/2 (−2048, 388, −3245) 축 ±x) · CAMcrankPush | c3 (`c3s.jpg` · `c3m.jpg` f84) | 같음 |
+| 3410–3428 | 크레토스 · 우리 속 병사 클로즈업 | 동영상 p02Mp02 | c3 f87–190 동영상 | 같음 |
+| 3432–3712 | 우리를 아래 복도로 떨어뜨림 → 오르막으로 밀며 해골 · 궁수와 싸움 | 미끄러짐 볼륨 · 해골 4 무리 · 돌 더미 · 벽 턱 | c4–c12 (`c4s.jpg` · `c9s.jpg` · `c10s.jpg`): 같은 낙하 (바닥 368 → 240) · 오르막 | 같음 (41.2) |
+| 3720–3740 | 우리를 판에 → 레버 당김 | CageEntry · lever fryAttach / taskP | c12 116.6 · 118.5 초 | 같음 |
+| 3740–3748 | 불 구멍 → 우리 속 병사가 불탐 (camCGEFRY1) → 빈 판 | CgeFRYing CamOn (Idle true) · cageBurn02 · CageLift2 AnimSink | c12 (`c12f.jpg` · `c12g.jpg`) 같은 순서 · 시각 (122.2 · 123.2 · 126.2 · 130.2) | R2 고침 (41.2-1), 불 밀도 41.3 |
+| 3752–3768 | 열린 문 → 나무 들보 복도 → 삼지창 방 (camTridentZoom) | TraproomDoor · LoadZoneFor2D · tridentZoom Idle 4 초 | d1 (`d1s.jpg`) | 같음 |
+| 3770–3790 | 삼지창 R2 연타 (camTridentLift, R2 표시) → 카드 155 → 184 | TAndF 205 · GlobalData0 | d1 f58–94 | 같음 |
+| 3798–3808 | 석상 R2 144 (camPosStatue) → 세이브 | R2Statue · SaveGameZone | d1 41.5 · 54.2 초 | 같음 |
+| 3810– | 물에 뛰어들어 잠수 | 삼지창 = 잠수 능력 (bd6a17a, 43 §42) | d2: 삼지창 뒤 □ 로 212 → 131 잠수 | 같음 |
+
+### 41.2 엔진 결함과 수정
+1. **불태우기 연출 (Idle) 동안 레버 옆 영웅에게 R2 안내가 떠 있었다 (영상 3740–3748 은 없음).** 레버는 당긴 뒤 0.5 초에 되감겨 (lever-EventReset 1015) 다시 잡을 수
+   있는 Show R2 오브젝트라 엔진 `minigameIconIndex` 의 근접 안내가 CgeFRYing 카메라 (CamOn H13 = Idle(true), CamOff = Idle(false), 8 초) 내내 R2 를 띄웠다.
+   원작 근접 안내 0x1DC3F8 [확실: 디스어셈블]: 0x1DC450 이 0x1BF108 (= lw 0x29DB58, 스크립트 Idle 의 전역 정지) 을 부르고 참이면 0x1DC610 으로 건너뛰어
+   잡기 질의 0x1C3F18 · 세이브 포인트 거리를 보지 않고, s1 = 0 이라 0x1DC648–0x1DC654 가 슬롯 0 에 −1 (0x21DA50(0, −1)) — 안내를 지운다. 엔진은 이 조건을 세이브
+   포인트 안내에만 걸고 있었다 → `MinigameIcon.useQueryOpen(전역 정지, 메시지)` 를 근접 오브젝트 · 세이브 포인트 둘 다에 (메시지 중 아이콘을 다시 고르지 않는 0x21E908
+   조건도 같이). 연출이 끝나면 (130.2 초) 레버 옆에서 R2 가 다시 나오는 것은 원작과 같다 (되감긴 레버는 잡힌다).
+   엔진 전역: Idle 연출 중 Show R2 오브젝트 · 세이브 포인트 곁에 선 장면 모두.
+
+- 결함 아님 (하네스 · 경로) [확실: 데이터]: 크랭크 CageTriggerHandle 의 관절 0 은 GO 배치에서 758 떨어진 (−1290, 416, −3231) 이고 잡기는 손잡이 관절 handle1/2
+  (축 ±x) 로만 된다 — 크랭크 팔 옆에 서야 잡힌다. 문 메시지 DoorMsg 구는 배치 배율 0.0625 로 반지름 40. 우리는 복도의 벽 턱 (−1547, z −3136) · 돌 더미 (−1100,
+  z −3200) · 레버 기둥 (정적 충돌 x −478, z −3250…−3221, 높이 104) · 판 감실 기둥 (x −396) 에 막히므로 당기기로 옆으로 옮겨 가운데 (z −3188 → −3232) 로 넣어야 한다
+  (영상 3480 · 3552 · 3724 도 우리를 가운데로 돌려 민다). 해골이 우리 앞에 서면 막힌다.
+
+### 41.3 남은 것 · 미확인
+- **쪽지 카메라 camNote (영상 3319 → 3322–3331)**: 원작은 시체 무릎에서 벽에 붙은 쪽지 (그리스 글자) · 오른쪽 투구로 올라간다. 엔진은 godeadguynote 관절 1 을
+  ANM deadGuyNote 대로 (눈 (−453.8, 494.5, −3241.2) → (−456.2, 480.6, −3300.1), 아래 21° → 위 4°) 따라가 시체 몸통 앞에서 끝난다. GO 배치가 y 축 180° · 이동
+  (−896.7, 0, −6464) 인 반전 배치라 관절 트랙 · 배치 곱 순서 또는 카메라 0x1000 재시작 시점 해석이 다를 수 있다 [미확인] — 이번에 고치지 않았다.
+- 불태우기 클로즈업 (영상 3744: 우리 속이 불길로 가득) 은 엔진이 벽 불 구멍 불길 · 병사만 보이고 덜 짙다. 병사 GO 의 FXC_RSF*/RSFA* 이미터는 서브타입 7 (생성률 0, act
+  채널 구동) 이고 엔진 GO 이펙트의 서브타입 5–9 갱신은 미해석 (36.4) [근사].
+- 메시지 상자 글자 색 (영상 짙은 적갈색, 엔진 주황) · 상자 너비는 1 · 2 차 대조 그대로 두었다.
+- PAND02B 좁은 턱 · 사슬 오르기 · 세이렌 열쇠 상자 (2944–3024), 세이브 · 업그레이드 메뉴 (3176–3215), 협곡 싸움 시간, 해골 · 궁수 수 · 출현 시각은 나란히 몰지 않았다.
+- 하네스: 경로 순간이동으로 PAND02C 에서 PAND02D 로 넘어가면 LoadCheck 를 지나지 않아 지금 슬롯이 PAND02C 로 남는다 (`--arrive PAND02C@…` d1 첫 실행의 세이브가
+  PAND02C 로 기록) — 걸어서 넘어가는 원작 경로와 무관 [엔진 전용 하네스].
+
+### 41.4 시험
+`CageSacrificeTest` (2): useHintIsClearedDuringScriptIdle (0x1DC450 jal 0x1BF108 · 0x1DC458 bne → 0x1DC610 · 0x1BF108/0x1BF110 = 0x29DB58 · 0x1DC650 movz ·
+0x1DC654 jal 0x21DA50, PAND02C CgeFRYing CamOn/CamOff Idle true/false, lever-EventReset 1015, `useQueryOpen`), cageCrankHandlesSitOnTheArm (handle1 (−2048, ·, −3245) 축 −x,
+관절 0 −1290). 엔진 시험 전부 통과.
+
+### 41.5 증거 (`work/verify/ep3_c/`, 커밋 안 함)
+`video/` (영상 362 장), `vs1.jpg`–`vs9.jpg` (영상 시트 2880–3810), `b1s.jpg` · `b2s.jpg` (PAND02B 해골 · 미노타우로스), `c2n.jpg` · `cmpnote.jpg` (쪽지 카메라 대조),
+`c2t.jpg` · `c3s.jpg` · `c3m.jpg` (손잡이 · 크랭크 · 동영상), `c4s.jpg` · `c9s.jpg` · `c10s.jpg` (우리 낙하 · 막힘), `c12s.jpg` · `c12f.jpg` (고치기 전: 연출 중 R2),
+`c12g.jpg` (고친 뒤: 연출 중 R2 없음, 끝난 뒤 레버 곁 R2), `d1s.jpg` (삼지창), `route/` (경로 c2–c12 · d1 · d2 · b2).
+
 ## 42. QA vs PS2 영상 3화 — 포세이돈의 시험 물 구간: PAND02D 수영장 · 돌진 문 → PAND02DD 새끼 케르베로스 동굴 → PAND02F 물속 홀 · 나이아드 · 빛줄기 방 → PAND02G 붉은 결계 방 → PAND02H 물속 큰 홀 → PAND02I 기둥 · 화로 방 · 세이브 → PAND00D (영상 3840–5760 초, 2026-10-26)
 
 영상 = HF4CELG5OxQ (3화, 전사 (보통) = `-Dgow.difficulty=1`), 프레임 423×317 (`work/verify/ep3_d/video/v<초>.jpg` 60 장 — 3840–5720, 커밋 안 함).

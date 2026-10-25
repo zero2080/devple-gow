@@ -14,6 +14,15 @@ public final class MinigameIcon {
 			/** 버튼 안내 센서 (EventSensor PromptOnEnter, 원작 슬롯 1 ← 14). */
 			PROMPT = 14;
 
+	/**
+	 * 근접 사용 안내 (슬롯 0 = 14, 매 프레임 0x1DC3F8) 를 고를 수 있는지: 전역 정지 (0x29DB58 = 스크립트 Idle, getter 0x1BF108) 중이면
+	 * 잡기 질의 0x1C3F18 · 세이브 포인트 거리를 보지 않고 슬롯 0 을 지운다 (0x1DC450 bne → 0x1DC610 → 0x1DC648: s1 = 0 → 0x21DA50(0, −1)) [확실],
+	 * 메시지 · 질문 중에는 아이콘을 다시 고르지 않는다 (0x21E908) — 43 §41 PAND02C 불태우기 연출.
+	 */
+	public static boolean useQueryOpen(boolean globalIdle, int messageId) {
+		return !globalIdle && messageId < 0;
+	}
+
 	private int current = NONE;
 
 	public int current() {

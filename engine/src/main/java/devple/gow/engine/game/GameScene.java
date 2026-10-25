@@ -3861,13 +3861,16 @@ public final class GameScene implements Scene {
 				// 아이콘을 다시 고르는 0x21E908 은 메시지·질문 (+0x1528/+0x152C/+0x1530) 이 없을 때만 — 초 0 메시지 (정지 안 함) 동안에도 숨김
 				return devple.gow.engine.ui.MinigameIcon.PROMPT;
 			}
-			var near = nv != null && held == null ? nv.promptItem() : null;
+			// 0x1DC3F8 은 전역 정지 (0x29DB58 = 스크립트 Idle, getter 0x1BF108) 이면 질의 0x1C3F18 을 건너뛰고 슬롯 0 을 지운다 (0x1DC450 → 0x1DC610 →
+			// 0x1DC648: s1 = 0 → 0x21DA50(0, −1)) [확실] — PAND02C 레버를 당긴 뒤 CgeFRYing 연출 (Idle 8 초) 동안 레버 옆에 선 영웅에게 R2 가 떠 있었다
+			// (영상 3740–3748 은 없음, 43 §41). 메시지 중에는 0x21E908 이 아이콘을 다시 고르지 않는다 (위 PROMPT 와 같은 조건)
+			var near = nv != null && held == null && devple.gow.engine.ui.MinigameIcon.useQueryOpen(globalIdle(), messageId) ? nv.promptItem() : null;
 			if (near != null) {
 				return near.showPrompt ? devple.gow.engine.ui.MinigameIcon.PROMPT : devple.gow.engine.ui.MinigameIcon.NONE;
 			}
 			// 0x1DC3F8: 세이브 포인트 4 m 안이면 슬롯 0 = 14 (R2) — 가까운 R2 오브젝트 (0x1C3F18) 가 있으면 그 "Show R2" 가 덮는다.
 			// 기술 중 (자유 상태 아님) 이면 질의를 건너뛰고 슬롯 0 을 지운다 (0x1DC42C–0x1DC44C → 0x1DC648) — 43 §32
-			return nearSavePoint() && !globalIdle() && messageId < 0 && !hero.combat.active()
+			return nearSavePoint() && devple.gow.engine.ui.MinigameIcon.useQueryOpen(globalIdle(), messageId) && !hero.combat.active()
 					? devple.gow.engine.ui.MinigameIcon.PROMPT : devple.gow.engine.ui.MinigameIcon.NONE;
 		}
 		if (grab.timed() != null) {
