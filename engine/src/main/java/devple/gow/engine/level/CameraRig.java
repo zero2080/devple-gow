@@ -844,6 +844,24 @@ public final class CameraRig {
 
 	/** 영웅 대상 슬롯 반지름 (0x1DCC20 +0x40 = 1.6). */
 	static final float SLOT_RADIUS = 1.6f;
+
+	/** 지금 영웅 대상 슬롯 자리 (+0x30, 이 레벨 좌표), 아직 없으면 null — Warp 로 떠날 때 새 씬에 넘긴다 ({@link #carryTargetSlot}). */
+	public Vector3f targetSlot() {
+		return slotInit ? new Vector3f(slotPos) : null;
+	}
+
+	/**
+	 * Warp 도착: 영웅 대상 슬롯을 떠나온 레벨에서의 자리 그대로 잇는다 (43 §44) [확실: 코드]. 슬롯 표 0x304790 은 전역이고 영웅 생성 (0x1DCC20 → 0x1F3F48)
+	 * 에서만 비우는데 Warp 는 영웅을 다시 만들지 않는다. Warp_Jump 0x1B2E08 → 0x1EFC98 은 카메라 리셋 (0x1EDF48) 앞에서 0x1F4380 을 불러 그 슬롯을
+	 * 새 자리에서 반지름 1.6 까지만 끌어온다 — 그래서 첫 레일 표본 (리셋 → 볼륨 선택 → 0x1F3A38 → 0x1F3768 → 0x1F20F0) 의 T 는 새 자리 + 1.6·(옛 자리 쪽 방향)
+	 * 이다 (두 레벨 좌표계가 달라도 그대로 — 원작이 그렇게 섞는다). 첫 표본의 두 극소가 거의 같은 비용인 레일 (PAND03J CoreTubeCam4) 에서는 이 1.6 이 고른다.
+	 */
+	public void carryTargetSlot(Vector3f old) {
+		if (old != null) {
+			slotPos.set(old);
+			slotInit = true;
+		}
+	}
 	private final Vector3f desired = new Vector3f(), slotPos = new Vector3f(), lastT = new Vector3f();
 	private boolean slotInit;
 	private int jumpMode;

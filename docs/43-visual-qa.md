@@ -581,7 +581,7 @@ ATHN07B (화면 전체), ATHN06B (방 안이 흐린 벽), PAND03I (주황 판) �
 **4. 탐침에서 막힌 도착** — 분류
 | 도착 | 엔진 화면 | 분류 |
 |---|---|---|
-| PAND03F / PAND03J ← PAND00C Warp (CoreTubeCam4) | 관 벽 | **데이터대로 (§13.9)** — 카메라 해독 그대로: 레일 두 극소 u 9.25 (비용 3.46) / u 14.5 (2.75), 0x400 접선 좌표계 요 −180±60 은 u 14.5 만 만족 → 관 바깥 눈. PAND02B 와 같은 종류 (§8.2) |
+| PAND03F / PAND03J ← PAND00C Warp (CoreTubeCam4) | 관 벽 | ~~데이터대로 (§13.9)~~ → **§44: 떠나온 레벨에 남은 대상 슬롯의 1.6 끈으로 u 9.25 (영웅 뒤)** — 카메라 해독 그대로: 레일 두 극소 u 9.25 (비용 3.46) / u 14.5 (2.75), 0x400 접선 좌표계 요 −180±60 은 u 14.5 만 만족 → 관 바깥 눈. PAND02B 와 같은 종류 (§8.2) |
 | PAND02A ← PAND00C Warp (Start CameraName Lvl2HallCam2) | `Follow` | 데이터: Lvl2HallCam2 는 PAND00C 카메라. 도착점 x 960 은 camFromWarp (x ≤ 958.6) 와 camWarpTunle (x ≥ 964.2) 사이 5.6 단위 틈. 탐침은 떠나온 레벨을 다른 슬롯에 두어 Lvl2HallCam2 를 찾았다 — Warp 후에도 떠난 레벨을 남기면 OLYMP02 ← OLYMP01 에 OLYMP01 입구·staircam 이 겹쳐 (같은 좌표 공간) 되돌렸다 → 엔진의 "Warp 는 다른 슬롯 없음" 유지, 탐침 쪽 차이 (§13.9: 원작도 떠난 레벨 컨텍스트를 끔) |
 | HDES01E ← HDES01D 걷기 | 이전 `Follow` (벽) → **Dcam11** (기둥 위 크레토스) | 도착 상태: 떨어져 들어오는 길 — 바로 위 −1260 에 HDES01D Dcam11. 1 의 씨앗 (수직) 으로 해결 |
 | ATRET01A ← HDES01E Warp (camFrmHades07) | 바로 HDES01E 로 되돌아감 → **§13.9 해결** (줄에 매달려 도착) | 도착 위치: Start (5095, 619, 991) 는 무덤 줄 `gorope1` 위, 영웅이 떨어져 `loadHDES01G` 영역 2 (Warp) 에 들어간다. 원작은 줄에 매달린 채 나오는 연출로 보인다 [추정] — 카메라 무관, 미해결 |
@@ -601,7 +601,7 @@ ATHN07B (화면 전체), ATHN06B (방 안이 흐린 벽), PAND03I (주황 판) �
 ### 13.9 남은 도착 3 건 (두 극소 재확인 · ATRET01A 무덤 줄 · Warp 슬롯 정책)
 스크린샷 (커밋 안 함): `/Users/obeomsu/.claude/jobs/6f65672f/tmp/cam5/` — `b_*` (수정 전), `a_atret*.png` (ATRET01A 도착), `w_*.png` (도착점이 진입 센서 안인 다른 Warp 도착).
 
-**1. CoreTubeCam4 (PAND03F/03J ← PAND00C) · camFRMCLFFS (PAND02B 기본 시작) — 데이터대로** [확실: 디스어셈블]
+**1. CoreTubeCam4 (PAND03F/03J ← PAND00C) · camFRMCLFFS (PAND02B 기본 시작) — 데이터대로** [확실: 디스어셈블] → **PAND03F/03J 는 §44 정정 (Warp 를 넘어 남는 카메라 대상 슬롯)**
 - 이기는 극소를 바꿀 수 있는 것을 전부 다시 읽었다 (30 §7.2 끝): 0x1F20F0 표본 (매듭 × 4 + 1, `c.lt.s` 앞쪽 우선, 비용 함수 = t2 인자 0 → 플래그 규칙),
   각도 자르기는 비용 0x1F1648 **안** (자른 방향 투영), 눈 회전 자르기는 t 를 정한 뒤, 리셋 (+0x4C = 0) 이라 직전 정면 보너스 없음, 대상 T = 생물 +0xD0 (위치 행, 0x1E09C0) + 24
   (반경 1.6 끈 0x1F4380 — 떠나온 PAND00C 쪽으로 1.6 끌려도 u 9.25 비용은 3.46 → 3.9 로 오히려 나빠짐). **카메라 갱신 경로에 시선·충돌 질의가 없다** (광선 0x11E190 은 디버그 자유 카메라 0x1F0260 전용).
@@ -682,7 +682,7 @@ ATHN07B (화면 전체), ATHN06B (방 안이 흐린 벽), PAND03I (주황 판) �
 | PAND04AA ← PAND00C | Start 대상 미발동 + 엘리베이터 바닥 판정 | 대상 **해결** (3), 발판 판정 **해결** (6) |
 | OLYMP01 ← OLYMP02 Warp | goentrance 문 닫힘 (도착점이 OpenGates 안) | 실제 플레이 **해결** (4), 하네스는 상태 없음 |
 | ATHN02A ← ATHN01F | 정박한 배 goshipgroup 갑판 충돌 없음 | **해결** (6) |
-| PAND03F/03J ← PAND00C, PAND02A ← PAND00C | CoreTubeCam4 / Follow | 데이터대로 (§13.9) |
+| PAND03F/03J ← PAND00C, PAND02A ← PAND00C | CoreTubeCam4 / Follow | ~~데이터대로 (§13.9)~~ → §44: 영웅 뒤 CoreTubeCam4 / camFromWarp |
 | DEST01 ↔ DEST02, OLYMP02 ← OLYMP01 걷기, PAND03H ← PAND03I, PAND05B ← PAND05A | 닫힌 문 · 겹친 좌표 · 수호자 가림 · camEleEnter | 기존 분류 (§13.8) |
 | ATHN01D ← ATHN01E, ATHN01B ← ATHN01A, ATHN01E ← ATHN01D (짚라인 끝 Follow), PAND01C ← PAND01B (도착 즉시 PAND01B 로 걷기 → Follow) | 이음 도착점이 돛대·상자 뒤 / 넘겨받을 카메라 없음 | 하네스 (이음 재현 위치·카메라 상태) |
 | DEST00 ↔ DEST01, ATHN03E ← DEST00, ATHN06A ← ATHN06B (camNewWarp 계단 아래 고정, 영웅 400 위 어두운 문) | 멀리 작게 / 어두움 | 데이터대로 (카메라 설계) |
@@ -3202,7 +3202,8 @@ On · AnimRing · $sacCir 재질 애니, 원 안 처치 LevelData7/8 > 3) → 62
 | 7660–7720 PAND03C 문 홀 · 불덩이 | PAND03C 기본 시작은 불덩이 복도 (영상 앞 문 홀은 03A → 03C 걷기 이음) — 대조 안 함 |
 
 ### 43.3 남은 것 · 미확인
-- [미확인] **허브 잠수 도착 카메라 (영상 5826–5828: 위에서 폭포 웅덩이 · 웅덩이에서 나오는 크레토스)**: 엔진 `--arrive PAND00C` 는 CMV golv3tubecams hull 2 →
+- ~~[미확인] **허브 잠수 도착 카메라 (영상 5826–5828: 위에서 폭포 웅덩이 · 웅덩이에서 나오는 크레토스)**~~ → **§44 해결** (Warp 도착은 5817.8, 5826 은 웅덩이 위
+  WtrEntryCam1 — 떠나온 레벨에 남은 카메라 대상 슬롯의 1.6 끈이 두 극소를 가른다): 엔진 `--arrive PAND00C` 는 CMV golv3tubecams hull 2 →
   CoreTubeCam4 (레일 + 접선 틀 0x400, 설계 요 −180 ± 60). 첫 표본 (0x1F20F0, 매듭 × 4) 의 비용 극소가 둘 (u ≈ 9 (1304, −342, 2727) 13.0 · u ≈ 14.5
   (904, −356, 2625) 7.6) 이라 먼 쪽을 골라, 접선 틀에서 영웅 방향 국소 요 57.6° 가 −180 ± 60 밖 → 120° 로 잘려 화면 밖 62° — 크레토스가 (1039, −381, 2766) 까지
   걸어가도 파란 바위벽만 보인다 (`04`). §8.2 와 같은 "리셋 기준점 [근사]" 문제로 보인다 (Warp 직후 기준점 = 엔진은 영웅 머리, 원작은 직전 상태의 눈 + 정면·거리).
@@ -3218,6 +3219,65 @@ On · AnimRing · $sacCir 재질 애니, 원 안 처치 LevelData7/8 > 3) → 62
 `TemplateEmitterTest` (PAND03J 템플릿 = {golog, gologshatter} · 원점 · 횃불 gotorchfire1 은 레벨 이미터, PAND03A 템플릿 없음). 엔진 테스트 754 (db86e34 위, 이 작업 +2).
 증거 `work/verify/ep3_e/` (커밋 안 함): `01_hall_specks_v5950_v5960_before_after` (영상 | 고치기 전 | 고친 뒤), `02_log_on_pool_v5960_before_after`,
 `03_hades_circles_v6100_v6110_vs_engine`, `04_tube_arrival_v5825_v5828_vs_engine`, `05_maze_v6410_v6520_vs_engine_03b`.
+
+## 44. Warp 도착 첫 레일 표본 — 카메라 대상 슬롯은 Warp 를 넘어 남는다 (PAND03J ← PAND00C 허브 잠수 CoreTubeCam4, 영상 3화 5817.8–5819.5, 2026-10-26)
+
+영상 = HF4CELG5OxQ (3화), 프레임 `work/verify/ep3_e/video/v5816.5 … v5819.5.jpg` (0.1 초 간격) · `v5824 … v5828.jpg` (0.2 초). §43.3 의 "5826 = 도착" 은
+틀렸다: **Warp 는 5817.8** (5816.5–5817.7 은 PAND00C 관을 위에서 내려다보는 고정 카메라, 크레토스가 아래로 작아짐). 5817.8 첫 프레임부터 PAND03J 관 안에서
+**크레토스 바로 뒤·조금 위** 카메라가 헤엄치는 그를 따라가고 (5818.5–5819.5 관 벽이 왼쪽→오른쪽으로 쓸려 지나감, 거리 거의 일정), 5824–5825 는 웅덩이 아래에서
+위를 보는 고정 카메라 (CoreTubeCam2/1), 5825.2 부터 웅덩이 위 WtrEntryCam1 (상태 마스크 0xE0 = 물·점프·떨어짐, 순위 13) 이다. 엔진은 같은 도착에서 CoreTubeCam4 가
+관 끝 극소 (u 14.5) 를 골라 영웅이 화면 밖 62° 였다 (`--arrive PAND00C` 첫 1.7 초 파란 바위벽만).
+
+### 44.1 원작 [확실: 디스어셈블, 표시한 것 제외]
+- **슬롯 표는 Warp 를 넘어 남는다**: 카메라 대상 슬롯 10 개 (0x304790, 0x50 바이트) 는 0x1F3F48 (영웅 생성 0x1DCC20 만 부름) 에서만 비운다. 영웅 슬롯 = 종류 −4
+  (0x1F4138: 생물 +0xD0 + 오프셋 (0, 24, 0)), 반지름 +0x40 = 1.6, +0x44 = 16, 가중치 1. Warp 는 영웅을 다시 만들지 않는다 (Warp_Jump 0x1B2E08 = SetMatrix 만).
+- **Warp_Jump → 0x1EFC98(옛 행렬, 새 행렬)**: 첫 줄이 **0x1F4380** — 슬롯 +0x30 을 원하는 자리 (새 Start + 24) 에서 반지름 1.6 밖으로 벗어난 만큼만 끌어온다
+  (0x1F43CC–0x1F4440). 슬롯에는 떠나온 레벨 좌표의 옛 자리가 남아 있으므로 결과 T = 새 자리 + 1.6·normalize(옛 자리 − 새 자리) — 두 레벨 좌표계를 그대로 섞는다.
+  그 뒤 **0x1EDF48(관리자, 0)** 리셋: 상태 링 템플릿, +0x770 = 0x1EEFA0 (대상점), 볼륨 선택 0x1EE8E0 → 활성화 0x1EEE88 → 새 상태 0x1F3A38 이 **곧바로
+  0x1F3768(상태, 0)** 을 불러 (0x1F3B94) 첫 레일 표본 (+0x48 = −1 → 0x1F29A0 → 0x1F20F0) 을 이 T 로 잡는다. 이어지는 +0x7B0 = 1, +0x7C0 = 새·옛⁻¹ (0x185490)
+  은 입력 기준 행렬만 옮긴다 (0x1EF310 → 0x1DCE80, 카메라 상태가 아님). 0x1F3A38 은 직전 상태 (리셋 템플릿) 를 복사하고 전환 0 이라 정면 보너스 없음.
+- 영웅 속도는 잇지 않는다: SetMatrix 0x1E79D0 → 0x1E1D78 이 +0x210/+0x220 (속도) = 0, +0x230 (수면) = FLT_MAX. Warp_Jump 는 SetMatrix 앞에서 수평 속도 (+0xE0, 작으면
+  +0x100) 와 옛 정면의 각 차이만큼 새 행렬을 돌릴 뿐이다 (0x1B2E84–0x1B2F6C, 0x1846F0). 그러니 첫 표본은 정지한 새 자리 + 1.6 끈으로 정해진다.
+- 다시 읽은 나머지 (§13.9 · 30 §7.2 와 같음): 0x1F20F0 표본 = 구간 수 n × 4 + 1 (u = 끝 매듭 · i / 4n), 점 = (u³, u², u, 1) × 구간 행렬 / w, 비용 함수 = 0x200 없음 →
+  0x1F1648 (설계 요·피치 0x1F0EE0 = 카메라 GO −행2, 범위 0x306E00..0C, 거리 [0x14·16, 0x10·16]), `c.lt.s` 엄격 (앞쪽 우선), 0x1F29A0 머리의 데드존 0 자르기 →
+  기준점 = T. 시선·충돌 질의 없음.
+
+### 44.2 PAND03J 에서 1.6 이 고르는 것
+CoreTubeCam4 (NCV_CoreTubeRail1, 구간 15 → 표본 61, 거리 144, 접선 틀 요 180 ± 60) 의 첫 표본은 도착점 (1159.6, −344.7, 2784) + 24 에서 u 9.25 (1292.6, −342.3, 2743.8)
+|v| 140.6 → 비용 3.46 (영웅 뒤, 범위 안) · u 14.5 (904.2, −356.5, 2624.7) |v| 303, 자른 방향 투영 141.3 → 2.75 (관 끝, 범위 밖) 로 거의 같다. **T 를 −X 로 1 만 옮겨도
+u 9.25 가 이긴다** (탐침: x 1158.6 → 영웅 뒤, z −4 → 관 끝). PAND00C 관 Warp 볼륨 (golvl3warp 영역 1 공 (−1178, −443, 2023) r 224) 쪽 방향은
+normalize(−2338, −98, −761) = (−0.95, −0.04, −0.31) → T 이동 (−1.52, −0.06, −0.49) → **u 9.25, 눈 (1294, −342, 2743), 영웅 화면 가운데** — 영상 5817.8 의 "바로 뒤에서
+따라가는" 구도. §13.9 의 "1.6 끌려도 3.46 → 3.9 로 나빠짐" 은 옛 자리 방향을 다르게 잡은 것으로 보인다 [추정] — 여기서 볼륨 위치로 다시 쟀다.
+정확한 옛 자리 (볼륨 경계에서 슬롯이 1.6 늦게 따라온 점) 는 몰라도 두 레벨 사이 거리 (≈ 2460) 에 비해 작아 방향은 거의 같다 [근사: 옛 자리 = 볼륨 중심].
+
+### 44.3 엔진 (`CameraRig.targetSlot/carryTargetSlot`, `GameSession.warpTargetSlot`, `GameScene`)
+- Warp 로 떠날 때 지금 슬롯 자리를 세션에 남기고, 새 씬은 첫 카메라 갱신 전에 그 자리로 슬롯을 놓는다 → 첫 `target()` 이 1.6 끈으로 끌어온 T 로 볼륨 선택·첫 표본.
+  예전엔 새 `CameraRig` 의 슬롯이 비어 첫 T = 새 자리 그대로였다. 이음 (같은 씬 `swapLevels` · `handoff`) 은 원래 같은 리그·슬롯이라 바뀌지 않는다.
+- 하네스 `--arrive FROM` 은 떠나온 자리가 없으므로 `-Dgow.arrive.slot=x,y,z` (떠나온 레벨 좌표) [엔진 전용]. 없으면 예전과 같다 (§7 · §13 의 하네스 도착 결과 그대로).
+- 잠수 도착 재현은 `-Dgow.arrive.heroState=SWIM:DIVE -Dgow.giveAll` (bd6a17a: Warp 가 물 상태를 잇는다, 잠수는 포세이돈의 삼지창).
+
+### 44.4 검증 (`work/verify/cam44/`, 커밋 안 함)
+- `01_pand03j_arrival_v5817.8-5819.2_vs_before_after.png` — 위 영상 5817.8 · 5818.2 · 5818.8 · 5819.2, 가운데 고치기 전 (0 · 0.25 · 0.75 · 1.25 초: 바위벽만),
+  아래 고친 뒤 (`-Dgow.arrive.slot=-1178,-419,2023`, 헤엄 경로): 크레토스를 뒤·위에서 화면 가운데에 두고 따라간다 — 영상과 같은 구도 (엔진 물 안개가 더 푸름).
+  관 끝을 돌면 CoreTubeCam3 → (웅덩이 아래) CoreTubeCam2 — 영상 5824–5825 의 위를 보는 구도.
+- `02_pand02a_arrival_v2215_vs_before_after.png` — 같은 규칙이 **PAND02A ← PAND00C** 도 바꾼다: 도착점 x 960 은 camFromWarp (x ≤ 958.6) · camWarpTunle (x ≥ 964.2)
+  사이 5.6 틈 (§13.8 표) 이라 예전엔 `Follow` (벽 속), PAND00C Lvl2Warp (≈ (−1138, 466, 1725)) 쪽 1.6 이면 T x ≈ 958.5 → **camFromWarp** (이름 그대로 Warp 도착용
+  레일 카메라, 크레토스 뒤). 영상 2215 는 이미 상자 앞이라 첫 초 구도는 [미대조].
+- 전 Warp 도착 73 곳 탐침 (각 Start 에서 슬롯을 ±X/±Y/±Z 먼 곳에 두고 첫 카메라·눈 비교): 바뀔 수 있는 것은 PAND03F/03J ← PAND00C (같은 관, −X 쪽이면 눈 Δ 406),
+  PAND02A ← PAND00C (−X 쪽 → camFromWarp), ATRET01C ← ATRET01B (+Z 쪽일 때만 같은 LwrCam18 눈 Δ 17), PAND04H ← PAND04IB (−Z 쪽일 때만 눈 Δ 15 — 실제 옛 자리
+  reloadPand04H 공 (128, −321, −5860) 쪽으로는 변화 없음). 나머지 68 곳은 어느 방향이든 같은 카메라 · 눈 Δ ≤ 10.
+- 기본 시작·하네스 도착 (§7 13 레벨, §13 도착 188) 은 코드 경로가 같다 (슬롯 없음 → 예전 그대로).
+- 60 초 봇 (§44.5).
+- 시험 `StartCameraTest.warpCarriesTargetSlotIntoFirstRailSample` (PAND03J 슬롯 없음 = 관 끝 · 영웅 화면 밖 / 슬롯 = 영웅 뒤 x > 1250 · 화면각 < 5°,
+  PAND02A Follow → camFromWarp).
+
+### 44.5 60 초 봇 (보통 난이도, `-Dgow.auto=1`, 스크래치 홈)
+| 실행 | 예외 | 카메라 차례 |
+|---|---|---|
+| PAND03J ← PAND00C (슬롯 · SWIM:DIVE) | 0 | CoreTubeCam4 → WtrEntryCam3 → camera11 → RmPanCam → Hallcam8/2/3 → CoreTubeCam6/5 (BackToHub 쪽 관으로 돌아감) |
+| PAND03F ← PAND00C (슬롯 · SWIM:DIVE) | 0 | CoreTubeCam4 → WtrEntryCam3 → Hallcam1/4/2 → SaveCam ↔ WheelCam → THallCam1 → CoreTubeCam5 |
+| PAND02A ← PAND00C (슬롯) | 0 | camFromWarp → camWarpTunle → camFromWarp → camBrdg1 → camCine1 (케르베로스 동영상 앞) |
+| 기본 시작 PAND03J / 03F / 02A | 0 | camera2 … / THallCam1 … / camBrdg1 … — 바뀐 코드 경로 밖 (슬롯 없음) |
 
 ## 시연 녹화 (-Dgow.record, -Dgow.bot) [엔진 전용]
 

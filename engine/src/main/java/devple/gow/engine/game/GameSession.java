@@ -62,6 +62,11 @@ public final class GameSession {
 	 */
 	public String warpHeroState;
 	/**
+	 * Warp 순간 카메라 영웅 대상 슬롯 자리 (떠나온 레벨 좌표, null = 모름). 원작 슬롯 표 0x304790 은 영웅 생성 때만 비워 Warp 를 넘어 남고, Warp_Jump →
+	 * 0x1EFC98 → 0x1F4380 이 그 자리에서 새 자리로 반지름 1.6 까지만 끌어온 T 로 첫 레일 표본을 잡는다 (CameraRig.carryTargetSlot, 43 §44).
+	 */
+	public org.joml.Vector3f warpTargetSlot;
+	/**
 	 * 두 슬롯에 올라 있는 레벨의 스크립트 세계 (레벨 이름 대문자 → 세계, 최대 2). 원작 LoadCheck·걸어 넘기는 이음은 "현재 레벨" 표시만 바꾸고 두 슬롯
 	 * 스크립트가 그대로 돈다 (0x1BCA10). 같은 레벨을 다시 LoadWad 해도 이미 슬롯에 있으면 읽지 않는다 (0x1BC110: 슬롯 이름이 같으면 건너뜀) [확실].
 	 * 엔진 씬은 이음마다 새로 만들므로 이 세계를 넘겨 써서 LevelData·한 번 발동·지연을 잇는다 (43 §18) — 예전엔 ATHN04B 에서 광장으로 돌아오면

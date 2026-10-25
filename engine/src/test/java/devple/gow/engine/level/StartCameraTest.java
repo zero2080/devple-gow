@@ -243,4 +243,44 @@ class StartCameraTest {
 			assertEquals(c[3], rig.current(), c[0]);
 		}
 	}
+	/**
+	 * Warp 는 영웅 대상 슬롯 (전역 표 0x304790, 영웅 생성 때만 비움) 을 떠나온 레벨 자리 그대로 남기고, Warp_Jump → 0x1EFC98 이 리셋 전에 0x1F4380 으로
+	 * 새 자리에서 반지름 1.6 까지만 끌어온다 → 첫 레일 표본의 T = 새 자리 + 1.6·(옛 자리 쪽) (43 §44). PAND03J ← PAND00C (허브 잠수, 영상 5817.8–5819):
+	 * CoreTubeCam4 첫 표본의 두 극소 (u 9.25 영웅 뒤 3.46 · u 14.5 관 끝 2.75) 를 이 1.6 이 가른다 — 슬롯 없으면 관 끝 (영웅 62° 화면 밖),
+	 * PAND00C 관 Warp 볼륨 (−1178, −443, 2023) 쪽이면 영웅 뒤에서 따라간다. PAND02A ← PAND00C 는 Follow (벽 속) 대신 camFromWarp.
+	 */
+	@Test
+	void warpCarriesTargetSlotIntoFirstRailSample() throws Exception {
+		Object[][] cases = {{"PAND03J", "PAND00C", new Vector3f(-1178, -419, 2023), "CoreTubeCam4", "CoreTubeCam4"},
+				{"PAND02A", "PAND00C", new Vector3f(-1138, 490, 1725), "Follow", "camFromWarp"}};
+		for (Object[] c : cases) {
+			String lv = (String) c[0];
+			LevelData d = load(lv);
+			LevelEntry.Spot s = LevelEntry.resolve(d, new ScriptWorld(d, new ScriptHost(), null), null, (String) c[1]);
+			Vector3f feet = new Vector3f(s.pos()[0], s.pos()[1], s.pos()[2]);
+			for (int k = 0; k < 2; k++) {
+				CameraRig rig = new CameraRig(d);
+				if (k == 1) {
+					rig.carryTargetSlot((Vector3f) c[2]);
+				}
+				rig.update(0, feet, 0, false);
+				rig.request(s.camera());
+				rig.update(0, feet, 0, false);
+				for (int i = 0; i < 30; i++) {
+					rig.update(1 / 60f, feet, 0, false);
+				}
+				assertEquals(c[3 + k], rig.current(), lv + " slot " + k);
+				if (lv.equals("PAND03J")) {
+					Vector3f eye = rig.eye(), f = rig.pose().forward(new Vector3f());
+					Vector3f toHero = new Vector3f(feet).add(0, CameraRig.TARGET_HEIGHT, 0).sub(eye).normalize();
+					float ang = (float) Math.toDegrees(Math.acos(Math.min(1, toHero.dot(f))));
+					if (k == 0) {
+						assertTrue(ang > 45, "슬롯 없음: 관 끝 극소, 영웅 화면 밖 " + ang);
+					} else {
+						assertTrue(eye.x > 1250 && ang < 5, "슬롯 이음: 영웅 뒤 " + eye + " " + ang);
+					}
+				}
+			}
+		}
+	}
 }

@@ -250,7 +250,10 @@ CAM 로컬 (회전 행 × 관절 스케일 역수, 위치 = 관절 로컬) × �
   **카메라 갱신에 시선·충돌 질의 없음**: 0x1EF620/0x1EF310/0x1EF3F0/0x1F3768/0x1F29A0/0x1F20F0/0x1F1AA0 의 호출은 수학·GO 조회뿐이고,
   광선 질의 0x11E190 은 패드 디버그 자유 카메라 0x1F0260 (관리자 +4 모드 분기 0x1EFDA8) 에만 있다 [확실].
   CAM 플래그 중 0x8000·0x20000 은 카메라 코드가 읽지 않고, 0x2000 = 카메라 대상 덮어쓰기 (0x304AB0, 0x1F4468) 가 켜져 관리자 +0x7AC = 1 인 동안 상태 갱신 생략 (0x1F38A0).
-  → 두 카메라 모두 원작도 먼 극소를 고른다 (데이터대로).
+  → 두 카메라 모두 원작도 먼 극소를 고른다 (데이터대로). ~~(PAND03F/03J)~~ → **43 §44 정정**: 대상 T 는 새 자리가 아니다. 카메라 대상 슬롯 표 0x304790 은 영웅 생성
+  (0x1DCC20 → 0x1F3F48) 때만 비워 Warp 를 넘어 남고, Warp_Jump → 0x1EFC98 첫 줄 0x1F4380 이 떠나온 레벨 좌표의 옛 자리에서 새 자리로 반지름 1.6 까지만 끌어온 뒤
+  리셋 0x1EDF48 → 볼륨 선택 → 0x1F3A38 → 0x1F3768 이 곧바로 첫 표본을 잡는다 [확실]. 두 극소 비용 차 (3.46 / 2.75) 가 T 1 단위로 뒤집히는 CoreTubeCam4 는 PAND00C 관
+  Warp 볼륨 쪽 1.6 (−1.52, −0.06, −0.49) 으로 **u 9.25 (영웅 뒤)** — 영상 3화 5817.8 과 같다. PAND02B 기본 시작 (Warp 아님) 은 그대로.
 
 ### 7.3 엔진
 - `CameraRig.RailCost` (DISTANCE/ANGLES/PROJECTED), `railFrame` (0x400), 눈 각 자르기도 접선 좌표계, `descend` = 0x1F1AA0, 첫 표본 매듭 × 4.
@@ -270,6 +273,9 @@ CAM 로컬 (회전 행 × 관절 스케일 역수, 위치 = 관절 로컬) × �
 - 테스트 `StartCameraTest` (43 §7.4).
 - Warp 도착 (43 §13.9): 도착점을 덮은 스크립트 볼륨은 "안" 으로 시작 (원작 순간이동 프레임은 영웅 볼륨 선분 생략 0x29D90C), 줄 잡기 대기 없음 (`HeroNavigator.warpArrived`).
   Warp 는 계속 다른 슬롯 없이 시작한다 — 원작도 떠나온 레벨을 메모리에 두되 컨텍스트를 꺼 (§7.1) 화면·스크립트에 남지 않는다.
+- Warp 도착 첫 T (43 §44): 떠날 때 `CameraRig.targetSlot()` 을 `GameSession.warpTargetSlot` 에 남기고, 새 씬이 첫 갱신 전에 `carryTargetSlot` — 첫 `target()` 의
+  1.6 끈 (0x1F4380) 이 옛 자리 쪽 T 를 만들어 볼륨 선택·첫 레일 표본에 쓴다. 하네스 `--arrive FROM` 은 `-Dgow.arrive.slot=x,y,z` (떠나온 레벨 좌표, 없으면 예전 그대로).
+  PAND03J/03F ← PAND00C CoreTubeCam4 = 영웅 뒤, PAND02A ← PAND00C = camFromWarp (예전 Follow).
 - Warp 도착 Start 의 대상 발동 (Warp_Jump 끝 0x1A9C18, `ScriptWorld.fireStart` — 예 ATHN02A ShipTrans 0.5 초 PortCam), Warp 로 바로 되돌아오면 떠날 때의 화면 상태
   (`GameSession.warpLeft`) — 43 §13.10.
 

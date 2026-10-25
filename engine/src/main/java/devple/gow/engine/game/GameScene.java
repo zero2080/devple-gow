@@ -898,6 +898,13 @@ public final class GameScene implements Scene {
 				System.out.printf("도착 카메라 씨앗: %s (%.0f, %.0f, %.0f)%n", cameraRig.current(), sp.x, sp.y, sp.z);
 			}
 		}
+		if (warped) {
+			// Warp_Jump → 0x1EFC98: 카메라 리셋 앞에서 0x1F4380 이 떠나온 레벨에 남은 대상 슬롯을 반지름 1.6 까지만 끌어온다 — 첫 레일 표본의 T (43 §44).
+			// 하네스 --arrive FROM 은 떠나온 자리가 없으므로 -Dgow.arrive.slot=x,y,z (떠나온 레벨 좌표, 예 PAND00C 관 Warp 볼륨) [엔진 전용]
+			Vector3f slot = session.warpTargetSlot != null ? session.warpTargetSlot : arriveSlotProperty();
+			session.warpTargetSlot = null;
+			cameraRig.carryTargetSlot(slot);
+		}
 		cameraRig.update(0, hero.ctl.position, hero.ctl.yaw, false);
 		if (!arrivalCam.isEmpty()) {
 			cameraRig.request(arrivalCam); // Warp 도착 Start 의 CameraName
@@ -1163,6 +1170,16 @@ public final class GameScene implements Scene {
 	private String warpHeroState;
 
 	/** 벽·덩굴·사다리에 붙은 채 Warp 로 들어왔는가 (원작 Warp_Jump 는 이동 상태 +0x174 를 그대로 둔다). */
+	/** 하네스 -Dgow.arrive.slot=x,y,z (떠나온 레벨 좌표의 카메라 대상 슬롯), 없으면 null [엔진 전용]. */
+	private static Vector3f arriveSlotProperty() {
+		String s = System.getProperty("gow.arrive.slot");
+		if (s == null) {
+			return null;
+		}
+		String[] f = s.split(",");
+		return new Vector3f(Float.parseFloat(f[0].trim()), Float.parseFloat(f[1].trim()), Float.parseFloat(f[2].trim()));
+	}
+
 	/** "SWIM:DIVE" 같은 저장 이동 상태 → 물 하위 상태 (없으면 잠수). */
 	static devple.gow.engine.nav.HeroNavigator.Water swimState(String s) {
 		int c = s.indexOf(':');
@@ -2243,6 +2260,7 @@ public final class GameScene implements Scene {
 		if (a.kind() == LevelLink.Kind.WARP) {
 			session.warpLeft = nav != null ? new Resident(levelName, level.removedInstances(), nav.platformStates()) : null;
 			session.warpHeroState = nav != null ? navStateName() : null; // Warp_Jump 는 이동 상태를 잇는다 (사다리 → 사다리)
+			session.warpTargetSlot = cameraRig != null ? cameraRig.targetSlot() : null; // 카메라 대상 슬롯도 남는다 (43 §44)
 			if (back != null && back.wad().equalsIgnoreCase(wad) && a.resident() == null) {
 				a = new Arrival(a.kind(), a.from(), a.pos(), a.yaw(), a.camera(), List.of(back));
 			}
