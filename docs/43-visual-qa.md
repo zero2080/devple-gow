@@ -3025,12 +3025,21 @@ LevelData9 ≥ 16 이면 DMCCamOff · dogOut. 그 뒤 협곡 (Spawner/Spawner2 �
 5. [엔진 전용 봇] 잡힌 영웅 기술에 흔들기 분기 (방향 조건 7/8/15) 가 있으면 `AutoPad` 가 틱마다 스틱을 좌우 끝으로 (|Δ| 2 → 게이지 +0.4/틱) — 고치기 전 봇은
    381 에서 영영 못 나왔다 (r4: 게이지 0). 고친 뒤 r5: 54.25 초 381 → 54.45 초 383 탈출.
 
+6. **벼랑 위 궁수가 걸어 내려와 영웅을 쫓았다 — 빈 결정 트리 (엔진 전체; 영상 2600–2685 은 협곡 벼랑 위에 줄지어 서서 쏜다, 엔진 r7 64 · 128–196 초는 열 명이 경기장까지 내려옴).**
+   PAND02A timedArchers1–5 (Spawner1, R_SK2 AI1 034 "archer Lvl 2 -P") 의 DecisionTreeTemplate 034 = TWK_DTre_034 "do nothing", "DecisionTree" = 0. 엔진 `AiData` 는
+   빈 블롭을 버려 트리 없음 → `EnemyFighter` 의 옛 규칙 (다가가 무작위 공격, 바닥 무시) 으로 걸어왔다. 원작은 결정이 없어 스스로 움직이지 않고 [추정: 노드 0 개 평가]
+   스크립트 Spawner1-shootTransmit1–5 (1019 · 45 ADRAW, 0–2.5 초 난수 지연, 5 초 타이머 1050) 로만 쏜다. 같은 "do nothing": R_SKA 032 (ATHN01D/05C timedArchers ·
+   ATHN05B MainRoofArchers), R_SK3 036 (HDES01C MovePlatAI), 시민 AOX* (공격 기술이 없어 영향 없음). → `AiData.emptyTree`, `EnemyFighter.doNothing` (바닥 · 중력만,
+   기술 중엔 자동 조준 0x2077A0 으로 대상 쪽) [근사]. 고친 뒤 r10: 90 초 동안 벼랑 위 (y −295) 에 남아 쏨, ATHN05B 지붕 궁수 6 명도 제자리 (예외 0).
+   (같은 궁수의 SpawnEnemy 슬롯 5 = 자리 그래프 Site204–213 (노드 하나, Radius 10) — 원작 이동 0x1D0E08 은 ai+0x72 0x40 이면 자리 그래프 A* (0x1CF020 → 0x1D4190)
+   이고 엔진은 자리 그래프를 쓰지 않는다 [미구현, 32 문서 §대기 모드 와 같음].)
+
 ### 40.2 시험
 `CerberusArenaTest` (5): puppyGrowTemplate (085: 30 · 0 · 0 · 2 · 1.5 · GrowAdult · 30 · goCEPtranSpark, 1800 프레임, 남은 1 초 세기 0.5, 0.95 초과 한 번),
 growTimerCode (0x18F474 +0x24 · 0x18F9BC 0x3F73 · +0x28 · +0x2C · 0x209378/0x209918 · +0x18/+0x1C · 0x1A90D0 → 0x1DFFA8 → 0x1A9298), vomitNeedsSpawnerCondition
 (DTre 081 c25 · VOMIT 4, DTre 080 없음, Spawn/081 VomitSpawnTransform · synchJoint), scriptSpawnAtMatrix (PAND02A: canSpawn, GrowAdult 7 번 = 최대 6 무시 · 만든 수
 그대로 · 템플릿 81 · 기술 10 · 그룹 3 · Action 없음, VomitSpawnTransform 86 · 502 · 그룹 2 · LevelData4 + 1, VomitSpawn 없음), heroSelfHp (+ 0x207084 플래그 7,
-0x19CDB4 슬롯 4). 엔진 시험 752 통과.
+0x19CDB4 슬롯 4), doNothingArchers (R_SK2 034 · R_SKA 032 · R_SK3 036 빈 트리, 033 은 트리). 엔진 시험 755 통과.
 
 ## 42. QA vs PS2 영상 3화 — 포세이돈의 시험 물 구간: PAND02D 수영장 · 돌진 문 → PAND02DD 새끼 케르베로스 동굴 → PAND02F 물속 홀 · 나이아드 · 빛줄기 방 → PAND02G 붉은 결계 방 → PAND02H 물속 큰 홀 → PAND02I 기둥 · 화로 방 · 세이브 → PAND00D (영상 3840–5760 초, 2026-10-26)
 

@@ -176,4 +176,22 @@ class CerberusArenaTest {
 		assertEquals(0x21da50, at(e, 0x19cdb4).target());
 		assertTrue(at(e, 0x19cdb8).text().endsWith("0x4"), at(e, 0x19cdb8).text());
 	}
+
+	/**
+	 * 빈 결정 트리 "do nothing" (DTre "DecisionTree" = 0): R_SK2 034 · R_SKA 032 · R_SK3 036 "-P" 궁수 (PAND02A timedArchers, ATHN01D/05C timedArchers,
+	 * ATHN05B MainRoofArchers, HDES01C MovePlatAI) 는 스스로 움직이지 않는다 — 트리가 있는 033 은 그대로.
+	 */
+	@Test
+	void doNothingArchers() throws Exception {
+		AiData sk2 = AiData.load(wad("R_SK2"));
+		assertTrue(sk2.emptyTree(34));
+		assertNull(sk2.tree(34));
+		assertFalse(sk2.emptyTree(33));
+		assertNotNull(sk2.tree(33));
+		assertTrue(AiData.load(wad("R_SKA")).emptyTree(32));
+		assertTrue(AiData.load(wad("R_SK3")).emptyTree(36));
+		Tweaks tw = new Tweaks();
+		tw.load(wad("R_SK2"));
+		assertEquals(34, new devple.gow.engine.combat.AiTemplate(tw, 34).decisionTree, "AI1 034 archer Lvl 2 -P → DTre 034");
+	}
 }

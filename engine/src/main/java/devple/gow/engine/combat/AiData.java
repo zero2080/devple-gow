@@ -152,8 +152,11 @@ public final class AiData {
 			try {
 				if (t.tag() == WadTagType.TWEAK && t.name().startsWith("TWK_DTre_")) {
 					byte[] blob = stringValue(t.data(), DECISION_TREE);
+					int id = Integer.parseInt(t.name().substring(9));
 					if (blob != null && blob.length >= 5) {
-						trees.put(Integer.parseInt(t.name().substring(9)), DecisionTree.parse(blob));
+						trees.put(id, DecisionTree.parse(blob));
+					} else {
+						emptyTrees.add(id); // "do nothing" (R_SK2 034 · R_SKA 032 · R_SK3 036 "-P" 궁수, 시민 AOX*): "DecisionTree" = 0
 					}
 				} else if (t.tag() == WadTagType.TWEAK_REF && t.name().startsWith("TWK_Sold_")) {
 					int sid = Integer.parseInt(t.name().substring(9));
@@ -178,6 +181,17 @@ public final class AiData {
 				// 이름이 숫자가 아니거나 손상된 블록은 건너뜀
 			}
 		}
+	}
+
+	private final java.util.Set<Integer> emptyTrees = new java.util.HashSet<>();
+
+	/**
+	 * DTre 템플릿은 있는데 "DecisionTree" 가 비었음 (0) — 결정이 없어 스스로 움직이거나 공격하지 않는다 (원작 평가 0x1A2250 이 노드 없이 끝남 [추정]).
+	 * 스크립트 1019 기술 요청 (궁수 ADRAW 45) 으로만 쏜다. 예전 엔진은 트리 없는 적의 옛 규칙 (다가가 무작위 공격) 으로 벼랑 · 지붕 · 발판 위 궁수
+	 * (PAND02A timedArchers 34, ATHN01D/05C timedArchers · ATHN05B MainRoofArchers 32, HDES01C MovePlatAI 36) 를 걸어 내려오게 했다 (43 §40).
+	 */
+	public boolean emptyTree(int id) {
+		return emptyTrees.contains(id) && !trees.containsKey(id);
 	}
 
 	public DecisionTree tree(int id) {

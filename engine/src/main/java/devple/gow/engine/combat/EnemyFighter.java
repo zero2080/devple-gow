@@ -59,6 +59,8 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 	private final String navNode;
 	/** 모델 크기 = ScaleCenter/100 + ScaleRange/100 × (0.5 − rand) (0x1CEE00). */
 	public final float scale;
+	/** 빈 결정 트리 ("do nothing", {@link AiData#emptyTree}): 다가가거나 공격을 고르지 않고 제자리 — 스크립트 기술 요청만. */
+	private final boolean doNothing;
 	/** 그리기 배율 덧곱 — SCR_GrowTimer 변신 중 1 + p × Adult Scale (0x18F798, {@link GrowTimer}) [근사: 맞는 부피 · 내비 몸은 그대로]. */
 	public float growScale = 1f;
 	private final Random rnd;
@@ -208,6 +210,7 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 		nav.setRide(ai != null ? ov.apply("ride", ai.ride(tmpl.soldier)) : null);
 		collectLocoClips(set);
 		DecisionTree tree = ai != null ? ai.tree(tmpl.decisionTree) : null;
+		this.doNothing = tree == null && ai != null && ai.emptyTree(tmpl.decisionTree);
 		AiData.Soldier sold = ai != null ? ov.apply("soldier", ai.soldier(tmpl.soldier)) : null;
 		this.brain = new AiBrain(this, tmpl, tree, AiData.blockMod(tw, tmpl.blockMod), sold, seed);
 		setDifficulty(1);
@@ -398,6 +401,16 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 			}
 			if (!busy) {
 				locomotionAnim();
+			}
+		} else if (doNothing) {
+			// 빈 결정 트리: 제자리 (바닥·중력만), 기술 중이면 대상 쪽으로 돈다 (자동 조준 0x2077A0 — 스크립트가 시킨 ADRAW 가 영웅을 겨눔) [근사]
+			if (nav.world() != null) {
+				nav.update(pos, ZERO, null, combat.active(), dt);
+			}
+			if (combat.active() && foe != null && (combat.move().flags() & 0x20) == 0) {
+				yaw = autoAim(yaw, pos, foe.position(), combat, dt);
+			} else if (!combat.active()) {
+				anim.play(idleClip, false);
 			}
 		} else if (!combat.active() && foe != null && attackMoves.length > 0) {
 			// 결정 트리 없는 적: 예전 단순 규칙 (접근 → 무작위 공격)
