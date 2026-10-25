@@ -132,21 +132,19 @@ public final class Renderer implements AutoCloseable {
 				RenderModel.Blend b = p.blend();
 				RenderModel.Blend mode = b == RenderModel.Blend.OPAQUE || b == RenderModel.Blend.CUTOUT ? RenderModel.Blend.ALPHA : b;
 				MaterialFx fx = p.fx();
-				float ft = partTime(fx);
+				float[] tm = MaterialFx.times(partTime(fx));
+				float ft = tm[0];
 				Texture tex = fx == null ? p.texture() : fx.frame(p.texture(), ft);
 				float[] sc = fx == null ? null : fx.uv(0, ft);
-				float[] tint = p.tint();
-				if (fx != null && fx.anim() != null) {
-					tint = tint.clone();
-					tint[3] *= fx.opacity(ft, 1f);
-				}
-				drawLayer(p, tex, mode, tint, sc, env0(p), true, p.litColor());
+				float[] tint = baseTint(p, fx, tm);
+				drawLayer(p, tex, mode, tint, sc, env0(p), true, fx != null ? fx.litColor(0, tm[1], p.litColor()) : p.litColor());
 				if (fx != null && !fx.layers().isEmpty()) {
 					glDepthFunc(GL_LEQUAL);
 					for (MaterialFx.Layer l : fx.layers()) {
 						RenderModel.Blend lb = l.blend() == RenderModel.Blend.OPAQUE || l.blend() == RenderModel.Blend.CUTOUT
 								? RenderModel.Blend.ALPHA : l.blend();
-						drawLayer(p, fx.frame(l, ft), lb, l.tint(), fx.uv(l.index(), ft), l.env() && p.lit(), false, l.litColor());
+						drawLayer(p, fx.frame(l, ft), lb, fx.tint(l.index(), tm[1], l.tint(), l.texture() == null), fx.uv(l.index(), ft),
+								l.env() && p.lit(), false, fx.litColor(l.index(), tm[1], l.litColor()));
 					}
 					glDepthFunc(GL_LESS);
 				}
@@ -181,34 +179,32 @@ public final class Renderer implements AutoCloseable {
 					continue;
 				}
 				MaterialFx fx = p.fx();
-				float ft = partTime(fx);
+				float[] tm = MaterialFx.times(partTime(fx));
+				float ft = tm[0];
 				Texture tex = fx == null ? p.texture() : fx.frame(p.texture(), ft);
 				float[] sc = fx == null ? null : fx.uv(0, ft);
-				float[] tint = p.tint();
-				if (fx != null && fx.anim() != null) {
-					tint = tint.clone();
-					tint[3] *= fx.opacity(ft, 1f);
-				}
+				float[] tint = baseTint(p, fx, tm);
 				if (b == RenderModel.Blend.CUTOUT) {
 					if (pass == 0) {
 						basic.set("uAlphaRef", 0.75f);
-						drawLayer(p, tex, RenderModel.Blend.OPAQUE, tint, sc, env0(p), true, p.litColor());
+						drawLayer(p, tex, RenderModel.Blend.OPAQUE, tint, sc, env0(p), true, fx != null ? fx.litColor(0, tm[1], p.litColor()) : p.litColor());
 						basic.set("uAlphaRef", 0f);
 					} else {
 						basic.set("uAlphaMax", 0.75f);
-						drawLayer(p, tex, RenderModel.Blend.ALPHA, tint, sc, env0(p), true, p.litColor());
+						drawLayer(p, tex, RenderModel.Blend.ALPHA, tint, sc, env0(p), true, fx != null ? fx.litColor(0, tm[1], p.litColor()) : p.litColor());
 						basic.set("uAlphaMax", 0f);
 						continue;   // 레이어는 패스 0 에서 이미 그렸다
 					}
 				} else {
-					drawLayer(p, tex, b, tint, sc, env0(p), true, p.litColor());
+					drawLayer(p, tex, b, tint, sc, env0(p), true, fx != null ? fx.litColor(0, tm[1], p.litColor()) : p.litColor());
 				}
 				if (fx != null && !fx.layers().isEmpty()) {
 					glDepthFunc(GL_LEQUAL);
 					for (MaterialFx.Layer l : fx.layers()) {
 						RenderModel.Blend lb = l.blend() == RenderModel.Blend.OPAQUE || l.blend() == RenderModel.Blend.CUTOUT
 								? RenderModel.Blend.ALPHA : l.blend();
-						drawLayer(p, fx.frame(l, ft), lb, l.tint(), fx.uv(l.index(), ft), l.env() && p.lit(), false, l.litColor());
+						drawLayer(p, fx.frame(l, ft), lb, fx.tint(l.index(), tm[1], l.tint(), l.texture() == null), fx.uv(l.index(), ft),
+								l.env() && p.lit(), false, fx.litColor(l.index(), tm[1], l.litColor()));
 					}
 					glDepthFunc(GL_LESS);
 				}
@@ -218,6 +214,19 @@ public final class Renderer implements AutoCloseable {
 		basic.set("uUvOffset", 0f, 0f);
 		basic.set("uFogAdd", 0);
 		basic.set("uEnvUv", 0);
+	}
+
+	/**
+	 * 첫 레이어 색 배율 = 빌드 때 색에 머티리얼 ANM 색 트랙 (레이어 0 rgba · 헤더 rgb, {@link MaterialFx#tint}) 과 불투명도 (hdr8) 를 건 것.
+	 * @param tm {@link MaterialFx#times} (프레임·불투명도 시간, 색 시간)
+	 */
+	private static float[] baseTint(RenderModel.Part p, MaterialFx fx, float[] tm) {
+		float[] tint = p.tint();
+		if (fx != null && fx.anim() != null) {
+			tint = fx.tint(0, tm[1], tint, p.texture() == null).clone();
+			tint[3] *= fx.opacity(tm[0], 1f);
+		}
+		return tint;
 	}
 
 	/** 첫 레이어 환경맵 (VU 플래그 2, 법선 있는 파트) — {@link MaterialFx#env0}. */

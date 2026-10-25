@@ -30,6 +30,8 @@ public final class SceneNav {
 
 	/** 원작 과제 진행 이벤트 (CSM 0x215928: a0 = 0x3FF). */
 	public static final int EVENT_TASK = 1023;
+	/** -Dgow.debug.task: 과제 진행 1023 기록 (크랭크·레버·CSM) [엔진 전용]. */
+	private static final boolean DEBUG_TASK = System.getProperty("gow.debug.task") != null;
 	/** PushPull 붙잡기 / 놓기 (PAND05B pBoxPand05B-EventAttach/Detach). */
 	public static final int EVENT_ATTACH = 1048, EVENT_DETACH = 1049;
 	/**
@@ -82,6 +84,10 @@ public final class SceneNav {
 		 * (예 PAND01A AxeAlcWall-CamSensor1: 이벤트 1037 카메라 AltCam43 등이면 goaxealcwall 숨김, 43 §13.8).
 		 */
 		default void neighbourVisible(List<String> objects, boolean show) {
+		}
+
+		/** 이웃 레벨 스크립트 Animator 가 이웃 GO 를 틀었다 — 그 GO act 의 채널 이미터 (먼지·불꽃) 도 돌린다 (원작은 슬롯과 무관하게 GO 애니가 이미터를 몬다). */
+		default void neighbourAnimated(List<String> objects) {
 		}
 
 		/**
@@ -176,6 +182,9 @@ public final class SceneNav {
 			@Override
 			public void taskProgress(Interactables.Item it, devple.gow.engine.nav.TaskProgress.Event e) {
 				// 원작 0x215928 / 0x2118E8: 1023 (%, 과제 id, 재생 속도 × 100)
+				if (DEBUG_TASK) {
+					System.out.printf("1023 %s: %d %% id %d 속도 %d%n", it.owner, e.percent(), e.taskId(), e.speed100());
+				}
 				world.postEvent(EVENT_TASK, e.percent(), e.taskId(), e.speed100(), world.player());
 			}
 
@@ -514,6 +523,7 @@ public final class SceneNav {
 			@Override
 			public void animate(ScriptEntity source, List<String> objects, String anim) {
 				applyAnimator(neighbour, neighbourPlatforms, source, objects, anim);
+				host.neighbourAnimated(objects);
 			}
 
 			@Override
@@ -543,6 +553,9 @@ public final class SceneNav {
 						}
 						if (values.length > 3 && values[3] != 0) {
 							it.noCollision = values[3] == 2;
+						}
+						if (values.length > 9 && values[9] != 0) {
+							it.behaviourOff = values[9] == 2; // 슬롯 16: 비헤이비어 (BhvrServer 0x17) 끔 (43 §33)
 						}
 					}
 				}

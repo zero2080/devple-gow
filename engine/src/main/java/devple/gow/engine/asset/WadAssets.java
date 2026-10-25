@@ -521,7 +521,11 @@ public final class WadAssets implements AutoCloseable {
 		if (anim == null && frames == null && layers.isEmpty() && !env0) {
 			return null;
 		}
-		return new MaterialFx(frames, anim, layers, env0);
+		float[][] rgba = new float[mat.layers().size()][];
+		for (int i = 0; i < rgba.length; i++) {
+			rgba[i] = mat.layers().get(i).rgba().clone();
+		}
+		return new MaterialFx(frames, anim, layers, env0, mat.color().clone(), rgba); // 색 트랙 기본값 (헤더 rgb · 레이어 rgba, 43 §33)
 	}
 
 	@Override

@@ -64,6 +64,8 @@ public final class AutoPlay {
 	private int teleports, visited, deaths, vetoes;
 	/** 영웅 붉은 오브 수 (GameScene 이 매 틱 넣음, 기록용). */
 	public int redOrbs;
+	/** 영웅 정면 yaw (GameScene 이 매 틱 넣음) — 경로 단계 crank: 가 스틱을 영웅 정면으로 민다. */
+	public float heroYaw;
 	/** 영웅 MP (로그용, &lt; 0 = 모름). */
 	public float mp = -1;
 	/** 잡기를 기다리는 소품이 가까이 있음 (GameScene, ATHN01F 침대 쌍둥이): 목표에서 R2 대신 ○ (GRAB → MAIXPTBEDMOUNT). */
@@ -259,6 +261,7 @@ public final class AutoPlay {
 	 *   up:초              카메라와 무관하게 스틱 위 (사다리 오르기)
 	 *   stick:초:x,y[:버튼] 카메라와 무관한 스틱 값 (벽에서 뒤로 점프 = 0,-1:CROSS), 버튼은 단계 첫 프레임에 한 번
 	 *   mash:초            R2 연타 (들어 올리는 문 TAndF)
+	 *   crank:초:fx,fz     손잡이 쪽으로 돌아 R2 를 누른 채 스틱을 영웅 정면으로 (손잡이를 밀며 둘레를 도는 Type 1 크랭크, PAND00B 문 크랭크)
 	 *   jump:초:fx,fz      첫 프레임 × + (fx, fz) 쪽으로 스틱 (벽에 뛰어 붙기)
 	 *   post:번호[:인자0]  스크립트 전역 이벤트 (보낸 쪽 = 영웅)
 	 *   cam:이름           CMV 질의 끄고 카메라 요청 (Internal 0x9 false + 0x8), "cam:" = 질의 다시 켬
@@ -333,6 +336,18 @@ public final class AutoPlay {
 			}
 			case "mash" -> {
 				return routeNext(routeTime > Float.parseFloat(a[0]), bot.press((int) (routeTime / 0.075f) % 2 == 0 ? PadButton.USE : null));
+			}
+			case "crank" -> {
+				// crank:초:fx,fz — 손잡이 쪽으로 돌아서 R2 를 누르고 (0.25 초) 누른 채 스틱을 영웅 정면으로 (손잡이를 밀며 크랭크 둘레를 도는 Type 1
+				// 크랭크: 고정점을 향한 스틱은 손잡이 축과 직각이 되어 입력이 0 이다 — 원작 입력 0x2117E0 = 이동 방향 · 손잡이 −Z)
+				if (routeTime < 0.25f) {
+					return bot.hold(null, hero, xz(a[1], hero), null, camYaw, 0.2f);
+				}
+				if (routeTime < 0.5f) {
+					return bot.hold(PadButton.USE, hero, null, null, camYaw);
+				}
+				float[] f = {hero.x - (float) Math.sin(heroYaw) * 100f, hero.y, hero.z - (float) Math.cos(heroYaw) * 100f};
+				return routeNext(routeTime > Float.parseFloat(a[0]), bot.hold(PadButton.USE, hero, f, null, camYaw));
 			}
 			case "post" -> {
 				// post:번호[:인자0] — 스크립트 전역 이벤트 (보낸 쪽 = 영웅; 예 post:501:a06Mp03 = 동영상 끝) [엔진 전용: 앞 퍼즐을 건너뛸 때]

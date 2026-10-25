@@ -38,6 +38,8 @@ public final class ParticleSystem implements AutoCloseable {
 		/** 카메라를 따라가는 생성 상자 (비/눈): true 면 pos 를 무시하고 카메라 주변에 만든다. */
 		public boolean followCamera;
 		public boolean active = true;
+		/** SCR 부품이 스크립트 Vis 슬롯 16 으로 꺼짐 (SCR_Weather): 만들지도 그리지도 않는다 ({@link LevelFx#setScriptsOff}). */
+		public boolean scriptOff;
 		/** 레벨 배치 이미터의 소유 인스턴스 (소문자, 가시 칸 컨텍스트로 끈다 — {@link LevelFx#setContextHidden}). null = 없음. */
 		public String owner;
 		/**
@@ -199,7 +201,7 @@ public final class ParticleSystem implements AutoCloseable {
 		dt = Math.min(dt, 0.1f);
 		for (Emitter e : emitters) {
 			updateSpace(e);
-			if (!e.active) {
+			if (!e.active || e.scriptOff && e.weather == null) {
 				continue;
 			}
 			if (e.weather != null) {
@@ -294,7 +296,7 @@ public final class ParticleSystem implements AutoCloseable {
 		px[i] = c.x + wrap1(px[i] + mx - c.x, w.half);
 		py[i] = c.y + wrap1(py[i] + my - c.y, w.half);
 		pz[i] = c.z + wrap1(pz[i] + mz - c.z, w.half);
-		age[i] = w.inside(px[i], py[i], pz[i]) ? w.age : -1;
+		age[i] = !e.scriptOff && w.inside(px[i], py[i], pz[i]) ? w.age : -1; // SCR_Weather 가 꺼지면 (Vis 슬롯 16) 그리지 않음
 		p0x[i] = px[i];
 		p0y[i] = py[i];
 		p0z[i] = pz[i];

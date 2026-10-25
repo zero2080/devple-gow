@@ -205,6 +205,46 @@ class SceneFogTest {
 		}
 	}
 
+	/**
+	 * 안개 GO 가 하나도 걸리지 않은 프레임은 안개가 없다 (43 §33): 안개 설정 0x125970 이 관리자 +0x84 에 프레임 번호 0x3305D8 을 적고, 렌더 0x1281C8 은 +0x84 가
+	 * 지금 프레임이 아니면 뷰포트 +0x3A8 = 524287 로 두고 돌아간다. PAND00B 모래 폭풍 층 안개 gofog (CXT_bvfog) 는 크랭크 단 (칸 2) 에서만 켜지고 신전 입구
+	 * 홀 (칸 1 · 3: bvfog 끔) 에서는 없다 — 영상 3520–3600 의 맑은 홀. 예전 엔진은 이전 안개를 남겨 홀이 모래 안개에 덮였다.
+	 */
+	@Test
+	void noFogWhenNoFogObjectAppliedThisFrame() throws Exception {
+		Elf e = exe();
+		// 0x125A24: lw v0, 0x5d8(v0) (프레임 번호) → 0x125A2C: sw v0, 0x84(s0)
+		assertTrue(at(e, 0x125a24).text().contains("0x5d8("), at(e, 0x125a24).text());
+		assertEquals("sw", at(e, 0x125a2c).mnem());
+		assertTrue(at(e, 0x125a2c).ops().contains("0x84(s0)"), at(e, 0x125a2c).text());
+		// SCR_Fog 적용 0x20D428 · SCR_LayeredFog 적용 0x20D6A8 이 둘 다 0x125970 을 부른다
+		call(e, 0x20d428, 0x125970);
+		call(e, 0x20d6a8, 0x125970);
+		// 렌더 0x1281C8: s2 = 환경 +0x110 (안개 관리자), +0x84 와 프레임 번호가 같으면 0x128254 (안개), 아니면 +0x3A8 = 524287 · 끝 0x1297E0
+		assertTrue(at(e, 0x128214).text().contains("0x5d8("), at(e, 0x128214).text());
+		assertTrue(at(e, 0x128218).ops().contains("0x84(s2)"), at(e, 0x128218).text());
+		R5900.Insn b = at(e, 0x12821c);
+		assertEquals("beq", b.mnem());
+		assertEquals(0x128254, b.target());
+		assertEquals(524287f, Float.intBitsToFloat(at(e, 0x128224).imm() | at(e, 0x128228).imm() & 0xffff)); // lui 0x48ff · ori 0xffe0
+		assertTrue(at(e, 0x128248).text().contains("0x3a8("), at(e, 0x128248).text());
+		assertEquals(0x1297e0, at(e, 0x12824c).target());
+
+		Path p = rom().resolve("PAND00B.WAD");
+		devple.gow.tools.level.LevelData d = new devple.gow.tools.level.LevelData(wad("PAND00B"));
+		FxEnvironment env = new FxEnvironment(new devple.gow.engine.asset.WadAssets(p), d);
+		org.joml.Vector3f crank = new org.joml.Vector3f(1508, 60, 1233), hall = new org.joml.Vector3f(800, 80, 1232);
+		env.update(1 / 60f, crank);
+		assertTrue(env.fogActive(), "크랭크 단 (칸 2 가 bvfog 켬): 모래 안개");
+		assertTrue(env.activeFog().contains("gofog"), env.activeFog());
+		env.update(1 / 60f, hall);
+		assertFalse(env.selectFogAt(hall), "홀 (칸 1 · 3 은 bvfog 끔)");
+		assertFalse(env.fogActive(), "걸린 안개가 없으면 안개 없음 (이전 안개를 남기지 않는다)");
+		assertEquals(-1f, env.backgroundFactor(), "배경 안개도 없음");
+		env.update(1 / 60f, crank);
+		assertTrue(env.fogActive(), "다시 크랭크 단: 안개");
+	}
+
 	@Test
 	void sharedFogSourceIsIncluded() {
 		for (String s : new String[]{"basic.frag", "particle.frag", "lensflare.frag"}) {

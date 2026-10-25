@@ -350,6 +350,11 @@ public final class AnimatedModel implements AutoCloseable {
 						ft = mt;
 					}
 				}
+				float ct = Float.isNaN(ft) ? -1f : ft; // 색 트랙 시간 (아직 틀지 않은 0x42 = NaN → 걸지 않음, 43 §33)
+				ft = Float.isNaN(ft) ? 0f : ft;
+				if (p.fx() != null && p.matAnim() != null) { // 색 트랙 (레이어 0 rgba — 첫 레이어 색 = 레이어 rgba 그대로)
+					t = devple.gow.engine.fx.MaterialFx.colorTint(p.matAnim(), p.fx().header(), p.fx().layerRgba(), 0, ct, t, false);
+				}
 				if (ft >= 0 && p.matAnim() != null) {
 					float[] uv = p.matAnim().uv(0, ft);
 					if (uv != null) {
@@ -360,7 +365,7 @@ public final class AnimatedModel implements AutoCloseable {
 				}
 				shader.set("uTint", new org.joml.Vector4f(t[0] * colorScale[0], t[1] * colorScale[1], t[2] * colorScale[2], t[3] * op));
 				// 동적 라이트 경로: M = 머티리얼 색 × 물체 색 (qw 76 = 0x154410 의 헤더 × 레이어 × 물체 +0xB0, 47 §3.1)
-				float[] lc = p.litColor();
+				float[] lc = p.fx() != null && p.matAnim() == p.fx().anim() ? p.fx().litColor(0, ct, p.litColor()) : p.litColor();
 				shader.set("uLgtMat", lc[0] * colorScale[0], lc[1] * colorScale[1], lc[2] * colorScale[2]);
 				shader.set("uLgtAdd", lc[3], lc[4], lc[5]);
 				// 노멀맵 (원작에 없음, 44 문서): 첫 레이어 텍스처, 불투명·알파 블렌드만 (환경맵 첫 레이어 제외 — Renderer 와 같음)
@@ -433,7 +438,7 @@ public final class AnimatedModel implements AutoCloseable {
 			Texture tex = fx.frame(l, Math.max(ft, 0f));
 			(tex != null ? tex : white).bind(0);
 			shader.set("uUseTex", tex != null ? 1 : 0);
-			float[] t = l.tint();
+			float[] t = fx.tint(l.index(), ft, l.tint(), l.texture() == null); // 레이어 색 트랙 (43 §33)
 			shader.set("uTint", new org.joml.Vector4f(t[0] * colorScale[0], t[1] * colorScale[1], t[2] * colorScale[2], t[3]));
 			float[] lc = l.litColor();
 			shader.set("uLgtMat", lc[0] * colorScale[0], lc[1] * colorScale[1], lc[2] * colorScale[2]);

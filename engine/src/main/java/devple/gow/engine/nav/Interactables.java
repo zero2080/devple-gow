@@ -84,10 +84,16 @@ public final class Interactables {
 		 * "예" (MenuYes) → CDsOn (Delay 2 초) 뒤에야 R2 로 잡힌다 — 전에는 R2 한 번에 해치를 잡고 질문이 함께 떴다 (43 문서 §18).
 		 */
 		public boolean noCollision;
+		/**
+		 * 스크립트 Vis 슬롯 16 = 2 로 비헤이비어 (BhvrServer 0x17 — PushPull · CSM · TAndF) 가 꺼짐 — 잡을 수 없다. 원작 이펙터 0x1ABD24 – 0x1ABD4C 가
+		 * 슬롯 16 값을 타입 0x17 · 0x4 부품에 걸고 (0x1B1398, 끈 부품은 관리자에서 빠진다) [확실: 서버 타입 Servers_Create 0x17D218]. 데이터: ATHN01A
+		 * trapDoorCSM VisOffInit / VisOn, ATHN02B HarpoonGun-VisOff, PAND04D NewCranks, PAND04E MagicalMpegLever-LeverOff (43 §33).
+		 */
+		public boolean behaviourOff;
 
-		/** R2 로 잡을 수 있는 상태 (숨김·충돌 끔 아님). */
+		/** R2 로 잡을 수 있는 상태 (숨김·충돌 끔·비헤이비어 끔 아님). */
 		public boolean usable() {
-			return !hidden && !noCollision;
+			return !hidden && !noCollision && !behaviourOff;
 		}
 		/**
 		 * "Show R2" (#ca686863, 값의 bit 0): 가까이 서면 R2 안내 (슬롯 0, 0x1DC3F8 → 0x21DA50(0, 14)), TAndF 를 잡은 동안 R2 연타 안내

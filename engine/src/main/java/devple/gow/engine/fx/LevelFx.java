@@ -81,6 +81,7 @@ public final class LevelFx implements AutoCloseable {
 			Weather.Built b = Weather.build(w, assets, o, this::permk);
 			ParticleSystem.Emitter em = particles.add(b.def(), o == null ? 0 : o[0], o == null ? 0 : o[1], o == null ? 0 : o[2]);
 			em.followCamera = true;
+			weatherOwners.put(em, w.owner());
 			// 원작 0x21CF80: 정육면체 중심 = 카메라 + 시선·(셀×8 − near)
 			em.ahead = Weather.cell(w.type()) * 8 - Weather.NEAR;
 			em.weather = b.sim();
@@ -129,6 +130,23 @@ public final class LevelFx implements AutoCloseable {
 
 	public FxEnvironment env() {
 		return env;
+	}
+
+	/** SCR_Weather 이미터 → 소유 GO (스크립트 Vis 슬롯 16 으로 끌 수 있다). */
+	private final java.util.Map<ParticleSystem.Emitter, String> weatherOwners = new java.util.LinkedHashMap<>();
+	private java.util.function.Predicate<String> scriptsOff;
+
+	/**
+	 * 이 레벨 스크립트 세계의 Vis 슬롯 16 (SCR 부품 켬/끔) 상태 (GameScene 이 매 프레임, 두 슬롯 각자의 세계): 꺼진 SCR_Fog / LayeredFog 는 안개 고르기에서
+	 * 빠지고 ({@link FxEnvironment#setScriptsOff}), 꺼진 SCR_Weather 는 그리지 않는다 [확실: 0x1ABD24 → 0x1B1398 타입 4, 날씨 처리도 같은 SCR 부품] —
+	 * 예 PAND00C Ring3Plankton-Off (생성 · 물속 아닌 카메라) / On (43 §33).
+	 */
+	public void setScriptsOff(java.util.function.Predicate<String> p) {
+		scriptsOff = p;
+		env.setScriptsOff(p);
+		for (java.util.Map.Entry<ParticleSystem.Emitter, String> e : weatherOwners.entrySet()) {
+			e.getKey().scriptOff = p != null && p.test(e.getValue());
+		}
 	}
 
 	public boolean hidden(LevelScene.Instance i) {

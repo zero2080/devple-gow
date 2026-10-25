@@ -335,6 +335,8 @@ public final class Platforms {
 		boolean playing;
 		boolean loop;
 		boolean pingPong;
+		/** 스크립트가 한 번이라도 틀었는가 — 아니면 0x42 (스크립트용 한 번) 재질은 색 트랙을 걸지 않는다 ({@code MaterialFx#times}, 43 §33). */
+		boolean started;
 
 		MatClock(String owner, String material, float duration) {
 			this.owner = owner;
@@ -403,7 +405,8 @@ public final class Platforms {
 		}
 		java.util.Map<String, java.util.Map<String, Float>> out = new java.util.HashMap<>();
 		for (MatClock c : matClocks) {
-			out.computeIfAbsent(c.owner, k -> new java.util.HashMap<>()).put(c.material, c.time);
+			// 아직 틀지 않은 0x42 재질 = NaN (색 트랙 없이 MAT 기본 색, 프레임·UV·불투명도는 시간 0 — MaterialFx.times)
+			out.computeIfAbsent(c.owner, k -> new java.util.HashMap<>()).put(c.material, c.loop || c.started ? c.time : Float.NaN);
 		}
 		return out;
 	}
@@ -415,9 +418,13 @@ public final class Platforms {
 	/** "$" 재질 애니 ({@link #play} 의 '$' 갈래, 모드 규칙은 관절 애니와 같다). */
 	private boolean playMaterial(String owner, String anim, int mode, float speed, float start) {
 		MatClock c = matClock(owner, materialName(anim), true);
+		if (System.getProperty("gow.debug.mat") != null) {
+			System.out.printf("재질 애니 %s %s 모드 0x%x → %s%n", owner, materialName(anim), mode, c == null ? "재질/애니 없음" : "길이 " + c.duration + " 반복 " + c.loop);
+		}
 		if (c == null) {
 			return false;
 		}
+		c.started |= mode != 0x10;
 		if (mode == 0x10 || mode == 0x11) {
 			c.playing = mode == 0x11;
 			return true;
@@ -583,6 +590,7 @@ public final class Platforms {
 					c.playing = s.playing();
 					c.loop = s.loop();
 					c.pingPong = s.pingPong();
+					c.started = s.playing() || s.time() > 0; // 튼 적 있는 재질 (기억에 없는 값 — 돌았거나 시간이 지났으면)
 				}
 				continue;
 			}

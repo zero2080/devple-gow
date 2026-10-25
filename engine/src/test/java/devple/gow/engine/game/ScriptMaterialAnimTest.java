@@ -50,11 +50,13 @@ class ScriptMaterialAnimTest {
 		Platforms ps = Platforms.of(lv, SceneNav.animatorOwners(w));
 		SceneNav.registerMaterialAnimators(w, ps);
 		assertNotNull(head(ps), "MAtalkingHead01 의 '$' Animator 4 개 → 재질 시계");
-		assertEquals(Map.of("MAT_doorSub", 0f, "MAT_M01DoorFade1", 0f, "MAT_M01AphroFront", 0f, "MAT_SubScrollTex1", 0f), head(ps));
+		// 아직 틀지 않은 0x42 재질 = NaN (렌더: 프레임·UV·불투명도는 시간 0, 색 트랙은 걸지 않음 — MaterialFx.times, 43 §33), 0x41 은 시간
+		assertEquals(Map.of("MAT_doorSub", Float.NaN, "MAT_M01DoorFade1", 0f, "MAT_M01AphroFront", Float.NaN, "MAT_SubScrollTex1", Float.NaN), head(ps));
 
 		// 생성 상태: act 0x42 (doorSub) 는 시간 0 에 서 있고, 0x41 (M01DoorFade1 불꽃 흐름) 은 반복
 		run(ps, 10);
-		assertEquals(0f, head(ps).get("MAT_doorSub"), "0x42 = 스크립트가 틀 때까지 (예전 렌더는 레벨 시간으로 저절로 재생)");
+		assertTrue(Float.isNaN(head(ps).get("MAT_doorSub")), "0x42 = 스크립트가 틀 때까지 (예전 렌더는 레벨 시간으로 저절로 재생)");
+		assertArrayEquals(new float[]{0f, -1f}, devple.gow.engine.fx.MaterialFx.times(head(ps).get("MAT_doorSub")), "불투명도 시간 0 (p28 0.5), 색 트랙 끔");
 		float loop = head(ps).get("MAT_M01DoorFade1");
 		assertTrue(loop > 0 && loop < 7.67f, "0x41 반복 " + loop);
 

@@ -270,6 +270,23 @@ public final class ScriptWorld {
 		return s != null ? s.clone() : null;
 	}
 
+	/**
+	 * Vis 슬롯 16 (Attr17) 의 마지막 값이 2 (끔) 인가 — 원작 이펙터 0x1ABD24 – 0x1ABD4C 는 그 값을 오브젝트의 BhvrServer (0x17) · ScriptServer (0x4)
+	 * 부품에 건다 (0x1B1398, 서버 타입 = Servers_Create 0x17D218) [확실]. SCR_Fog / SCR_LayeredFog / SCR_Weather … 가 꺼지면 갱신하지 않는다 (0x2467A8: +0x4 비트 4).
+	 */
+	public boolean scriptsOff(String object) {
+		int[] s = visState.get(object);
+		if (s == null) {
+			for (Map.Entry<String, int[]> e : visState.entrySet()) {
+				if (e.getKey().equalsIgnoreCase(object)) {
+					s = e.getValue();
+					break;
+				}
+			}
+		}
+		return s != null && s.length > 9 && s[9] == 2;
+	}
+
 	/** 첫 Start 엔티티 (플레이어 이름 / 그룹 / 시작 위치). */
 	public ScriptEntity startEntity() {
 		return entities.stream().filter(e -> e.type() == 9).findFirst().orElse(null);

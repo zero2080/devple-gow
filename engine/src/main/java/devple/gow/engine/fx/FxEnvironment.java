@@ -106,14 +106,17 @@ public final class FxEnvironment {
 	/**
 	 * 시간 진행 + 활성 안개 선택 (43 문서 §11): 원작 SCR_Fog / SCR_LayeredFog 갱신 0x20D220 은 소유 GO 의 컨텍스트가 CXT_default 이거나
 	 * 카메라 위치를 포함하는 가시 칸이 그 컨텍스트를 켤 때만 (0x20D0D8 → 0x16DE18) 안개를 걸고, 한 프레임에 하나만 건다 (프레임 번호 0x29F324).
-	 * 아무것도 걸리지 않은 프레임은 이전 안개가 남는다 (처음은 첫 안개). 여럿이면 컨텍스트 소속 목록 순서로 앞의 것 — CXT_default 안개는 다른 안개가 꺼진 곳에서만 [추정: 갱신 순서].
+	 * 여럿이면 컨텍스트 소속 목록 순서로 앞의 것 — CXT_default 안개는 다른 안개가 꺼진 곳에서만 [추정: 갱신 순서].
+	 * <b>아무것도 걸리지 않은 프레임은 안개가 없다</b> [확실]: 안개 설정 0x125970 이 안개 관리자 +0x84 에 그 프레임 번호 (0x3305D8) 를 적고, 렌더
+	 * 0x1281C8 (0x128210 – 0x128250) 은 +0x84 가 지금 프레임이 아니면 뷰포트 +0x3A8 = 524287.0 · +0x39C = 1 로 두고 안개를 그리지 않는다 (0x125BE0 도 같은
+	 * 검사). 예전 엔진은 이전 안개를 남겨 PAND00B 모래 폭풍 층 안개 (gofog, CXT_bvfog) 가 신전 입구 홀 안까지 덮었다 (영상 3520–3600 은 맑은 홀, 43 §33).
 	 */
 	public void update(float dt, org.joml.Vector3f eye) {
 		time += dt;
 		selectFog(eye);
 	}
 
-	/** 이번 프레임 눈 위치로 안개를 고른다 ({@link #update} 의 고르기만). @return 컨텍스트가 켜진 안개가 있었는지 (없으면 이전 안개가 남음) */
+	/** 이번 프레임 눈 위치로 안개를 고른다 ({@link #update} 의 고르기만). @return 컨텍스트가 켜진 안개가 있었는지 (없으면 이 프레임 안개 없음) */
 	public boolean selectFogAt(org.joml.Vector3f eye) {
 		return selectFog(eye);
 	}
@@ -144,28 +147,18 @@ public final class FxEnvironment {
 		return selectFog(eye);
 	}
 
-	/** @return 컨텍스트가 켜진 안개가 있었는지 (하나뿐인 안개도 켜졌는지 본다 — 두 슬롯 고르기용) */
+	/** @return 컨텍스트가 켜진 안개가 있었는지 (없으면 안개 없음 — 두 슬롯 고르기용) */
 	private boolean selectFog(org.joml.Vector3f eye) {
 		if (FOG_NEAREST) {
 			nearestFog(eye);
 			return fog != null || layered != null;
-		}
-		if (params.fogs.size() + params.layeredFogs.size() < 2) {
-			// 하나뿐이면 켜질 때마다 같은 안개 — 이전 안개 유지와 같다 (값은 그대로, 켜졌는지만)
-			for (EnvParams.Fog f : params.fogs) {
-				return data.contextActive(f.owner(), eye.x, eye.y, eye.z);
-			}
-			for (EnvParams.LayeredFog f : params.layeredFogs) {
-				return data.contextActive(f.owner(), eye.x, eye.y, eye.z);
-			}
-			return false;
 		}
 		int best = Integer.MAX_VALUE;
 		EnvParams.Fog bf = null;
 		EnvParams.LayeredFog bl = null;
 		for (EnvParams.Fog f : params.fogs) {
 			int o = ownerOrder.getOrDefault(f.owner().toLowerCase(Locale.ROOT), Integer.MAX_VALUE - 1);
-			if (o < best && data.contextActive(f.owner(), eye.x, eye.y, eye.z)) {
+			if (o < best && scriptOn(f.owner()) && data.contextActive(f.owner(), eye.x, eye.y, eye.z)) {
 				best = o;
 				bf = f;
 				bl = null;
@@ -173,18 +166,34 @@ public final class FxEnvironment {
 		}
 		for (EnvParams.LayeredFog f : params.layeredFogs) {
 			int o = ownerOrder.getOrDefault(f.owner().toLowerCase(Locale.ROOT), Integer.MAX_VALUE - 1);
-			if (o < best && data.contextActive(f.owner(), eye.x, eye.y, eye.z)) {
+			if (o < best && scriptOn(f.owner()) && data.contextActive(f.owner(), eye.x, eye.y, eye.z)) {
 				best = o;
 				bf = null;
 				bl = f;
 			}
 		}
-		if (bf != null || bl != null) {
-			fog = bf;
-			layered = bl;
-			return true;
-		}
-		return false;
+		// 걸린 안개가 없으면 이 프레임은 안개 없음 (0x128210: 관리자 +0x84 ≠ 지금 프레임 → 그리지 않음) [확실]
+		fog = bf;
+		layered = bl;
+		return bf != null || bl != null;
+	}
+
+	/**
+	 * 스크립트 Vis 슬롯 16 (엔진 이름 Attr17) 으로 SCR 부품이 꺼진 소유 GO. 원작 Vis 이펙터 0x1ABD24 – 0x1ABD4C 가 슬롯 16 값을 부품 타입
+	 * 0x17 (BhvrServer) · 0x4 (ScriptServer — SCR_Fog/LayeredFog/Weather/Water …) 에 걸고 (0x1B1398: 1 켬 = 관리자 vtable +0x30, 2 끔 = +0x40,
+	 * 부품 +0x4 비트 4), SCR_Fog 처리 0x2467A8 · SCR_LayeredFog 0x246860 은 그 비트가 없으면 안개 갱신 0x20D220 을 부르지 않는다 [확실: 서버 타입 =
+	 * Servers_Create 0x17D218 (ScriptServer 4, BhvrServer 0x17)]. 예 PAND00C fogTubeL3-FogOff (생성 · 물속 아닌 카메라) / FogOn (물속 카메라),
+	 * fogMainGroup-VisOn1/VisOff1 (43 §33).
+	 */
+	private java.util.function.Predicate<String> scriptsOff;
+
+	/** 소유 GO 이름 → SCR 부품이 꺼졌는가 (그 레벨 스크립트 세계의 마지막 Vis 슬롯 16 값, {@code ScriptWorld#scriptsOff}). null = 모두 켬. */
+	public void setScriptsOff(java.util.function.Predicate<String> p) {
+		scriptsOff = p;
+	}
+
+	private boolean scriptOn(String owner) {
+		return scriptsOff == null || !scriptsOff.test(owner);
 	}
 
 	private void nearestFog(org.joml.Vector3f eye) {

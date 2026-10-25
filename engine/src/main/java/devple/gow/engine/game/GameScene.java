@@ -620,6 +620,9 @@ public final class GameScene implements Scene {
 		if (System.getProperty("gow.redOrbs") != null) { // [엔진 전용] 업그레이드 메뉴 검증: 붉은 오브 지급 (43 §17)
 			hero.player.addRedOrbs(Integer.getInteger("gow.redOrbs", 0));
 		}
+		if (System.getProperty("gow.blades") != null) { // [엔진 전용] 영상 대조: 블레이드 레벨 (0 기반, 영상 메뉴 숫자 − 1 — 판도라 신전 4 = 3, 43 §33)
+			hero.player.level.put(Weapon.BLADES, Math.clamp(Integer.getInteger("gow.blades", 0), 0, Weapon.BLADES.maxLevel));
+		}
 		grab.onSound(n -> session.sound.play(n));
 		// 마법 (35 문서): 대상 = 살아있는 적 전체, 소리 → SoundManager, HUD 선택 마법 아이콘
 		hero.magic.setTargets(() -> enemies.stream().map(Enemy::fighter).filter(f -> !f.dead()).toList());
@@ -1438,6 +1441,11 @@ public final class GameScene implements Scene {
 			}
 
 			@Override
+			public void neighbourAnimated(List<String> objects) {
+				startAnimatorEffects(objects);
+			}
+
+			@Override
 			public void neighbourVisible(List<String> objects, boolean show) {
 				for (String o : objects) {
 					String k = o.toLowerCase(java.util.Locale.ROOT);
@@ -1606,6 +1614,15 @@ public final class GameScene implements Scene {
 				}
 				if (values.length > 3 && values[3] != 0 && nav != null) {
 					nav.setSolid(objects, values[3] == 1); // Attr11_0: 충돌 on/off ("collisionOFF", "DoorCollOff") [추정: 데이터 용례] + R2 잡기 대상
+				}
+				if (values.length > 9 && values[9] != 0 && hero.nav != null) {
+					// 슬롯 16 (Attr17): 비헤이비어 (0x17) · SCR (0x4) 부품 켬/끔 — R1/R2 오브젝트는 잡을 수 없게, SCR_Fog/Weather 는 LevelFx 가 세계 상태로 (43 §33)
+					for (String o : objects) {
+						var it = hero.nav.items().byOwner(o);
+						if (it != null) {
+							it.behaviourOff = values[9] == 2;
+						}
+					}
 				}
 				if (values.length > 4 && values[4] != 0) {
 					if (System.getProperty("gow.trace.vis") != null) {
@@ -3011,6 +3028,15 @@ public final class GameScene implements Scene {
 		devple.gow.engine.fx.EffectSystem fx = magicFx.effects();
 		for (String o : objects) {
 			devple.gow.engine.nav.Platforms.Body b = nav.navWorld.platforms().body(o);
+			boolean other = false;
+			if (b == null && nav.neighbourPlatforms() != null) {
+				// 다른 슬롯 레벨의 Animator (PAND00B 홀에서 R2 로 연 PAND00C 해 문 goentryside: act EntrySide 의 먼지 이미터 둘, 영상 3642–3650 — 43 §33)
+				b = nav.neighbourPlatforms().body(o);
+				other = b != null;
+			}
+			if (other && otherName != null && b.anim() != null && fx.library().resolve(o) == null) {
+				magicFx.addWad(Stages.wad(session.rom, otherName)); // 다른 슬롯 WAD 의 이펙트 GO (처음 한 번 해석, onBreakOther 와 같이)
+			}
 			devple.gow.tools.fx.EffectLibrary.EffectDef def = fx.library().resolve(o);
 			if (b == null || b.anim() == null || def == null || def.emitters().isEmpty()) {
 				continue;
@@ -4089,6 +4115,7 @@ public final class GameScene implements Scene {
 		}
 		if (auto != null) {
 			auto.redOrbs = hero.player.redOrbs;
+			auto.heroYaw = hero.ctl.yaw;
 			if (auto.takeDie()) {
 				hero.player.hp = 0; // 경로 단계 die: (검증) 이번 틱 끝에 사망 → 체크포인트 재시작
 			}
@@ -5205,11 +5232,18 @@ public final class GameScene implements Scene {
 	/**
 	 * 두 슬롯 안개 고르기 (43 §27): 원작 안개 관리자는 하나 — 두 슬롯의 SCR_Fog GO 가 저마다 컨텍스트 (가시 칸) 가 켜졌을 때만 걸고, 한 프레임에 하나 (0x20D220,
 	 * 0x29F324) [확실]. 슬롯 간 갱신 순서는 [미확인] 이라 엔진은: 눈 위치에서 한 레벨 안개만 켜졌으면 그 레벨 것, 둘 다 켜졌으면 지난 프레임 것 그대로, 둘 다
-	 * 꺼졌으면 지난 것 그대로. 다른 슬롯 레벨의 효과 시계는 현재 레벨 것을 따른다 (층 안개 텍스처 흐름). 두 슬롯 지오메트리·하늘·캐릭터·파티클이 모두 같은 안개.
+	 * 꺼졌으면 안개 없음 (0x128210 프레임 번호 검사, {@link devple.gow.engine.fx.FxEnvironment#update} — 43 §33). 다른 슬롯 레벨의 효과 시계는 현재 레벨 것을
+	 * 따른다 (층 안개 텍스처 흐름). 두 슬롯 지오메트리·하늘·캐릭터·파티클이 모두 같은 안개.
 	 * 예전 엔진은 현재 레벨 안개만 (다른 슬롯 지오메트리는 그 레벨 첫 안개, 멈춘 시계) 이라 이음 순간 안개·하늘색이 바뀌었다 (ATHN01A 갑판 → 01B 선창,
 	 * ATHN03A ↔ 03C 의 층 안개 흐름) — 이제는 카메라가 그 레벨 안개 칸에 들어갈 때 바뀐다 (원작처럼 컨텍스트 경계).
 	 */
 	private void selectFogSource(LevelScene os) {
+		// 두 슬롯 각자의 스크립트 세계가 Vis 슬롯 16 으로 끈 SCR 부품 (PAND00C fogTubeL3-FogOff · Ring3Plankton-Off, 43 §33)
+		level.fx().setScriptsOff(world != null ? world::scriptsOff : null);
+		if (os != null) {
+			ScriptWorld nw = nav != null ? nav.neighbour() : null;
+			os.fx().setScriptsOff(nw != null ? nw::scriptsOff : null);
+		}
 		devple.gow.engine.fx.FxEnvironment me = level.fx().env(), oe = os != null ? os.fx().env() : null;
 		boolean ma = me.selectFogAt(cam.eye);
 		boolean oa = oe != null && oe.follow(me, cam.eye);
