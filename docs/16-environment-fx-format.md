@@ -143,7 +143,7 @@ ATHN02B·PAND04AA·PAND04C 는 하늘 2개 (본 + FX). 이름에 sky 가 없는 
 - **본문 없는 인스턴스 SCR_Sky** (2026-10-24, 43 §16) [확실: 0x218920 / 0x218848 디스어셈블]: 생성자·매 프레임 갱신은 본문 (오브젝트 이름) 을 읽지 않고 스크립트의
   **소유 GO** (+0x18) 를 옮기며 그 모델을 층 1 (0x218778 → 0x150738(모델, 1), 렌더 플래그 &= ~0x800 = 동적 조명 끔) 로 둔다. ATHN03A/03AA/03C 의 `goaresanimgroup1`
   (도시 위 거대한 아레스, 템플릿 MDL_AresAnimGroup1 에는 SCR_Sky 가 없다) 이 이 경우 — 엔진 `EnvParams.skyOwners`, `LevelScene.skyNames`. 애니가 있으면 하늘 단계에서
-  매 프레임 스키닝 (관절 0 = 눈, 반복 시작 act = 레벨 시간), 이미터는 하늘 공간 (`GameScene.startSkyEffects`). SCR_AresSky (ATHN03D/03E, 0x2189A8 무작위 act 순환) 는 미구현.
+  매 프레임 스키닝 (관절 0 = 눈, 반복 시작 act = 레벨 시간), 이미터는 하늘 공간 (`GameScene.startSkyEffects`). SCR_AresSky (ATHN03D/03E) 는 §1.7 — 같은 하늘 층 + 무작위 act (`level.AresSkyActs`, 43 §30).
   0x218848 은 모델 부품 (0x330514) 과 **파티클 부품 (0x330524) 도** 층 1 로 둔다 [확실: 부품 목록 둘 / 추정: 0x330524 = 파티클] → 하늘 GO 파티클 (불덩이·재·화톳불) 은 세계보다
   먼저 그려져 세계가 덮는다. 엔진: `EffectSystem.Effect.sky` → 일반 파티클 패스에서 빼고 하늘 단계 끝 (`LevelScene.skyEffects`) 에서 (43 §17.2-5).
 - **두 슬롯**: 하늘 GO 도 가시 칸 컨텍스트 (CXT_bvsky 등) 를 따르므로, 현재 레벨의 칸 밖으로 눈이 나가면 그 레벨 하늘은 숨고 다른 슬롯 레벨의 같은 하늘이 보인다
@@ -227,7 +227,13 @@ PAND01A gowaterholeloc1: 11×15, cell .5 (23×31), REFLENVM, 물방울 20×15 �
   - 데이터 (인스턴스 37 개, 값 (1,0)/(0,1)/(0,0)): 거울 모델 = 반사 바닥 자체 — OLYMP02 `gomirror` (MAT_tnMarblePlainNew00b 알파 블렌드 대리석,
     수평, 가장자리 조각 이탈 1.04), ATHN06B/ATRET01B/OLYMP01 floorReflect, ATHN04A puddle00, PAND01BB/PAND03H mirrorFloor, ATHN03A group2839–2841 (0,1) …
     ATHN07 `sword1` 처럼 평면이 아닌 거울도 있다. 엔진 구현은 31 문서 §8.
-- SCR_AresSky: 객체 {f32 −1, s32 −1}, 갱신 0x2189A8 (2개뿐, 미해석).
+- SCR_AresSky (ATHN03D/03E `goaresanimgroup1`, 본문 0 바이트 — 데이터 2 개) [확실: 0x246BB8 · 0x218968 · 0x25C6B0 · 0x2189A8]:
+  생성 0x218968 = SCR_Sky 와 같은 0x218848 (소유 GO 의 모델·파티클 부품을 층 1, GO 위치 = 원점 (VMOVE vf1, vf0) → 관절 0 이 눈) + 객체 {f32 직전 t = −1, s32 직전 act = −1}.
+  매 프레임 0x25C6B0 → 0x2189A8: t = 재생 항목 시간 최댓값 (0x100C50 → 0x1089D8 항목 +0x8), d = 재생 act 길이 최댓값 (0x100BF0 → 0x108A30 act +0x1C).
+  d ≤ t (1 회 act 끝) 또는 t &lt; 직전 t (반복 act 감김) 이면 act 수 (ANM +0x14, 0x239EC8 = 컨트롤러 +0x1C) ≥ 2 일 때 난수 0x13E6B0 으로 [0, 수) 에서 직전 act 와 다른 것을
+  0x1007C8(컨트롤러, act, 0, 0, 1, 0) 으로 튼다. 직전 t 는 늘 바꾸기 전에 잰 t — 1 회 act 가 끝나 바꾼 다음 프레임은 새 act 시간이 작아 한 번 더 바뀐다.
+  03D/03E 세트: 0 main (0.033 초, 관절 트랙 없음) · 1 aoBAR1a03Hl01 (8.8 초 반복) · 2 Hl02 (7.7) · 3 Hl03 (5.6) · 4 Hl04 (6.1), 인스턴스 시작 act 0.
+  자세 = 눈 기준 (−212, −26, −390) 쯤 (요 +28°, 키 91) — 03E 오메가 광장에서 골짜기 왼쪽 위에 선 불타는 아레스 (PS2 영상 986–987). 엔진 `level.AresSkyActs` (43 §30).
 
 ## 2. 파티클 (FXC_ 이미터 / PTC_ 모양)
 
@@ -455,5 +461,5 @@ PAND01A `PSambLite` .751 회색 .5 / 8000, `PSFirelite*` (.777,.284,0) .75, 반�
 - ~~안개 Z→알파 램프~~, ~~Fog_A ≥ 1 경로~~, ~~층 안개 키 알파·t 눈금~~ (§1.2, §1.3). 남은 것: 0x127918 단계 ③ 의 TEXA 상태 (A8 비트 7), 텍스처 층 안개 0x127240 의 UV 세부.
 - ~~PTC VU1 상수 의미~~, ~~+0x74~~ (읽지 않음), ~~종류 5~~, ~~연산 9/10/13/14~~, ~~0x10/0x20~~ (§2.3–2.4). 남은 것: 연산 6/7 의 주소 공간 (쓰는 PTC 없음), 종류 5 UV 오프셋의 정확한 화소 단위, 레코드 배치 바이트 (+0x8C) 의 4번 이후 속성.
 - ~~FXC 0xD 방출 지오메트리 포맷 (커브)~~ (§2.5). 남은 것: 표면 이미터 (서브타입 3) 의 메시 표면 참조, 커브 퍼짐 원뿔의 축, 노드 헤더 b, 필드 단위.
-- SCR_Water 물방울 원점, 0x0C 플래그; SCR_Mirror a/b; SCR_AresSky; ~~SCR_LensFlare~~ (46) / GhostTrail / RopeSkinned / cloth / ThingOnASpring 본문.
+- SCR_Water 물방울 원점, 0x0C 플래그; SCR_Mirror a/b; ~~SCR_AresSky~~ (§1.7); ~~SCR_LensFlare~~ (46) / GhostTrail / RopeSkinned / cloth / ThingOnASpring 본문.
 - renderFlags bit16 / 0x400, flags2 의미; 한 레벨 여러 SCR_Fog 의 전환 조건 (ESC).

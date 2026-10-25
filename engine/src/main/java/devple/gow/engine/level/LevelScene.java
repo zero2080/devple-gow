@@ -153,9 +153,10 @@ public final class LevelScene implements Scene {
 	 * 반복 act 를 재생하는 하늘 GO (SCR_Sky 소유자 + 시작 act 반복). 원작 0x218848 은 소유 GO 위치를 매 프레임 카메라로 옮기고
 	 * 모델을 층 1 (하늘) 에 두며 동적 조명 플래그 0x800 을 끈다 (0x218778) [확실]. 애니 컴포넌트는 다른 GO 처럼 계속 돈다.
 	 *
-	 * @param off 관절 0 월드 (정적 하늘과 같은 규칙: 이 점이 카메라 눈에 온다)
+	 * @param off  관절 0 월드 (정적 하늘과 같은 규칙: 이 점이 카메라 눈에 온다)
+	 * @param acts SCR_AresSky 무작위 act ({@link AresSkyActs}, ATHN03D/03E) — 있으면 반복 시작 act 대신 이 act·시간으로 그린다. 없으면 null
 	 */
-	private record SkyAmbient(Ambient anim, Vector3f off) {
+	private record SkyAmbient(Ambient anim, Vector3f off, AresSkyActs acts) {
 	}
 
 	private final List<SkyAmbient> skyAmbient = new ArrayList<>();
@@ -171,8 +172,9 @@ public final class LevelScene implements Scene {
 	 * · 던지는 불덩이 FBFemit (관절 23, 19 초쯤 400/초) · 재 ASH* (GameScene.startSkyEffects, 43 §16).
 	 *
 	 * @param act   반복 재생하는 시작 act (없으면 null = 바인드/시작 자세 고정), start = 시작 시간
+	 * @param acts  SCR_AresSky 무작위 act (ATHN03D/03E 아레스) — 이미터도 이 act·시간을 따른다. 없으면 null
 	 */
-	public record SkyGo(String name, Vector3f off, float[] inst, devple.gow.tools.anim.Animation act, float start) {
+	public record SkyGo(String name, Vector3f off, float[] inst, devple.gow.tools.anim.Animation act, float start, AresSkyActs acts) {
 	}
 
 	private final List<SkyGo> skyGos = new ArrayList<>();
@@ -307,6 +309,8 @@ public final class LevelScene implements Scene {
 		envParams = new devple.gow.tools.fx.EnvParams(assets.wad());
 		pending = new ArrayList<>();
 		java.util.Set<String> skyNames = skyNames(envParams);
+		java.util.Set<String> aresNames = new java.util.HashSet<>();
+		envParams.aresSkyOwners.forEach(o -> aresNames.add(o.trim().toLowerCase(Locale.ROOT)));
 		Map<String, int[]> mirrorOwners = Mirrors.owners(envParams);
 		shadowOwners = scriptOwners(envParams, "SCR_Shadow");
 		java.util.Set<String> aiTemplates = aiTemplateObjects(assets.wad());
@@ -355,12 +359,19 @@ public final class LevelScene implements Scene {
 				// ATHN01A nightSky: 관절 0 = (0,448,0), 미니어처 바다면 y=432 → 지평선이 눈높이 바로 아래
 				float[] j0 = p.jointWorld()[0];
 				off.set(j0[12], j0[13], j0[14]);
+				AresSkyActs ares = aresSky(p, aresNames);
 				skyGos.add(new SkyGo(p.instance().name().toLowerCase(Locale.ROOT), new Vector3f(off), p.instance().matrix(),
-						amb != null ? amb.act() : null, amb != null ? amb.start() : 0));
+						amb != null ? amb.act() : null, amb != null ? amb.start() : 0, ares));
+				if (ares != null) {
+					// SCR_AresSky (ATHN03D/03E 거대한 아레스, 시작 act 0 main): act 를 무작위로 바꿔 가며 매 프레임 스키닝 (0x2189A8, AresSkyActs)
+					skyAmbient.add(new SkyAmbient(new Ambient(p.instance().name().toLowerCase(Locale.ROOT), p.object().skeleton(), ares.act(),
+							p.instance().matrix(), 0), new Vector3f(off), ares));
+					continue;
+				}
 				if (amb != null) {
 					// 반복 act 가 있는 하늘 GO (ATHN03A/03AA/03C 거대한 아레스 goaresanimgroup1, act 1 aoBAR1a03Hl09 29.7 초):
 					// 구운 시작 자세 대신 매 프레임 스키닝으로 하늘 단계에 그린다 (renderSkyAmbient)
-					skyAmbient.add(new SkyAmbient(amb, new Vector3f(off)));
+					skyAmbient.add(new SkyAmbient(amb, new Vector3f(off), null));
 					continue;
 				}
 			}
@@ -599,7 +610,30 @@ public final class LevelScene implements Scene {
 				out.add(o.trim().toLowerCase(Locale.ROOT));
 			}
 		}
+		// SCR_AresSky 생성자 0x218968 도 같은 0x218848 (소유 GO 를 층 1 하늘로, 관절 0 = 눈) — ATHN03D/03E goaresanimgroup1 [확실]
+		for (String o : env.aresSkyOwners) {
+			if (o != null && !o.isBlank()) {
+				out.add(o.trim().toLowerCase(Locale.ROOT));
+			}
+		}
 		return out;
+	}
+
+	/**
+	 * SCR_AresSky 소유 하늘 GO 의 무작위 act ({@link AresSkyActs}) — ANM 세트 act 전부, 시작 act = 인스턴스 0x54 (0x1309C0), 씨앗 = 레벨·GO 이름.
+	 * 소유자가 아니거나 ANM·뼈대가 없으면 null.
+	 */
+	private AresSkyActs aresSky(LevelLayout.Placement p, java.util.Set<String> aresNames) {
+		String n = p.instance().name().toLowerCase(Locale.ROOT);
+		if (!aresNames.contains(n) || p.object().skeleton() == null
+				|| p.object().skeleton().size() > devple.gow.engine.asset.AnimatedModel.MAX_JOINTS) {
+			return null;
+		}
+		devple.gow.tools.anim.AnimationSet set = animSet(p);
+		if (set == null || set.all().isEmpty()) {
+			return null;
+		}
+		return new AresSkyActs(set.all(), p.instance().startAct(), p.instance().startTime(), (assets.wad().name() + "/" + n).hashCode());
 	}
 
 	/** 배치가 SCR_Sky 대상인가: 모델 이름(MDL_x)·오브젝트 이름·GO 인스턴스 이름이 SCR_Sky 이름과 같다. */
@@ -1241,6 +1275,10 @@ public final class LevelScene implements Scene {
 	 *
 	 * @param now 애니 하늘의 효과 시간 (다른 슬롯 하늘은 현재 레벨 시간)
 	 */
+	/** -Dgow.debug.sky: SCR_AresSky 하늘 GO 의 act·숨김을 초마다 (엔진 전용). */
+	private static final boolean SKY_DEBUG = System.getProperty("gow.debug.sky") != null;
+	private float skyDebugLast = -1;
+
 	private void renderSkyAmbient(Engine e, Camera cam, float now) {
 		if (skyAmbient.isEmpty() || dbgHidden("sky")) {
 			return;
@@ -1254,11 +1292,26 @@ public final class LevelScene implements Scene {
 		boolean drew = false;
 		for (SkyAmbient s : skyAmbient) {
 			Ambient a = s.anim();
+			if (SKY_DEBUG && s.acts() != null && (int) now != (int) skyDebugLast) {
+				System.out.printf(Locale.ROOT, "[하늘] %s %s act %s t=%.2f 보임 %s 숨김 %s/%s/%s 눈 %s%n", data.layout.wadName, a.key(), s.acts().act().name, s.acts().time(),
+						s.acts().visible(), removed.contains(a.key()), ctxHidden.contains(a.key()), fxHidden(a.key()), cam.eye);
+			}
 			if (removed.contains(a.key()) || ctxHidden.contains(a.key()) || fxHidden(a.key())) {
 				continue;
 			}
+			devple.gow.tools.anim.Animation act = a.act();
 			float t = a.start() + now;
-			float[][] w = skyJoints(a, t, s.off(), cam.eye);
+			boolean loop = true;
+			if (s.acts() != null) { // SCR_AresSky: 무작위로 바뀌는 act·그 act 의 경과 시간 (0x2189A8)
+				s.acts().advanceTo(now);
+				if (!s.acts().visible()) {
+					continue;
+				}
+				act = s.acts().act();
+				t = s.acts().time();
+				loop = act.looping();
+			}
+			float[][] w = skyJoints(a.skeleton(), act, a.inst(), t, loop, s.off(), cam.eye);
 			devple.gow.engine.asset.AnimatedModel m;
 			if (posedModels.containsKey(a.key())) {
 				m = posedModels.get(a.key());
@@ -1272,12 +1325,13 @@ public final class LevelScene implements Scene {
 			if (m == null) {
 				continue;
 			}
-			float len = a.act().duration;
-			m.hiddenJoints = a.act().hiddenJoints(a.skeleton(), ((t % len) + len) % len);
+			float len = act.duration;
+			m.hiddenJoints = act.hiddenJoints(a.skeleton(), len > 0 ? ((t % len) + len) % len : 0);
 			m.draw(cam, e.window().aspect(), tmp.identity(), w, e.renderer().white(), -1f, 1f);
 			m.hiddenJoints = null;
 			drew = true;
 		}
+		skyDebugLast = now;
 		fx.env().setBackground(skinned, false, e.window().height());
 		FxEnvironment.disableFog(skinned);
 		e.renderer().basic().use();
@@ -1289,12 +1343,13 @@ public final class LevelScene implements Scene {
 	}
 
 	/** 애니 하늘 GO 의 시간 t 관절 월드 — 관절 0 (시작 배치의 관절 0 월드 off) 을 눈 위치로 옮긴다 (0x218848: GO 위치 = 카메라). */
-	static float[][] skyJoints(Ambient a, float t, Vector3f off, Vector3f eye) {
-		float[][] lw = a.act().sample(a.skeleton(), t, true).world(a.skeleton());
+	static float[][] skyJoints(devple.gow.tools.anim.Skeleton sk, devple.gow.tools.anim.Animation act, float[] inst, float t, boolean loop,
+							   Vector3f off, Vector3f eye) {
+		float[][] lw = act.sample(sk, t, loop).world(sk);
 		float[][] w = new float[lw.length][];
 		float dx = eye.x - off.x, dy = eye.y - off.y, dz = eye.z - off.z;
 		for (int i = 0; i < lw.length; i++) {
-			w[i] = Mat4.mul(lw[i], a.inst());
+			w[i] = Mat4.mul(lw[i], inst);
 			w[i][12] += dx;
 			w[i][13] += dy;
 			w[i][14] += dz;

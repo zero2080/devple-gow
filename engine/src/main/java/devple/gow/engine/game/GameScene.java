@@ -3107,7 +3107,11 @@ public final class GameScene implements Scene {
 		e.jointEmitters = true;
 		e.scale = 1f / Math.max(def.scale(), 1e-3f);
 		e.silent = true; // 하늘 GO 의 SEM (아레스 SNDAthn3Ares*) 은 레벨 소리 쪽 [미확인: 재생 시점]
-		if (s.act() != null && def.act(s.act().name) != null) {
+		if (s.acts() != null) { // SCR_AresSky: 이미터 채널도 무작위로 바뀌는 act 를 따른다 (0x2189A8)
+			s.acts().advanceTo(level.fxTime());
+			e.hold = true;
+			skyAct(e, s);
+		} else if (s.act() != null && def.act(s.act().name) != null) {
 			e.setAct(s.act().name);
 			e.hold = true;
 			e.setActTime(s.start() + level.fxTime());
@@ -3154,9 +3158,19 @@ public final class GameScene implements Scene {
 	private void updateSkyEffects() {
 		for (int i = 0; i < skyFx.size(); i++) {
 			LevelScene.SkyGo s = skyFxGo.get(i);
-			if (s.act() != null) {
+			if (s.acts() != null) {
+				s.acts().advanceTo(level.fxTime());
+				skyAct(skyFx.get(i), s);
+			} else if (s.act() != null) {
 				skyFx.get(i).setActTime(s.start() + level.fxTime());
 			}
+		}
+	}
+
+	/** SCR_AresSky 하늘 GO 이펙트를 지금 act·시간에 맞춘다 (바뀐 act 는 이름으로, 이펙트 정의에 없는 act — main — 면 그대로). */
+	private static void skyAct(devple.gow.engine.fx.EffectSystem.Effect e, LevelScene.SkyGo s) {
+		if (e.setAct(s.acts().act().name)) {
+			e.setActTime(s.acts().time());
 		}
 	}
 

@@ -108,7 +108,10 @@ public final class EnvParams {
 	 * SCR_AresSky (0x218968 → 같은 0x218848 + 갱신 0x2189A8 무작위 act) 소유자는 {@link #aresSkyOwners}.
 	 */
 	public final List<String> skyOwners = new ArrayList<>();
-	/** SCR_AresSky 인스턴스 스크립트가 붙은 GO 이름 (ATHN03D/03E goaresanimgroup1) — 엔진 미구현 (act 무작위 순환 0x2189A8). */
+	/**
+	 * SCR_AresSky 인스턴스 스크립트가 붙은 GO 이름 (ATHN03D/03E goaresanimgroup1, 본문 0 바이트). 생성 0x218968 = 0x218848 (SCR_Sky 와 같은 하늘 층) +
+	 * 객체 {f32 −1, s32 −1}, 매 프레임 0x2189A8 = act 가 끝나거나 감기면 다른 act 를 무작위로 (엔진 {@code level.AresSkyActs}, 43 §30).
+	 */
 	public final List<String> aresSkyOwners = new ArrayList<>();
 
 	/** 인스턴스 값만 사용 (템플릿 기본값은 무시). */
