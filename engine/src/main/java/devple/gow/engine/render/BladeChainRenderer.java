@@ -2,6 +2,7 @@ package devple.gow.engine.render;
 
 import devple.gow.engine.asset.WadAssets;
 import devple.gow.engine.game.BladeChain;
+import devple.gow.engine.game.BladeTrail;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.lwjgl.system.MemoryUtil;
@@ -13,13 +14,15 @@ import static org.lwjgl.opengl.GL33.*;
 
 /**
  * 블레이드 사슬 고리·사슬 빛·궤적 렌더 (45 문서 §3). 머티리얼은 현재 무기 WAD (R_WPN&lt;c&gt;_&lt;n&gt;) 의
- * MAT_chainlink (알파 블렌드) / MAT_chainglow (가산) / MAT_swordtrail (가산), 신들의 분노 중 god 판 (0x1FAA10 이 목록 마지막 원소를 바꿈).
- * 정점은 {@link BladeChain} 이 만든 월드 좌표, 셰이더는 파티클 것 (위치·UV·색, 텍스처 곱).
+ * MAT_chainlink (알파 블렌드) / MAT_chainglow (가산) / MAT_swordtrail (가산), 신들의 분노 중 god 판 (0x1FAA10 이 목록 마지막 원소를 바꿈 —
+ * 궤적 띠 +0xB4→+0x184 와 부채꼴 +0xBC 둘 다).
+ * 정점은 {@link BladeChain} · {@link BladeTrail} 이 만든 월드 좌표, 셰이더는 파티클 것 (위치·UV·색, 텍스처 곱).
  */
 public final class BladeChainRenderer implements AutoCloseable {
 
 	private static final int STRIDE = 9;
-	private static final int MAX_VERTS = 2 * 3 * (BladeChain.MAX_SAMPLES * 2 + 32);
+	/** 사슬 띠 (2 × 68 표본) 와 궤적 한 블레이드 (띠 {@link BladeTrail#CAPACITY} 칸 × 삼각형 4 × 정점 3) 중 큰 것. */
+	private static final int MAX_VERTS = Math.max(2 * 3 * (BladeChain.MAX_SAMPLES * 2 + 32), BladeTrail.CAPACITY * 12);
 	private final Shader shader = new Shader("particle.vert", "particle.frag");
 	private final int vao, vbo;
 	private final FloatBuffer buf = MemoryUtil.memAllocFloat(MAX_VERTS * STRIDE);
@@ -61,9 +64,10 @@ public final class BladeChainRenderer implements AutoCloseable {
 	 * @param tint    궤적 색 RGBA (Trail Tint / God Mode Trail Tint)
 	 * @param trailOn 블레이드별 궤적 켜짐 (기술 이벤트 17/18)
 	 * @param bladeLen 블레이드 길이 (Weapon Length × 16)
+	 * @param trails  휘두르기 궤적 띠 (0x12DE70, null 이면 없음)
 	 */
 	public void draw(Camera cam, float aspect, Matrix4f fix, BladeChain chain, boolean god, float[] tint, boolean[] trailOn,
-					 float bladeLen) {
+					 float bladeLen, BladeTrail trails) {
 		int g = god ? 1 : 0;
 		Vector3f eye = new Vector3f(cam.eye);
 		Vector3f back = new Vector3f(cam.eye).sub(cam.target).normalize();
@@ -84,6 +88,15 @@ public final class BladeChainRenderer implements AutoCloseable {
 		glBlendEquation(GL_FUNC_ADD);
 		glBindVertexArray(vao);
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
+		Texture trailTex = trail[g] != null ? trail[g] : trail[0];
+		if (trails != null && tint[3] > 0) {
+			// 휘두르기 궤적 띠 (0x12DE70 인스턴스, 블레이드 객체 +0xB4): 켜짐과 관계없이 남은 띠를 수명까지 (Blades_Init 생성 순서상 사슬보다 먼저 [추정])
+			for (BladeTrail.Side ts : trails.sides) {
+				buf.clear();
+				ribbonTrail(ts, tint, trailTex != null ? trailTex.width() : 64, trailTex != null ? trailTex.height() : 32);
+				flush(trailTex, true);
+			}
+		}
 		for (BladeChain.Side s : chain.sides) {
 			if (!s.valid()) {
 				continue;
@@ -125,6 +138,32 @@ public final class BladeChainRenderer implements AutoCloseable {
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 		if (cull) {
 			glEnable(GL_CULL_FACE);
+		}
+	}
+
+	/**
+	 * 궤적 띠 칸마다 GS 삼각형 띠 [옛0, 새0, 옛1, 새1, 옛2, 새2] (점 0 만 ADC → 삼각형 4 개). S = 0 / 0.5 / 1, T = 칸의 옛·새 T.
+	 * [근사] GS 감싸기 (CLAMP/REPEAT) 미확인 — 엔진 텍스처는 반복이라 맨 끝 행·열이 반대쪽과 섞이지 않게 S·T 를 첫·끝 텍셀 중심으로 자른다
+	 * (부채꼴 V = 1 과 같은 처리).
+	 */
+	private void ribbonTrail(BladeTrail.Side ts, float[] tint, int texW, int texH) {
+		float lo = 0.5f / Math.max(1, texH), hi = 1f - lo;
+		float slo = 0.5f / Math.max(1, texW), shi = 1f - slo;
+		int n = ts.size();
+		for (int k = 0; k < n; k++) {
+			BladeTrail.Strip st = ts.strip(k);
+			float tp = Math.max(lo, Math.min(hi, st.tPrev)), tn = Math.max(lo, Math.min(hi, st.tNext));
+			for (int i = 0; i + 1 < BladeTrail.POINTS; i++) {
+				Vector3f p0 = st.prev[i], n0 = st.next[i], p1 = st.prev[i + 1], n1 = st.next[i + 1];
+				float s0 = Math.max(slo, Math.min(shi, BladeTrail.S[i])), s1 = Math.max(slo, Math.min(shi, BladeTrail.S[i + 1]));
+				// (옛i, 새i, 옛i+1), (새i, 옛i+1, 새i+1)
+				put(p0.x, p0.y, p0.z, s0, tp, tint);
+				put(n0.x, n0.y, n0.z, s0, tn, tint);
+				put(p1.x, p1.y, p1.z, s1, tp, tint);
+				put(n0.x, n0.y, n0.z, s0, tn, tint);
+				put(p1.x, p1.y, p1.z, s1, tp, tint);
+				put(n1.x, n1.y, n1.z, s1, tn, tint);
+			}
 		}
 	}
 

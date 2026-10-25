@@ -58,6 +58,8 @@ public final class HeroRig implements AutoCloseable {
 	public java.util.function.BooleanSupplier hideBlades = () -> false;
 	/** 블레이드 사슬 (블레이드 행렬 따라가기 + 사슬 베지어, 45 문서 §3). */
 	public final BladeChain chain;
+	/** 휘두르기 궤적 띠 (블레이드 객체 +0xB4 = 0x12DE70 인스턴스, 45 문서 §3.4 · 43 §35) — 손 쪽 사슬에서 칼끝까지 넓은 불꽃. */
+	public final BladeTrail bladeTrail = new BladeTrail();
 	private devple.gow.engine.render.BladeChainRenderer chainRenderer;
 	/** 블레이드 행렬을 계산한 틱의 영웅 행렬 (렌더 보간 보정). */
 	private final Matrix4f bladeTickWorld = new Matrix4f();
@@ -442,7 +444,32 @@ public final class HeroRig implements AutoCloseable {
 			}
 		}
 		ctl.world(bladeTickWorld, 1f);
+		// 휘두르기 궤적 (0x240A88): 0x1FB460 이 이번 프레임 블레이드 행렬·세 점을 리소스에 쓴 뒤 [추정: EffectsServer 갱신 0x25D2C0 이 같은 프레임 뒤에]
+		boolean god = godMode.active(); // 0x1FBF70: 0x243DE0(…, 2) → God Mode Weapon Length
+		bladeTrail.update(chain, new boolean[]{blades && trail(0), blades && trail(1)}, bladeLength(god), dt);
+		if (TRAIL_DEBUG) {
+			System.out.printf(java.util.Locale.ROOT, "[궤적] 기술 %d 켜짐 %b/%b 띠 %d/%d 하위 %d/%d 상태 %d/%d%n", m != null ? m.id() : -1,
+					trail(0), trail(1), bladeTrail.sides[0].size(), bladeTrail.sides[1].size(),
+					bladeTrail.sides[0].lastSubSamples, bladeTrail.sides[1].lastSubSamples, chain.sides[0].mode, chain.sides[1].mode);
+		}
 		tickBladeLights(dt);
+	}
+
+	/** -Dgow.debug.trail: 틱마다 궤적 켜짐·띠 수·하위 표본 수 [엔진 전용]. */
+	private static final boolean TRAIL_DEBUG = System.getProperty("gow.debug.trail") != null;
+
+	/**
+	 * 영웅 SetMatrix (순간 이동, 0x1E79D0 → 0x1E0A18 → 0x201140 → 0x202080 → 0x1FDB18) 의 블레이드 쪽: 궤적 띠·이력을 지운다 (0x12E768).
+	 * [미구현] 0x1FDB18 의 블레이드 행렬을 지금 상태 관절로 바로 놓기 — 등·손은 비율 1 이라 다음 틱에 같아진다.
+	 */
+	public void snapBlades() {
+		bladeTrail.reset();
+	}
+
+	/** 블레이드 길이 = /Player/Costume n/Weapon Length (god 이면 God Mode Weapon Length) × 16 (0x3042A0 + 코스튬·0x20 +0x18/+0x1C, 0x1FBF4C). */
+	private float bladeLength(boolean god) {
+		String c = "/Player/Costume " + player.costume + "/";
+		return tweaks.f(c, god ? "God Mode Weapon Length" : "Weapon Length", 0.7f) * 16f;
 	}
 
 	/** 블레이드 벽 질의 (0x1FAFC8). null 이면 벽 충돌 없음 (연습 씬 등). */
@@ -552,9 +579,8 @@ public final class HeroRig implements AutoCloseable {
 		String n = "/Player/Weapon Level " + bladeLevel() + "/";
 		String p = god ? "God Mode Trail Tint " : "Trail Tint ";
 		float[] tint = {tweaks.f(n, p + "R", 1), tweaks.f(n, p + "G", 1), tweaks.f(n, p + "B", 1), tweaks.f(n, p + "A", god ? 1 : 0.8f)};
-		String c = "/Player/Costume " + player.costume + "/";
-		float wl = tweaks.f(c, god ? "God Mode Weapon Length" : "Weapon Length", 0.7f) * 16f;
-		chainRenderer.draw(cam, aspect, renderFix(alpha), chain, god, tint, new boolean[]{trail(0), trail(1)}, wl);
+		chainRenderer.draw(cam, aspect, renderFix(alpha), chain, god, tint, new boolean[]{trail(0), trail(1)}, bladeLength(god),
+				System.getProperty("gow.notrail") != null ? null : bladeTrail);
 	}
 
 	/**

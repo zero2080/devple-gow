@@ -1571,6 +1571,7 @@ public final class GameScene implements Scene {
 		hero.ctl.yaw = spawnYaw;
 		hero.ctl.vy = 0;
 		hero.ctl.launch.zero();
+		hero.snapBlades(); // SetMatrix 0x1E0A18 → 0x201140: 블레이드 궤적 지움 (0x12E768)
 		if (nav != null) {
 			nav.reset();
 		}
