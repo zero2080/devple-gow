@@ -304,12 +304,17 @@ public final class AnimatedModel implements AutoCloseable {
 			lastLights = null;
 		}
 		// 패스 0 = OPAQUE + CUTOUT(알파 ≥ 0.75, 깊이 쓰기), 패스 1 = CUTOUT 가장자리 + ALPHA/ADD/SUB (깊이 쓰기 끔) — Renderer.draw 와 동일
-		for (int pass = 0; pass < 2; pass++) {
+		for (int step = 0; step < 4; step++) {
+			int pass = step == 0 ? 0 : 1, rank = Math.max(0, step - 1); // 단계 0 = 패스 0, 1..3 = 패스 1 의 순위 0..2
 			Boolean lastLocal = null;
 			int[][] lastBlend = null;
 			for (Part p : parts) {
 				RenderModel.Blend b = p.blend();
 				boolean solid = b == RenderModel.Blend.OPAQUE || b == RenderModel.Blend.CUTOUT;
+				// 패스 1 은 반투명 단계 안 원작 순서로 세 번: 알파·가장자리 → 뺄셈 → 가산 (RenderModel.translucentRank, 43 §33)
+				if (pass == 1 && RenderModel.translucentRank(b) != rank) {
+					continue;
+				}
 				if (pass == 0 && !solid || pass == 1 && b == RenderModel.Blend.OPAQUE || p.hiddenBy(hiddenJoints)
 						|| !layer3 && devple.gow.engine.render.DrawStage.skip(p.late())) {
 					continue;

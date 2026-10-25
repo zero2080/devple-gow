@@ -121,4 +121,43 @@ class TempleEntranceTest {
 		assertArrayEquals(new float[]{0f, -1f}, MaterialFx.times(Float.NaN), "NaN = 아직 틀지 않은 스크립트 재질");
 		assertArrayEquals(new float[]{2f, 2f}, MaterialFx.times(2f));
 	}
+
+	/**
+	 * 아르테미스 얼굴 (PAND01A, 영상 3966–4001): 키 배정 0x155C40 이 반투명 단계를 0x155B50(…, a3 위쪽 비트, t0 아래쪽 비트, 단계) 로 나눈다 —
+	 * (0x0A000400 / 나머지, 1) → (0x0A000000 / 0x400, 2) → (0x08000000 가산 / 0x02000000 뺄셈, 3·4). 그래서 알파 &lt; 뺄셈 &lt; 가산 순서로 그려
+	 * 어둡게 하는 SubScrollTex2/3 · darkenMatFade (GS 0x42) 위에 얼굴 M01ArtemisFront01 · 불꽃 M01DoorFade2 (0x48) 가 보인다.
+	 */
+	@Test
+	void artemisFaceSortsSubtractiveBeforeAdditive() throws Exception {
+		Elf e = exe();
+		assertEquals(0x0A000400, at(e, 0x155ed0).imm() | at(e, 0x155ed4).imm() & 0xffff, at(e, 0x155ed0).text());
+		assertEquals(1, li(e, 0x155ee0));
+		assertEquals(0x0A000000, at(e, 0x155f14).imm());
+		assertEquals(0x400, li(e, 0x155f20));
+		assertEquals(2, li(e, 0x155f24));
+		assertEquals(0x08000000, at(e, 0x155f54).imm(), "a3 = 가산 (위쪽 = 나중)");
+		assertEquals(0x02000000, at(e, 0x155f58).imm(), "t0 = 뺄셈 (아래쪽 = 먼저)");
+		assertEquals(3, li(e, 0x155f60));
+		for (int pc : new int[]{0x155ef4, 0x155f30, 0x155f70, 0x155fb0}) {
+			assertEquals(0x155b50, at(e, pc).target(), String.format("%08x", pc));
+		}
+		WadFile w = wad("PAND01A");
+		java.util.Map<String, Integer> gs = new java.util.HashMap<>();
+		for (WadTag t : w.resources()) {
+			if (t.name().matches("MAT_(M01ArtemisFront01|M01DoorFade2|SubScrollTex[23]|darkenMatFade)") && t.hasData()) {
+				gs.put(t.name(), MaterialResource.parse(t).layers().getFirst().gsAlpha());
+			}
+		}
+		assertEquals(0x48, gs.get("MAT_M01ArtemisFront01"));
+		assertEquals(0x48, gs.get("MAT_M01DoorFade2"));
+		assertEquals(0x42, gs.get("MAT_SubScrollTex2"));
+		assertEquals(0x42, gs.get("MAT_SubScrollTex3"));
+		assertEquals(0x42, gs.get("MAT_darkenMatFade"));
+		var r = devple.gow.engine.asset.RenderModel.Blend.class;
+		assertTrue(devple.gow.engine.asset.RenderModel.translucentRank(Enum.valueOf(r, "ALPHA"))
+				< devple.gow.engine.asset.RenderModel.translucentRank(Enum.valueOf(r, "SUB")));
+		assertTrue(devple.gow.engine.asset.RenderModel.translucentRank(Enum.valueOf(r, "SUB"))
+				< devple.gow.engine.asset.RenderModel.translucentRank(Enum.valueOf(r, "ADD")));
+		assertEquals(0, devple.gow.engine.asset.RenderModel.translucentRank(Enum.valueOf(r, "CUTOUT")), "가장자리 = 알파 단계");
+	}
 }

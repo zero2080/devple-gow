@@ -202,6 +202,16 @@ public final class BotInput extends Input {
 		return this;
 	}
 
+	/** 멈춰서 여러 버튼을 함께 누르고 있음 (경로 단계 keys: — L1 + R1 아르테미스의 검 등). */
+	public BotInput pressAll(java.util.Collection<PadButton> bs) {
+		prev.clear();
+		prev.addAll(down);
+		down.clear();
+		lx = ly = 0;
+		down.addAll(bs);
+		return this;
+	}
+
 	/** 멈춰서 버튼 하나만 (null = 아무것도). */
 	public BotInput press(PadButton b) {
 		prev.clear();

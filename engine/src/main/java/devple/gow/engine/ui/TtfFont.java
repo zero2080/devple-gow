@@ -87,6 +87,13 @@ public final class TtfFont {
 		return h * cfg.scale() / glyphs.px();
 	}
 
+	/** 다음 {@link #add} 글자의 기울임 (x −= shear · (y − 기준선), FLP 서체 [*n] — FlpRenderer.ITALIC). */
+	private float shear;
+
+	public void setShear(float k) {
+		shear = k;
+	}
+
 	/** 펜 (x, base) 에 글자 사각형을 모은다 — {@link #flush} 때 그린다. */
 	public void add(char ch, float x, float base, float h) {
 		Entry e = entry(ch);
@@ -96,18 +103,19 @@ public final class TtfFont {
 		float s = unit(h);
 		float x0 = x + e.x0() * s, y0 = base + e.y0() * s + cfg.yOffset() * h;
 		float x1 = x0 + e.w() * s, y1 = y0 + e.h() * s;
+		float d0 = -shear * (y0 - base), d1 = -shear * (y1 - base); // 위 (y0) 는 오른쪽, 아래 (y1) 는 왼쪽
 		int p = e.page();
 		float[] v = verts[p];
 		int n = counts[p];
 		if (n + 6 * Mesh.STRIDE > v.length) {
 			v = verts[p] = Arrays.copyOf(v, Math.max(v.length * 2, 64 * 6 * Mesh.STRIDE));
 		}
-		n = vtx(v, n, x0, y0, e.u0(), e.v0());
-		n = vtx(v, n, x1, y0, e.u1(), e.v0());
-		n = vtx(v, n, x1, y1, e.u1(), e.v1());
-		n = vtx(v, n, x0, y0, e.u0(), e.v0());
-		n = vtx(v, n, x1, y1, e.u1(), e.v1());
-		n = vtx(v, n, x0, y1, e.u0(), e.v1());
+		n = vtx(v, n, x0 + d0, y0, e.u0(), e.v0());
+		n = vtx(v, n, x1 + d0, y0, e.u1(), e.v0());
+		n = vtx(v, n, x1 + d1, y1, e.u1(), e.v1());
+		n = vtx(v, n, x0 + d0, y0, e.u0(), e.v0());
+		n = vtx(v, n, x1 + d1, y1, e.u1(), e.v1());
+		n = vtx(v, n, x0 + d1, y1, e.u0(), e.v1());
 		counts[p] = n;
 	}
 

@@ -171,11 +171,12 @@ public final class Renderer implements AutoCloseable {
 
 	private void drawPasses(RenderModel model, Matrix4f world, int first, int last) {
 		basic.set("uModel", world);
-		for (int pass = first; pass <= last; pass++) {
+		for (int step = first == 0 ? 0 : 1; step <= (last == 0 ? 0 : 3); step++) {
+			int pass = step == 0 ? 0 : 1, rank = Math.max(0, step - 1); // 패스 1 = 반투명 단계 안 원작 순서: 알파 → 뺄셈 → 가산 (RenderModel.translucentRank)
 			for (RenderModel.Part p : model.parts()) {
 				RenderModel.Blend b = p.blend();
 				boolean solid = b == RenderModel.Blend.OPAQUE || b == RenderModel.Blend.CUTOUT;
-				if (pass == 0 && !solid || pass == 1 && b == RenderModel.Blend.OPAQUE || DrawStage.skip(p.late())) {
+				if (pass == 0 && !solid || pass == 1 && (b == RenderModel.Blend.OPAQUE || RenderModel.translucentRank(b) != rank) || DrawStage.skip(p.late())) {
 					continue;
 				}
 				MaterialFx fx = p.fx();

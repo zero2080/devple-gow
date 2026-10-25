@@ -337,24 +337,43 @@ public final class FlpRenderer implements AutoCloseable {
 				case 2 -> left + (width - w) / 2;
 				default -> left;
 			};
+			int style = 0; // 줄마다 0 에서 (0x149868)
+			float[] sc = tc;
 			for (Object r : runs) {
+				if (r instanceof Style st) {
+					if (ttf != null && st.n() != style) { // 앞 글자는 앞 서체 색으로
+						tint.set(sc[0], sc[1], sc[2], sc[3]);
+						ttf.flush(shader, m, tint);
+					}
+					style = st.n();
+					sc = styleColor(style, tc, col);
+					if (ttf != null) {
+						ttf.setShear(style != 0 ? ITALIC : 0f);
+					}
+					continue;
+				}
 				if (r instanceof Character ch) {
 					int g = font.glyphOf(ch);
 					if (ttf != null && ttf.covers(ch, g >= 0)) {
 						ttf.add(ch, x, base, h);
 					} else if (g >= 0 && ch != ' ') {
 						float s = h / GLYPH_EM;
-						drawMeshRef(font.glyphMeshes().get(g), mul(m, s, 0, 0, s, x, base), tc);
+						drawMeshRef(font.glyphMeshes().get(g), mul(m, s, 0, style != 0 ? -ITALIC * s : 0, s, x, base), sc);
 					}
 				} else if (r instanceof String icon && drawIcons) {
 					if (ttf != null) {
 						// 아이콘 안의 라벨 (배지 글자) 도 같은 공유 글자 묶음을 쓰므로 앞 글자를 이 라벨 변환·색으로 먼저 그린다
-						tint.set(tc[0], tc[1], tc[2], tc[3]);
+						tint.set(sc[0], sc[1], sc[2], sc[3]);
 						ttf.flush(shader, m, tint);
 					}
 					drawIcon(icon, x, base, h, ascent, m, col);
 				}
 				x += advance(font, ttf, r, h);
+			}
+			if (ttf != null && style != 0) {
+				tint.set(sc[0], sc[1], sc[2], sc[3]);
+				ttf.flush(shader, m, tint);
+				ttf.setShear(0f);
 			}
 			base += lineH;
 		}
@@ -364,8 +383,30 @@ public final class FlpRenderer implements AutoCloseable {
 		}
 	}
 
-	/** 문자 또는 버튼 태그 이름(String) 나열. [*1] 같은 인자 자리는 버린다. */
-	private List<Object> tokenize(String line) {
+	/** 글자 서체 태그 [*n] (0 = 보통). */
+	record Style(int n) {
+	}
+
+	/**
+	 * 글자 서체 [*n] (원작 텍스트 배치 0x1494A8: '[' 뒤 '*' 면 다음 숫자 − '0' 을 글자 레코드 +0x6 에 — 0x1498AC–0x1498DC, "[*]" 는 0; 그리기 0x148388 이
+	 * 그 번호로 세 벌의 행렬 · 색 중 하나를 고른다) [확실: 코드]: 0 = 라벨 색 · 보통, 1 = 고정 색 (0xDC, 0x6E, 0x00) (0x29CCDC) · 기울임, 2 = (0x00, 0xDC, 0xDC)
+	 * (0x29CCE4) · 기울임. 색은 (바이트 + 1) × 부모 색 변환 ≫ 8, 알파 = 부모 알파 (0x148794–0x1488C4), 기울임 = x 를 −0.2 · y 만큼 (0x29CCE0 / 0x29CCE8 = 0.2
+	 * 를 부호를 바꿔 행렬에, 0x148A0C · 0x148AA4). 예 책 126 의 "[*1]이 신전은 …" · 카드 267 "[*1]아르테미스의 검" 은 붉은 기울임 (영상 3614 · 3998).
+	 * 예전 엔진은 "인자 자리" 로 보고 버렸다 (43 §33).
+	 */
+	static final float ITALIC = 0.2f;
+	static final int[][] STYLE_RGB = {null, {0xDC, 0x6E, 0x00}, {0x00, 0xDC, 0xDC}};
+
+	static float[] styleColor(int style, float[] labelColor, float[] col) {
+		if (style <= 0 || style >= STYLE_RGB.length) {
+			return labelColor;
+		}
+		int[] c = STYLE_RGB[style];
+		return new float[]{col[0] * (c[0] + 1) / 256f, col[1] * (c[1] + 1) / 256f, col[2] * (c[2] + 1) / 256f, col[3]};
+	}
+
+	/** 문자, 버튼 태그 이름(String), 서체 태그 ({@link Style}) 나열. */
+	static List<Object> tokenize(String line) {
 		List<Object> out = new ArrayList<>();
 		for (int i = 0; i < line.length(); i++) {
 			char ch = line.charAt(i);
@@ -373,7 +414,10 @@ public final class FlpRenderer implements AutoCloseable {
 				int e = line.indexOf(']', i);
 				if (e > i) {
 					String tag = line.substring(i + 1, e);
-					if (!tag.startsWith("*")) {
+					if (tag.startsWith("*")) {
+						// "[*]" = 0, "[*n" = 숫자 − '0' (원작은 '*' 다음 한 글자만 본다)
+						out.add(new Style(tag.length() > 1 ? Math.max(0, tag.charAt(1) - '0') : 0));
+					} else {
 						out.add(tag);
 					}
 					i = e;
@@ -386,6 +430,9 @@ public final class FlpRenderer implements AutoCloseable {
 	}
 
 	private static float advance(FlpFile.Font f, TtfFont ttf, Object r, float h) {
+		if (r instanceof Style) {
+			return 0;
+		}
 		if (r instanceof Character ch) {
 			int g = f.glyphOf(ch);
 			if (ttf != null && ttf.covers(ch, g >= 0)) {

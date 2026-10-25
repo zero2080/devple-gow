@@ -263,6 +263,7 @@ public final class AutoPlay {
 	 *   mash:초            R2 연타 (들어 올리는 문 TAndF)
 	 *   crank:초:fx,fz     손잡이 쪽으로 돌아 R2 를 누른 채 스틱을 영웅 정면으로 (손잡이를 밀며 둘레를 도는 Type 1 크랭크, PAND00B 문 크랭크)
 	 *   pull:초:fx,fz      (fx, fz) 쪽으로 돌아 R2 를 누른 채 스틱을 영웅 정면 반대로 (밀기 상자 끌어내기)
+	 *   keys:초:B1+B2      버튼 여럿을 함께 누르고 있음 (L1+R1 아르테미스의 검)
 	 *   jump:초:fx,fz      첫 프레임 × + (fx, fz) 쪽으로 스틱 (벽에 뛰어 붙기)
 	 *   post:번호[:인자0]  스크립트 전역 이벤트 (보낸 쪽 = 영웅)
 	 *   cam:이름           CMV 질의 끄고 카메라 요청 (Internal 0x9 false + 0x8), "cam:" = 질의 다시 켬
@@ -404,6 +405,14 @@ public final class AutoPlay {
 					return bot.press(PadButton.valueOf(a[0].toUpperCase(Locale.ROOT)));
 				}
 				return routeNext(routeTime > 0.3f, bot.press(null));
+			}
+			case "keys" -> {
+				// keys:초:L1+R1 — 버튼 여럿을 함께 초 동안 (아르테미스의 검 바꾸기 L1 + R1) [엔진 전용]
+				List<PadButton> bs = new ArrayList<>();
+				for (String b : a[1].split("\\+")) {
+					bs.add(PadButton.valueOf(b.trim().toUpperCase(Locale.ROOT)));
+				}
+				return routeNext(routeTime > Float.parseFloat(a[0]), bot.pressAll(bs));
 			}
 			default -> {
 				boolean tp = s.endsWith("!");
