@@ -451,8 +451,15 @@ public final class Interactables {
 			}
 		}
 		if (!fresh.isEmpty()) {
-			it.handles.clear();
-			it.handles.addAll(fresh);
+			if (fresh.size() == it.handles.size()) {
+				// 같은 배열을 고쳐 쓴다 — 붙은 영웅 (HeroNavigator.handle) 이 잡은 손잡이를 그대로 따라간다 (0x1C4258 매 프레임 관절 읽기)
+				for (int i = 0; i < fresh.size(); i++) {
+					System.arraycopy(fresh.get(i), 0, it.handles.get(i), 0, Math.min(fresh.get(i).length, it.handles.get(i).length));
+				}
+			} else {
+				it.handles.clear();
+				it.handles.addAll(fresh);
+			}
 		}
 		if (jw.length > 0) {
 			it.pos.set(jw[0][12], jw[0][13], jw[0][14]);

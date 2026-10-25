@@ -943,4 +943,35 @@ class NavDataTest {
 		assertEquals(NavState.GROUND, nav.state(), "꼭대기에서 내려섬 (ANILDis1)");
 		assertEquals(504f, b.pos.y, 2f, "복도 바닥");
 	}
+
+	/**
+	 * 43 §32: 붙은 영웅은 매 프레임 손잡이 관절을 다시 읽어 붙는다 (0x1C4258). PAND00B 문 크랭크 godoorcrank (Core Ext Crank, Type 1, act 12 초) 의
+	 * handle1/2 는 도는 "Anim" 관절 아래라 크랭크를 돌리면 손잡이가 기둥 둘레를 돈다 — 영상 3476–3482 크라토스가 기둥을 돌며 민다. 예전에는 진행 자세를
+	 * 그려도 손잡이를 다시 읽지 않아 영웅이 잡은 자리에 서 있었다. 같은 배열을 고쳐 써서 HeroNavigator 가 잡은 손잡이를 그대로 따라간다.
+	 */
+	@Test
+	void doorCrankHandleFollowsTheTurningCrank() throws Exception {
+		LevelData d = level("PAND00B");
+		Tweaks tw = new Tweaks();
+		tw.load(d.wad);
+		Interactables items = Interactables.of(d, tw);
+		Interactables.Item crank = items.byOwner("godoorcrank");
+		assertNotNull(crank);
+		assertTrue(crank.crank);
+		assertFalse(crank.handles.isEmpty());
+		Platforms ps = Platforms.of(d, java.util.Set.of(), SceneNav.bodyOwners(items));
+		ScriptWorld w = new ScriptWorld(d, new ScriptHost(), null);
+		float[] grabbed = crank.handles.getFirst();
+		float x0 = grabbed[0], z0 = grabbed[2];
+		float cx = crank.pos.x, cz = crank.pos.z;
+		float r0 = (float) Math.hypot(x0 - cx, z0 - cz);
+		crank.task().advance(1f, 3f); // 3 초 (12 초 act 의 1/4)
+		SceneNav.poseItems(items, ps, w, 0);
+		assertSame(grabbed, crank.handles.getFirst(), "같은 배열 (영웅이 잡은 손잡이)");
+		float r1 = (float) Math.hypot(grabbed[0] - cx, grabbed[2] - cz);
+		assertEquals(r0, r1, 0.5f, "기둥 둘레");
+		double turned = Math.toDegrees(Math.abs(Math.atan2(grabbed[2] - cz, grabbed[0] - cx) - Math.atan2(z0 - cz, x0 - cx)));
+		turned = Math.min(turned, 360 - turned);
+		assertTrue(turned > 20, "손잡이가 돌았다 " + turned + "°");
+	}
 }

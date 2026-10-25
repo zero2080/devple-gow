@@ -829,6 +829,12 @@ public final class SceneNav {
 			}
 			if (b != null && ps.poseAt(it.owner, it.objectAnim, it.kind == Interactables.Kind.LIFT && b.anim() != null ? t * b.anim().duration : t)) {
 				world.poseOwner(b.owner, b.joints());
+				// 붙은 영웅은 매 프레임 손잡이 관절을 다시 읽어 붙는다 (0x1C4258) — 도는 크랭크의 손잡이 (PAND00B 문 크랭크 godoorcrank "Anim" 아래
+				// handle1/2) 를 따라 영웅이 기둥을 돈다 (영상 3476–3482). 예전에는 잡은 순간의 손잡이 자리에 서 있었다 (43 §32).
+				// 엔진은 크랭크류 (Push Type 1–4) 만 [근사: 레버·CSM·TAndF 의 손잡이 관절 이동은 영상으로 확인하지 않아 그대로 둔다]
+				if (it.crank) {
+					Interactables.refreshHandles(it, b.skeleton(), b.joints());
+				}
 			}
 		}
 	}
