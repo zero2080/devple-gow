@@ -236,7 +236,7 @@ public final class ScriptWorld {
 			listener.create(e);
 		}
 		for (Map.Entry<String, int[]> v : new ArrayList<>(visState.entrySet())) {
-			listener.vis(visSource.get(v.getKey()), List.of(v.getKey()), v.getValue().clone());
+			listener.vis(visSource.get(v.getKey()), List.of(visObject(v.getKey())), v.getValue().clone());
 		}
 		for (ScriptActor a : new ArrayList<>(actors)) {
 			if (a.spawner == null || a.destroyed || a == player || markers.containsValue(a)) {
@@ -251,17 +251,36 @@ public final class ScriptWorld {
 		}
 	}
 
-	/** Vis 값을 오브젝트별로 쌓는다 (0 이 아닌 슬롯만 덮어씀, FadeTime 슬롯 8 은 다시 보낼 때 0 = 바로). */
+	/**
+	 * Vis 값을 오브젝트별로 쌓는다 (0 이 아닌 슬롯만 덮어씀, FadeTime 슬롯 8 은 다시 보낼 때 0 = 바로). JointVisibility (슬롯 17 = 값 10) 는 관절마다
+	 * 따로 — 원작 0x1ABAA8 은 Vis 엔티티 +0x40 의 관절 칸에 쓴다 [확실] → 열쇠 "오브젝트#j관절" 에 그 Vis 와 함께 (다시 보낼 때 관절이 맞게, 43 §36).
+	 */
 	private void rememberVis(ScriptEntity e, List<String> objects, int[] v) {
 		for (String o : objects) {
 			int[] s = visState.computeIfAbsent(o, k -> new int[v.length]);
 			for (int i = 0; i < v.length; i++) {
-				if (i != 8 && v[i] != 0) {
+				if (i != 8 && i != JOINT_VIS && v[i] != 0) {
 					s[i] = v[i];
 				}
 			}
 			visSource.put(o, e);
+			if (v.length > JOINT_VIS && v[JOINT_VIS] != 0) {
+				String jk = o + JOINT_KEY + e.data.unk40();
+				visState.computeIfAbsent(jk, k -> new int[v.length])[JOINT_VIS] = v[JOINT_VIS];
+				visSource.put(jk, e);
+			}
 		}
+	}
+
+	/** Vis 값 배열에서 JointVisibility (슬롯 17) 의 자리. */
+	static final int JOINT_VIS = 10;
+	/** 관절 가시성 기억 열쇠의 구분자 ("오브젝트#j관절"). */
+	static final String JOINT_KEY = "#j";
+
+	/** 기억 열쇠 → 오브젝트 이름 (관절 가시성 열쇠면 앞부분). */
+	static String visObject(String key) {
+		int i = key.indexOf(JOINT_KEY);
+		return i < 0 ? key : key.substring(0, i);
 	}
 
 	/** 오브젝트에 쌓인 Vis 값 (없으면 null) — 시험용. */
@@ -629,8 +648,8 @@ public final class ScriptWorld {
 				continue;
 			}
 			int[] values = v.getValue().clone();
-			listener.vis(src, List.of(v.getKey()), values);
-			rememberVis(src, List.of(v.getKey()), values);
+			listener.vis(src, List.of(visObject(v.getKey())), values);
+			rememberVis(src, List.of(visObject(v.getKey())), values);
 		}
 	}
 

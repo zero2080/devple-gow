@@ -35,11 +35,27 @@ public final class EffectLibrary {
 	 * @param ptc     PTC_ 모양 (+0x54 모양 이름으로 연결)
 	 * @param channel 노드 헤더 +0x0A s16 = ANM 타입 10 채널 묶음 번호 (−1 = 없음 → FXC 상수 생성률)
 	 */
-	public record EmitterDef(FxResources.Emitter fxc, FxResources.Shape ptc, int channel, Surface surface) {
+	public record EmitterDef(FxResources.Emitter fxc, FxResources.Shape ptc, int channel, Surface surface, Curve curve) {
 
 		public EmitterDef(FxResources.Emitter fxc, FxResources.Shape ptc, int channel) {
-			this(fxc, ptc, channel, null);
+			this(fxc, ptc, channel, null, null);
 		}
+
+		public EmitterDef(FxResources.Emitter fxc, FxResources.Shape ptc, int channel, Surface surface) {
+			this(fxc, ptc, channel, surface, null);
+		}
+	}
+
+	/**
+	 * 커브 이미터 (FXC 서브타입 4) 의 방출 커브: 이미터 +0x6C 모양 이름 → 0xD 노드 (+0x70) 의 +0x58 NCV_ 커브. 원작 갱신 0x25EC88 이 0x12EDA8 로
+	 * 노드 월드 (노드 로컬 · 소유 GO 관절 월드) 를 두고 0x1249C8 이 t = 난수 × 마지막 매듭의 P(t) · T(t) 에서 낸다 [확실: 16 문서 §2.5] —
+	 * 레벨 배치 이미터 ({@code LevelEmitters.curveSamples}) 와 같은 규칙을 GO 이펙트 (Animator · 관절 이미터) 에도.
+	 *
+	 * @param joint 0xD 노드 헤더 +0x08 관절 (−1 = 노드 로컬만)
+	 * @param local 0xD 노드 +0x10 로컬 행렬 (행벡터 16)
+	 * @param curve NCV 커브 (노드 로컬 좌표)
+	 */
+	public record Curve(int joint, float[] local, devple.gow.tools.level.NcvCurve curve) {
 	}
 
 	/**
@@ -319,7 +335,8 @@ public final class EffectLibrary {
 				if (e != null) {
 					FxResources.Shape sh = fx.shape(e.shape(), objAt);
 					if (sh != null) {
-						em.add(new EmitterDef(e, sh, e.header()[1], e.subtype() == 3 ? surface(wad, fx, e, objAt) : null));
+						em.add(new EmitterDef(e, sh, e.header()[1], e.subtype() == 3 ? surface(wad, fx, e, objAt) : null,
+								e.subtype() == 4 ? curve(wad, fx, e, objAt) : null));
 					}
 				} else if (fx.fields.containsKey(r)) {
 					fields.add(fx.field(r, objAt));
@@ -341,6 +358,37 @@ public final class EffectLibrary {
 		}
 		return new EffectDef(gi.name().toLowerCase(Locale.ROOT), gi.object(), wad, gi.scale() > 0 ? gi.scale() : 1f, model, sk, anim,
 				List.copyOf(em), List.copyOf(fields), sound, acts, sem);
+	}
+
+	/**
+	 * 커브 이미터의 방출 커브 (0xD 노드 → NCV_). 노드나 커브가 없으면 null (이미터 원점에서 낸다). PAND00C 고리 1 크랭크 goring1crank 의
+	 * FXC_emitter3 = 벽 톱니 중심의 반지름 26 원 (NCV_nurbsCircle5, 관절 9 RingArt1) — 예전엔 원점 한 점에 쌓여 톱니 가운데를 흐린 덩어리로 덮었다 (43 §36).
+	 */
+	private static Curve curve(WadFile wad, FxResources fx, FxResources.Emitter e, int objAt) {
+		FxResources.Geom g = e.geom() == null || e.geom().isEmpty() ? null : fx.geom(e.geom(), objAt);
+		if (g == null || g.curve() == null || !g.curve().startsWith("NCV_")) {
+			return null;
+		}
+		// 같은 이름은 오브젝트 그룹 앞의 마지막 정의 (FXC_ · PTC_ 와 같은 규칙), 없으면 처음 정의
+		List<WadTag> tags = wad.tags();
+		WadTag pick = null;
+		for (int i = 0; i < tags.size(); i++) {
+			WadTag t = tags.get(i);
+			if (t.tag() == devple.gow.tools.wad.WadTagType.MESH_EXTRA && t.hasData() && t.name().equals(g.curve())) {
+				if (pick == null || i < objAt) {
+					pick = t;
+				}
+			}
+		}
+		if (pick == null) {
+			return null;
+		}
+		try {
+			devple.gow.tools.level.NcvCurve c = devple.gow.tools.level.NcvCurve.parse(pick.name(), pick.data());
+			return c.knots.length > 0 && c.tMax() > 0 ? new Curve(g.joint(), g.local(), c) : null;
+		} catch (RuntimeException ex) {
+			return null;
+		}
 	}
 
 	/** 표면 이미터의 방출면 (0xD 노드 → MSH_). 노드나 메시가 없으면 null (예전처럼 이미터 원점에서 낸다). */

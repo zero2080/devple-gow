@@ -2458,7 +2458,7 @@ R2 EvtUseWorld 는 201 이 켠 LevelData21 이 있어야 · 글자 gontrydoorglo
 | 3634–3642 | 해 문 글자가 빛나다 꺼짐 | 고치기 전 빛나지 않음 → 고친 뒤 같은 빛 · 10 초에 꺼짐 (§33.2-3) |
 | 3646–3650 | 해 문이 먼지 속에 굴러 열림 | 고치기 전 먼지 없음 → 고친 뒤 이웃 슬롯 Animator 먼지 (§33.2-4). 9f69e4c 뒤에도 같음 (h15) |
 | 3655–3662 | 복도 · 구역 제목 810 "판도라의 반지" · 톱니 부조 · 깃발 | 같음 (aced5e0 / cc7e2fa 뒤 톱니 부조 · 깃발 · 횃불 재질 어긋남 없음) |
-| 3686–3690 | 세이브 빛기둥 R2 → 메모리 카드 저장 | 같은 R2 · 빛기둥 · 초록 상자. 방 벽이 영상 (회색 돌) 보다 붉음 [미확인: 순간이동이라 카메라가 다름] |
+| 3686–3690 | 세이브 빛기둥 R2 → 메모리 카드 저장 | 같은 R2 · 빛기둥 · 초록 상자. 방 벽이 영상 (회색 돌) 보다 붉음 → §36: 영상은 PAND00D 눈 방 세이브 16 (다른 방) |
 | 3700–3760 | 가라앉은 바닥 방 싸움 · 파랑 상자 | 정지 프레임만 — 엔진으로 몰지 않음 |
 | 3770–3810 | 크랭크 · 큰 원통 · 톱니 원판 문 · 눈 광선 · 석상 레버 | 눈 분쇄기 방 (구 · 다이아몬드) 만 순간이동으로 확인 (카메라 다름) |
 | 3820 | 가시 굴 · 피 | 대조 안 함 |
@@ -2713,6 +2713,86 @@ HoleLoad → PAND01A). 엔진 = origin/main 4fe5fa2 위에서 시작, 마지막 
 `03_burst_0.1s_v2605.0-2605.3_vs_slam_v1355.8-1356.1_vs_dest01` (0.1 초 연속: 영상 | 엔진), `04_engine_sewr01_combo3_crescent`, `05_engine_dest01_arc` · `05b_…_before_notrail`,
 `06_engine_god_mode_blue_trail`, `07_engine_air_combo`, `08_engine_pand00b_level3_red_arc_vs_v3545_3598` (영상 | 엔진),
 영상 프레임 `video/v2604.5 … v2605.5` · `v1355.6 … v1356.4`.
+
+## 36. QA vs PS2 영상 2화 — 판도라의 반지: PAND00D 눈 방 (세이브 · 궁수 · 물웅덩이 · 레버 · 석상 손잡이 · 빛줄기) → 가시 굴 → PAND00C 해골 문 · 고리 1 크랭크 → 뮤즈 석상 → 크랭크 → 아르테미스의 굴 (영상 3690–3958 초, 2026-10-25)
+
+영상 = hoXYXNef60U (2화, 전사 (보통)), 프레임 728×409 (`work/verify/rings_rooms/video/v<초>.jpg` 159 장 — 3691–3958 3 초 간격, 3743–3800 · 3836–3861 · 3944–3960 1 초 간격, 커밋 안 함).
+엔진 = origin/main 68cf54a 위 (rebase 8d9fcae), 1280×720 lockstep, 스크래치 홈, 경로 하네스 (`-Dgow.auto.route`, 순간이동 · `use:` · `crank:` · `kill:33`).
+**정정 (§33.1)**: 영상 3686–3694 의 세이브는 PAND00C (−936, 481, 1720) 이 아니라 **PAND00D 눈 방 남서쪽 구석 세이브 16** (−448, 0, 3296) 이다 (회색 돌 벽 · 오른쪽 부조 = 엔진 x1 첫 프레임과 같음) —
+§33 의 "방 벽이 붉음" 은 다른 세이브 방을 본 것.
+
+레벨 연결 [확실: 스크립트 · 배치 · 충돌]: PAND00C 고리 1 (중심 (−240, 0, 1232), 반지름 ≈ 650–800, 북 = −z 쪽 이름 규칙: R1SouthVol = +z) 의 +z 출구 (부수는 문 gocrusherdoor z 2001)
+→ PAND00D 가시 굴 (x −240, z 2040–3250, 분쇄기 crusher1–4) → 눈 방 (x −480…−20, z 3260–3700): 가운데 물웅덩이 (Water 면 y −7.1, 바닥 −144, 가운데 배수구),
+북쪽에 두 석상이 받친 구 (PAND00C goeyedoor, 손잡이 crank Type 1 id 22 · 받침 톱니 둘), 구 뒤 레버 goeyermlever (Push 012 Type 5, id 120), 서쪽 뿔 해골 문 goliftdoor (잠김),
+상자 chest1 (−439) · chest2 (−50, 종류 순환) · chest5. 적: EyeRoomEnemies-ArcherLevel2AI1–4 = R_SK2 템플릿 33, MaximumCount 2 · Respawn · 지연 5 초 (넷이 한 번씩 다시 = 8).
+
+### 36.1 장면 대응
+| 영상 (초) | 장면 | 원작 (스크립트·데이터) | 엔진 (실행 · 초) | 결과 |
+|---|---|---|---|---|
+| 3691–3694 | 메모리 카드 저장 → 세이브 빛 R2 | PAND00D SaveGameZone 16 | x1 0 | 같은 방 (§33.1 정정) |
+| 3697–3742 | 눈 방 싸움 · 초록 상자 · 파랑 상자 (오브) | 궁수 R_SK2 ×4 (+ 다시 4) · chest1/2 | x1 0–30 (보통, 봇) | 같은 방 · 같은 적 · 화살. 시간 비교 안 함 (봇) |
+| 3744–3761 | 웅덩이에 뛰어들어 배수구까지 잠수 · 헤엄 → 북쪽으로 나옴 | Water y −7.1 깊이 137 | — | 엔진 수영 (38 §11) 있음, 이 구간은 몰지 않음 [미확인] |
+| 3762–3766 | 뿔 해골 문 계단 → 구 사이로 | goliftdoor (잠김) | x1 2 | 같은 문 |
+| 3767–3771 | 구 뒤 레버 R2 → 당김 (뒤 카메라) | goeyermlever 3.67 초 → 1023 (100, 120) → CrushersOff · 203 | a1/a6: R2 → 100 % 3.9 초 | 같은 구도 (`p_lever1`) |
+| 3771–3779 | KrushOffCam: 구 사이 크레토스 → 석상 전경 → 가시 굴 분쇄기 물러남 → 굴 끝 | KrushOffCam (12 초), CrusherReset1–4 (5.25–6.75 초) | a1/a6 같은 순서 | 같음 |
+| 3780–3782 | 고리 1 톱니 벽: 받침이 없다가 가짜 크랭크가 벽에서 접혀 내려옴 → 받침 · 기둥 | 203 → FakeCrank-AnimMurphyBed (+8), +11 초 FakeCrank-CrankOff · **CrankOn (JointVisibility 관절 2 = 1)** | 고치기 전: 받침 · 기둥이 처음부터 있고 가짜 크랭크와 겹침 → 고친 뒤 같음 (36.2-2, `a6m`) | 고침 |
+| 3785–3790 | 구 사이로 다시 → 석상 받침 톱니 클로즈업 (손잡이가 나옴) | EyeRmLever-TriggerVol (CrushersOff) → HandleZmCam 4 초 · 203 → EyeDoor-MsgFromCrank2 → FakeHandles-AnimPlay, +3 초 LeftLeverOn / RightLeverOn (관절 2 · 8) · DoorCollOn | a6 25.3 → 28.3 | 같음 (`p_handle`). 고치기 전엔 손잡이가 처음부터 보였다 (36.2-2) |
+| 3791–3796 | 서쪽 석상 손잡이 돌리기 | goeyedoor Type 1 3 초 → LevelData 2 = 100 | a6 36.6–40.5 (동쪽 석상) | 같음 |
+| 3797–3808 | 수정 클로즈업 → 빛줄기가 구에서 왼쪽 (−z) 으로 → 굴 입구 → 해골 문에 닿음 → 크레토스 | EyeCrusherBeam-BeamOn · Ring1Beam-BeamOn (Ring1 = 마커 South), IbeamCam 2.66 초 → IbeamCam2 | a6 40.5 같은 카메라 순서 | **빛줄기가 거의 안 보임** (36.4) |
+| 3811–3823 | 세이브 방 → 가시 굴 (피 · 물러난 가시) | — | a1 KrushOffCam 굴 | 같은 굴 · 같은 피 |
+| 3826–3832 | 해골 문 메시지 123 | §33 | §33 | 같음 |
+| 3835–3858 | 고리 1 크랭크: 아치 너머 가시 굴 → 돌리기 (아치 닫힘 · 연기) → 3857 아치 너머 뮤즈 계단 | goring1crank Type 4 (12 초 = 한 바퀴, 최대 0.15) — ¼ = 20 초, R1West 진입 = Siren 출구, **Crank1cam (관절 1 RingRot)** | 고치기 전: 카메라가 고리 바깥 (−338, 25, 2586) 에 고정되어 검은 화면 → 고친 뒤 크랭크 · 톱니 · 아치가 영상과 같은 구도로 고리와 함께 돈다, 23.4 초 (¼) 에 R1WestVol (`c2a`) | 고침 (36.2-1) |
+| 3859–3874 | 계단 → 금 뮤즈 부조 R2 → 메시지 127 | PAND00D SirenDoor | §33 muse1 | 같음 |
+| 3877–3928 | 회랑 (깃발 · 톱니 원판 · 등불) 을 돌아 해골 문 → 다시 크랭크 | 고리 1 회랑 (고정 해골 문, 고리와 함께 도는 장식) | c1 (고리 회전 중 영웅 위치 북 → 서 → 남) | 같은 회랑 |
+| 3931–3958 | 둘째 크랭크 → 아치 너머 불 굴 · 빛 구슬 (아르테미스) | ¼ 더 → R1North = Lvl1 (PAND01A), Ring1LoadVols-Load01AVol2 → LoadWad Pand01A | c1: 50 % 43.4 초 R1North, 27.1 초 LoadWad PAND01A | 같음 (구도 · 시간) |
+
+### 36.2 엔진 결함과 수정
+1. **고리 1 크랭크 카메라가 고리 밖에서 검은 화면을 비췄다 (영상 3836–3958: 크랭크 기둥 · 벽 톱니 · 왼쪽 아치를 늘 같은 구도로).** CAM_Crank1cam (0x41CFE, 고정 · 고정 주시) 은
+   크랭크 GO goring1crank 소유인데 엔진은 "카메라 이름과 같은 관절, 없으면 루트" 로 붙여 크랭크 뿌리 (−316, 0, 1953) 기준 로컬 (−22, 25, 633) = 눈 (−338, 25, 2586)
+   이었다. 원작 [확실]: 노드 헤더 복사 0x12FEE0 이 CAM 리소스 +0x08 (s16) 을 정의 +8 로, 노드 만들기 0x1300C8 이 그것을 카메라 노드 **+0x60 = 부모 관절** 로,
+   노드 월드 0x1303D0 이 (−1 이 아니면) 부모 GO 애니 인스턴스 (+0x104) 의 **지금** 관절 행렬 ([+0x8C] + j·64, 0x1306C8 — 매 프레임 0x136990) 을 곱한다.
+   Crank1cam 의 +0x08 = 1 = RingRot (고리 중심) → 눈 (−273, 29, 1864) 에서 +z (바깥 벽) 를 보고, 크랭크가 고리를 돌리면 카메라도 같이 돈다.
+   전 WAD 2916 카메라 중 이름 규칙과 다른 것 19 개 (PAND00C Crank1cam · Crank3cam · Crank4Cam · EyeCUcam · Zcam · Ring3Cam4 · ElevatorCam · LogCam 1–3,
+   PAND02I PistonCam, PAND03E PinCam2–4, PAND03G BMI 4 개 (관절 56), PAND04G CrnkCam) — 대개 0 (루트), IdleCam 류 1 은 같다.
+   → `CameraDef.Params.joint` (예전 쓰이지 않던 `animated`), `LevelData.PlacedCamera.joint` (범위 밖 → 루트 [근사]: PAND03G gologhitcamgrp 관절 1 개에 56),
+   `CameraRig` 관절 애니 카메라도 그 관절, **`CameraRig.setLiveJoints`** — 엔진이 자세를 정한 GO (발판 몸 중 애니가 걸린 것: 크랭크 진행 · Animator, 두 슬롯) 면
+   눈 · 정면 = 로컬 × 그 GO 의 지금 관절 (`GameScene.liveJoints`).
+2. **크랭크 받침 · 석상 손잡이가 숨지 않았다 — Vis 슬롯 17 JointVisibility 미구현 (영상 3780–3782 · 3788).** 원작 Vis 이펙터 0x1ABAA8 끝 [확실]: 값 ≠ 0 이면 GO +0x104 의
+   관절 표 +0x54 (0x1364F0 이 관절 수만큼 1 로 만듦, 없으면 "Game object needs '_JointVisibility' attribute") 의 [Vis 엔티티 +0x40 = 붙은 관절] 에 1 → 1, 2 → 0,
+   3 → 뒤집기를 쓰고 관절 행렬 캐시 시각 (+0x40) 을 지운다. 렌더 행렬 0x137290 (0x159190 이 부름) 은 부모 비트 (+0x64) 가 없거나 표 값이 0 인 관절을 건너뛰고
+   비트를 세우지 않아 **자손까지** 그리지 않는다 (0x137338–0x1374B0). 애니 u8 트랙도 같은 표에 쓴다 (0x1365A8 이 층 종류 6 출력에 +0x54 를 건다) — 41 §1.3 의 [추정]
+   "값 0 = 자손 숨김" 을 확인. 데이터 21 개 중 관절 ≠ 0 은 PAND00C 넷 (Ring1Crank-RingRot-crankPlatform01-CrankOff/On 관절 2, EyeDoor-LeftAnim-lever01 2 ·
+   RightAnim-lever02 8 Off/On), 나머지 (말하는 머리 · ATHN05B 문 빛 · PAND01BB 반짝이) 는 관절 0 이고 모두 Visible 과 짝이다.
+   → `Platforms.Body.setJointVisible` / `hidden()` (애니 u8 숨김 + 스크립트 관절의 자손 상속), 한 번 받은 몸은 애니 전에도 관절별로 그림 (`jointsHidden`),
+   `GameScene` · `SceneNav` (이웃 슬롯) Vis 처리, 기억 · 다시 보내기는 관절마다 (`ScriptWorld` 열쇠 "오브젝트#j관절" — 오브젝트 하나에 관절 둘을 쓰는 goeyedoor 가
+   마지막 Vis 의 관절로 섞이지 않게).
+3. **고리 톱니 가운데가 크랭크를 돌리는 동안 흐린 덩어리로 덮였다 (영상 3838–3856 의 톱니 가운데는 또렷).** 고리 1 GO 의 이미터 FXC_emitter1–3 은 서브타입 4 (커브) —
+   emitter3 = 관절 9 RingArt1 의 0xD 노드 nurbsCircleShape5 → NCV_nurbsCircle5 (톱니 중심 둘레 반지름 26 원), 생성률은 act 채널. 레벨 배치 이미터
+   (`LevelEmitters`) 는 커브 위에서 내지만 (16 §2.5) GO 이펙트 (Animator · 관절 이미터, `EffectSystem`) 는 커브를 몰라 400/초를 이미터 원점 한 점 (톱니 중심) 에 쌓았다.
+   → `EffectLibrary.Curve` (0xD 노드 → NCV, 표면 이미터와 같은 "그룹 앞 마지막 정의" 규칙), `EffectSystem` 이 매 틱 노드 월드 = GO · 노드 관절 · 노드 로컬 로 커브 표본
+   (`curveSamples`) 을 옮겨 `ParticleSystem.spawnOnCurve`, 방향 = FXC dir, 퍼짐 = FXC (원뿔 이미터와 같은 규칙) [확실: 0x25EC88 · 0x1249C8 흐름 / 근사: 표본 보간].
+
+### 36.3 시험
+`RingsRoomsTest` (3): cameraNodeJointComesFromHeader (0x12FEFC lhu +8 · 0x130100 sh +0x60 · 0x130400 lh +0x60, Crank1cam 관절 1 · 눈 (−273, ·, 1864) · +z),
+jointVisibilityHidesJointAndDescendants (0x1ABDEC · 0x1ABE18 · 0x137368, crankPlatform01 의 자손 숨김 · 고리 장식 · 벽 톱니 보임 · 다시 켬 · 뒤집기, goeyedoor 관절 8),
+ringCrankCurveEmitterHasCurve (FXC_emitter3 → NCV_nurbsCircle5 반지름 26, 상자 이미터 7 은 커브 없음). `CameraRigTest.cameraParams` 는 IdleCam joint 1 · Boat1Cam4 0.
+
+### 36.4 남은 것 · 미확인
+- **빛줄기 (영상 3798–3808)**: 원작은 수정에서 굴을 따라 해골 문까지 굵고 하얀 빛기둥이다. 엔진은 BeamOn (Visible 1) 뒤 MDL_EyeCrusherBeam (z −212…914, 굵기 ≈ 9,
+  MAT_M01SFXlightBeam5 가산 · 레이어 rgba 0.116 · UV 스크롤 3.33 초) 을 그리지만 거의 보이지 않는다. 조명 없는 모델의 정점 색 · 레이어 rgba 가 첫 레이어에 어떻게
+  들어가는지 (43 §30 은 2 · 3 레이어만 해독) 와 두 번째 오브젝트 (MAT_phong4, 형 0x1D) 의 역할 [미해석] — 이번에 고치지 않았다.
+- 아치 안 연기 · 크랭크 받침 먼지 (영상은 어두운 연기와 가는 흰 줄): 엔진은 FXC_emitter7 (서브타입 5 상자) 을 작은 상자 한 점에서 내 아치 가운데 흰 덩어리 [근사: 상자 크기
+  · 서브타입 5–9 갱신 미해석].
+- 크랭크 받침이 숨어 있는 동안 (CrankOn 전) 크랭크를 잡을 수 있는지: CrankOff 는 슬롯 16 (비헤이비어) 을 끄지 않아 엔진은 잡힌다 — 원작 잡기 질의 0x1C3F18 이 숨은 관절
+  손잡이를 거르는지 [미확인] (영상에서는 레버 뒤에만 간다).
+- 웅덩이 잠수 · 헤엄 (3744–3761) · 눈 방 싸움 시간 · 둘째 궁수 무리는 엔진으로 영상과 나란히 보지 않았다 (봇 싸움은 같은 R_SK2 화살).
+- 관절 카메라의 0x1000 (활성화 때 소유 GO 애니 재시작): 엔진은 자체 시계 카메라 애니만 다시 튼다 — 발판 몸 (PAND00C 굴러오는 통나무 LogCam) 의 Animator 애니는 다시 틀지 않는다 [근사, 이 구간 밖].
+- 영상 3836 의 아치 너머 가시 굴 (크랭크 전) · 3857 뮤즈 계단 · 3957 불 굴은 고리 회전 뒤 바깥 고정 세계가 보이는 것 — 엔진 c1/c2 에서 같은 출구 정렬 (R1West · R1North) 을 확인했고, 아치 너머 그림의 나란한 대조는 하지 않았다.
+
+### 36.5 증거 (`work/verify/rings_rooms/`, 커밋 안 함)
+`video/` (영상 159 장), `p_lever1.png` · `p_lever2.png` (3767–3782 ↔ a1: 레버 · KrushOffCam · 가시 굴 · 톱니 벽), `a6m.png` (고친 뒤 받침 없음 → 가짜 크랭크 → 받침),
+`p_handle.png` (3786–3791 ↔ a6 손잡이), `p_beam.png` · `beam2.png` (3797–3808 ↔ a6 빛줄기 — 36.4), `c1a.png` (고치기 전 크랭크 카메라 검은 화면), `c2a.png` · `c2b.png` (고친 뒤 3838 · 3850 구도),
+`gear.png` · `hub.png` (톱니 가운데 덩어리, 36.2-3 전), `map_all.png` · `map_eye.png` (위에서 본 충돌 지도).
 
 ## 37. QA vs PS2 영상 2화 — 아르테미스의 검 숨김 · 해제: 수평 줄 · 오르는 벽 = 해제, 줄 · 사다리 · 붙잡기 · 잡기 · 마법 = 숨김, 검을 든 이동 애니 (영상 4014–5189, 2026-10-25)
 

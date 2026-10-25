@@ -129,8 +129,11 @@ public final class LevelData {
 		}
 	}
 
-	/** 배치된 카메라: 월드 행렬(행 0..2 = 오른쪽/위/뒤, 행 3 = 위치), 레일(NCV_, 월드 좌표, 없으면 null). */
-	public record PlacedCamera(CameraDef def, String owner, float[] world, NcvCurve rail) {
+	/**
+	 * 배치된 카메라: 월드 행렬(행 0..2 = 오른쪽/위/뒤, 행 3 = 위치, 소유 GO 의 배치 자세 기준), 레일(NCV_, 월드 좌표, 없으면 null),
+	 * joint = 붙은 소유 GO 관절 ({@link CameraDef.Params#joint}, 범위 밖이면 0).
+	 */
+	public record PlacedCamera(CameraDef def, String owner, float[] world, NcvCurve rail, int joint) {
 
 		public float[] eye() {
 			return new float[]{world[12], world[13], world[14]};
@@ -223,17 +226,18 @@ public final class LevelData {
 				}
 				CameraDef c = cameras.get(r);
 				if (c != null) {
-					// 카메라 이름과 같은 관절이 있으면 그 관절에 붙는다 (예: idlecamgroup 의 "IdleCam" 관절, ANM 으로 움직임)
-					int j = p.object().skeleton().indexOf(r.substring(4));
-					for (int k = 0; j < 0 && k < p.object().skeleton().size(); k++) {
-						if (p.object().skeleton().joints.get(k).name().equalsIgnoreCase(r.substring(4))) {
-							j = k;
-						}
+					// 카메라 노드는 CAM 헤더 +0x08 의 관절에 붙는다 (0x12FEE0 → 0x1300C8 노드 +0x60, 월드 0x1303D0 = 로컬 × 관절 행렬) [확실].
+					// 대개 0 (루트) 이고 IdleCam 류는 1 (= 카메라 이름의 관절). 예전 엔진은 "카메라 이름과 같은 관절, 없으면 루트" 로 골라 전 WAD 2916 개 중
+					// 19 개가 틀렸다 — PAND00C Crank1cam (RingRot) 은 고리 중심이 아니라 크랭크 GO 뿌리에 붙어 눈이 고리 바깥 633 (z 2586) 이었다 (43 §36).
+					// 범위 밖 (PAND03G gologhitcamgrp 관절 1 개에 56) 은 루트 [근사: 원작은 표를 넘어 읽는다].
+					int j = c.p().joint();
+					if (j < 0 || j >= p.jointWorld().length) {
+						j = 0;
 					}
-					float[] jw = j > 0 ? p.jointWorld()[j] : w;
+					float[] jw = p.jointWorld()[j];
 					// 레일은 월드 좌표 그대로 (ATHN01A Boat1Cam1 의 월드 위치가 NCV_Boat1Rail1 위에 정확히 놓인다)
 					placedCameras.add(new PlacedCamera(c, p.instance().name(), Mat4.mul(c.local(), jw),
-							c.rail() != null ? curves.get(c.rail()) : null));
+							c.rail() != null ? curves.get(c.rail()) : null, j));
 				}
 			}
 		}

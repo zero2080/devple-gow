@@ -278,10 +278,12 @@ public final class EffectSystem implements AutoCloseable {
 				FxResources.Emitter fx = ed.fxc();
 				float[] lt = fx.local();
 				int j = fx.header().length > 0 ? fx.header()[0] : -1;
-				float[] d = fx.subtype() == 1 || fx.subtype() == 8 ? fx.dir() : new float[]{0, 1, 0};
+				// 방향: 원뿔 (1 · 8) 과 커브 (4: b = dir + T·접선 속력 + N·법선 속력, 0x1249C8 — LevelEmitters 와 같음) 은 FXC dir, 나머지는 +Y
+				float[] d = fx.subtype() == 1 || fx.subtype() == 8 || ed.curve() != null ? fx.dir() : new float[]{0, 1, 0};
 				float speedMul = Math.min(s, 4f);
 				EffectLibrary.Surface sf = ed.surface();
-				if (sf != null && def.skeleton() != null && surfJoints == null) {
+				EffectLibrary.Curve cv = ed.curve();
+				if ((sf != null || cv != null) && def.skeleton() != null && surfJoints == null) {
 					surfJoints = jointWorld != null ? jointWorld : act != null && act.hasSkeletalData()
 							? def.pose(act, act == def.anim() ? time : actTime).world(def.skeleton())
 							: bindWorld != null ? bindWorld : (bindWorld = def.skeleton().bindWorld());
@@ -341,6 +343,22 @@ public final class EffectSystem implements AutoCloseable {
 					e.distMin = fx.minDist();
 					e.distMax = fx.maxDist();
 					speedMul = 1f;
+				}
+				if (cv != null) {
+					// 커브 이미터 (서브타입 4, 0x25EC88 → 0x12EDA8 · 0x1249C8): 노드 월드 = GO 월드 · 노드 관절 월드 · 노드 로컬, 커브 P(t) · T(t) 를
+					// 그 행렬로 — 관절이 돌면 커브도 돈다 (PAND00C 고리 1 벽 톱니 FXC_emitter3 = 톱니 둘레 원) [확실: 16 §2.5]. 예전엔 원점 한 점에서 냈다
+					int gj = surfJoints != null && cv.joint() >= 0 && cv.joint() < surfJoints.length ? cv.joint() : -1;
+					Matrix4f nw = new Matrix4f(world);
+					if (gj >= 0) {
+						nw.mul(new Matrix4f().set(surfJoints[gj]));
+					}
+					nw.mul(new Matrix4f().set(cv.local()));
+					curveSamples(cv.curve(), nw, e);
+					nw.getTranslation(e.pos);
+					e.tangentSpeed = fx.tangentSpeed();
+					e.normalSpeed = fx.normalSpeed();
+					e.distMin = fx.minDist();
+					e.distMax = fx.maxDist();
 				}
 				float at = act == def.anim() ? time : actTime;
 				float ct = act != null && act.looping() && act.duration > 0 ? at % act.duration : at;
@@ -679,6 +697,33 @@ public final class EffectSystem implements AutoCloseable {
 	}
 
 	/**
+	 * 커브 이미터의 월드 표본 (점·접선, 구간마다 {@link LevelEmitters#CURVE_SAMPLES_PER_SEGMENT} 개 — {@link LevelEmitters#curveSamples} 와 같은 표본) 을
+	 * 노드 월드 nw (열벡터 JOML) 로 옮겨 e.curve / e.curveTan 에 (같은 크기면 배열을 다시 쓴다).
+	 */
+	static void curveSamples(devple.gow.tools.level.NcvCurve c, Matrix4f nw, ParticleSystem.Emitter e) {
+		int n = c.knots.length * LevelEmitters.CURVE_SAMPLES_PER_SEGMENT + 1;
+		if (e.curve == null || e.curve.length != n * 3) {
+			e.curve = new float[n * 3];
+			e.curveTan = new float[n * 3];
+		}
+		float[] a = new float[3];
+		Vector3f v = new Vector3f();
+		for (int s = 0; s < n; s++) {
+			float t = c.tMax() * s / (n - 1);
+			c.eval(t, a);
+			nw.transformPosition(v.set(a[0], a[1], a[2]));
+			e.curve[s * 3] = v.x;
+			e.curve[s * 3 + 1] = v.y;
+			e.curve[s * 3 + 2] = v.z;
+			c.tangent(t, a);
+			nw.transformDirection(v.set(a[0], a[1], a[2]));
+			e.curveTan[s * 3] = v.x;
+			e.curveTan[s * 3 + 1] = v.y;
+			e.curveTan[s * 3 + 2] = v.z;
+		}
+	}
+
+	/**
 	 * 이펙트 이미터 → 파티클 정의. 색·텍스처·블렌드·알파 곡선은 레벨 이미터와 같은 해석 ({@link LevelEmitters#def}),
 	 * 크기 |PTC+0x74| (≥ 800 → /128 (VU 4 는 /256), ≥ 160 → /64, 양수 → /16, 음수 → 2.5) [근사], 가속 = 필드 합 ({@link EffectLibrary#fieldAccel}).
 	 */
@@ -695,7 +740,8 @@ public final class EffectSystem implements AutoCloseable {
 		float size = sh.size() < 0 ? 2.5f : s >= 800 ? s / (sh.vuType() == 4 ? 256f : 128f) : s >= 160 ? s / 64f : Math.max(s / 16f, 0.5f);
 		float life = sh.lifespan() > 0 ? sh.lifespan() : 0.5f;
 		int sub = em.subtype();
-		boolean cone = sub == 1 || sub == 8;
+		// 커브 이미터 (4) 는 원뿔 이미터와 같은 속력·퍼짐 (0x1249C8 후반, LevelEmitters 와 같음) — 위치는 ParticleSystem.spawnOnCurve
+		boolean cone = sub == 1 || sub == 8 || sub == 4 && ed.curve() != null;
 		float spread = cone ? em.spread() : 2f; // 2 = 전방향 구 (π)
 		float r = Math.max(em.maxDist(), 0) * 16 * 0.5f + (sub >= 5 && sub <= 9 ? 4 : 0);
 		float[] acc = EffectLibrary.fieldAccel(fields);

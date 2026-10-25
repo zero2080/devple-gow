@@ -53,7 +53,8 @@ class CameraRigTest {
 		assertEquals(3, p.pitchMode());
 		assertEquals(3, p.yawMode());
 		assertEquals(160f, p.railMax(), 1e-3f);
-		assertTrue(d.camera("IdleCam").def().p().animated());
+		assertEquals(1, d.camera("IdleCam").def().p().joint()); // 노드 헤더 +0x08 = 관절 1 "IdleCam" (0x1300C8 → +0x60)
+		assertEquals(0, d.camera("Boat1Cam4").def().p().joint());
 		CameraDef c1 = d.camera("Boat1Cam1").def();
 		assertEquals(2, c1.transitions().size());
 		assertEquals("Boat1Cam2", c1.transitions().getFirst().from());

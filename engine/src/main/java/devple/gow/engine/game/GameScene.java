@@ -708,6 +708,9 @@ public final class GameScene implements Scene {
 		ph = devple.gow.engine.core.PerfMonitor.phase(". other", ph);
 		cameraRig = new devple.gow.engine.level.CameraRig(level.data());
 		cameraRig.setOther(otherData); // 다른 슬롯 레벨의 CMV·카메라도 질의 (원작 두 슬롯 상주)
+		// 카메라 노드 월드 = 로컬 × 소유 GO 의 지금 관절 (0x1303D0) — 엔진이 자세를 정하는 GO (크랭크·Animator 발판, 두 슬롯): PAND00C 고리 1
+		// Crank1cam 은 크랭크가 돌리는 고리를 따라 돈다 (43 §36)
+		cameraRig.setLiveJoints(this::liveJoints);
 		// 카메라 전환 → 전역 이벤트 1037 (인자0 = 카메라 이름, 원작 0x1EEE88)
 		cameraRig.onSwitch(n -> {
 			camPrev = camNow; // 0x1EEE04: +0x820 ← +0x808, +0x808 ← 새 이름 (Internal 0xE / 0xD)
@@ -1676,6 +1679,21 @@ public final class GameScene implements Scene {
 						System.out.println("VIS " + source.name() + " CMV " + (values[4] == 1 ? "ON " : "OFF ") + objects);
 					}
 					objects.forEach(o -> cameraRig.setOwnerVolumes(o, values[4] == 1)); // Attr11_1: CMV 볼륨 on/off
+				}
+				if (values.length > 10 && values[10] != 0 && nav != null) {
+					// 슬롯 17 JointVisibility (0x1ABAA8 끝): GO 관절 표 [Vis +0x40 관절] = 1 보임 / 2 숨김 / 3 뒤집기 — 그 관절과 자손을 그리지 않는다 (0x137290)
+					// [확실]. PAND00C 고리 1 크랭크 받침은 눈 방 레버 (203) 11 초 뒤 CrankOn 까지 숨고, 그동안 가짜 크랭크가 벽에서 접혀 내려온다 (영상 3780–3782,
+					// 43 §36). 관절 0 (말하는 머리 등) 은 모두 Visible 과 짝이다. 엔진은 발판 몸 (지금 · 다른 슬롯) 만 관절별로 그린다
+					int joint = source.data.unk40();
+					for (String o : objects) {
+						devple.gow.engine.nav.Platforms.Body b = nav.navWorld.platforms().body(o);
+						if (b == null && nav.neighbourPlatforms() != null) {
+							b = nav.neighbourPlatforms().body(o);
+						}
+						if (b != null) {
+							b.setJointVisible(joint, values[10]);
+						}
+					}
 				}
 			}
 
@@ -3129,6 +3147,21 @@ public final class GameScene implements Scene {
 	 * 같은 구조의 건물 폭발 GO (group3251/3278/3284, TallBuildExplode2, CornerRip00, group3289) 도. 메시는 레벨이 그대로 그리고 (hideMesh), 링크 없는 상수
 	 * 이미터는 LevelEmitters 몫. 시간은 발판 몸 (Platforms) 의 act 시간에 맞춘다.
 	 */
+	/**
+	 * 엔진이 자세를 정한 GO (지금·다른 슬롯 {@code Platforms} 몸 중 애니가 걸린 것 — 크랭크 진행 시간 · Animator) 의 지금 관절 월드, 없으면 null
+	 * ({@link devple.gow.engine.level.CameraRig#setLiveJoints}). 애니가 걸린 적 없는 몸은 배치 자세라 카메라 자체 애니 · 배치 자리를 그대로 쓴다.
+	 */
+	private float[][] liveJoints(String owner) {
+		if (nav == null) {
+			return null;
+		}
+		devple.gow.engine.nav.Platforms.Body b = nav.navWorld.platforms().body(owner);
+		if (b == null && nav.neighbourPlatforms() != null) {
+			b = nav.neighbourPlatforms().body(owner);
+		}
+		return b != null && b.anim() != null ? b.joints() : null;
+	}
+
 	void startAnimatorEffects(List<String> objects) {
 		if (magicFx == null || nav == null) {
 			return;
@@ -4402,13 +4435,15 @@ public final class GameScene implements Scene {
 			if (animatedRope(b.owner)) {
 				continue; // 애니로 옮겨지는 줄 오브젝트: 뿌리는 애니, 사슬은 시뮬레이션 (poseRopes, 0x218168)
 			}
-			if (b.anim() != null && b.scripted || b.follows()) { // 정지 CDV 오브젝트의 반복 act 는 렌더가 따로 돌린다 (반복 재생 배치). 부모 링크로 옮겨진 몸은 그 자세로
+			// 정지 CDV 오브젝트의 반복 act 는 렌더가 따로 돌린다 (반복 재생 배치). 부모 링크로 옮겨진 몸은 그 자세로.
+			// 스크립트 JointVisibility 로 관절을 끈 몸 (PAND00C 고리 1 크랭크 받침 · 석상 손잡이) 은 애니 전에도 관절별로 그린다 (43 §36)
+			if (b.anim() != null && b.scripted || b.follows() || b.jointsHidden()) {
 				level.fx().followOwner(b.owner, b.joints()); // 그 GO 의 배치 이미터도 관절을 따라 (사이렌 영혼의 검은 연기, 43 §31.2-6)
-				level.poseInstance(b.owner, b.drawJoints(), b.hidden()); // 움직인 발판·문·회전방은 애니 자세로 (관절 숨김 포함: DMC 결계, SCR_GhostTrail 꼬리)
+				level.poseInstance(b.owner, b.drawJoints(), b.hidden()); // 움직인 발판·문·회전방은 애니 자세로 (관절 숨김 포함: DMC 결계, SCR_GhostTrail 꼬리, 스크립트 관절)
 			}
 		}
 		for (var b : nav.neighbourPlatforms().bodies()) { // 다른 슬롯 레벨 문·발판 (43 §13.8)
-			if (b.anim() != null && b.scripted || b.follows()) {
+			if (b.anim() != null && b.scripted || b.follows() || b.jointsHidden()) {
 				otherPosed.put(b.owner, new Object[]{b.drawJoints(), b.hidden()});
 			}
 		}

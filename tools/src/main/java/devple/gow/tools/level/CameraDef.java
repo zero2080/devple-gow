@@ -8,7 +8,9 @@ import java.util.List;
 /**
  * 카메라 CAM_ (CAM 서버 0x09, 0x24C 바이트). 소유 오브젝트 관절 로컬 좌표. 로더 0x13E790 이 0x70..0xCC 를 정의 객체 +0x10 으로 복사.
  * <pre>
- * 0x00 u32 9          0x08 u16 0, u16 0xFFFF (1 = ANM 으로 움직이는 관절 카메라: IdleCam 류 인트로 팬)
+ * 0x00 u32 9          0x08 s16 부모 관절 번호, s16 0xFFFF — 노드 헤더 (0x12FEE0 이 정의 +8/+0xA 로, 0x1300C8 이 카메라 노드 +0x60/+0x62 로 복사,
+ *                     노드 월드 0x1303D0 = 로컬 × 소유 GO 애니 인스턴스 관절 [+0x60] 행렬 (−1 = 로컬 그대로)) [확실]. 대개 0 (루트), IdleCam 류 1,
+ *                     PAND00C Crank1cam 1 = 고리 1 RingRot (돌아가는 고리를 따라 돈다, 43 §36)
  * 0x10 vec4[3]        회전 행 (행벡터, 관절 스케일의 역수만큼 스케일됨 → 관절 월드를 곱하면 정규직교)
  * 0x40 vec4           위치 (w=1)  — 카메라는 로컬 -Z 를 바라본다
  * 0x50 char[24]       레일 커브 이름 NCV_x (첫 바이트 0 이면 레일 없음)
@@ -44,10 +46,13 @@ public record CameraDef(String name, float[] local, String rail, int mode, int r
 	/** 여러 카메라 대상 가중 ("Camera Target Weight", AresCamera1 0x1F67C0). */
 	public static final int F_MULTI_TARGET = 0x10000;
 
-	/** 런타임 파라미터 (0x70.., 거리 단위는 이미 ×16 한 월드 유닛). */
+	/**
+	 * 런타임 파라미터 (0x70.., 거리 단위는 이미 ×16 한 월드 유닛). joint = 노드 헤더 +0x08 의 부모 관절 번호 (s16, −1 = 부모 없음) —
+	 * 카메라가 붙는 소유 GO 관절 (0x1300C8 → 노드 +0x60, 0x1303D0) [확실].
+	 */
 	public record Params(float fovRad, int flags, int pitchMode, int yawMode, float distScale, float railMax, float railMin,
 			float distMax, float distMin, float pitchRange, float yawRange, float damping, int priority, float blend,
-			float[] lookOffset, boolean animated, float[] deadZone) {
+			float[] lookOffset, int joint, float[] deadZone) {
 	}
 
 	/** 이 카메라로 들어올 때, 이전 카메라가 from 이면 blend 초 (기본값 대신). prefer = 동순위일 때 우선. */
@@ -72,7 +77,7 @@ public record CameraDef(String name, float[] local, String rail, int mode, int r
 		float distMax = d.getFloat(0x88), distMin = Math.min(d.getFloat(0x8C), distMax);
 		Params p = new Params(d.getFloat(0x70), d.getInt(0x74), pitchMode, yawMode, d.getFloat(0x7C), railMax * 16,
 				railMin * 16, distMax * 16, distMin * 16, d.getFloat(0x90), d.getFloat(0x94), d.getFloat(0xA8),
-				d.getInt(0xBC), d.getFloat(0xB8), new float[]{d.getFloat(0xC0) * 16, d.getFloat(0xC4) * 16, d.getFloat(0xC8) * 16}, d.getShort(0x08) == 1,
+				d.getInt(0xBC), d.getFloat(0xB8), new float[]{d.getFloat(0xC0) * 16, d.getFloat(0xC4) * 16, d.getFloat(0xC8) * 16}, d.getShort(0x08),
 				deadZone(d));
 		// 전환표: 끝에서부터 빈 이름을 버린다 (0x13E950)
 		List<Transition> tr = new ArrayList<>();

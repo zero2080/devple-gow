@@ -245,14 +245,8 @@ public final class CameraRig {
 				if (!c.owner().equals(p.instance().name()) || !p.object().refs().contains(c.def().name())) {
 					continue;
 				}
-				String jn = c.def().name().substring(4);
-				int j = 0;
-				for (int k = 0; k < sk.size(); k++) {
-					if (sk.joints.get(k).name().equalsIgnoreCase(jn)) {
-						j = k;
-					}
-				}
-				anims.put(c, new CamAnim(sk, p.instance().matrix(), c.def().local(), j, act));
+				// 붙은 관절 = CAM 노드 헤더 +0x08 (0x1300C8 → 노드 +0x60) [확실] — LevelData 와 같은 관절
+				anims.put(c, new CamAnim(sk, p.instance().matrix(), c.def().local(), c.joint(), act));
 			}
 		}
 	}
@@ -392,6 +386,34 @@ public final class CameraRig {
 		active.clear();
 		volumeQuery = true;
 		framedLast = false; // 다음 갱신은 반드시 선택한다 (빈 상태 링)
+	}
+
+	/**
+	 * 엔진이 자세를 정하는 GO (크랭크·레버·Animator 발판 — {@code Platforms} 몸) 의 지금 관절 월드 (소유 GO 이름 → 관절별 행렬, 없으면 null).
+	 * 원작 카메라 노드 월드 0x1303D0 은 매 프레임 소유 GO 애니 인스턴스의 지금 관절 행렬 ([+0x8C] + j·64, 0x136990 이 프레임마다 갱신) 을 곱한다 [확실]
+	 * — PAND00C 고리 1 크랭크의 Crank1cam (관절 1 RingRot) 은 크랭크가 돌리는 고리를 따라 돌아 크랭크·벽 톱니·아치를 늘 같은 구도로 잡는다
+	 * (영상 3836–3858, 43 §36). 예전엔 카메라 자체 시계의 ANM ({@link CamAnim}) 이나 배치 자세만 써서 크랭크로 돈 고리를 따라가지 못했다.
+	 */
+	public void setLiveJoints(java.util.function.Function<String, float[][]> f) {
+		liveJoints = f;
+	}
+
+	private java.util.function.Function<String, float[][]> liveJoints;
+
+	/** 소유 GO 가 엔진 자세를 가지면 카메라 월드 = 로컬 × 그 관절 (0x1303D0), 아니면 null. */
+	private float[] liveWorld(LevelData.PlacedCamera c) {
+		float[][] jw = liveJoints != null ? liveJoints.apply(c.owner()) : null;
+		if (jw == null || jw.length == 0) {
+			return null;
+		}
+		return Mat4.mul(c.def().local(), jw[Math.min(Math.max(c.joint(), 0), jw.length - 1)]);
+	}
+
+	/** 카메라 행렬의 정면 (−Z 행, 정규화). */
+	static float[] forwardOf(float[] w) {
+		float x = -w[8], y = -w[9], z = -w[10];
+		float l = (float) Math.sqrt(x * x + y * y + z * z);
+		return new float[]{x / l, y / l, z / l};
 	}
 
 	/** Vis 이펙터 슬롯 4 (Attr11_1, 오브젝트 속성 0x11 = 충돌 서버 볼륨 추정): 1 켬, 2 끔. 꺼진 소유자의 CMV 는 무시. */
@@ -1002,9 +1024,10 @@ public final class CameraRig {
 		CameraDef.Params cp = s.cam.def().p();
 		p.fovDeg = verticalFov(cp.fovRad());
 		CamAnim anim = anims.get(s.cam);
-		float[] w = anim != null ? anim.world() : s.cam.world();
+		float[] live = liveWorld(s.cam);
+		float[] w = live != null ? live : anim != null ? anim.world() : s.cam.world();
 		Vector3f camPos = new Vector3f(w[12], w[13], w[14]);
-		float[] f = s.cam.forward();
+		float[] f = live != null ? forwardOf(w) : s.cam.forward();
 		Vector3f fwd = new Vector3f(f[0], f[1], f[2]);
 		if ((cp.flags() & CameraDef.F_TRACK) == 0) {
 			Vector3f at;

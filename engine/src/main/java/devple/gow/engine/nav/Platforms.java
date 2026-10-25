@@ -224,9 +224,53 @@ public final class Platforms {
 			return skeleton;
 		}
 
-		/** 현재 act 의 관절 숨김 (u8 가시성 트랙, 41 §1.3) — 애니가 없거나 트랙이 없으면 null. */
+		/**
+		 * 현재 관절 숨김 = act 의 u8 가시성 트랙 (41 §1.3) 과 스크립트 JointVisibility ({@link #setJointVisible}) — 둘 다 없으면 null.
+		 * 원작 렌더 행렬 0x137290 은 부모 비트가 없거나 표 값이 0 인 관절을 건너뛰고 비트를 세우지 않아 자손까지 그리지 않는다 [확실] → 꺼진 관절의 자손도 숨김.
+		 */
 		public boolean[] hidden() {
-			return anim == null ? null : anim.hiddenJoints(skeleton, time);
+			boolean[] h = anim == null ? null : anim.hiddenJoints(skeleton, time);
+			if (jointOff == null) {
+				return h;
+			}
+			boolean[] out = h != null ? h.clone() : new boolean[skeleton.size()];
+			for (int j = 0; j < out.length && j < skeleton.size(); j++) {
+				for (int k = j, guard = 0; k >= 0 && guard < 64; k = skeleton.joints.get(k).parent(), guard++) {
+					if (k < jointOff.length && jointOff[k]) {
+						out[j] = true;
+						break;
+					}
+				}
+			}
+			return out;
+		}
+
+		/**
+		 * 스크립트 Vis JointVisibility (슬롯 17) 로 꺼진 관절 (자기 값만, 자손은 {@link #hidden} 이 잇는다). 원작 0x1ABAA8 끝: 값이 0 이 아니면
+		 * GO 모델 인스턴스 (+0x104) 의 관절 표 (+0x54, 0x1364F0 이 모두 1 로 만듦) 의 [Vis 엔티티 +0x40 = 붙은 관절] 에 1 → 1, 2 → 0, 3 → 뒤집기를 쓰고
+		 * 관절 행렬 캐시 시각 (+0x40) 을 지운다 [확실]. 데이터: PAND00C Ring1Crank-RingRot-crankPlatform01-CrankOff/On (goring1crank 관절 2 — 크랭크 받침·기둥),
+		 * EyeDoor-LeftAnim-lever01 / RightAnim-lever02 Off/On (goeyedoor 관절 2 · 8 — 석상 받침 톱니 손잡이), 나머지 (말하는 머리 · ATHN05B 문 빛 ·
+		 * PAND01BB 반짝이) 는 관절 0 이고 Visible 과 짝 (43 §36).
+		 */
+		boolean[] jointOff;
+
+		/** @param value 1 보임, 2 숨김, 3 뒤집기 (0 = 그대로) */
+		public void setJointVisible(int joint, int value) {
+			if (value == 0 || joint < 0 || joint >= skeleton.size()) {
+				return;
+			}
+			if (jointOff == null) {
+				jointOff = new boolean[skeleton.size()];
+			}
+			jointOff[joint] = value == 3 ? !jointOff[joint] : value == 2;
+		}
+
+		/**
+		 * 스크립트 JointVisibility 를 받은 적이 있는가 — 애니가 돈 적 없어도 자세 그리기 (관절별) 로 그려야 한다. 다시 다 켜져도 참 (장면의 마지막
+		 * 자세 · 숨김이 남지 않도록 계속 넘긴다).
+		 */
+		public boolean jointsHidden() {
+			return jointOff != null;
 		}
 
 		/**

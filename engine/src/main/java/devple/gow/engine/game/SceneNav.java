@@ -581,6 +581,15 @@ public final class SceneNav {
 					}
 					host.neighbourCamera(null, null, objects, values[4] == 1);
 				}
+				if (values.length > 10 && values[10] != 0) {
+					// 슬롯 17 JointVisibility — 이웃 슬롯 발판 몸의 관절 표 (0x1ABAA8, GameScene 과 같은 규칙, 43 §36): PAND00D 눈 방에서 돈 PAND00C 크랭크 받침
+					for (String o : objects) {
+						Platforms.Body b = neighbourPlatforms.body(o);
+						if (b != null) {
+							b.setJointVisible(source.data.unk40(), values[10]);
+						}
+					}
+				}
 			}
 
 			@Override
