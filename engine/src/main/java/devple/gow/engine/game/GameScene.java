@@ -1425,7 +1425,7 @@ public final class GameScene implements Scene {
 				// 이웃 레벨 Creator "savepoint" (원작 두 슬롯 GO 상주): 자리·빛기둥을 이 씬에 — R2 저장 (0x1DC678 은 슬롯 구분 없이 가장 가까운 것).
 				if (SceneNav.creatorIs(name, "savepoint") && source.owner != null) {
 					float[] m = SceneNav.creatorMatrix(source); // 엔티티 행렬 (0x1A9CD0), 43 §19
-					addSavePoint(m, otherName);
+					addSavePoint(m, otherName, nav != null ? nav.neighbourSlot(source, "unk6") : null);
 					boolean body = spawnSavePoint(m, otherName);
 					System.out.printf("세이브 포인트 생성 (이웃 %s, %.0f, %.0f, %.0f)%s%n", otherName, m[12], m[13], m[14], body ? " + 빛기둥 savepoint" : "");
 					return;
@@ -1791,7 +1791,7 @@ public final class GameScene implements Scene {
 				Object name = world.slot(source, "Name0");
 				if (SceneNav.creatorIs(name, "savepoint") && source.owner != null) {
 					float[] m = SceneNav.creatorMatrix(source);
-					addSavePoint(m, levelName);
+					addSavePoint(m, levelName, world.slot(source, "unk6"));
 					boolean body = spawnSavePoint(m, levelName);
 					System.out.printf("세이브 포인트 생성 (%.0f, %.0f, %.0f)%s%n", m[12], m[13], m[14], body ? " + 빛기둥 savepoint" : "");
 				} else {
@@ -2970,12 +2970,21 @@ public final class GameScene implements Scene {
 	static final float SAVE_POINT_RANGE = 4f * 16f;
 
 	private boolean nearSavePoint() {
+		return nearestSavePoint() != null;
+	}
+
+	/** 범위 안의 가장 가까운 세이브 포인트 자리 (원작 0x1DC678: 거리가 영웅 +0x90 보다 작으면 +0x8C = 그 번호), 없으면 null. */
+	private Vector3f nearestSavePoint() {
+		Vector3f best = null;
+		float bd = SAVE_POINT_RANGE;
 		for (Vector3f sp : savePoints) {
-			if (sp.distance(hero.ctl.position) < SAVE_POINT_RANGE) {
-				return true;
+			float d = sp.distance(hero.ctl.position);
+			if (d < bd) {
+				bd = d;
+				best = sp;
 			}
 		}
-		return false;
+		return best;
 	}
 
 	/** 스크립트 화면 페이드 (Entity 0x5 FadeOut / 0x6 FadeIn, {@link ScreenFade}). 레벨마다 새로 (0x1AF600). */
@@ -3187,11 +3196,58 @@ public final class GameScene implements Scene {
 	/** 세이브 포인트 자리·몸 → 만든 레벨 (대문자) — 그 레벨이 두 슬롯에서 내려가면 지운다 ({@link #releaseLevel}). */
 	private final Map<Object, String> savePointOwner = new java.util.IdentityHashMap<>();
 
-	/** Creator "savepoint" 의 자리 (R2 거리 판정, {@link #nearSavePoint}). */
-	private void addSavePoint(float[] m, String owner) {
+	/**
+	 * 세이브 포인트 자리 → 번호: Creator "savepoint" 의 슬롯 6 이 새 GO 의 SavePoint 비헤이비어 값 (0x1ACCA8 → 0x1A5130 → 0x22E2A8 의 +8,
+	 * 0x22E250) 이 되고, 매 프레임 0x2671C8 이 그 번호·자리로 0x1DC678 을 부른다 [확실]. 전 레벨 데이터: ATHN06A 10 · ATHN07 12 · PAND00A 15 · PAND00D 16 ·
+	 * PAND01A 17 · PAND01B 18 · PAND01C 19 · PAND00C 20 (메시지 610 "오라클의 사원" · 617 "아틀라스의 시험" …).
+	 */
+	private final Map<Object, Integer> savePointNumber = new java.util.IdentityHashMap<>();
+
+	/** Creator "savepoint" 의 자리 (R2 거리 판정, {@link #nearSavePoint}) 와 번호 (슬롯 6). */
+	private void addSavePoint(float[] m, String owner, Object number) {
 		Vector3f v = new Vector3f(m[12], m[13], m[14]);
 		savePoints.add(v);
 		savePointOwner.put(v, owner);
+		savePointNumber.put(v, number instanceof Number n ? n.intValue() : 0);
+	}
+
+	/** R_SAVEPT.WAD (TXR_SavePt01..41, 슬롯 그림) — 저장 화면을 처음 열 때 읽는다. */
+	private WadAssets savePtAssets;
+
+	/**
+	 * 저장 화면 슬롯 그림 (원작 0x1B81C0 [확실]): 번호 &gt; 0 = "TXR_SavePt%02d", 아니면 MemoryCard_Image1 의 원래 그림 (+0x14A8, 0x1B8138) 을
+	 * MemoryCard_Image1..4 (HUD FLP 텍스처 TXR_HUDK020..023) 에.
+	 */
+	private void saveThumbnails(int[] points) {
+		devple.gow.engine.ui.FlpRenderer r = hud.renderer();
+		String img1 = r.clipTexture("MemoryCard_Image1");
+		for (int i = 0; i < points.length; i++) {
+			String slot = r.clipTexture("MemoryCard_Image" + (i + 1));
+			int n = points[i];
+			if (n > 0) {
+				String txr = String.format("TXR_SavePt%02d", n);
+				r.swapTexture(slot, () -> savePtTexture(txr));
+			} else if (i == 0 || img1 == null) {
+				r.swapTexture(slot, null);
+			} else {
+				r.swapTexture(slot, () -> r.texture(img1));
+			}
+		}
+	}
+
+	private devple.gow.engine.render.Texture savePtTexture(String txr) {
+		try {
+			if (savePtAssets == null) {
+				java.nio.file.Path p = Content.file(session.rom, "R_SAVEPT.WAD");
+				if (!java.nio.file.Files.exists(p)) {
+					return null;
+				}
+				savePtAssets = new WadAssets(p);
+			}
+			return savePtAssets.texture(txr);
+		} catch (IOException | RuntimeException ex) {
+			return null;
+		}
 	}
 
 	/**
@@ -3221,6 +3277,7 @@ public final class GameScene implements Scene {
 			Vector3f v = it.next();
 			if (k.equalsIgnoreCase(savePointOwner.get(v))) {
 				savePointOwner.remove(v);
+				savePointNumber.remove(v);
 				it.remove();
 				saves++;
 			}
@@ -3510,7 +3567,8 @@ public final class GameScene implements Scene {
 		// 메모리카드 쓰기 (0x230A98) 는 R2 때 찍은 스냅숏 버퍼 0x3387B8 를 그대로 쓴다 (0x22D390 → 0x22D418 뒤 저장 질문) — 그 스냅숏 = 두 슬롯 덩어리를
 		// 표에 쓴 World_Serialize 0x1B3E48 (43 §21, §26)
 		SaveGame snap = session.checkpoint;
-		saveFlow = MemoryCardFlow.save(hud.variables(), session.messages, SaveGame.dir(), () -> snap != null ? snap : snapshot());
+		saveFlow = MemoryCardFlow.save(hud.variables(), session.messages, SaveGame.dir(), () -> snap != null ? snap : snapshot())
+				.thumbnails(this::saveThumbnails);
 		saveFlow.start();
 	}
 
@@ -3998,7 +4056,9 @@ public final class GameScene implements Scene {
 		}
 		boolean use = e.input().pressed(PadButton.USE) || lastInput != null && lastInput.pressed(PadButton.USE);
 		if (use && !hero.combat.active() && nearSavePoint()) {
-			takeCheckpoint("세이브 포인트"); // 0x1DC4DC → 0x22D390: 스냅숏 (0x22D418) 뒤 저장 질문 (0x21D8B0)
+			// 0x1DC4DC → 0x22D390(영웅 +0x8C): 세이브 포인트 번호 0x2A2704 (저장 슬롯 이름·그림), 스냅숏 (0x22D418) 뒤 저장 질문 (0x21D8B0)
+			session.savePoint = savePointNumber.getOrDefault(nearestSavePoint(), 0);
+			takeCheckpoint("세이브 포인트");
 			askSave();
 			return;
 		}
@@ -5419,6 +5479,9 @@ public final class GameScene implements Scene {
 		}
 		hero.close();
 		hud.close();
+		if (savePtAssets != null) {
+			savePtAssets.close();
+		}
 		if (levelHud != null) {
 			levelHud.close();
 		}

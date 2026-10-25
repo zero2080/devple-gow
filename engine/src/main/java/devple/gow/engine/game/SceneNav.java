@@ -441,6 +441,12 @@ public final class SceneNav {
 		return neighbour;
 	}
 
+	/** 이웃 레벨 스크립트 엔티티의 슬롯 값 (시작 중인 이웃 세계 먼저 — {@link Host#neighbourCreate} 안에서), 이웃이 없으면 null. */
+	public Object neighbourSlot(ScriptEntity e, String name) {
+		ScriptWorld w = neighbourStarting != null ? neighbourStarting : neighbour;
+		return w != null ? w.slot(e, name) : null;
+	}
+
 	/** 다른 슬롯 레벨을 되살린 레벨 기억 (부순 물체를 씬이 건다, null = 처음 · 넘겨 씀). */
 	private ScriptWorld.Memory neighbourMemory;
 

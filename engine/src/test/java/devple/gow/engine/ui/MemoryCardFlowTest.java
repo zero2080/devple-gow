@@ -57,7 +57,9 @@ class MemoryCardFlowTest {
 
 	@Test
 	void shellLoadFlow() throws Exception {
-		sample(2, 3723).write(MemoryCardFlow.file(card, 1));
+		SaveGame atlas = sample(2, 3723);
+		atlas.savePoint = 17; // PAND01A SaveGameZone (Creator 슬롯 6)
+		atlas.write(MemoryCardFlow.file(card, 1));
 		UiVariables v = new UiVariables();
 		ShellBinding.init(v, 0);
 		List<String> log = new ArrayList<>();
@@ -73,9 +75,12 @@ class MemoryCardFlowTest {
 		assertEquals(21, f.state());
 		press(p, UiPad.CIRCLE); // 카드 슬롯 1
 		assertEquals(23, f.state(), "파일 선택");
+		// Save_SlotText 0x22E810: 이름 = 메시지 600 + 세이브 포인트 번호, 셋째 줄 = "%s    %d:%02d:%02d" (난이도 + 시간) — 영상 5182 "아틀라스의 시험" · "전사(보통) 3:10:43"
 		assertEquals("비어있음", v.get("PS2_MemoryCard_Name1"));
-		assertEquals("영웅(어려움)", v.get("PS2_MemoryCard_Name2"));
-		assertEquals("1:02:03", v.get("PS2_MemoryCard_PlayTime2"));
+		assertEquals("아틀라스의 시험", v.get("PS2_MemoryCard_Name2"));
+		assertEquals("영웅(어려움)    1:02:03", v.get("PS2_MemoryCard_PlayTime2"));
+		assertTrue(String.valueOf(v.get("PS2_MemoryCard_Date2")).matches("\\d{4}/\\d{1,2}/[ \\d]\\d [ \\d]\\d:\\d\\d:\\d\\d [ap]m"),
+				"날짜 %d/%d/%2d %2d:%02d:%02d am|pm: " + v.get("PS2_MemoryCard_Date2"));
 		press(p, UiPad.CIRCLE); // 빈 파일 1 → 무시
 		assertEquals(23, f.state(), "빈 파일은 고를 수 없음");
 		press(p, UiPad.RIGHT); // 파일 2
@@ -145,12 +150,23 @@ class MemoryCardFlowTest {
 			choice = v.get("PS2_Menu_Choice").replace(".0", "");
 		}
 		assertEquals("1", choice, "저장하시겠습니까? 예: " + log);
-		MemoryCardFlow f = MemoryCardFlow.save(v, p.messages(), card, () -> sample(1, 61));
+		SaveGame old = sample(1, 30);
+		old.savePoint = 17;
+		old.write(MemoryCardFlow.file(card, 2)); // 파일 3 = 예전 저장 (PAND01A)
+		List<int[]> thumbs = new ArrayList<>();
+		MemoryCardFlow f = MemoryCardFlow.save(v, p.messages(), card, () -> {
+			SaveGame g = sample(1, 61);
+			g.savePoint = 10;
+			return g;
+		}).thumbnails(thumbs::add);
 		p.addCommandListener(f::command);
 		f.start();
 		idle(p, 30);
 		press(p, UiPad.CIRCLE);
 		assertEquals(22, f.state(), "저장 파일 선택");
+		// 슬롯 그림 (0x1B81C0): 파일마다 세이브 포인트 번호 (없는 파일 0 → 기본 그림)
+		assertEquals("[0, 0, 17, 0]", java.util.Arrays.toString(thumbs.getLast()));
+		assertEquals("아틀라스의 시험", v.get("PS2_MemoryCard_Name3"));
 		press(p, UiPad.CIRCLE);
 		assertEquals(16, f.state(), "새 파일 생성?");
 		press(p, UiPad.UP);
@@ -162,5 +178,20 @@ class MemoryCardFlowTest {
 		press(p, UiPad.CIRCLE);
 		assertEquals(MemoryCardFlow.Result.SAVED, f.result());
 		assertEquals(61, SaveGame.read(MemoryCardFlow.file(card, 0)).playTime, 0.01);
+		assertEquals(10, SaveGame.read(MemoryCardFlow.file(card, 0)).savePoint, "세이브 포인트 번호도 파일에 (슬롯 디렉터리 u16 +0xC)");
+	}
+
+	/** Save_SlotText 0x22E810 의 이름 갈래와 0x22E4A8 의 언어 5 날짜 형식 (43 §34). */
+	@Test
+	void slotNameAndDate() throws Exception {
+		MessageTable m = MessageTable.fromWad(WadFile.load(FlpPlayerTest.rom().resolve("R_PERMK.WAD"))).orElseThrow();
+		assertEquals("* Not A Save Point *", MemoryCardFlow.slotName(m, 0));
+		assertEquals("오라클의 사원", MemoryCardFlow.slotName(m, 10)); // ATHN06A
+		assertEquals("아틀라스의 시험", MemoryCardFlow.slotName(m, 17)); // PAND01A
+		assertEquals("Save Point 99", MemoryCardFlow.slotName(m, 99)); // 메시지 699 없음
+		assertEquals("2023/1/ 9  6:42:53 am", MemoryCardFlow.slotDate(java.time.LocalDateTime.of(2023, 1, 9, 6, 42, 53)));
+		assertEquals("2023/12/25 12:00:00 pm", MemoryCardFlow.slotDate(java.time.LocalDateTime.of(2023, 12, 25, 12, 0, 0)));
+		assertEquals("2023/12/25 12:05:09 am", MemoryCardFlow.slotDate(java.time.LocalDateTime.of(2023, 12, 25, 0, 5, 9)));
+		assertEquals("2023/12/25 11:59:59 pm", MemoryCardFlow.slotDate(java.time.LocalDateTime.of(2023, 12, 25, 23, 59, 59)));
 	}
 }

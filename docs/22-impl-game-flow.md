@@ -64,7 +64,9 @@ IN_GAME ─세이브 포인트→ SAVE_POINT → SAVE_DONE → IN_GAME
 정한다 (MemCard_ReadFlow 0x230248 / MemCard_WriteFlow 0x230A98, 11 문서 §5.1). 엔진 ↔ FLP 규약:
 
 - 엔진 → FLP: `PS2_MemoryCard_Event = n` → 루트 SimKeyEvent 가 이전 화면 AnimateOff, `MemoryScreen<n>` AnimateOn, `MemoryCardState = n`.
-  `0` = 메뉴 닫기 (`SaveLoad_Off` → 셸은 MainWait 로 복귀). 슬롯 표시 변수 `PS2_MemoryCard_CardSlot`, `PS2_MemoryCard_Name/Date/PlayTime1..4`.
+  `0` = 메뉴 닫기 (`SaveLoad_Off` → 셸은 MainWait 로 복귀). 슬롯 표시 변수 `PS2_MemoryCard_CardSlot`, `PS2_MemoryCard_Name/Date/PlayTime1..4`
+  (Name = 세이브 포인트 이름 메시지 600 + 번호, Date = "%d/%d/%2d %2d:%02d:%02d am", PlayTime = "난이도    h:mm:ss" — 11 §5.1, 43 §34), 게임 중 저장 화면은
+  `MemoryCard_Image1..4` 그림을 R_SAVEPT `TXR_SavePt%02d` 로 (`MemoryCardFlow.thumbnails`, 0x1B81C0).
 - FLP → 엔진: `FSCommand:PS2_MemoryCard_Select arg` — ○ 확인 화면(2,4,5,8,12,14,18,19) = 1, 예/아니오 화면(3,10,15,16,24,26,27) = 1/0
   (기본 커서 = 아니오, ↑↓ 로 전환), 카드 선택 21 = 1/2, 파일 선택 22/23 = 1..4 (←/→ 이동), △(21/22/23) = 0.
 - 21/22/23 에서 고르면 FLP 가 `EnableButton = 2` 로 입력을 잠그고 다음 화면을 기다린다 → 엔진은 선택을 무시할 때도 같은 화면을 다시 보낸다.

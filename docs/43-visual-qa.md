@@ -2149,6 +2149,17 @@ HoleLoad → PAND01A). 엔진 = origin/main 4fe5fa2 위.
    앞 75 · 100 = 0 (예전 3), 옆 40 = 2–3 · 뒤 40 = 3 (예전 0) (`ArtemisHitVolumeTest`). 같은 까닭으로 검 렌더도 rWeapOH (블레이드 사슬 로케이터 — BER* 자세에서 손과
    5–15 · 축 40° 넘게 어긋남) → rWeapIH (`ArtemisBladeModel`): 칼을 손에 쥐고 휘두른다 (영상 4062 · 4200 의 칼 방향).
 2. 하네스 [엔진 전용]: `-Dgow.auto.artemis` — 봇이 검을 보유했는데 들지 않았으면 싸울 때 L1 홀드 + R1 (BERSERKENTER 555) 로 든다 (`BotInput.equipArtemis`).
+3. **세이브 슬롯 이름이 "아틀라스의 시험" 이 아니라 난이도였다 (영상 5182: 그림 · "아틀라스의 시험" · "2023/1/ 9  6:42:53 am" · "전사(보통)    3:10:43").**
+   원작 Save_SlotText 0x22E810 [확실]: 파일마다 MemoryCard_Name (HUD +0xE0) = **메시지 600 + 세이브 포인트 번호** 첫 줄 (번호 ≤ 0 "* Not A Save Point *", 메시지 없음
+   "Save Point %d", 빈 파일 메시지 2), MemoryCard_Date (+0xF0) = 0x22E4A8 언어 5 (0x1BF41C 고정) 형식 "%d/%d/%2d %2d:%02d:%02d%s" (12 시간제 " am"/" pm"),
+   MemoryCard_PlayTime (+0x100) = "%s    %d:%02d:%02d" (난이도 이름 0x29DB68 = 메시지 3..6 + 시간). 번호는 슬롯 디렉터리 u16 +0xC (0x2312B0 ← 0x2A2704 ← R2 때
+   0x1DC3F8 → 0x22D390(영웅 +0x8C)) — 세이브 포인트 GO 가 매 프레임 0x2671C8 → 0x1DC678 로 가장 가까운 번호를 영웅에 적고, 그 번호는 Creator "savepoint" 의
+   **슬롯 6** (0x1ACCA8 → 0x1A5130 → SavePoint 비헤이비어 +8, 0x22E2A8/0x22E250) 이다: ATHN06A 10 "오라클의 사원" · ATHN07 12 · PAND00A 15 "판도라의 다리" ·
+   PAND00D 16 · **PAND01A 17 "아틀라스의 시험"** (−505, −6, −337 — 영상 4040 의 빛기둥 · 5180 의 저장) · PAND01B 18 · PAND01C 19 · PAND00C 20. 슬롯 그림 = 0x1B81C0:
+   번호 &gt; 0 이면 R_SAVEPT `TXR_SavePt%02d`, 아니면 MemoryCard_Image1 원래 그림 (HUD FLP MemoryCard_Image1..4 = TXR_HUDK020..023, 0x1B8178) — R_SAVEPT 는
+   게임 중에만 올라 셸 불러오기 화면은 기본 그림. 예전 엔진은 이름에 난이도, 시간 줄에 시간만, 날짜 "yyyy/MM/dd HH:mm", 그림 없음이었다 →
+   `GameSession.savePoint` (R2 때 가장 가까운 세이브 포인트 번호) · `SaveGame.savePoint` (파일 속성) · `MemoryCardFlow.slotName / slotDate / thumbnails` ·
+   `GameScene.saveThumbnails` (`01_save_slot_atlas_s2` ↔ `02_video_5182_save_slot`, 같은 그림·이름·형식).
 
 ## 시연 녹화 (-Dgow.record, -Dgow.bot) [엔진 전용]
 

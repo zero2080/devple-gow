@@ -58,6 +58,11 @@ public final class SaveGame {
 	public String selectedMagic;
 	/** 누적 플레이 시간 (초, 원작 슬롯 디렉터리 f32 playTime — 11 문서 §5.1). */
 	public float playTime;
+	/**
+	 * 세이브 포인트 번호 (원작 슬롯 디렉터리 u16 +0xC ← 0x2A2704 ← 세이브 포인트 Creator 슬롯 6, 0x2312B0) — 슬롯 이름 메시지 600 + 번호
+	 * (617 "아틀라스의 시험" = PAND01A), 0 이하 = "* Not A Save Point *" (Save_SlotText 0x22E810) [확실]. 예전 세이브엔 없어 0.
+	 */
+	public int savePoint;
 	public final Map<Weapon, int[]> weapons = new TreeMap<>();
 	/** ESC GlobalData 변수 (id → 값 문자열 "타입:값"). */
 	public final Map<Integer, String> globalData = new TreeMap<>();
@@ -129,6 +134,7 @@ public final class SaveGame {
 		g.hintCount19 = p.hintCount19;
 		g.selectedMagic = p.selectedMagic != null ? p.selectedMagic.name() : "";
 		g.playTime = s.playTime;
+		g.savePoint = s.savePoint;
 		String mus = s.sound != null ? s.sound.currentMusic() : null;
 		g.music = mus != null ? mus : "";
 		for (Weapon w : Weapon.values()) {
@@ -306,6 +312,7 @@ public final class SaveGame {
 		pr.setProperty("hints", hintMask + "," + hintCount1 + "," + hintCount19);
 		pr.setProperty("selectedMagic", selectedMagic);
 		pr.setProperty("playTime", Float.toString(playTime));
+		pr.setProperty("savePoint", Integer.toString(savePoint));
 		pr.setProperty("music", music != null ? music : "");
 		weapons.forEach((w, v) -> pr.setProperty("weapon." + w.name(), v[0] + "," + v[1]));
 		globalData.forEach((k, v) -> pr.setProperty("global." + k, v));
@@ -363,6 +370,7 @@ public final class SaveGame {
 		g.hintCount19 = hs.length > 2 ? Integer.parseInt(hs[2]) : 0;
 		g.selectedMagic = pr.getProperty("selectedMagic", "");
 		g.playTime = Float.parseFloat(pr.getProperty("playTime", "0"));
+		g.savePoint = Integer.parseInt(pr.getProperty("savePoint", "0"));
 		g.music = pr.getProperty("music", "");
 		for (Weapon w : Weapon.values()) {
 			String v = pr.getProperty("weapon." + w.name());

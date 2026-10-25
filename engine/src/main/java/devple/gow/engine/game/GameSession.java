@@ -42,6 +42,11 @@ public final class GameSession {
 	/** 누적 플레이 시간 (초): GameScene 이 일시정지가 아닐 때 더한다. 세이브 슬롯 표시용. */
 	public float playTime;
 	/**
+	 * 마지막으로 R2 를 누른 세이브 포인트 번호 (원작 전역 0x2A2704 — 0x1DC3F8 이 영웅 +0x8C 의 가장 가까운 세이브 포인트 번호로 0x22D390 을 부른다) [확실].
+	 * 저장 때 슬롯 디렉터리 u16 +0xC 로 (0x2312B0) → 슬롯 이름 = 메시지 600 + 번호, 그림 = R_SAVEPT TXR_SavePt%02d (43 §34).
+	 */
+	public int savePoint;
+	/**
 	 * 세계 시작 시각 (playTime 기준) — 원작 0x29D924: 세계 초기화 0x1A6EC0 (레벨 적재 0x1B3070) 가 0 으로, 걷기 이음 (LoadCheck) 은 그대로 둔다.
 	 * CheckPoint 의 "시작 뒤 1 초" 거름 (0x1B0234) 이 이것으로 잰다 (엔진 씬은 이음마다 새로 만들어 씬 시각이 0 부터라 쓰지 않는다, 43 문서 §19).
 	 */

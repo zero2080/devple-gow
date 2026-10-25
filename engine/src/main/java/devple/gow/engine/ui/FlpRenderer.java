@@ -71,6 +71,11 @@ public final class FlpRenderer implements AutoCloseable {
 		}
 	}
 
+	/** FLP 자원 WAD 의 텍스처 (바꿔 끼우지 않은 원래 그림 — 저장 화면 빈 슬롯 그림 0x1B8138). */
+	public Texture texture(String name) {
+		return name != null ? assets.texture(name) : null;
+	}
+
 	/** 인스턴스 이름이 붙은 클립 (예 "GenericPickUp") 첫 레이어의 메시 머티리얼 텍스처 이름 (없으면 null). */
 	public String clipTexture(String instanceName) {
 		Integer h = iconClips.get(instanceName);

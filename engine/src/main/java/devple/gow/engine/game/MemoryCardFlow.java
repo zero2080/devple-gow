@@ -8,7 +8,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.function.Supplier;
 
 /**
@@ -39,8 +38,6 @@ public final class MemoryCardFlow {
 	static final int NO_CARD = 2, LOAD_ASK = 10, LOADING = 11, LOAD_ERROR = 12, LOAD_DONE = 13, NO_FILES = 14,
 			OVERWRITE_ASK = 15, CREATE_ASK = 16, SAVING = 17, SAVE_DONE = 18, SAVE_ERROR = 19, CARD_SELECT = 21,
 			SAVE_SELECT = 22, LOAD_SELECT = 23;
-
-	private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm");
 
 	private final UiVariables vars;
 	private final MessageTable messages;
@@ -208,18 +205,26 @@ public final class MemoryCardFlow {
 		vars.event("PS2_MemoryCard_Event", 0);
 	}
 
-	/** 파일 목록 변수 (원작 Save_SlotText 0x22E810: 난이도 이름 + 플레이 시간 h:mm:ss). @return 파일이 하나라도 있으면 true. */
+	/**
+	 * 파일 목록 변수 — 원작 Save_SlotText 0x22E810 [확실]: 파일마다 HUD +0xE0 (MemoryCard_Name) = 세이브 포인트 이름 (메시지 600 + 번호 첫 줄,
+	 * 번호 ≤ 0 이면 "* Not A Save Point *", 메시지가 없으면 "Save Point %d", 빈 파일 = 메시지 2), +0xF0 (MemoryCard_Date) = 파일 시각
+	 * ({@link #slotDate}), +0x100 (MemoryCard_PlayTime) = "%s    %d:%02d:%02d" (난이도 이름 0x29DB68[난이도] = 메시지 3..6 + 플레이 시간).
+	 * 예전 엔진은 이름 자리에 난이도를, 시간 자리에 시간만 두었다 (영상 5182 슬롯 "아틀라스의 시험" · "전사(보통) 3:10:43", 43 §34).
+	 * 그림 = {@link #thumbnails} (0x1B81C0). @return 파일이 하나라도 있으면 true.
+	 */
 	private boolean fillSlots() {
 		boolean any = false;
+		int[] points = new int[FILES];
 		for (int i = 0; i < FILES; i++) {
 			Path f = file(cardDir, i);
 			String name = msg(2, "비어있음"), date = "", time = "";
 			if (Files.exists(f)) {
 				try {
 					SaveGame g = SaveGame.read(f);
-					name = msg(3 + Math.max(0, Math.min(3, g.difficulty)), "난이도 " + g.difficulty);
-					date = LocalDateTime.ofInstant(Files.getLastModifiedTime(f).toInstant(), ZoneId.systemDefault()).format(DATE);
-					time = playTime(g.playTime);
+					points[i] = g.savePoint;
+					name = slotName(messages, g.savePoint);
+					date = slotDate(LocalDateTime.ofInstant(Files.getLastModifiedTime(f).toInstant(), ZoneId.systemDefault()));
+					time = msg(3 + Math.max(0, Math.min(3, g.difficulty)), "난이도 " + g.difficulty) + "    " + playTime(g.playTime);
 					any = true;
 				} catch (IOException | RuntimeException ex) {
 					name = "?";
@@ -229,7 +234,46 @@ public final class MemoryCardFlow {
 			vars.set("PS2_MemoryCard_Date" + (i + 1), date);
 			vars.set("PS2_MemoryCard_PlayTime" + (i + 1), time);
 		}
+		if (thumbnails != null) {
+			thumbnails.accept(points);
+		}
 		return any;
+	}
+
+	/**
+	 * 슬롯 그림 (원작 MemCard_Save · MemCard_Load → 0x1B81C0 [확실]: 파일마다 세이브 포인트 번호 &gt; 0 이면 R_SAVEPT 의 "TXR_SavePt%02d", 아니면
+	 * MemoryCard_Image1 의 원래 그림 (+0x14A8) 을 MemoryCard_Image1..4 머티리얼에 끼운다 (0x1B8178). R_SAVEPT 는 영웅 WAD 와 함께 게임 중에만 올라
+	 * (Hero_LoadWads → 0x1B81B8 +0x14A4) 셸 불러오기 화면은 기본 그림 그대로다. null = 그림 없음 (셸).
+	 */
+	private java.util.function.Consumer<int[]> thumbnails;
+
+	public MemoryCardFlow thumbnails(java.util.function.Consumer<int[]> c) {
+		thumbnails = c;
+		return this;
+	}
+
+	/** 슬롯 이름 (Save_SlotText 0x22E8C0–0x22EA10): 메시지 600 + 번호 (0x1B95D0 첫 줄, 0x28 자 버퍼). */
+	public static String slotName(MessageTable messages, int savePoint) {
+		if (savePoint <= 0) {
+			return "* Not A Save Point *";
+		}
+		String m = messages != null ? messages.get(600 + savePoint) : null;
+		if (m == null || m.isEmpty()) {
+			return "Save Point " + savePoint;
+		}
+		String line = m.split("\n", 2)[0];
+		return line.length() > 0x27 ? line.substring(0, 0x27) : line;
+	}
+
+	/**
+	 * 슬롯 시각 (원작 0x22E4A8: 카드 디렉터리 시각 → 0x284208 지역 시각, 언어 0x29DB5C = 5 (0x1BF41C 고정) 의 형식
+	 * "%d/%d/%2d %2d:%02d:%02d%s" — 년/월/일, 12 시간제 (0 시 → 12, 13 시 이상 −12), " am"/" pm") [확실]. 예: 2023/1/ 9  6:42:53 am (영상 5182).
+	 */
+	public static String slotDate(LocalDateTime t) {
+		int h = t.getHour();
+		int h12 = h == 0 ? 12 : h > 12 ? h - 12 : h;
+		return String.format(java.util.Locale.ROOT, "%d/%d/%2d %2d:%02d:%02d%s", t.getYear(), t.getMonthValue(), t.getDayOfMonth(), h12, t.getMinute(),
+				t.getSecond(), h < 12 ? " am" : " pm");
 	}
 
 	static String playTime(float sec) {
