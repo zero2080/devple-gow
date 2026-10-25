@@ -608,6 +608,39 @@ class HeroNavigatorTest {
 		assertEquals("wallBackL", b.anim);
 	}
 
+	/**
+	 * 등 대고 좁은 턱 (+0x174 0x200000) 에서 찍은 체크포인트 되읽기: 몸 정면이 벽 반대라 정면 벽 질의는 빗나가고 등 쪽 질의로 다시 붙는다 — PAND01B 구덩이 턱
+	 * (beforePITtrig, 영상 3 화 770–790: "로딩 중..." 뒤 턱에 등을 대고 다시 시작). 예전 엔진은 공중이 되어 구덩이로 떨어졌다 (43 §39).
+	 */
+	@Test
+	void restoredBackPressSnapshotReattachesBackToTheWall() {
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -300, -20, 300, 0, 0, SurfaceAttr.GROUND); // 좁은 턱 (폭 20)
+		wallZ(t, -20, -100, 100, 0, 60, SurfaceAttr.BACK_PRESS);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		Body b = new Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		b.yaw = (float) Math.PI; // 정면 +z = 벽 반대 (등 대고 걷기의 몸 방향)
+		b.grounded = false;
+		b.pos.set(0, 0, -20 + HeroNavigator.WALL_OFF);
+		nav.reset();
+		assertTrue(nav.reattachWall());
+		assertEquals(NavState.WALL_WALK, nav.state());
+		assertTrue(nav.wallBack(), "등 대고");
+		assertEquals(Math.PI, Math.abs(b.yaw), 1e-4, "정면 = 벽 법선");
+		// 등 뒤가 BackPress 가 아닌 보통 벽이면 붙이지 않는다 (벽 오르기 스냅숏은 정면 질의만)
+		List<LevelCollision.Tri> t2 = new ArrayList<>();
+		floor(t2, -300, -20, 300, 0, 0, SurfaceAttr.GROUND);
+		wallZ(t2, -20, -100, 100, 0, 60, SurfaceAttr.CLIMBABLE);
+		Body b2 = new Body();
+		HeroNavigator nav2 = new HeroNavigator(b2, new NavWorld(LevelCollision.of(t2)), null);
+		b2.yaw = (float) Math.PI;
+		b2.grounded = false;
+		b2.pos.set(0, 0, -20 + HeroNavigator.WALL_OFF);
+		nav2.reset();
+		assertFalse(nav2.reattachWall());
+	}
+
 	/** 지상에서 앞으로 걸어 Climbable 벽에 붙음 (0x1C7DE8, × 불필요), 옆 끝에서 막힘 (반환 3 → 0x100, wallClimbAL) → × = 90° 옆 점프 (위 192 · 앞 160). */
 	@Test
 	void climbWallEdgeBlocksThenSideJump() {

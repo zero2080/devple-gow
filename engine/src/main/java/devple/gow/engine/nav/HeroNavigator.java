@@ -360,11 +360,18 @@ public final class HeroNavigator {
 	public boolean reattachWall() {
 		Vector3f p = body.position();
 		WallProbe w = probeWall(p, forward(body.yaw()), null);
+		boolean back = false;
 		if (w == null) {
-			return false;
+			// 등 대고 좁은 턱 (+0x174 0x200000, BackPress 벽): 몸 정면 = 벽 법선 (0x1C8000) 이라 벽은 등 뒤다 — 정면 질의는 빗나가므로 등 쪽으로 다시 [근사:
+			// 원작은 +0x174 를 그대로 되돌릴 뿐 질의하지 않는다]. 예전엔 빗나가 공중이 되어 PAND01B 구덩이 턱 (beforePITtrig 체크포인트) 에서 되살아나면 떨어졌다 (43 §39)
+			w = probeWall(p, forward(body.yaw()).negate(), null);
+			if (w == null || !w.tri().has(SurfaceAttr.BACK_PRESS)) {
+				return false;
+			}
+			back = true;
 		}
 		p.y = w.feet().y;
-		enterWall(w, false);
+		enterWall(w, back);
 		cooldown = 0;
 		return true;
 	}
