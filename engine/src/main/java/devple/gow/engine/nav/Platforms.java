@@ -533,7 +533,7 @@ public final class Platforms {
 			String anm = null;
 			for (String r : p.object().refs()) {
 				BallHull h = lv.hulls.get(r);
-				if (h != null && h.kind == 0 && !h.hulls.isEmpty()) {
+				if (h != null && h.kind == 0 && (!h.hulls.isEmpty() || breakableBalls(lv, name, h))) {
 					cdv = h;
 				}
 				if (r.startsWith("ANM_")) {
@@ -614,12 +614,34 @@ public final class Platforms {
 		}
 		for (String r : p.object().refs()) {
 			BallHull h = lv.hulls.get(r);
+			if (h != null && h.kind == 0 && breakableBalls(lv, name, h)) {
+				return true;
+			}
 			if (h != null && h.kind == 0) {
 				for (BallHull.Hull hh : h.hulls) {
 					if (hh.planes().size() >= 4) {
 						return true;
 					}
 				}
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * 공 (ball) 만 있는 Breakable CDV — PAND02D/02DD 물속 돌진 문 godashdoorgrp* (공 1 개, 반지름 56, 재질 Ground · TakeDamage),
+	 * ARENA06 항아리 (반지름 16). 원작 Breakable 접촉 0x1DE4D8 (충돌 접촉 0x203AF0 → 0x203CD4 가 부름) 은 공격이 없을 때 돌진 중인
+	 * (+0x2D8 0x80000) 몸이 Sold+0x214 (18 m/s) 보다 빠르면 1000 피해를 준다 — 몸이 물체 충돌 인스턴스에 닿아야 오는 접촉이므로 공도 몸을 막는다
+	 * [확실: 접촉 코드 · 공 질의 0x139C20 (인스턴스 +0x3C 공 수, +0x88 공 월드) / 근사: 엔진은 Breakable 의 공만 몸 구 밀어내기, 바닥 · 선분 질의 없음].
+	 * 재질이 NoPlayerCollision 이면 막지 않는다 (몸 제외 마스크).
+	 */
+	static boolean breakableBalls(LevelData lv, String owner, BallHull h) {
+		if (h.balls.isEmpty() || !h.hulls.isEmpty()) {
+			return false;
+		}
+		for (var e : lv.behaviors.entrySet()) {
+			if (e.getKey().equalsIgnoreCase(owner)) {
+				return "Breakable".equals(e.getValue().type());
 			}
 		}
 		return false;
@@ -998,12 +1020,47 @@ public final class Platforms {
 			for (Body b : bodies) {
 				if (b.solid && b.hull != null && !skip.contains(b.owner)) {
 					any |= pushOut(b, c, r, exclude);
+					if (!b.hull.balls.isEmpty() && b.hull.hulls.isEmpty()) {
+						any |= pushOutBalls(b, c, r, exclude);
+					}
 				}
 			}
 			moved |= any;
 			if (!any) {
 				break;
 			}
+		}
+		return moved;
+	}
+
+	/** 공 CDV ({@link #breakableBalls}): 공 중심 = 공 관절 월드 × 로컬 중심, 반지름 × 관절 스케일 — 겹치면 중심에서 바깥으로 민다. */
+	private static boolean pushOutBalls(Body b, org.joml.Vector3f c, float r, long exclude) {
+		boolean moved = false;
+		float[] w = new float[3];
+		for (int i = 0; i < b.hull.balls.size(); i++) {
+			int mat = b.hull.ballMaterial[i];
+			if (mat >= 0 && mat < b.hull.materialAttrs.length && (b.hull.materialAttrs[mat] & exclude) != 0) {
+				continue;
+			}
+			float[] ball = b.hull.balls.get(i);
+			float[] m = b.joints[Math.min(Math.max(b.hull.ballJoint[i], 0), b.joints.length - 1)];
+			Mat4.transformPoint(m, ball[0], ball[1], ball[2], w);
+			float scale = (float) Math.sqrt(m[0] * m[0] + m[1] * m[1] + m[2] * m[2]);
+			float br = ball[3] * scale + r;
+			float dx = c.x - w[0], dy = c.y - w[1], dz = c.z - w[2];
+			float d = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
+			if (d >= br - 1e-3f) {
+				continue;
+			}
+			if (d < 1e-4f) {
+				dx = 0;
+				dy = 1;
+				dz = 0;
+				d = 1;
+			}
+			float k = br / d;
+			c.set(w[0] + dx * k, w[1] + dy * k, w[2] + dz * k);
+			moved = true;
 		}
 		return moved;
 	}

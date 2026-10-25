@@ -180,6 +180,26 @@ public final class Breakables {
 	}
 
 	/**
+	 * 물속 돌진 파괴 (Breakable 접촉 0x1DE4D8, 공격 레코드가 없을 때): 돌진 중 (+0x2D8 0x80000) 인 몸이 물체에 닿고 |속도| / 16 &gt; Sold+0x214
+	 * (크라토스 18 m/s) 이면 피해 1000 (0x447A0000) → 0x1DDDF0 [확실: 코드]. 닿음 = 몸 구 (중심 c, 반지름 r) 와 물체 판정 구가 겹치거나 맞닿음
+	 * (몸 밀어내기 {@code Platforms.pushOutBalls} 뒤라 거리 = 합) [근사: 원작은 충돌 인스턴스 접촉 메시지 0x203AF0]. PAND02D 돌진 문 godashdoorgrp*.
+	 *
+	 * @return 부서진 물체 수
+	 */
+	public int dashContact(Vector3f c, float r, float speed, float breakSpeed, ScriptWorld world, Consumer<String> onBreak) {
+		if (speed <= breakSpeed) {
+			return 0;
+		}
+		int n = 0;
+		for (Item it : items) {
+			if (!it.broken && c.distance(it.center) <= it.radius + r + 2f && damage(it, 1000f, world, onBreak)) {
+				n++;
+			}
+		}
+		return n;
+	}
+
+	/**
 	 * 영웅 공격 판정. 부서진 물체마다 onBreak(소유 GO 이름) 를 부르고, 그 GO 의 Marker 를 파괴한다.
 	 */
 	public void update(Combatant hero, ScriptWorld world, Consumer<String> onBreak) {

@@ -32,6 +32,8 @@ public final class PlayerState {
 	public int phoenixFeathers;
 	public int deaths;
 	public int itemFlags;
+	/** 포세이돈의 삼지창 = 아이템 9 (Internal 37, PAND02D VisTridentPopUp) — 보유 비트 1 &lt;&lt; 8. 잠수 · 돌진 능력 (0x1D8FDC). */
+	public static final int ITEM_TRIDENT = 9, ITEM_BIT_TRIDENT = 1 << (ITEM_TRIDENT - 1);
 	/** 첫 안내 비트 (PlayerProgress +0x50) 와 안내 1 / 0x13 누적 (+0x54 / +0x55) — {@link #firstTimeHint}. 세이브 대상, 체크포인트 재시작에도 유지. */
 	public int hintMask, hintCount1, hintCount19;
 	public Weapon selectedMagic;

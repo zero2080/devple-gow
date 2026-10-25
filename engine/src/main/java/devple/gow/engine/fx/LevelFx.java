@@ -69,7 +69,7 @@ public final class LevelFx implements AutoCloseable {
 			env.setEnabled(false);   // 비교 스크린샷용: GOW_FX=off
 		}
 		for (EnvParams.Water w : p.waters) {
-			float[] c = ownerPosition(data, w.owner());
+			float[] c = ownerPosition(data, w.owner(), w.joint()); // 격자 최소 모서리 = 소유 GO 의 관절 (0x219D88, 43 §42)
 			if (c != null) {
 				String t = assets.materialTexture("MAT_" + w.material());
 				waters.add(new WaterSurface(w, c, t == null ? null : assets.texture(t)));
@@ -108,9 +108,15 @@ public final class LevelFx implements AutoCloseable {
 
 	/** 소유 GO 의 관절 0 월드 위치 (없으면 인스턴스 위치, 그것도 없으면 null). */
 	static float[] ownerPosition(LevelData data, String owner) {
+		return ownerPosition(data, owner, 0);
+	}
+
+	/** 소유 GO 의 관절 joint 월드 위치 (관절이 없거나 범위 밖이면 관절 0, 배치가 없으면 GO 위치). */
+	static float[] ownerPosition(LevelData data, String owner, int joint) {
 		for (devple.gow.tools.level.LevelLayout.Placement pl : data.layout.placements()) {
 			if (pl.instance().name().equals(owner)) {
-				float[] j = pl.jointWorld()[0];
+				float[][] jw = pl.jointWorld();
+				float[] j = jw[joint >= 0 && joint < jw.length ? joint : 0];
 				return new float[]{j[12], j[13], j[14]};
 			}
 		}

@@ -78,8 +78,9 @@ public final class EnvParams {
 	 * @param dropOff  0x2C/0x30 물방울 영역 오프셋 (×16), dropSize 0x34/0x38 영역 크기 (×16)
 	 * @param dropRate 0x3C 초당 물방울 수, strength 0x40 충격 세기
 	 */
+	/** @param joint 소유 GO 관절 번호 ({@link EnvScript#joint}) — 격자 최소 모서리 = 그 관절 월드 위치 (0x219D88) */
 	public record Water(String owner, float[] size, float cell, int flag, String material, int frames, float[] dropOff,
-						float[] dropSize, int dropRate, float strength) {
+						float[] dropSize, int dropRate, float strength, int joint) {
 
 		public int nx() {
 			return Math.max(2, Math.round(size[0] / cell) + 1);
@@ -145,7 +146,7 @@ public final class EnvParams {
 				}
 				case "SCR_Weather" -> weathers.add(new Weather(s.owner(), s.i(0), s.vec(4, 3), s.vec(0x10, 3)));
 				case "SCR_Water" -> waters.add(new Water(s.owner(), s.vec(0, 2), s.f(8), s.i(0x0C), s.str(0x10, 24), s.i(0x28),
-						s.vec(0x2C, 2), s.vec(0x34, 2), s.i(0x3C), s.f(0x40)));
+						s.vec(0x2C, 2), s.vec(0x34, 2), s.i(0x3C), s.f(0x40), s.joint()));
 				default -> others.add(new Raw(s.target(), s.owner(), s));
 			}
 		}

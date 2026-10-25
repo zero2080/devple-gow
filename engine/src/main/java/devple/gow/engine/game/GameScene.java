@@ -618,6 +618,7 @@ public final class GameScene implements Scene {
 			for (int id = 3; id <= 7; id++) {
 				hero.player.addItem(id, 1);
 			}
+			hero.player.addItem(PlayerState.ITEM_TRIDENT, 1); // 잠수 · 돌진 (43 §42)
 			hero.player.level.put(Weapon.BLADES, 2);
 			hero.player.mp = hero.player.maxMp();
 			hero.combat.godMeter = 100; // 신들의 분노 게이지 가득 (L3+R3)
@@ -805,6 +806,12 @@ public final class GameScene implements Scene {
 			if (loadPos != null && restoreHeroState != null && restoreHeroState.matches("WALL_CLIMB|LADDER|WALL_WALK")) {
 				boolean on = nav.navigator.reattachWall();
 				System.out.println("되읽은 이동 상태 " + restoreHeroState + (on ? " → 벽에 다시 붙음" : " → 벽 질의 빗나감 (공중)"));
+			}
+			// 물 상태 (+0x174 0x80 · 0x100 · 0x200) 도 그대로 — 물속 체크포인트 · Warp (43 §42)
+			String ws = loadPos != null ? restoreHeroState : warped ? warpHeroState : null;
+			if (ws != null && ws.startsWith("SWIM")) {
+				nav.navigator.restoreWater(swimState(ws));
+				System.out.println("이동 상태 " + ws + " → 물 (수면 " + nav.navigator.waterSurface() + ")");
 			}
 			if (warpOnWall()) {
 				// 사다리·벽에 붙은 채 Warp (SEWR02 사다리 → ATHN03D 우물 사다리 WarpFSewr01, 영상 924–929): 도착 Start 에서 같은 벽 질의로 다시 붙는다.
@@ -1156,6 +1163,25 @@ public final class GameScene implements Scene {
 	private String warpHeroState;
 
 	/** 벽·덩굴·사다리에 붙은 채 Warp 로 들어왔는가 (원작 Warp_Jump 는 이동 상태 +0x174 를 그대로 둔다). */
+	/** "SWIM:DIVE" 같은 저장 이동 상태 → 물 하위 상태 (없으면 잠수). */
+	static devple.gow.engine.nav.HeroNavigator.Water swimState(String s) {
+		int c = s.indexOf(':');
+		if (c > 0) {
+			try {
+				return devple.gow.engine.nav.HeroNavigator.Water.valueOf(s.substring(c + 1));
+			} catch (IllegalArgumentException ignored) {
+				// 모르는 하위 상태
+			}
+		}
+		return devple.gow.engine.nav.HeroNavigator.Water.DIVE;
+	}
+
+	/** 이동 상태 이름 (물이면 "SWIM:하위 상태" — 스냅숏 +0x40 · Warp 가 잇는 +0x174). */
+	private String navStateName() {
+		var nv = nav.navigator;
+		return nv.state() == devple.gow.engine.nav.NavState.SWIM ? "SWIM:" + nv.water().name() : nv.state().name();
+	}
+
 	private boolean warpOnWall() {
 		return warpHeroState != null && warpHeroState.matches("WALL_CLIMB|LADDER|WALL_WALK");
 	}
@@ -2216,7 +2242,7 @@ public final class GameScene implements Scene {
 		GameScene.Resident back = session.warpLeft;
 		if (a.kind() == LevelLink.Kind.WARP) {
 			session.warpLeft = nav != null ? new Resident(levelName, level.removedInstances(), nav.platformStates()) : null;
-			session.warpHeroState = nav != null ? nav.navigator.state().name() : null; // Warp_Jump 는 이동 상태를 잇는다 (사다리 → 사다리)
+			session.warpHeroState = nav != null ? navStateName() : null; // Warp_Jump 는 이동 상태를 잇는다 (사다리 → 사다리)
 			if (back != null && back.wad().equalsIgnoreCase(wad) && a.resident() == null) {
 				a = new Arrival(a.kind(), a.from(), a.pos(), a.yaw(), a.camera(), List.of(back));
 			}
@@ -2522,7 +2548,7 @@ public final class GameScene implements Scene {
 
 	/**
 	 * 디버그/검증용 스크립트 입력: {@code -Dgow.script="L1:0.5:0.4,R1:0.7:0.05,SQUARE:2:0.05"} (버튼:시작초:누름초).
-	 * {@code -Dgow.giveAll} 이면 시작 시 마법 4종·아르테미스의 검·블레이드 Lv2·신들의 분노 게이지 100 지급.
+	 * {@code -Dgow.giveAll} 이면 시작 시 마법 4종·아르테미스의 검·포세이돈의 삼지창·블레이드 Lv2·신들의 분노 게이지 100 지급.
 	 */
 	private final devple.gow.engine.input.ScriptedInput debugInput = parseDebugScript();
 	/** -Dgow.auto: 레벨 단위 자동 플레이 검증 (AutoPlay) [엔진 전용]. */
@@ -3969,7 +3995,7 @@ public final class GameScene implements Scene {
 		String other = otherName != null ? otherName : warpSlot;
 		SaveGame g = SaveGame.capture(session, levelName, other, otherName != null, new float[]{p.x, p.y, p.z}, hero.ctl.yaw);
 		devple.gow.engine.nav.NavState st = nav != null ? nav.navigator.state() : devple.gow.engine.nav.NavState.GROUND;
-		g.heroState = st == devple.gow.engine.nav.NavState.GROUND ? null : st.name(); // 영웅 +0x174 (스냅숏 +0x40)
+		g.heroState = st == devple.gow.engine.nav.NavState.GROUND ? null : navStateName(); // 영웅 +0x174 (스냅숏 +0x40, 물 하위 상태 포함)
 		return g;
 	}
 
@@ -4258,6 +4284,9 @@ public final class GameScene implements Scene {
 					hp.z, hero.ctl.grounded, col.groundHeight(hp.x, hp.y + STEP, hp.z, 4000), session.sound.active(),
 					session.sound.currentMusic(), session.sound.backend().getClass().getSimpleName());
 			System.out.printf("[디버그] 카메라 눈 %s 대상 %s%n", cam.eye, cam.target);
+			if (hero.nav != null) {
+				System.out.printf("[디버그] 내비 %s 물 %s 수면 %.0f 애니 %s%n", hero.nav.state(), hero.nav.water(), hero.nav.waterSurface(), hero.ctl.animator().current() == null ? "-" : hero.ctl.animator().current().name);
+			}
 			for (Enemy en : enemies) { // 적 위치·내비 상태 (그물·벽 위 적 확인)
 				if (!en.fighter().dead()) {
 					Vector3f ep = en.fighter().position();
@@ -4425,8 +4454,13 @@ public final class GameScene implements Scene {
 			float[] tp = auto.takeTeleport();
 			if (tp != null) {
 				float yaw = hero.ctl.yaw;
+				boolean swim = nav.navigator.state() == devple.gow.engine.nav.NavState.SWIM;
+				var w = nav.navigator.water();
 				respawn(new Vector3f(tp[0], tp[1], tp[2]));
 				hero.ctl.yaw = yaw;
+				if (swim) { // 물속 경로 순간이동은 물 상태 그대로 [엔진 전용 하네스]
+					nav.navigator.restoreWater(w);
+				}
 			}
 			// HP 32767 = 부술 수 없는 소품 (ATHN01F 침대 쌍둥이 aoxpt 305) — 싸울 대상이 아니다
 			float[] obj = boss != null ? boss.autoObjective() : null;
@@ -4593,6 +4627,14 @@ public final class GameScene implements Scene {
 		breakables.update(hero.combat, world, this::onBreak);
 		if (otherBreakables != null && nav.neighbour() != null) {
 			otherBreakables.update(hero.combat, nav.neighbour(), this::onBreakOther);
+		}
+		if (hero.nav != null && hero.nav.dashContactSpeed() > 0) { // 물속 돌진으로 부수기 (0x1DE4D8, 43 §42)
+			Vector3f bc = hero.nav.swimBodyCenter(new Vector3f());
+			float sp = hero.nav.dashContactSpeed(), bs = devple.gow.engine.nav.HeroNavigator.DASH_BREAK, br = devple.gow.engine.nav.HeroNavigator.BODY;
+			breakables.dashContact(bc, br, sp, bs, world, this::onBreak);
+			if (otherBreakables != null && nav.neighbour() != null) {
+				otherBreakables.dashContact(bc, br, sp, bs, nav.neighbour(), this::onBreakOther);
+			}
 		}
 		if (!archerAims.isEmpty()) {
 			updateArcherAims(dt);

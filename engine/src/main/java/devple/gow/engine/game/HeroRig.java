@@ -324,6 +324,9 @@ public final class HeroRig implements AutoCloseable {
 	public boolean autoAim;
 
 	public void update(Input in, float camYaw, float dt, Vector3f aimTarget) {
+		if (nav != null) { // 잠수 · 돌진 능력 = 포세이돈의 삼지창 보유 (+0x2DC 0x200020 ← 아이템 9, 0x1D8FDC · 0x1DC21C)
+			nav.diveAbility = (player.itemFlags & PlayerState.ITEM_BIT_TRIDENT) != 0;
+		}
 		ctl.berserkBank = player.artemisEquipped; // 내비 애니 뱅크 (+0x328 +0xA8): 장착 0x19C240 이 1, 해제가 0 — 숨김은 그대로
 		boolean navActive = nav != null && nav.active();
 		// 수평 줄 손 이동 중에는 전투도 돈다 (분기 마스크 0x80, {@link CombatOwner#stateMask}) — 원작 수평 줄 싸움 (영상 4865–4940, 43 §34)

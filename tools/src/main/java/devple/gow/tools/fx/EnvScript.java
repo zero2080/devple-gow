@@ -21,8 +21,11 @@ import java.util.List;
  * @param owner    소유 리소스 이름 (인스턴스면 go 인스턴스, 템플릿이면 MDL_)
  * @param instance true = 인스턴스 값
  * @param values   파라미터 값 영역 (little endian, position 0 = 첫 값)
+ * @param joint    헤더 +0x22 u16 — 소유 GO 의 관절 번호. GO 하나에 같은 스크립트가 여럿이면 1, 2, … (PAND02D gowaterdynamic 의 SCR_Water 5 개 =
+ *                 MDL_WaterDynamic 관절 1–5 = 물 조각 다섯의 최소 모서리), 하나면 0. SCR_Water 위치 0x219D88 은 GO 에 애니 인스턴스 (+0x104) 가 있으면
+ *                 0x136BD8(인스턴스, 스크립트 +0x46 u16) 의 관절 월드 행렬 위치를 쓴다 [확실: 코드 / 추정: 메모리 +0x46 = 리소스 +0x22]
  */
-public record EnvScript(String target, String owner, boolean instance, ByteBuffer values) {
+public record EnvScript(String target, String owner, boolean instance, ByteBuffer values, int joint) {
 
 	public static final int MAGIC = 0x00010004;
 
@@ -45,7 +48,7 @@ public record EnvScript(String target, String owner, boolean instance, ByteBuffe
 				body = body.slice(start, body.limit() - start).order(ByteOrder.LITTLE_ENDIAN);
 			}
 		}
-		return new EnvScript(target, owner, inst, body);
+		return new EnvScript(target, owner, inst, body, Short.toUnsignedInt(d.getShort(0x22)));
 	}
 
 	/** WAD 의 모든 환경 스크립트 (등장 순서). */
@@ -67,6 +70,15 @@ public record EnvScript(String target, String owner, boolean instance, ByteBuffe
 	 */
 	static String owner(List<WadTag> tags, int k) {
 		int j = k - 1;
+		// 같은 그룹에 스크립트가 여럿이면 (GROUP{ go인스턴스, SCR, SCR, … }) 앞 스크립트를 건너뛴다 — 예전엔 둘째부터 소유가 " SCR_Water" 가 되어
+		// 위치를 못 찾고 버려졌다 (PAND02D 수영장 물 조각 4 개, 43 §42)
+		while (j >= 0 && tags.get(j).tag() == WadTagType.RESOURCE && tags.get(j).hasData() && tags.get(j).magic() == MAGIC) {
+			j--;
+		}
+		if (j >= 0 && j < k - 1 && tags.get(j).tag() == WadTagType.RESOURCE) {
+			return tags.get(j).name();
+		}
+		j = k - 1;
 		if (j >= 0 && tags.get(j).tag() == WadTagType.RESOURCE) {
 			return tags.get(j).name();
 		}

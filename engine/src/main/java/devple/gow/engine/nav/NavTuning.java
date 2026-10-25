@@ -63,6 +63,7 @@ import java.util.Map;
  * 0x1F8 0.5 / 0x1FC 1   0x1C9F10       잠수 돌진 (R1) 충전 시간 하한 / 상한 (초)                 [확실]
  * 0x200 11 / 0x204 22   0x1C9F24       잠수 돌진 속도 lerp (m/s)                               [확실]
  * 0x208 0.01 / 0x20C 0.1  0x1C9F2C     잠수 돌진 조종 시간 lerp (+0x2B8 = 이 값 + 1, ≥ 1 동안 상하 조종)  [확실]
+ * 0x214 18     0x1DE63C                부서지는 물체 (Breakable) 돌진 파괴 속도 — 접촉 0x1DE4D8: 공격 없이 돌진 중 (+0x2D8 0x80000) |속도| / 16 &gt; 이 값이면 1000 피해  [확실]
  * 0x114 10 / 0x120 12   0x1E9CD0       벽 옆 끝 (+0x2D8 0x100/0x200) × 옆 점프: 정면 / 위 속도 (정면을 ±90° 돌림)  [확실]
  * 0x22C 1      0x1C7678 / 0x1C76E4     평균대 매달림 (턱 윗면 Narrow·NarrowNoBB, +0x2D8 0x40) 시간 → +0x2A4 (0 이면 무한) [확실]
  * 0x230 1      0x1EAFB0 / 0x1EB578     +0x2D8 비트 4 (좁은 길) 일 때 지상 속도 배율             [확실: 값 / 추정: 비트 뜻]
@@ -87,7 +88,7 @@ public final class NavTuning {
 			ROPE_SLIDE_ACC = 0x150, ROPE_SLIDE_DEC = 0x154, TRAVERSE = 0x158, TRAVERSE_MIN = 0x15C, ZIP_SPEED = 0x160, ZIP_ACCEL = 0x164,
 			LEDGE_WALK = 0x168, GROUND = 0x178, PUSH_MIN = 0x17C, PUSH_MAX = 0x188, KICK_MIN = 0x194, KICK_MAX = 0x1A0, KICK_CHARGE = 0x1AC, SWIM = 0x1D4, TREAD = 0x1D8, SWIM_MIN = 0x1DC, SWIM_ACCEL = 0x1E0, SWIM_DECEL = 0x1E4,
 			SWIM_TURN = 0x1E8, WATER_LINE = 0x1EC, BUOYANCY = 0x1F0, DASH_CHARGE_MIN = 0x1F8, DASH_CHARGE_MAX = 0x1FC,
-			DASH_MIN = 0x200, DASH_MAX = 0x204, DASH_STEER_MIN = 0x208, DASH_STEER_MAX = 0x20C, EDGE_JUMP_OUT = 0x114, EDGE_JUMP_UP = 0x120, BALANCE_HANG = 0x22C, NARROW_SCALE = 0x230, BODY_HALF = 0x234, BODY_HEIGHT = 0x238, BODY_BASE = 0x23C,
+			DASH_MIN = 0x200, DASH_MAX = 0x204, DASH_STEER_MIN = 0x208, DASH_STEER_MAX = 0x20C, DASH_BREAK = 0x214, EDGE_JUMP_OUT = 0x114, EDGE_JUMP_UP = 0x120, BALANCE_HANG = 0x22C, NARROW_SCALE = 0x230, BODY_HALF = 0x234, BODY_HEIGHT = 0x238, BODY_BASE = 0x23C,
 			ROPE_JUMP_UP = 0x140, ROPE_JUMP_OUT = 0x144;
 
 	/** R_PERMK TWK_Sold_000 (크라토스) — 데이터 테스트가 원본과 대조. */
@@ -107,7 +108,7 @@ public final class NavTuning {
 			Map.entry(KICK_MAX, 24f), Map.entry(KICK_MAX + 4, 16f), Map.entry(KICK_MAX + 8, 9f), Map.entry(KICK_CHARGE, 2f), Map.entry(SWIM, 7.5f), Map.entry(TREAD, 4.5f), Map.entry(SWIM_MIN, 1f),
 			Map.entry(SWIM_ACCEL, 7.5f), Map.entry(SWIM_DECEL, 7.5f), Map.entry(SWIM_TURN, 0.15f), Map.entry(WATER_LINE, 0.2f),
 			Map.entry(BUOYANCY, 15f), Map.entry(DASH_CHARGE_MIN, 0.5f), Map.entry(DASH_CHARGE_MAX, 1f), Map.entry(DASH_MIN, 11f), Map.entry(DASH_MAX, 22f),
-			Map.entry(DASH_STEER_MIN, 0.01f), Map.entry(DASH_STEER_MAX, 0.1f), Map.entry(EDGE_JUMP_OUT, 10f), Map.entry(EDGE_JUMP_UP, 12f),
+			Map.entry(DASH_STEER_MIN, 0.01f), Map.entry(DASH_STEER_MAX, 0.1f), Map.entry(DASH_BREAK, 18f), Map.entry(EDGE_JUMP_OUT, 10f), Map.entry(EDGE_JUMP_UP, 12f),
 			Map.entry(BALANCE_HANG, 1f), Map.entry(NARROW_SCALE, 1f), Map.entry(BODY_HALF, 0.6f), Map.entry(BODY_HEIGHT, 2.2f), Map.entry(BODY_BASE, 0.4f),
 			Map.entry(ROPE_JUMP_UP, 14f), Map.entry(ROPE_JUMP_OUT, 14f)));
 

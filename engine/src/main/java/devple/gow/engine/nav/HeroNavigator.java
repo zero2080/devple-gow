@@ -1917,10 +1917,19 @@ public final class HeroNavigator {
 	public static final float DASH_CHARGE_MIN = K.get(NavTuning.DASH_CHARGE_MIN), DASH_CHARGE_MAX = K.get(NavTuning.DASH_CHARGE_MAX),
 			DASH_MIN = K.units(NavTuning.DASH_MIN), DASH_MAX = K.units(NavTuning.DASH_MAX), DASH_STEER_MIN = K.get(NavTuning.DASH_STEER_MIN),
 			DASH_STEER_MAX = K.get(NavTuning.DASH_STEER_MAX);
+	/** 돌진으로 Breakable 을 부수는 속도 (Sold+0x214 18 m/s → 288, 접촉 0x1DE4D8 → 0x1DE63C) [확실]. */
+	public static final float DASH_BREAK = K.units(NavTuning.DASH_BREAK);
 	/** 공중 다이빙 자세 (0x1CA318): 낙하 속도 &gt; 점프 초속이면 0.4 초, 앞 속도 &gt; 80 이면 0.35 초 뒤까지의 궤적 선분 (0x1C98D8) [확실: 값]. */
 	public static final float DIVE_LOOK_FALL = 0.4f, DIVE_LOOK_RUN = 0.35f, DIVE_RUN_SPEED = 80f;
 
 	private Water water = Water.TREAD;
+	/**
+	 * 잠수 · 잠수 돌진 능력 (원작 영웅 +0x2DC 0x20 · 0x200000) [확실: 디스어셈블]: 포세이돈의 삼지창 (아이템 9, 0x3044C2 비트 0x100) 이 켠다 —
+	 * AddItem 0x1D8CF0 의 아이템 9 갈래 (점프 표 0x2B81A8 → 0x1D8FDC) 가 |= 0x200020, DeductItem 0x1D9168 (0x1D91C8) 이 끄고, 영웅을 만들 때
+	 * 0x1DC21C 가 보유 비트 0x100 으로 정한다. 삼지창 전에는 □ 잠수 · R1 돌진이 안 된다 (떠 있기 · 가라앉음 · 물에서 점프는 된다).
+	 * 엔진은 {@code HeroRig} 가 매 틱 보유 비트로 넣는다 (기본 참 = 시험 · 평지 연습).
+	 */
+	public boolean diveAbility = true;
 	/** 물속 월드 수직 속도 (+0xE0.y), 잠수 수직 속도 (+0x260.y). */
 	private float waterVy, diveVy;
 	/** 아직 떠 있는 높이 위에서 떨어지는 중 (공중 물리), 다이빙 (+0x2D8 0x100000), 이번 낙하는 다이빙 안 함 (0x200000), 수면이 NoDiving. */
@@ -2003,6 +2012,40 @@ public final class HeroNavigator {
 		body.play(waterAnim(), true);
 	}
 
+	/**
+	 * 세이브 · 체크포인트 되읽기 (Load_PlayerBlock 0x1DC130 은 이동 상태 +0x174 = 스냅숏 +0x40 을 그대로 — 물 0x80 · 0x100 · 0x200 도) [확실]:
+	 * 물속에서 찍은 스냅숏이면 그 하위 상태로 곧바로 물 상태. 수면 (+0x230) 은 위쪽 첫 Water 면 (없으면 머리 위 멀리 — 다음 수면 질의가 정한다)
+	 * [근사: 원작 스냅숏에 +0x230 이 담기는지 미확인]. 예전 엔진은 지상 / 공중으로 되돌려 PAND02F 물속 체크포인트 (CheckPointGroup6 · 7) 에서
+	 * 크라토스가 바닥까지 가라앉아 걸어 다녔다 (43 §42).
+	 */
+	public void restoreWater(Water w) {
+		Vector3f p = body.position();
+		state = NavState.SWIM;
+		stateTime = 0;
+		water = w == Water.DIVE && !diveAbility ? Water.SINK : w;
+		swimSpeed = 0;
+		waterVy = diveVy = 0;
+		plunging = divingIn = noDiveFall = false;
+		dashCharging = dashing = false;
+		waterY = p.y + SWIM_DEPTH + 100000f;
+		waterNoDiving = false;
+		for (float y = p.y - 48; y <= p.y + 4000; y += 16) { // 발 아래 64 부터 위로 16 씩: 천장 (단단한 면) 은 지나 첫 Water 면 (최대 4000)
+			NavWorld.Floor f = world.floor(p.x, y, p.z, 16);
+			if (f != null && f.has(SurfaceAttr.WATER)) {
+				waterY = f.y();
+				waterNoDiving = f.has(SurfaceAttr.NO_DIVING);
+				break;
+			}
+		}
+		if (water == Water.TREAD) {
+			p.y = Math.min(p.y, waterY - SWIM_DEPTH);
+		}
+		body.setVy(0);
+		body.setGrounded(false);
+		body.launch().zero();
+		body.play(waterAnim(), true);
+	}
+
 	/** 원작 가속 도우미 0x1E5FE0: 목표가 0 이 아니면 |목표| ≥ min, 같은 부호로 커지면 acc, 아니면 dec 만큼 다가감 [확실]. */
 	static float accel(float target, float cur, float acc, float dec, float min) {
 		if (Math.abs(target) > 1e-4f) {
@@ -2038,7 +2081,9 @@ public final class HeroNavigator {
 		swimSpeed = Math.max(0, accel(target, swimSpeed, SWIM_ACCEL * dt, SWIM_DECEL * dt, target > 0 ? SWIM_MIN : 0));
 		// 수직
 		if (water == Water.DIVE) {
-			dashUpdate(in, dt);
+			if (diveAbility) { // 돌진 능력 +0x2DC 0x200000 (삼지창, 0x1C9F58)
+				dashUpdate(in, dt);
+			}
 			// 0x1CAA58: 목표 = □ 아래 / △·× 위 × +0x1D4 (돌진 조종 중엔 돌진 속도, 가감속도 같은 비율)
 			float vmax = SWIM_SPEED, k = 1;
 			if (dashing && dashTime >= 1) {
@@ -2085,6 +2130,9 @@ public final class HeroNavigator {
 		float off = water == Water.DIVE ? HANG * 0.5f : SWIM_DEPTH;
 		Vector3f c = new Vector3f(cand).add(0, off, 0);
 		world.collideSphere(c, BODY);
+		// 물속에서도 몸 질의 0x1E2100 은 GO 충돌 인스턴스 (문 · 창살 · 부서지는 물체의 hull · 공) 를 본다 — 예전엔 정적 시트만 봐 PAND02D 돌진 문 (공 CDV)
+		// 을 그냥 헤엄쳐 지나갔다 (43 §42) [확실: 같은 몸 질의 / 근사: 엔진은 두 슬롯 Platforms 구 밀어내기]
+		world.collideBodies(c, BODY, java.util.Set.of());
 		cand.x = c.x;
 		cand.z = c.z;
 		NavWorld.Floor bed = world.floor(cand.x, Math.max(cand.y, p.y) + FOOT, cand.z, 400);
@@ -2098,6 +2146,15 @@ public final class HeroNavigator {
 		if (s != null && s.has(SurfaceAttr.WATER)) {
 			waterY = s.y();
 			waterNoDiving = s.has(SurfaceAttr.NO_DIVING);
+		}
+		// 수면 질의 0x1E57D8 [확실]: 내비 위치 + 21.76 (= 발 + 28.16) ± d (d = 2·max(이동, 3.2)) 선분이 Water·NoDiving 면에 맞으면 +0x230 = 그 높이 —
+		// 머리 근처의 수면만 본다. 물 높이가 다른 웅덩이 (PAND02F 입구 −641 → 안쪽 −1104 · −1184 · −984) 로 헤엄쳐 올라오면 그 수면으로 바뀐다.
+		// 예전 엔진은 처음 들어간 수면 둘레만 봐 안쪽 웅덩이 위 공기 속을 계속 헤엄쳤다 (43 §42)
+		float qd = 2 * Math.max(p.distance(cand), 3.2f);
+		NavWorld.Floor hs = world.floor(cand.x, cand.y + SWIM_DEPTH + qd, cand.z, 2 * qd);
+		if (hs != null && hs.has(SurfaceAttr.WATER)) {
+			waterY = hs.y();
+			waterNoDiving = hs.has(SurfaceAttr.NO_DIVING);
 		}
 		float line = waterY - SWIM_DEPTH;
 		// 물 상태 전환 (0x1C9BB8)
@@ -2134,8 +2191,8 @@ public final class HeroNavigator {
 				if (waterVy >= 0) {
 					divingIn = false; // 0x1C9C6C: 수직 속도 ≥ 0 이면 다이빙 끝
 				}
-				// 잠수 (0x1C9CC8 / 0x1C9D18): 잠수 능력 (+0x2DC 0x20) + □ (+0x310 0x40) + 지역 수직 속도 ≤ 0 [확실: 조건 / 추정: 영웅은 처음부터 잠수 가능]
-				if (down) {
+				// 잠수 (0x1C9CC8 / 0x1C9D18): 잠수 능력 (+0x2DC 0x20 = 삼지창, {@link #diveAbility}) + □ (+0x310 0x40) + 지역 수직 속도 ≤ 0 [확실]
+				if (down && diveAbility) {
 					water = Water.DIVE;
 					diveVy = Math.min(0, waterVy);
 					waterVy = diveVy;
@@ -2146,7 +2203,7 @@ public final class HeroNavigator {
 		body.play(waterAnim(), false);
 	}
 
-	/** 잠수 돌진 (0x1C9E70 – 0x1CA094, 0x1C9F58): 돌진 중이면 조종 시간을 줄이고, 아니면 R1 충전 → 떼면 돌진 [확실: 식 / 추정: 영웅은 돌진 능력 +0x2DC 0x200000 있음]. */
+	/** 잠수 돌진 (0x1C9E70 – 0x1CA094, 0x1C9F58): 돌진 중이면 조종 시간을 줄이고, 아니면 R1 충전 → 떼면 돌진 [확실: 식 · 능력 +0x2DC 0x200000 = 삼지창]. */
 	private void dashUpdate(Input in, float dt) {
 		if (dashing) {
 			dashTime -= dt;
@@ -2179,6 +2236,19 @@ public final class HeroNavigator {
 		float r = dashSpeed / SWIM_SPEED;
 		swimSpeed = Math.max(0, SWIM_SPEED - Math.abs(diveVy)) * r;
 		diveVy *= r;
+	}
+
+	/**
+	 * 돌진 중 (+0x2D8 0x80000) 의 속도 크기 (유닛/초), 돌진 중이 아니면 0 — Breakable 접촉 0x1DE4D8 이 |+0xE0| 로 본다 (1/16 = m/s).
+	 * 엔진 물속 속도 = 정면 swimSpeed · 수직 diveVy [근사: 원작 +0xE0 은 월드 속도 벡터].
+	 */
+	public float dashContactSpeed() {
+		return dashing && water == Water.DIVE ? (float) Math.hypot(swimSpeed, diveVy) : 0;
+	}
+
+	/** 물속 몸 구 중심 (몸 충돌 밀어내기와 같은 높이, {@link #BODY} 반지름). */
+	public Vector3f swimBodyCenter(Vector3f out) {
+		return out.set(body.position()).add(0, water == Water.DIVE ? HANG * 0.5f : SWIM_DEPTH, 0);
 	}
 
 	/** 물속 정면 속도 (+0x260.z) / 수직 속도 (월드). */
