@@ -368,7 +368,8 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 			nav.update(pos, ZERO, null, combat.active(), dt);
 		} else if (controller != null) {
 			controller.update(this, dt); // 플러그인 AI (49 문서 §13)
-		} else if (brain.tree != null) {
+		} else if (brain.tree != null || brain.patrolling()) {
+			// 결정 트리 없는 적도 순찰 중이면 같은 이동 (DEST03 타이탄 AOTIT: DecisionTree 0 · AI Mode 5 → 순찰만, 32 문서 §순찰)
 			brain.update(dt);
 			boolean busy = combat.active();
 			// 이동 = 공용 내비게이션 (지상 Sold 속도 / 벽 / 줄, EnemyNav). AI 는 스틱(brain.move)과 목표 점만 준다 (0x1CF9D0)

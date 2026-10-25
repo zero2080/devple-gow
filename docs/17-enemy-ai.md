@@ -160,7 +160,7 @@ TWK_Sold 값 (`work/ai/sold_raw.txt`): 크라토스 000 = 비용 4, **용량 12,
 stateDiagram-v2
     [*] --> Idle
     Idle --> Combat: 시야(거리·각) 안 / 피격
-    Idle --> Patrol: 순찰 경로 (0x40 비트, 경로 노드 0x1CF020)
+    Idle --> Patrol: InitState 2/4 · 1025 (ai+0x72 0x20, 한 걸음 0x1D0348 — 32 문서 §대기 모드 · 순찰)
     Combat --> Combat: 기술 중 → 토큰만 갱신
     state Combat {
         Approach --> Surround: 대상 기준 ±176 상자 안
@@ -211,7 +211,8 @@ BlockMod 020(해골)과 050 의 0번 항목은 Move 0 / Limit 0 이라 영웅 �
      달리기 5.0×16/0.733 = 109 (미끄럼 156), 해골 달리기 146 (53) 로 어긋난다 → +0x14 를 읽는 쪽 분석 전까지 미채택.
    - 추가 확인: sub_00116BB0 은 `<클립>_Tween` → act +0x04, `<클립>_Cycle` → act +0x14 (05 문서의 blendParam) 를 **ANM act 레코드에 직접 덮어쓴다**.
      영웅 blendParam(걷기 3.5 / 달리기 5.0)과 실측 루트 이동(48 / 120 유닛/s = 3.0 / 7.5 m/s)이 맞지 않으므로 m/s 속도는 아님 → 블렌드 축 값으로 결론, 속도 출처는 여전히 미확인.
-5. 순찰(Patrol%d / 경로 노드 0x1D4AA0) 상세, AI Mode 2(궁수)·3·4 차이. — 궁수의 쏘기 자체는 전투 파일 (SHOOT = 블렌드 그룹 "shoot" + SCR_ArcherShoot 0x18DAA8 의
+5. ~~순찰(Patrol%d / 경로 노드 0x1D4AA0) 상세~~ → 32 문서 §대기 모드 · 순찰 (WYP 그래프 · InitState 0/1/2/4 · 0x1D17B8 · 0x1D0348 · 1025; 0x1D4AA0 은 자리
+   그래프 A* 의 다음 노드). AI Mode 2(궁수)·3·4 차이. — 궁수의 쏘기 자체는 전투 파일 (SHOOT = 블렌드 그룹 "shoot" + SCR_ArcherShoot 0x18DAA8 의
    겨눔 0.02/프레임 · 당김 0.05/프레임 → ArrowEmitter 0x222710: Aim Joint rWrist, 앞질러 겨눔, 퍼짐 구 #1bf49679, 탄도 해 0x2223C8) 로 확인 (43 §17.2-2·3). 쏘는 거리 상한 [미확인].
 6. ~~생물끼리 밀어내기~~ (32 §생물끼리 밀어내기: 0x1E2DD8 / 0x1E28B0, Sold +0x234/+0x238/+0x23C 몸 상자, Move stateMask 비트 2 = 단단함).
    ~~적 줄 흔들기·짚라인~~ (32 §줄·짚라인: 매단 줄 AI 스틱 0 = 흔들지 않음, 정면 45° 정렬 후 점프 / 짚라인은 내비게이션이 낮은 끝으로). 남은 것: 매단 줄 위 회전 속도, +0x2D8 비트 31 (밀기 끔) 출처.

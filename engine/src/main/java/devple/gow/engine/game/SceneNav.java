@@ -110,6 +110,13 @@ public final class SceneNav {
 		}
 
 		/**
+		 * 이웃 레벨 스크립트의 EventTransmitter → 액터 이벤트 (그 슬롯이 낸 적에게: 1025 대기 모드 · 순찰, 1019, 1039 …) — 원작 메시지는 대상 GO 로 바로 가서
+		 * 슬롯 구분이 없다 (0x1AC020). 예전엔 이웃 리스너가 버렸다.
+		 */
+		default void neighbourObjectEvent(ScriptListener.ObjectEvent e) {
+		}
+
+		/**
 		 * 이웃 레벨 스크립트의 Idle(bool) (Internal 0xC) — 원작 0x1BF080 → 전역 정지 0x29DB58 하나라 이웃 슬롯 스크립트도 영웅을 세운다
 		 * (예 ATHN04A LedgeJumpCams-TriggerVol: ATHN04B 가 현재인 채 난간에 들어서면 Idle + SuicideCam 10.5 초, 43 §18).
 		 */
@@ -545,6 +552,13 @@ public final class SceneNav {
 			@Override
 			public void movie(String name, int op, int arg) {
 				host.neighbourMovie(name, op, arg);
+			}
+
+			@Override
+			public void objectEvent(ObjectEvent e) {
+				if (e.actor() != null) {
+					host.neighbourObjectEvent(e); // 이웃이 낸 적에게 (1025 순찰 등, 32 문서 §순찰)
+				}
 			}
 
 			@Override

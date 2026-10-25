@@ -1,6 +1,7 @@
 package devple.gow.engine.combat;
 
 import devple.gow.tools.combat.CombatFile.Move;
+import devple.gow.tools.level.WaypointGraph;
 import org.joml.Vector3f;
 
 import java.util.ArrayList;
@@ -74,8 +75,20 @@ public final class AiBrain {
 	private final Vector3f lastTargetPos = new Vector3f();
 	private float targetSpeed;
 	private float targetMaxHp = 1;
-	private List<Vector3f> patrol = List.of();
-	private int patrolIdx;
+	/**
+	 * 대기 모드 = 생성 기록 슬롯 8 InitState → ai+0x7C (0x22CAF0), 대기 상태 들어갈 때 0x245DB0 이 고른다 [확실: 디스어셈블]:
+	 * 0 = 서 있기 (0x25BA98: ai+0x72 = 4 → 0x1CEFC0 스틱 0), 1 = 자리 그래프 (Site%d) 무작위 노드 걷기 (0x25BAA8 → 0x1D1770 → 0x1CEF68)
+	 * [엔진: 서 있음 — 자리 그래프 이동 없음], 2 · 4 = 순찰 (0x25BAC8 → 0x1D17B8), 4 는 ai+0x48 비트 0 을 세워 인지 (1005)·경보 (1000) 로
+	 * 싸움에 들지 않는다 (0x26B190 – 0x26B198) — 시민 XY1/AOXY1 (313), ATHN04A 계단 사람들, ATHN06B 하피, ARENA12 해골·병사.
+	 */
+	private int idleMode;
+	private boolean passive;
+	/** 순찰 경로 (ai+0x20 = "CLI_WYP_Patrol%d"), 지금 목표 노드 (ai+0x6C), 노드 위 흩뿌림 (ai+0x54/+0x58/+0x5C). */
+	private WaypointGraph patrolGraph;
+	private int patrolNode = -1;
+	private final Vector3f patrolOffset = new Vector3f();
+	/** 순찰 번호 → 그래프 (적을 낸 레벨의 "Patrol%d", 0x1D17B8 의 sprintf + 0x187E60). */
+	private java.util.function.IntFunction<WaypointGraph> patrols = n -> null;
 
 	/** 이번 프레임 이동 의도 (월드, 단위 벡터 × 속도 배율 0..1). */
 	public final Vector3f move = new Vector3f();
@@ -128,9 +141,99 @@ public final class AiBrain {
 		}
 	}
 
-	public void setPatrol(List<Vector3f> waypoints) {
-		patrol = waypoints != null ? waypoints : List.of();
-		patrolIdx = 0;
+	/** 순찰 그래프 찾기 (적을 낸 레벨의 웨이포인트 그래프 — 스크립트 1025 는 번호만 준다). */
+	public void setPatrols(java.util.function.IntFunction<WaypointGraph> p) {
+		patrols = p != null ? p : n -> null;
+	}
+
+	/**
+	 * 대기 모드로 들어간다 — 생성 (Enemy1 초기화 0x22CA78 → 0x245DB0) 과 스크립트 1025 (0x265478) 가 부른다. 모드 2 · 4 이고 순찰 번호가 있으면
+	 * "Patrol%d" 그래프로 순찰을 시작한다 (0x25BAC8 → 0x1D17B8).
+	 *
+	 * @param mode         InitState (0 서기 · 1 자리 걷기 · 2 순찰 · 4 싸우지 않는 순찰 · 5 석화는 따로)
+	 * @param patrolNumber 순찰 번호 ({@link WaypointGraph#patrolNumber}, 없으면 −1)
+	 * @return 순찰을 시작했으면 true
+	 */
+	public boolean startIdle(int mode, int patrolNumber) {
+		idleMode = mode;
+		passive = mode == 4;
+		patrolGraph = null;
+		patrolNode = -1;
+		if ((mode == 2 || mode == 4) && patrolNumber >= 0) {
+			WaypointGraph g = patrols.apply(patrolNumber);
+			if (g != null && g.size() > 0) {
+				startPatrol(g);
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * 순찰 시작 0x1D17B8 [확실]: ai+0x72 = (ai+0x72 &amp; 0x40) | 0x20, 지금 자리에서 3 차원 거리가 가장 가까운 노드 (0x1D1854 – 0x1D18CC) 가 첫 목표,
+	 * 그 노드 "Radius" × 16 반경 원 위 무작위 점으로 흩뿌린다 (0x1CBB08).
+	 */
+	public void startPatrol(WaypointGraph g) {
+		patrolGraph = g;
+		patrolNode = g.nearest(self.pos.x, self.pos.y, self.pos.z);
+		scatter(g.radius(patrolNode) * 16f);
+		log.accept("순찰 " + g.name + " 시작 노드 " + patrolNode);
+	}
+
+	/**
+	 * 0x1CBB08: 난수 셋 (0x13E600, [0, 1)) → (2u − 1) 벡터, 지상이면 몸 행렬의 오른쪽·정면 축 성분만 (0x1CBCC0 갈래), 정규화 × 반경 →
+	 * ai+0x54/+0x58/+0x5C [확실: VU0 VMULx · VSUB · VRSQRT · VMULq 해독] — 원 안이 아니라 원 위.
+	 */
+	private void scatter(float r) {
+		float a = 2 * rnd.nextFloat() - 1;
+		rnd.nextFloat(); // 위 성분 (지상은 쓰지 않음)
+		float c = 2 * rnd.nextFloat() - 1;
+		float s = (float) Math.sin(self.yaw), co = (float) Math.cos(self.yaw);
+		// 몸 행렬 오른쪽 = (cos, 0, −sin), 정면 행 (+Z 행) = (sin, 0, cos) — 엔진 yaw 규약 (정면 −Z)
+		float x = a * co + c * s, z = -a * s + c * co;
+		float l = (float) Math.hypot(x, z);
+		if (l < 1e-6f || r <= 0) {
+			patrolOffset.zero();
+		} else {
+			patrolOffset.set(x / l * r, 0, z / l * r);
+		}
+	}
+
+	/** 순찰 중 (경로가 있음). */
+	public boolean patrolling() {
+		return patrolGraph != null && patrolNode >= 0;
+	}
+
+	public WaypointGraph patrolGraph() {
+		return patrolGraph;
+	}
+
+	/** 지금 목표 순찰 노드 (ai+0x6C, 없으면 −1). */
+	public int patrolNode() {
+		return patrolNode;
+	}
+
+	/** 대기 모드 (ai+0x7C). */
+	public int idleMode() {
+		return idleMode;
+	}
+
+	/** 모드 4 (ai+0x48 비트 0): 인지·경보로 싸우지 않는다. */
+	public boolean passive() {
+		return passive;
+	}
+
+	/**
+	 * 스크립트 1025 (AI 메시지 0x401, 0x265478 – 0x2654E4) [확실]: 상태 처리기 → 0x1D30D0(ai, 0) (대상 놓음 — 토큰·칸 반납), ai+0x20 = 0 (경로 지움),
+	 * ai+0x7C = 인자 0, 인자 0 이 2 · 4 면 대기 상태 +0xA = 인자 1 (순찰 번호) → 대기 다시 (0x245DB0). 예: DEST01 SwitchSiteZone-SwitchSite (2, 1) →
+	 * 첫 세이렌 Patrol1, ATHN04A SecTP2-ForcePatrolAway (4, 500…), PAND01D RopeSkellyJump-SendStopPartol (0) → 서기.
+	 * 엔진은 대상을 지우지 않고 "인지 전" 으로 되돌린다 — 원작도 인지 (0x1D2170 → 0x1D22B0 → 1005) 가 다시 대상을 잡는다.
+	 */
+	public void scriptIdle(int mode, int patrolNumber) {
+		releaseAll();
+		state = State.IDLE;
+		boolean ok = startIdle(mode, patrolNumber);
+		log.accept("1025 대기 모드 " + mode + (ok ? " 순찰 " + patrolGraph.name : ""));
 	}
 
 	/** 공격 대상 지정 (아직 인지 전 — 시야에 들어오거나 맞으면 전투). */
@@ -210,8 +313,8 @@ public final class AiBrain {
 			releaseAll();
 			return;
 		}
-		if (target == null) {
-			wander();
+		if (target == null || tree == null) {
+			wander(); // 결정 트리 없는 적 (DEST03 타이탄 AOTIT 321: DecisionTree 0 · AI Mode 5) 은 순찰만
 			return;
 		}
 		Vector3f tp = target.position();
@@ -225,7 +328,7 @@ public final class AiBrain {
 		}
 		float dist = dist(tp);
 		if (state != State.COMBAT) {
-			if (tmpl.mode == 5 || !perceives(tp, dist)) {
+			if (tmpl.mode == 5 || passive || !perceives(tp, dist)) {
 				wander();
 				return;
 			}
@@ -258,17 +361,45 @@ public final class AiBrain {
 		}
 	}
 
+	/**
+	 * 대상을 인지하지 않은 동안 (AI 갱신 0x1D0E08 의 대기 분기 0x1D1330 – 0x1D13B0: ai+0x72 비트 0x2 자리 걷기 / 0x40 자리 경로 / 0x4 서기 /
+	 * 0x20 순찰). 순찰 한 걸음 0x1D0348 [확실]: 목표 = 노드 + 흩뿌림, 3 차원 거리 &lt; 노드 "Radius" × 16 이면 다음 노드 = 나가는 간선 + 들어오는 간선
+	 * 가운데 고르게 무작위 (0x13E6B0, 0x1D0578 – 0x1D05B0 — 한 방향 고리면 늘 다음 노드), 흩뿌림 0. 간선이 없으면 0x1D0748 이 자기에게 0x411 →
+	 * AI Mode 2 면 서기, 아니면 자리 걷기 (0x26B8C8) [엔진: 둘 다 섬]. 노드에서 멈추는 시간은 없다. 이동 = AI_MoveTo 0x1CF9D0, 스틱 = AI1 0x64 %
+	 * (ai+0x72 &amp; 0x22, 0x1D0030).
+	 */
 	private void wander() {
-		state = patrol.isEmpty() ? State.IDLE : State.PATROL;
-		if (!patrol.isEmpty()) {
-			Vector3f wp = patrol.get(patrolIdx % patrol.size());
-			if (flat(self.pos, wp) < 16f) {
-				patrolIdx++;
-			} else {
-				steer(wp, tmpl.speedPctAlt / 100f);
-				face = yawTo(wp);
-			}
+		WaypointGraph g = patrolGraph;
+		if (g == null || patrolNode < 0) {
+			state = State.IDLE;
+			return;
 		}
+		state = State.PATROL;
+		Vector3f t = patrolTarget();
+		if (self.pos.distance(t) < g.radius(patrolNode) * 16f) {
+			int[] a = g.out(patrolNode), b = g.in(patrolNode);
+			int k = a.length + b.length;
+			if (k == 0) {
+				log.accept("순찰 " + g.name + " 끝 (노드 " + patrolNode + " 간선 없음)");
+				patrolGraph = null;
+				patrolNode = -1;
+				state = State.IDLE;
+				return;
+			}
+			int r = rnd.nextInt(k);
+			patrolNode = r < a.length ? a[r] : b[r - a.length];
+			patrolOffset.zero();
+			t = patrolTarget();
+		}
+		steer(t, tmpl.speedPctAlt / 100f);
+		face = yawTo(t);
+	}
+
+	/** 지금 순찰 목표 점 = 노드 + 흩뿌림 (0x1D03EC – 0x1D041C). */
+	public Vector3f patrolTarget() {
+		WaypointGraph g = patrolGraph;
+		return g == null || patrolNode < 0 ? new Vector3f(self.pos)
+				: new Vector3f(g.x(patrolNode), g.y(patrolNode), g.z(patrolNode)).add(patrolOffset);
 	}
 
 	/** 인지 (0x1D22B0): 시야 거리 ×16 안 + 정면 기준 반각 sightFov 안 + 시선이 막히지 않음 (템플릿 0x84&amp;0x800 이면 생략). */
@@ -288,7 +419,7 @@ public final class AiBrain {
 		}
 		float r = tmpl.alertRadius * 16f;
 		for (AiBrain o : List.copyOf(slot.brains)) {
-			if (o != this && o.state != State.COMBAT && !o.dead() && o.tmpl.mode != 5 && o.self.pos.distance(self.pos) <= r) {
+			if (o != this && o.state != State.COMBAT && !o.dead() && o.tmpl.mode != 5 && !o.passive && o.self.pos.distance(self.pos) <= r) {
 				o.state = State.COMBAT;
 				o.log.accept("경보 받음");
 			}
@@ -757,10 +888,6 @@ public final class AiBrain {
 
 	private float dist(Vector3f p) {
 		return p.distance(self.pos);
-	}
-
-	private static float flat(Vector3f a, Vector3f b) {
-		return (float) Math.hypot(a.x - b.x, a.z - b.z);
 	}
 
 	private float yawTo(Vector3f p) {

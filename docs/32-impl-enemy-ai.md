@@ -19,7 +19,8 @@ API:
 EnemyFighter f = kind.spawn();          // Kind 에 AiData 포함 (EnemyFactory 가 R_PERMK Sold_000 을 영웅 용량으로 등록)
 f.setFoe(hero);                          // AiBrain.setTarget → AiTargets.slot(hero) 공유
 f.setDifficulty(session.difficulty);     // AI Recovery Time Mult (기본 Normal)
-f.brain().setPatrol(waypoints);          // 선택: 미인지 시 순찰
+f.brain().setPatrols(level::patrol);     // 순찰 번호 → 그 레벨의 WYP "Patrol%d" (§대기 모드 · 순찰)
+f.brain().startIdle(initState, patrolNo);// 생성 슬롯 8 InitState · 슬롯 9 "patrolN" (0x245DB0 → 0x1D17B8)
 f.brain().onLog(System.out::println);    // 판단 로그 (인지/토큰/행동/방어)
 f.brain().debugString();                 // 상태 요약
 ```
@@ -40,7 +41,7 @@ f.brain().debugString();                 // 상태 요약
 | 이동 속도 | **Sold +0x178 (m/s) × AI 스틱** [확실] — 미노 3 → 48, 해골 8 → 128 유닛/s, 가속 +0x16C / 감속 +0x170. 스틱 = AI1 0x68 % (순찰 0x64 %). 클립 = 블렌드 축 값(_Cycle)이 속도에 가장 가까운 것 [추정] (§이동 속도 출처) |
 | 모델 크기 ScaleCenter/Range | 구현 (`world()` 에 적용, 해골 0.87) |
 | 결정 트리 없는 적 (보스·스크립트 구동) | 예전 단순 규칙 유지 |
-| 순찰 | 웨이포인트 목록 따라가기만 (ESC Patrol → 좌표 연결은 GameScene 쪽 미연결) |
+| 대기 모드 · 순찰 | **구현** (§대기 모드 · 순찰): WYP_ 웨이포인트 그래프 · InitState 2 / 4 순찰 (가까운 노드 · 반경 × 16 도착 · 간선 무작위) · 모드 4 는 싸우지 않음 · 스크립트 1025. 모드 1 (자리 그래프 무작위 걷기) 은 서 있음 [근사] |
 
 ## 3. 테스트 (`AiBrainTest` 헤드리스 + `EnemyNavTest` / `EnemyClimbTest`)
 | 테스트 | 검증 |
@@ -338,3 +339,48 @@ AI 스틱 크기 = AI1 0x68 % (평상 100) 또는 0x64 % (ai+0x72 & 0x22, 순찰
 3. 0x20BFB0: 대상 중심 격자 원점 + (2·rand − 1)·X축 + (2·rand − 1)·Z축 를 반경(토큰 보유 64 / 대기 160)배 → 칸 → 제외 칸이 아니면 채택, 재귀로 최대 5번.
 4. 그래도 없으면 rand(121) 칸; 막혀 있으면 sub_00243B68 (미상 → 엔진은 자신에 가장 가까운 허용 칸).
 → 이전 근사("반경에 가까운 칸 + 자기 거리 비용")와 달리 **반경 정사각형 안 무작위** 가 원작이다.
+
+
+## 대기 모드 · 순찰 (WYP 웨이포인트 그래프) [확실: 디스어셈블 / 근사: 표시한 것]
+예전 엔진은 WYP_ 자원을 읽지 않았고 `AiBrain.setPatrol` 을 부르는 곳이 없어 순찰하는 적이 하나도 없었다 (43 §32.6: DEST03 타이탄이 스폰 자리에 서 있음).
+
+**자원** (`tools/level/WaypointGraph`, `LevelData.waypoints()` · `patrol(n)`): 형 0x14 "WYP_&lt;이름&gt;", 클라이언트 0x187BC8 이 "CLI_WYP_%s" 로 등록.
+자료 +4 = 머리 "WypHeadr", 표는 머리 기준 오프셋 (0x187C18 – 0x187C98): +0x0C 노드 · +0x14 간선 · +0x1C 속성 자료 · +0x20 속성 표, +0x2C 노드 수 · +0x40 속성 수 ·
++0x4C 노드당 속성 크기, +0x08 ≠ 0 이면 노드가 소유 GO 기준 (0x187D30 — ARENA14 한 노드 Site 8 개뿐). 노드 24 바이트 = x, y, z · +0x0C 나가는 간선 수 · +0x10 들어오는
+간선 수 · +0x12 / +0x16 첫 칸 (0x23D790 / 0x23D7A8), 간선 4 바이트 +0 u16 이웃. 속성 0x4C 바이트 = 이름 ("Radius") + +0x3C 위치. 전 80 레벨 WYP 505 개를 이 꼴로 읽으면 모든 간선이
+노드 범위 안이다. 순찰 경로는 한 방향 (고리 — DEST03 Patrol1030 0→1→3→…→48→47→…→2→49→0, 또는 줄 — ATHN02C Patrol14 0→1→2→3→4 끝), 자리 그래프 (Site) 는 양방향.
+
+**생성** [확실]: SpawnEnemy 슬롯 9 문자열은 0x1AC9B8 – 0x1AC9E8 이 앞 6 글자를 "patrol" 과 대소문자 무시 (0x28DFD0) 로 견주어 뒤 10 진수 (0x291D58) 를 생성 기록 +0xA
+(없으면 −1), 슬롯 8 InitState → +0x8. Enemy1 초기화 0x22CA78 이 +0x8 → ai+0x7C, +0xA → 대기 상태 +0xA 에 두고 0x245DB0 (대기 모드로) 를 부른다:
+| ai+0x7C | 0x245DB0 | 하는 일 |
+|---|---|---|
+| 0 | 0x25BA98: ai+0x72 = 4 | 서 있기 (0x1CEFC0 스틱 0) |
+| 1 | 0x1D16D0(ai, 0) · 0x25BAA8 → 0x1D1770: ai+0x72 = 2, ai+0x6C = 자리 그래프 무작위 노드 | 자리 그래프 노드 사이를 무작위로 걷기 (0x1CEF68) — **엔진: 서 있음 [근사]** (데이터 SpawnEnemy 대부분이 1) |
+| 2 · 4 | 0x25BAC8 → 0x1D17B8(ai, ai+0x20 ? −1 : 상태 +0xA) | 순찰. 4 는 ai+0x48 비트 0 도 세운다 |
+| 5 | (0x22CBF8 석화 0x407 뒤 0) | 돌로 시작 |
+
+**순찰 시작 0x1D17B8**: ai+0x72 = (ai+0x72 &amp; 0x40) | 0x20, 번호가 있으면 ai+0x7E = 번호, ai+0x20 = "Patrol%d" (0x187E60), 지금 자리에서 3 차원 거리가 가장 가까운 노드 →
+ai+0x6C (0x1D1854 – 0x1D18CC), 그 노드 "Radius" × 16 으로 0x1CBB08 — 난수 셋 (2u − 1) 을 지상이면 몸 오른쪽·정면 축 성분만 두어 **정규화 × 반경** (원 위 무작위 점, VU0 VMULx · VSUB ·
+VRSQRT · VMULq) → ai+0x54/+0x58/+0x5C. ai+0x70 = 그 노드에 가장 가까운 자리 그래프 노드 (0x1D3F50, 자리 경로용).
+
+**한 걸음 0x1D0348** (AI 갱신 0x1D0E08 의 대기 분기 0x1D1330 – 0x1D13B0, 비트 0x2 → 0x40 → 0x4 → 0x20 순): 목표 = 노드 + 흩뿌림, 3 차원 거리 &lt; "Radius" × 16 이면 다음 노드 =
+나가는 간선 (A) + 들어오는 간선 (B) 가운데 고르게 무작위 (0x13E6B0, r &lt; A 면 A[r] 아니면 B[r − A]) · 흩뿌림 0. 간선이 없으면 0x1D0748 이 자기에게 0x411 → 0x26B8C8: AI Mode 2 면
+서기, 아니면 자리 걷기 (0x1D1770). 노드에서 멈추는 시간 없음. 이동 = AI_MoveTo 0x1CF9D0, 스틱 = AI1 0x64 % (ai+0x72 &amp; 0x22, 0x1D0030 — 엔진 `speedPctAlt` #cd7da53a).
+
+**인지와 싸움**: 대기 중 0x1D2170 이 인지 0x1D22B0 을 돌리고 (ai+0x72 &amp; 0x40 자리 경로 중에는 건너뜀) 보이면 자기에게 1005 (0x3ED); 대기 상태 처리기 0x26B0D8 은 1005 와
+경보 1000 (0x3E8) 에 0x26BA30 (경로 놓고 0x1D30D0 대상) 으로 싸움에 드는데, **ai+0x48 비트 0 (모드 4) 이면 들지 않는다** (0x26B190 – 0x26B198). 싸움에서 대기로 돌아오면 다시 0x245DB0 →
+경로가 남아 있으니 0x1D17B8(ai, −1) — 지금 자리에서 가장 가까운 노드부터 다시.
+
+**스크립트**: 1025 → AI 메시지 0x401 (0x265478 – 0x2654E4): 상태 처리기 → 0x1D30D0(ai, 0) → ai+0x20 = 0 → ai+0x7C = 인자 0, 2 · 4 면 대기 상태 +0xA = 인자 1 → 대기 다시 (0x265350).
+1026 → 0x402 → 0x1CE728 (자리 그래프 바꾸기, "CLI_WYP_%s") — 엔진 없음. 0x409 (1033) = 0x1D16D0(ai, 1) 뒤 순찰 다시 (0x26B8C8, 내부).
+
+**엔진**:
+- `AiBrain.startIdle(mode, 순찰 번호)` / `startPatrol` (가장 가까운 노드 · `scatter` 원 위 흩뿌림) / `wander` (위 한 걸음) / `scriptIdle` (1025 — 대상은 두고 "인지 전" 으로: 원작도
+  인지가 다시 대상을 잡는다) / `passive` (모드 4: 인지·경보로 싸우지 않음, 맞으면 싸운다 [미확인: 원작 피격 경로]).
+- `GameScene.spawn`: 적을 낸 슬롯 레벨의 `LevelData.patrol` 을 붙이고 InitState · "patrolN" 으로 `startIdle`. 결정 트리 없는 적도 순찰 중이면 같은 이동 (`EnemyFighter` —
+  DEST03 타이탄 AOTIT 321: DecisionTree 0 · AI Mode 5) 과 바닥 (`EnemyNav`).
+- `EnemyFactory`: 걷기 클립을 이름으로 못 찾으면 Navigation ANIWalk (타이탄 "TIT1d01Mi02", BossKinds 와 같은 규칙).
+- `CombatScriptBridge` 1025 (`EVENT_IDLE_MODE`), 이웃 슬롯 스크립트의 액터 이벤트도 그 슬롯 다리로 (`SceneNav.Host.neighbourObjectEvent`).
+- 남은 것: 모드 1 자리 그래프 걷기 · 1026 · 자리 경로 (0x40, 0x1CF020 A* 0x1D4190) — 자리 그래프는 읽지만 쓰지 않는다. 엔진 전투는 대기로 돌아오지 않아 싸운 뒤 순찰로 돌아가는 경로는 없다.
+- 시험 `PatrolTest` (그래프 꼴 · 번호 · 미노 복도 줄 · 모드 4 · 1025 · 타이탄 기어가기).
+

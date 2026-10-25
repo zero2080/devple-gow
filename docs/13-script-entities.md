@@ -64,7 +64,7 @@
 | 7 Vis | 0 Visible, 1..7 속성(int, 0 그대로 / 1 켬 / 2 끔), 8 FadeTime float | 9 | +16 Attr17, +17 JointVisibility (`0x1A3200`, 효과 `0x1ABAA8`) |
 | 8 EventTransmitter | 0 EventId, 1 Arg1, 2 Arg2 (int) | 3 | `0x1A3578` |
 | 9 Start | 0 PlayerName str ("Hero"), 1 Filter int(+0x9C), 2 CameraName str | – | `0x1A3780` |
-| 10 SpawnEnemy | 0 MaximumCount int (+0xB0, 조건 0x1AC580: Trigger 때 +0x100 += 1), 1 ? int(-1, +0xB8 — 0x1AC580/0x1AC630/0x1AC850 은 읽지 않음), 2 SpawnAtStart bool, 3 Respawn bool, 4 TemplateId int, 5..6 int, 7 SpawnAction int(-1, 생성 액션 = CombatFile 액션 ID, 32 문서), 8 InitState int (5 = 석화), 9 Patrol str ("patrolN") | 10 | `0x1A3840`, 효과 `0x1AC850` |
+| 10 SpawnEnemy | 0 MaximumCount int (+0xB0, 조건 0x1AC580: Trigger 때 +0x100 += 1), 1 ? int(-1, +0xB8 — 0x1AC580/0x1AC630/0x1AC850 은 읽지 않음), 2 SpawnAtStart bool, 3 Respawn bool, 4 TemplateId int, 5 int (자리 그래프 "Site%d", 0x1A4E88), 6 int, 7 SpawnAction int(-1, 생성 액션 = CombatFile 액션 ID, 32 문서), 8 InitState int (대기 모드 ai+0x7C: 0 서기 · 1 자리 걷기 · 2 순찰 · 4 싸우지 않는 순찰 · 5 석화, 0x245DB0), 9 Patrol str ("patrolN" → N, 대소문자 무시 0x1AC9B8 → WYP "Patrol%d", 32 문서 §대기 모드 · 순찰) | 10 | `0x1A3840`, 효과 `0x1AC850` |
 | 11 Creator | 0 Name0 str ("chest", "savepoint", "aoRED" … — 앞에 "go", 대소문자 무시), 1 Name1 str (= 새 GO 의 처음 act, 0x1AD110), 2 float (+0xC0 배율), 3..5 int(-1) = 새 GO 의 비헤이비어 템플릿 (3 PushPull · 4 Breakable · 5 IO_CSM, −1 = 없음), 6 int = PushPull id / CSM 과제 id / SavePoint 번호 (0x1A5298, 43 §32.2-6), 7 int (+0xE8: 생성 수 상한), **8 CreateAtStart bool** (36 문서 §5), 9 bool; base 16 Filter = 새 GO 의 오브젝트 그룹. 행렬 = 엔티티 행렬 · 소유 GO 관절 월드 (0x1A9CD0, 43 §19) | 10 | +17 bool (`0x1A3B90`), 효과 `0x1ACCA8` |
 | 12 GlobalData / 13 LevelData | 0 Priority int, 1..16 Init action (변수 초기화) | – | `0x1A3F18` / `0x1A4240` |
 | 14 Marker | 0 Id int (+0x9C) | – | `0x1A4568` |
@@ -134,7 +134,7 @@ Fire(e, sender)     0x1A98C0  (큐에서 꺼낼 때)
 | 1019 | 184 | `EvtForce`: Arg1 = 강제 상태 번호 (PlayerStartZone 512, PatrolChange 0, ATHN05A 영웅 DeathZone **504**) |
 | 1029 | 100 | 적 DeathZone (ATHN01A Filter 8/2/3/4/5) → 제거 |
 | 1008 (0x3F0) | 26 | **죽음** (EvtDie · instantDie · KillEnemies · DeathVol · oraclFallDIE). Creator 가 만든 GO (전투 컴포넌트 없음, 핸들러 0x1ADEE0) 면 보내지 않고 GO 제거 0x1AE448 → 레지스트리 제거 0x1A6010 (DestructionSensor) [확실: 0x1AC154 – 0x1AC198]. 엔진 `GameScene.destroyCreated` (ATHN06C 구출 뒤 줄의 오라클), 전투원에 보낸 1008 은 [미구현] |
-| 1015 / 1025 | 49 / 25 | 미확인 (1015 = 들어 올리는 문 리셋, 38 §23.4) |
+| 1015 / 1025 | 49 / 25 | 1015 = 들어 올리는 문 리셋 (38 §23.4). **1025** = 적 AI 메시지 0x401 (0x265478): 대상 놓고 대기 모드 = Arg1, 2 · 4 면 순찰 번호 = Arg2 ("Patrol%d") → 대기 다시 — `SwitchSite` (DEST01 첫 세이렌 (2, 1)) · `ForcePatrolAway` · `PatrolUp/DownChange` · `FleeTransmit` · `SendStopPartol` (0 = 서기), 32 문서 §대기 모드 · 순찰 [확실] |
 | 1017 / 1018 | 13 / 15 | **영웅 PAUSE / UNPAUSE** (`0x1AC0EC`: 영웅에게 0x3F9/0x3FA 면 `"======== %sPAUSE Hero"`) [확실] |
 | 200..352 (모드 5) | 각 1 | 전역 이벤트 (EventSensor 로 수신) |
 

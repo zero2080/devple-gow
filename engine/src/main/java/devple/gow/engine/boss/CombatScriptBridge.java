@@ -28,6 +28,8 @@ public final class CombatScriptBridge {
 	static final boolean DEBUG = System.getProperty("gow.debug") != null;
 	public static final int EVENT_FORCE = 1019, EVENT_HEALTH = 1039, EVENT_STONE_KILL = 1046, EVENT_ZONE = 1054, METER_ON = 1055,
 			METER_OFF = 1056;
+	/** 스크립트 → 적 1025 (AI 메시지 0x401): 대기 모드 = 인자 1, 모드 2 · 4 면 순찰 번호 = 인자 2 (0x265478, {@code AiBrain.scriptIdle}). */
+	public static final int EVENT_IDLE_MODE = 1025;
 
 	private final ScriptWorld world;
 	private final Map<ScriptActor, EnemyFighter> byActor = new HashMap<>();
@@ -144,6 +146,20 @@ public final class CombatScriptBridge {
 			return ok;
 		}
 		switch (e.event()) {
+			case EVENT_IDLE_MODE -> {
+				// 1025 "SwitchSite" (DEST01 SwitchSiteZone-SwitchSite (2, 1) → 첫 세이렌 Patrol1, ATHN04A ForcePatrolAway (4, 500…),
+				// PAND01D SendStopPartol (0)) — 대상 놓고 대기 모드 다시 (0x265478 – 0x2654E4) [확실]
+				if (f.dead()) {
+					return false;
+				}
+				f.brain().scriptIdle(e.arg1(), e.arg2());
+				log.add("1025 → " + a.group + " 모드 " + e.arg1() + " 순찰 " + e.arg2());
+				if (DEBUG) {
+					System.out.println("[스크립트 이벤트] 1025 → " + a.group + " 모드 " + e.arg1() + " 순찰 " + e.arg2()
+							+ (f.brain().patrolling() ? " (" + f.brain().patrolGraph().name + ")" : ""));
+				}
+				return true;
+			}
 			case EVENT_FORCE -> {
 				Combatant c = f.combat();
 				if (!c.request(e.arg1())) {

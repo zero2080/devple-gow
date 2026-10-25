@@ -243,6 +243,24 @@ public final class LevelData {
 		}
 	}
 
+	private Map<String, WaypointGraph> waypoints;
+
+	/**
+	 * 레벨 WAD 의 웨이포인트 그래프 (WYP_, 형 0x14 — 순찰 경로 Patrol%d · 이동 자리 Site%d): 키 = 이름 소문자 ("patrol1030", "site1031").
+	 * 원작 레지스트리는 "CLI_WYP_%s" 를 대소문자 무시로 찾는다 (0x187E60 → 0x17A7B8).
+	 */
+	public Map<String, WaypointGraph> waypoints() {
+		if (waypoints == null) {
+			waypoints = WaypointGraph.all(wad);
+		}
+		return waypoints;
+	}
+
+	/** 순찰 번호 → 그래프 "Patrol%d" (0x1D17B8 의 sprintf, 없으면 null). */
+	public WaypointGraph patrol(int number) {
+		return number < 0 ? null : waypoints().get("patrol" + number);
+	}
+
 	private java.util.Set<String> animatorOwners;
 
 	/**

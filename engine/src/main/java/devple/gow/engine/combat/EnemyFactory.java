@@ -192,6 +192,16 @@ public final class EnemyFactory {
 				idle = sa.name;
 			}
 		}
+		Animation walkA = set.find(walk);
+		if ((walkA == null || !walkA.hasSkeletalData()) && animNode != null) {
+			// 걷기도 이름 규칙으로 못 찾으면 Navigation ANIWalk (원작 지상 이동 애니) — DEST03 타이탄 aoTIT 의 순찰 "TIT1d01Mi02" (10 초 기어가기,
+			// 32 문서 §순찰). BossKinds 와 같은 규칙
+			String wk = tw.s(animNode + "Navigation/", "ANIWalk", null);
+			Animation wa = wk != null ? findIgnoreCase(set, wk) : null;
+			if (wa != null && wa.hasSkeletalData()) {
+				walk = wa.name;
+			}
+		}
 		// 결정 트리·병사 구조체 (17 문서). 영웅 Sold(000)는 공격 토큰 용량 (R_PERMK)
 		AiData ai = AiData.load(wad, permk);
 		AiTargets.setHeroSoldier(ai.soldier(0));

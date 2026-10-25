@@ -1437,6 +1437,14 @@ public final class GameScene implements Scene {
 			}
 
 			@Override
+			public void neighbourObjectEvent(ScriptListener.ObjectEvent e) {
+				// 이웃 슬롯 스크립트 → 그 슬롯이 낸 적 (neighbourBridge 가 액터를 안다): 1025 대기 모드 · 순찰 등
+				if (boss == null) {
+					neighbourBridge().objectEvent(e);
+				}
+			}
+
+			@Override
 			public void neighbourMovie(String name, int op, int arg) {
 				// 이웃 슬롯 스크립트의 PlayMovie — 지금 레벨 것과 같은 재생기 · 끝 501 (공유 이벤트 큐로 이웃 센서도 받는다, 43 §32)
 				if (op == 0 && pendingEngine != null) {
@@ -2610,7 +2618,17 @@ public final class GameScene implements Scene {
 		// 해골 ClimbSkellys: Z 축이 난간 바깥이라 523 SKSshipDismount 가 배 밖 아래에서 올라와 난간을 넘는다 (28 §7)
 		f.yaw = (float) Math.atan2(w[8], w[10]);
 		f.setDifficulty(session.difficulty);
-		if ((bossKind == null || boss.usesNavWorld()) && f.brain().tree != null && nav != null) {
+		// 대기 모드 · 순찰: 생성 기록 +8 (슬롯 8 InitState) → ai+0x7C, +0xA (슬롯 9 "patrolN" → N, 0x1AC9B8) → Enemy1 초기화 0x22CA78 → 0x245DB0 → 모드 2 · 4 면
+		// 0x25BAC8 → 0x1D17B8 이 그 레벨의 "Patrol%d" 웨이포인트 그래프로 순찰 (32 문서 §순찰). 그래프는 적을 낸 슬롯의 레벨 WAD 에서
+		ScriptWorld spawner = neighbour && nav != null ? nav.spawningNeighbour() : world;
+		devple.gow.tools.level.LevelData spawnLevel = spawner != null ? spawner.level : level.data();
+		f.brain().setPatrols(spawnLevel::patrol);
+		int initState = spawner != null && r.source() != null && spawner.slot(r.source(), "InitState") instanceof Number n ? n.intValue() : 0;
+		if (bossKind == null && f.brain().startIdle(initState, devple.gow.tools.level.WaypointGraph.patrolNumber(r.patrol()))) {
+			System.out.printf("순찰: %s 모드 %d %s 노드 %d (%d 개)%n", r.source() != null ? r.source().name() : "?", initState,
+					f.brain().patrolGraph().name, f.brain().patrolNode(), f.brain().patrolGraph().size());
+		}
+		if ((bossKind == null || boss.usesNavWorld()) && (f.brain().tree != null || f.brain().patrolling()) && nav != null) {
 			f.setNavWorld(devple.gow.engine.combat.EnemyNav.of(nav.navWorld)); // 바닥·중력·벽·줄 이동 (32 문서 §적 자신의 벽·줄 이동)
 		}
 		f.setCrowd(() -> bodies); // 생물끼리 밀어내기 0x1E2DD8 — 보스도 (Sold +0x1C 비트 1·BMI Think 이면 자기는 밀지 않음)

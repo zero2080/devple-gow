@@ -72,7 +72,7 @@ GROUP{ RES ANM_hero_<level> } ...         레벨별 애니메이션 세트
 | 0x0F | MDL | `MDL_` | 모델 (0x2000F), 0x1000F 변형 |
 | 0x11 | COL | `CDV_` `CDZ_` `ENV_` `ENZ_` `SEV_` `SEZ_` `CMV_` `CMZ_` | 충돌 / 환경 / 카메라 볼륨 |
 | 0x13 | PRT | `PTC_` | 파티클 |
-| 0x14 | WYP | `WYP_` | 웨이포인트 (AI 경로) |
+| 0x14 | WYP | `WYP_` | 웨이포인트 그래프 (AI 순찰 경로 Patrol%d · 이동 자리 Site%d): 자료 +4 머리 "WypHeadr" 기준 노드 24 바이트 · 간선 4 바이트 · 속성 ("Radius") — `tools/level/WaypointGraph`, 32 문서 §대기 모드 · 순찰 |
 | 0x17 | BHV | `Brea…`, `Push…` | 비헤이비어 (부서지는 물체, 미는 물체 등) |
 | 0x18 | SND | `SBK_` | 사운드뱅크 |
 | 0x1A | EMT | `SEM_` | 이미터 |
