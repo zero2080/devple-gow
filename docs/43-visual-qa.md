@@ -2907,6 +2907,22 @@ R_PERMK 의 SCR_HideBerserkBlade 기술 (GRAB 200 · 260 · 400 · 506 · 508 ·
 kill:28;keys:1.5:L1+R1;wait:1.2;push:0.4:236,-1022;hold:4:236,-1022;…` (gochest3 healthChest), a5 = `…;-470,-412,-976!;wait:0.3;keys:1.5:L1+R1;wait:1.5;
 jump:1.0:-400,-976;push:40:120,-988;…`, 둘 다 `-Dgow.giveAll -Dgow.debug.combat -Dgow.auto.route.nofight`.
 
+## 38. 영상 2화 QA 마무리 회귀 순회 — 51 레벨 (7804ba7, 2026-10-25)
+
+봇 60 초 쉬움 (`-Dgow.difficulty=0 -Dgow.auto=1 -Dgow.auto.secs=60`, `-Duser.home=<스크래치>`), 2 줄 동시, `--game L --skip-movies`.
+대상 = ATHN 전부 (34) · SEWR01/02 · DEST00–03 · PAND00A–E · PAND01A–D (51). 기준 = 같은 방법의 4fe5fa2 (1 차 QA 끝) 빌드.
+51 레벨 모두 rc 0 · 예외 0 (전 · 후). 46 레벨은 방문 · 순간이동 · 사망이 같다. 다른 5 레벨:
+
+| 레벨 | 4fe5fa2 방문 · 순간이동 · 사망 | 7804ba7 | 까닭 |
+|---|---|---|---|
+| ATHN01B | 6/8 · 2 · 0 | 8/8 · 4 · 0 | 늘어남 [하네스: 봇] |
+| ATHN05B | 4/28 · 1 · 0 | 5/28 · 1 · 0 | 늘어남 [하네스: 봇] |
+| ATHN05D | 8/8 · 4 · 0 | 9/9 · 5 · 0 | 늘어남 (볼륨 8 → 9) |
+| ATHN06B | 7/35 · 2 · 0 | 8/35 · 3 · 0 | 하피가 Patrol710/711 을 돈다 (942a3a1, §32.6 순회와 같음) |
+| ATHN08C | 0/0 · 0 · 16 | 0/0 · 0 · 18 | 아레스 결투 흔들림 (§29, §32.6 — 다시 돌리면 뒤바뀜) |
+
+- 엔진 테스트 747 통과 (7804ba7). 실제 세이브 위치 (`~/Library/Application Support/devple-gow`) 는 생기지 않았다.
+
 ## 시연 녹화 (-Dgow.record, -Dgow.bot) [엔진 전용]
 
 - `-Dgow.record=DIR` 로직 틱 `gow.record.every`(기본 2 = 30fps) 번마다 `DIR/f000000.jpg` 저장, `gow.record.secs` 초 뒤 종료. 녹화 중에는 lockstep (프레임당 틱 하나) 이라 렌더 속도와 무관하게 영상 시간이 게임 시간과 같다.
