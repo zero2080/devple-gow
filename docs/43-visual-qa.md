@@ -2995,6 +2995,23 @@ gocoffinlidcrank · TAndF CoffinHeadRip 141 → 카드 257 "건축가 아들의 
 "cerebus vomit") + 새끼 CerebusPuppyTAI2–5 (R_CEP 86, Respawn, LevelData9 ≤ 16) → LevelData3 (DeathDetectZone 제거, Filter 2) = LevelData4 (생성 Action) 이고
 LevelData9 ≥ 16 이면 DMCCamOff · dogOut. 그 뒤 협곡 (Spawner/Spawner2 · 키클롭스 R_CY3 Patrol10/12 · 궁수 timedArchers · DMCCerebus) → PAND02AA.
 
+### 40.0 장면 대응
+| 영상 (초) | 장면 | 원작 (스크립트·데이터) | 엔진 (실행) | 결과 |
+|---|---|---|---|---|
+| 1960–2210 | 해골 문 (메시지 "자물쇠에 해골 열쇠를…") → 고리 회랑 → 사다리 → 물 고리 헤엄 · 수로 · 둥근 통 위 · 사다리 | PAND00C 고리 (SkullDoorCam · UWSkullDoor · ring3water-AnimWaterDrain · LadderLower · Lvl2Warp) | 몰지 않음 | [미확인] (§36 의 고리 1 이후) |
+| 2215–2235 | 세이브 방 (초록 · 파랑 상자, 메모리 카드) → 모래 복도 | PAND02A 도착 WarpFromHub (Chesty5/6 CSM 008) | `--arrive PAND00C` 0 초 방 · 상자 둘 | 같음 |
+| 2250 | 구역 제목 "포세이돈의 시험" | ZoneReportGroup 12 | 4 초 | 같음 |
+| 2255–2282 | 동영상 p02Mp01 (새끼가 불타며 자라 머리 셋) | cerebusIntroMPEG | `--skip-movies` (녹화 lockstep 은 동영상이 느림, r1) | 원작 PSS |
+| 2283–2440 | 케르베로스 + 새끼 떼, 2370–2385 어른 둘 · 셋, 2390 사망 → 2400 체크포인트 (CheckPoint1) → 다시 | DTre 081 · GrowTimer 085 · VomitSpawnTransform | 고치기 전: 어른 하나뿐, 깔려 물려도 HP 그대로 (r2) → 고친 뒤: 46–71 초에 새끼 여섯이 자람 · 60 초 토하기 (r6), 사망 → 같은 체크포인트에서 다시 (r3) | 고침 (40.1-1–5) |
+| 2455–2490 | 제우스의 분노 · 영혼 | (마법) | 봇은 안 씀 | — |
+| 2495–2550 | 밀기 상자 gopushy · 키클롭스 둘 (Spawner, R_CY3 Patrol10/12) | PushPull 097 · skellyLvl3GrpBox | r12: R2 잡고 밀기 20 초 (−832 → −1207), 키클롭스 순찰 | 같음 (밀기 구도 · 상자 · 초록 상자) |
+| 2550–2620 | 키클롭스 처형 프롬프트 △ · □ | MAICY3MINI* TimedPress | 봇이 키클롭스를 못 이김 (r13, 잡기 거부) | [미확인] |
+| 2600–2690 | 상자를 벼랑 아래로 밀고, 벼랑 위 궁수 열이 쏨 → 상자 위로 올라감 | timedArchers1–5 (034 do nothing) · shootTransmit 1019 45 | 고치기 전: 궁수가 경기장까지 내려옴 (r7) → 고친 뒤 벼랑 위에 남아 쏨 (r10) | 고침 (40.1-6) |
+| 2690–2765 | 협곡 싸움 · 석상 문 (DMCCerebus 새끼 · ArchersDMC) | Spawner2 → DMCZone (LevelData19 = 20 → 문) | 몰지 않음 | [미확인] |
+| 2770–2786 | 둥근 방: 구멍 속 레버 R2 → 철창 닫힘 → 방이 돎 | PAND02AA SpawnTrig → entitiesLever-VisON · leverGrate-AnimBack, 1023 (100, 60) → SpinRoom1-AnimForward · leverGrate · floorCogs · 1015 | r14: 같은 순서 · 같은 구도 (레버 5.6 초 잡음 → 9.3 초 1023) | 같음 |
+| 2796–2803 | 감실 상자를 열자 창살이 내려오고 바닥 가시 → 사망 | (CSM 064 "BigRed2", 회전 벽 group1263–1266 pCube333–336 EvtDie 는 EventId 0) | 감실 앞에서 상자가 열리지 않았고 카메라가 회전 벽에 막힘 (r15) | [미확인] |
+| 2805–2880 | 다시: 레버 → 철창 감실 · 붉은 오브 상자 | — | — | [미확인] |
+
 ### 40.1 엔진 결함과 수정
 1. **새끼가 자라지 않았다 — SCR_GrowTimer 미구현 (영상 2370–2385: 경기장에 어른 케르베로스 둘 · 셋, 엔진은 처음 하나뿐).** 새끼의 생성 기술 SPAWNVOMIT 502 ·
    SPAWNVOMITLAND 506 의 SCRIPT 0x01EE9AD5 = Hash127Upper("SCR_GrowTimer") idx 85. 원작 [확실: 디스어셈블] 등록 0x190210 → 시작 0x190030: GrowChar/085
@@ -3035,11 +3052,28 @@ LevelData9 ≥ 16 이면 DMCCamOff · dogOut. 그 뒤 협곡 (Spawner/Spawner2 �
    이고 엔진은 자리 그래프를 쓰지 않는다 [미구현, 32 문서 §대기 모드 와 같음].)
 
 ### 40.2 시험
-`CerberusArenaTest` (5): puppyGrowTemplate (085: 30 · 0 · 0 · 2 · 1.5 · GrowAdult · 30 · goCEPtranSpark, 1800 프레임, 남은 1 초 세기 0.5, 0.95 초과 한 번),
+`CerberusArenaTest` (6): puppyGrowTemplate (085: 30 · 0 · 0 · 2 · 1.5 · GrowAdult · 30 · goCEPtranSpark, 1800 프레임, 남은 1 초 세기 0.5, 0.95 초과 한 번),
 growTimerCode (0x18F474 +0x24 · 0x18F9BC 0x3F73 · +0x28 · +0x2C · 0x209378/0x209918 · +0x18/+0x1C · 0x1A90D0 → 0x1DFFA8 → 0x1A9298), vomitNeedsSpawnerCondition
 (DTre 081 c25 · VOMIT 4, DTre 080 없음, Spawn/081 VomitSpawnTransform · synchJoint), scriptSpawnAtMatrix (PAND02A: canSpawn, GrowAdult 7 번 = 최대 6 무시 · 만든 수
 그대로 · 템플릿 81 · 기술 10 · 그룹 3 · Action 없음, VomitSpawnTransform 86 · 502 · 그룹 2 · LevelData4 + 1, VomitSpawn 없음), heroSelfHp (+ 0x207084 플래그 7,
-0x19CDB4 슬롯 4), doNothingArchers (R_SK2 034 · R_SKA 032 · R_SK3 036 빈 트리, 033 은 트리). 엔진 시험 755 통과.
+0x19CDB4 슬롯 4), doNothingArchers (R_SK2 034 · R_SKA 032 · R_SK3 036 빈 트리, 033 은 트리). 엔진 시험 766 통과 (rebase 뒤).
+
+### 40.3 남은 것 · 미확인
+- **케르베로스 · 새끼 색**: 영상은 초록 빛 회색 살갗인데 엔진은 하얗게 날아간다 (`cerberus_color_engine.png`). 텍스처 CLUT 0 (초록) 을 쓰고 MAT_lambert2/3 의
+  더할 색 12.8 (qw77) 은 작다 — 레벨 라이트 (PAND02A 44 개) 와 VU 조명 (47 문서) 의 밝기 쪽 [미해석, 고치지 않음].
+- 새끼 불꽃 goCEPtranSpark 은 시작 때 한 번 (몸에 붙여 세기 올림 0x2279D0 · 0x227D80 없음), 변신 중 맞는 부피 · 내비 몸은 커지지 않음 [근사].
+- SCR_Spawn 은 적 갱신 순회 중이라 다음 틱 머리에 만든다 [근사].
+- 자리 그래프 (Site%d, 슬롯 5) 를 전투 이동에 쓰지 않는다 (원작 0x1D0E08 의 0x40 = A* 0x1CF020) [미구현].
+- PAND02AA 감실 함정 (영상 2797–2801: 상자 열기 → 창살 · 바닥 가시 → 사망) 의 원작 장치 · 엔진 재현, 협곡 DMC (Spawner2 · DMCZone) · PAND02B 철창 방 · PAND00C 물 고리
+  (1960–2210) 는 이번에 몰지 않았다.
+- 키클롭스 처형 프롬프트 (2550–2620): 봇이 HP 를 깎지 못해 대조 못 함.
+
+### 40.4 증거 (`work/verify/ep3_b/`, 커밋 안 함)
+`video/` (영상 v<초> 333 장 + h<초> 1270 14 장), `video_1960-2255.jpg` · `video_2255-2319.jpg` · `video_2320-2490.jpg` · `video_2490-2880.jpg` (격자),
+`pinned_before_r2.jpg` (깔려 물림 120 초, HP 그대로), `grow_engine_r6_43-51s.jpg` (새끼가 자라 어른 둘), `archers_before_r7.jpg` · `archers_after_r10.jpg`,
+`push_block_r12.jpg`, `spinroom_r14.jpg`, `cerberus_color_engine.png`. 실행: `--game PAND02A --arrive PAND00C --skip-movies -Dgow.difficulty=1 -Dgow.auto=1`
+(r6 봇), r10 `-Dgow.auto.novol -Dgow.auto.route=wait:1;-616,-380,-980!;wait:2`, r12 `…;-600,-380,-770!;wait:1;crank:20:-600,-832`, r14 `--game PAND02AA`
+`…;-2186,-172,-1605!;wait:2;-2309,-236,-1047!;wait:1;-2300,-236,-890,20;use:-2319,-864;…`. 실제 세이브 위치는 생기지 않았다.
 
 ## 42. QA vs PS2 영상 3화 — 포세이돈의 시험 물 구간: PAND02D 수영장 · 돌진 문 → PAND02DD 새끼 케르베로스 동굴 → PAND02F 물속 홀 · 나이아드 · 빛줄기 방 → PAND02G 붉은 결계 방 → PAND02H 물속 큰 홀 → PAND02I 기둥 · 화로 방 · 세이브 → PAND00D (영상 3840–5760 초, 2026-10-26)
 
