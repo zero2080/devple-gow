@@ -43,6 +43,18 @@ public final class ParticleSystem implements AutoCloseable {
 		/** 레벨 배치 이미터의 소유 인스턴스 (소문자, 가시 칸 컨텍스트로 끈다 — {@link LevelFx#setContextHidden}). null = 없음. */
 		public String owner;
 		/**
+		 * 레벨 배치 이미터의 FXC 로컬 행렬 · 소유 관절 · P 블록 방향 (로컬) — 소유 GO 가 애니로 움직이면 {@link LevelFx#followOwner} 가 이미터 월드 =
+		 * 로컬 · 관절 월드 로 다시 놓는다 (원작 0x1227C8 → 0x130140 은 매 프레임 소유 GO 관절 행렬을 쓴다) [확실]. null = 고정.
+		 */
+		public float[] ownerLocal, ownerDir;
+		public int ownerJoint = -1;
+		/**
+		 * 소유 GO 의 효과 부품이 스크립트 Vis 슬롯 1 로 꺼짐 — 원작 Vis 0x1ABAA8 의 +0xB8 값이 부품 타입 0x1E (EffectsServer, Servers_Create 0x17D3FC)
+		 * 에 걸린다 (0x1B1398) [확실]. 새로 만들지 않는다 (나온 파티클은 수명까지). 예 DEST01 sirenSpirit-SoulOffInit/SoulOn/SoulOff (영혼 검은 연기),
+		 * DoorSparkle-VisOff · AthenaSparkle2-SparkleOff (반짝이).
+		 */
+		public boolean effectsOff;
+		/**
 		 * 하늘 GO 의 이미터 (SCR_Sky 소유 GO — 도시 화톳불, 아레스의 불덩이·재): 0x218848 이 GO 의 모델 (0x330514) 과 파티클 (0x330524) 부품을
 		 * 모두 0x218778 → 0x150738(부품, 1) = 층 1 로 둔다 → 세계 (층 2–4) 보다 먼저 그려지고 세계가 덮는다 [확실: 부품 목록 둘 / 추정: 0x330524 = 파티클].
 		 * 일반 패스 ({@link #render}) 는 건너뛰고 하늘 단계 ({@link #renderSky}) 에서만 그린다.
@@ -201,7 +213,7 @@ public final class ParticleSystem implements AutoCloseable {
 		dt = Math.min(dt, 0.1f);
 		for (Emitter e : emitters) {
 			updateSpace(e);
-			if (!e.active || e.scriptOff && e.weather == null) {
+			if (!e.active || e.effectsOff || e.scriptOff && e.weather == null) {
 				continue;
 			}
 			if (e.weather != null) {

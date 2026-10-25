@@ -245,4 +245,103 @@ class DesertSirensQaTest {
 		}
 		assertEquals(6, models);
 	}
+
+	/**
+	 * SCR_GhostTrail (영상 1491–1497 · 2335 · 2445–2447 의 영혼 꼬리, 43 §31.2-6): DEST01 인스턴스 둘의 머리 = 관절 2 "tail", 꼬리 = 그 직속 자식 중
+	 * 플래그 0x20 (joint1–8, 0 · 16 × 7 = 112, 기록 17). 원작 0x246918 → 0x20D988 (부품 +0x34 = 0x20E708), 기록 간격 8 (0x20E4DC) · 수 = ⌊길이 × 0.125⌋ + 3
+	 * (0x20D9B8), 꼬리 플래그 0x20 (0x20DC00).
+	 */
+	@Test
+	void sirenSoulGhostTrailIsTheTailJointChain() throws Exception {
+		WadFile d1 = wad("DEST01");
+		assertEquals(java.util.Map.of("gosirenspirit", 2, "gosirenspiritgrp", 2), devple.gow.engine.fx.GhostTrail.owners(d1));
+		devple.gow.tools.anim.Skeleton sk = devple.gow.tools.anim.Skeleton.loadAll(d1).stream().filter(s -> s.name.equals("sirenspirit"))
+				.findFirst().orElseThrow();
+		assertEquals("tail", sk.joints.get(2).name());
+		devple.gow.engine.fx.GhostTrail gt = devple.gow.engine.fx.GhostTrail.of(sk, 2,
+				devple.gow.tools.level.LevelLayout.jointWorld(sk, devple.gow.tools.anim.Mat4.identity()));
+		assertNotNull(gt);
+		assertArrayEquals(new int[]{3, 4, 5, 6, 7, 8, 9, 10}, gt.chain());
+		assertEquals(112f, gt.length(), 0.01f);
+		assertEquals(17, gt.samples());
+		Elf e = exe();
+		call(e, 0x246940, 0x20d988); // SCR 처리 → 생성
+		assertTrue(at(e, 0x20d9b8).text().contains("0x3e00"), at(e, 0x20d9b8).text()); // 0.125
+		assertTrue(at(e, 0x20e4dc).text().contains("0x4100"), at(e, 0x20e4dc).text()); // 8.0
+		assertTrue(at(e, 0x20dc00).text().contains("0x20"), at(e, 0x20dc00).text()); // 꼬리 관절 플래그
+		assertTrue(at(e, 0x20da34).text().contains("0x34(s2)"), at(e, 0x20da34).text()); // 켤 때 = 0x20E708 → 기록 리셋
+	}
+
+	/**
+	 * 꼬리는 머리가 지나간 길 위 호 길이 자리에 놓인다: +X 로 300 간 뒤 joint10 (112) 은 정확히 112 뒤, 이어 +Z 로 80 — joint3 (0) 은 머리, joint6 (48) 은
+	 * Z 다리 위 48 뒤, joint10 은 모퉁이 지나 X 다리 위 약 32 뒤 (모퉁이 현만큼 더 뒤, Catmull-Rom 은 곧은 구간에서 정확). 회전은 머리 것. 기록은 생성
+	 * 자세 (x = 0) 로 채운 채 시작한다 (0x20D988 → 0x20DE20).
+	 */
+	@Test
+	void ghostTrailTailFollowsTheHeadPath() throws Exception {
+		devple.gow.tools.anim.Skeleton sk = devple.gow.tools.anim.Skeleton.loadAll(wad("DEST01")).stream()
+				.filter(s -> s.name.equals("sirenspirit")).findFirst().orElseThrow();
+		float[] inst = devple.gow.tools.anim.Mat4.identity();
+		devple.gow.engine.fx.GhostTrail gt = devple.gow.engine.fx.GhostTrail.of(sk, 2, devple.gow.tools.level.LevelLayout.jointWorld(sk, inst));
+		float[][] out = null;
+		for (int i = 1; i <= 150; i++) {
+			inst[12] = 2f * i;
+			out = gt.apply(devple.gow.tools.level.LevelLayout.jointWorld(sk, inst));
+		}
+		float[] h = devple.gow.tools.level.LevelLayout.jointWorld(sk, inst)[2];
+		assertEquals(h[12] - 112, out[10][12], 0.05f);
+		assertEquals(h[14], out[10][14], 0.05f);
+		for (int i = 1; i <= 40; i++) {
+			inst[14] = 2f * i;
+			out = gt.apply(devple.gow.tools.level.LevelLayout.jointWorld(sk, inst));
+		}
+		float[][] w = devple.gow.tools.level.LevelLayout.jointWorld(sk, inst);
+		h = w[2];
+		assertEquals(h[12], out[3][12], 0.05f); // joint1: 머리 자리
+		assertEquals(h[14], out[3][14], 0.05f);
+		assertEquals(h[12], out[6][12], 0.05f); // joint4 (48): Z 다리
+		assertEquals(h[14] - 48, out[6][14], 0.05f);
+		// joint8 (112): 모퉁이 (80) 지나 X 다리 — 기록은 [0] 에서 머리 쪽 직선 8 씩이라 모퉁이를 현으로 자른다 (원작도 같은 식) → 직각이면 많아야
+		// 8·(√2 − 1) ≈ 3.3 더 뒤 (기록 위상에 따라)
+		assertEquals(h[12] - 32, out[10][12], 3.4f);
+		assertTrue(out[10][12] <= h[12] - 32 + 0.05f, "현은 길을 줄인다 → 더 뒤");
+		assertEquals(h[14] - 80, out[10][14], 0.05f);
+		for (int k = 0; k < 3; k++) { // 회전 = 머리 회전 (정규화)
+			float n = (float) Math.sqrt(h[k * 4] * h[k * 4] + h[k * 4 + 1] * h[k * 4 + 1] + h[k * 4 + 2] * h[k * 4 + 2]);
+			for (int c = 0; c < 3; c++) {
+				assertEquals(h[k * 4 + c] / n, out[10][k * 4 + c], 1e-3f);
+			}
+		}
+	}
+
+	/**
+	 * 스크립트 Vis 슬롯 1 = 효과 부품 (타입 0x1E EffectsServer): 원작 Vis 0x1ABAA8 이 +0xB8 값을 0x1B1398(GO, 값, 0x1E) 로 건다 (0x1ABB6C) [확실]. 사막 영혼
+	 * gosirenspirit 의 FXC_emitter31 (관절 1, 감산 PTC_particle31 = 검은 연기 60/초 · 0.7 초) 은 SoulOffInit/SoulOff 가 슬롯 0 과 1 을 함께 2 로, SoulOn 이 1 로 —
+	 * 엔진은 슬롯 1 을 무시하고 이미터를 처음 자리에 고정해 날아가는 영혼에 연기가 없었다.
+	 */
+	@Test
+	void visSlot1SwitchesTheSoulSmokeEmitter() throws Exception {
+		Elf e = exe();
+		assertTrue(at(e, 0x1abb20).text().contains("0xb8"), at(e, 0x1abb20).text()); // s3 = Vis +0xB8 (슬롯 1)
+		assertEquals(0x1e, li(e, 0x1abb6c, "a2"));
+		call(e, 0x1abb70, 0x1b1398);
+		assertEquals(0x1e, li(e, 0x17d3fc, "a2")); // Servers_Create: "EffectsServer" = 0x1E
+		WadFile d1 = wad("DEST01");
+		for (String[] v : new String[][]{{"sirenSpirit-SoulOn", "1"}, {"sirenSpirit-SoulOff", "2"}, {"sirenSpirit-SoulOffInit", "2"},
+				{"DoorSparkle-VisOff", "2"}}) {
+			EscScript.Entity s = entity(d1, v[0]);
+			assertTrue(handler(s, 0).startsWith("push_int " + v[1]), v[0] + " 슬롯 0");
+			assertTrue(handler(s, 1).startsWith("push_int " + v[1]), v[0] + " 슬롯 1");
+		}
+		devple.gow.tools.fx.FxResources fx = new devple.gow.tools.fx.FxResources(d1);
+		devple.gow.tools.level.LevelData lv = new devple.gow.tools.level.LevelData(d1);
+		devple.gow.tools.level.LevelLayout.Placement pl = lv.layout.placements().stream()
+				.filter(p -> p.instance().name().equals("gosirenspirit")).findFirst().orElseThrow();
+		devple.gow.tools.fx.FxResources.Emitter em = fx.emitter("FXC_emitter31", pl.object().tag());
+		assertEquals(1, em.header()[0]); // 관절 1 "siren"
+		assertEquals(60f, em.rate(), 1e-3f);
+		devple.gow.tools.fx.FxResources.Shape sh = fx.shape(em.shape(), pl.object().tag());
+		assertEquals(0x42, sh.gsBlend()); // 감산 = 검은 연기
+		assertEquals(0.7f, sh.lifespan(), 1e-3f);
+	}
 }

@@ -99,6 +99,9 @@ public final class LevelEmitters {
 					System.out.printf(Locale.ROOT, "  열기 아지랑이 %s @ (%.0f, %.0f, %.0f)%n", sh.name(), p[0], p[1], p[2]);
 				}
 				e.owner = pl.instance().name().toLowerCase(Locale.ROOT);
+				e.ownerLocal = em.local();
+				e.ownerJoint = j;
+				e.ownerDir = dir;
 				e.lodNear = em.lodNear();
 				e.lodFar = em.lodFar();
 				if (curve != null) {

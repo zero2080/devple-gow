@@ -70,6 +70,16 @@ public final class Platforms {
 		 * GO 위치를 옮김) 과 발판 관절에 실린 yaw 회전·이동 ({@link Platforms#ride}, 원작 0x1E6248).
 		 */
 		float[] place = Mat4.identity();
+		/**
+		 * SCR_GhostTrail (0x246918 — 생성할 때의 자세로 꼬리 관절을 정함, 0x20DB38) — 그릴 관절은 {@link #drawJoints}. null = 없음.
+		 * 원작 갱신은 GO +0x4 bit 0 일 때만 건너뛰고 모델 숨김 (Vis 슬롯 0 = 부품 0xF/0x1C) 과는 무관하다 [확실: 0x246918 · 0x1ABAA8].
+		 */
+		public devple.gow.engine.fx.GhostTrail ghost;
+
+		/** 그릴 관절 월드: 꼬리 길 ({@link #ghost}) 을 이번 틱 갱신해 꼬리 관절을 길 위로 (없으면 {@link #joints()} 그대로). */
+		public float[][] drawJoints() {
+			return ghost == null ? joints : ghost.apply(joints);
+		}
 
 		/** 인스턴스 월드 행렬 (행벡터, {@code GoInstance.matrix()}) — Animator 이펙트 기준 (GameScene.startAnimatorEffects). */
 		public float[] instanceMatrix() {
@@ -468,6 +478,7 @@ public final class Platforms {
 	public static Platforms of(LevelData lv, Collection<String> owners, Collection<String> posed) {
 		Platforms ps = new Platforms();
 		ps.matWad = lv.wad;
+		java.util.Map<String, Integer> ghosts = lv.wad != null ? devple.gow.engine.fx.GhostTrail.owners(lv.wad) : java.util.Map.of(); // SCR_GhostTrail → 머리 관절
 		for (LevelLayout.Placement p : lv.layout.placements()) {
 			String name = p.instance().name();
 			boolean scripted = owners.contains(name) || posed.contains(name);
@@ -514,6 +525,10 @@ public final class Platforms {
 				}
 			}
 			body.baseJoints = body.joints;
+			Integer ghostHead = ghosts.get(name.toLowerCase(java.util.Locale.ROOT));
+			if (ghostHead != null) {
+				body.ghost = devple.gow.engine.fx.GhostTrail.of(p.object().skeleton(), ghostHead, body.joints); // 생성 자세 (0x20D988 → 0x20DB38)
+			}
 			ps.bodies.add(body);
 		}
 		// GO 부모 링크 (0x58): 자식 몸이 부모 몸의 관절을 따른다 (둘 다 몸일 때)

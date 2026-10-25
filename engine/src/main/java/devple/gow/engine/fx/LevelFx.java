@@ -132,6 +132,59 @@ public final class LevelFx implements AutoCloseable {
 		return env;
 	}
 
+	/** 소유 인스턴스 (소문자) → 배치 이미터 (처음 부를 때 만든다). */
+	private java.util.Map<String, java.util.List<ParticleSystem.Emitter>> byOwner;
+
+	private java.util.List<ParticleSystem.Emitter> emittersOf(String owner) {
+		if (byOwner == null) {
+			byOwner = new java.util.HashMap<>();
+			for (ParticleSystem.Emitter em : particles.emitters()) {
+				if (em.owner != null && em.ownerLocal != null) {
+					byOwner.computeIfAbsent(em.owner, k -> new java.util.ArrayList<>()).add(em);
+				}
+			}
+		}
+		return byOwner.getOrDefault(owner.toLowerCase(java.util.Locale.ROOT), java.util.List.of());
+	}
+
+	/**
+	 * 애니로 움직이는 소유 GO 의 배치 이미터를 지금 관절로 다시 놓는다: 이미터 월드 = FXC 로컬 · 관절 월드, 방향 = P 블록 방향 · 그 행렬, 시스템 행렬 =
+	 * 관절 월드 (원작은 이미터 노드가 매 프레임 소유 GO 관절 행렬을 쓴다 — 0x1227C8 → 0x130140 → 0x131618) [확실]. 예전엔 불러올 때 자리에 고정이라
+	 * DEST01 사이렌 영혼 (gosirenspirit 관절 1 의 FXC_emitter31 — 감산 검은 연기 60/초, 수명 0.7 초) 이 날아가도 연기는 쉬던 자리에서만 났다.
+	 * 커브 이미터 (표본이 월드) 는 그대로.
+	 */
+	public void followOwner(String owner, float[][] jointWorld) {
+		java.util.List<ParticleSystem.Emitter> list = emittersOf(owner);
+		if (list.isEmpty() || jointWorld == null) {
+			return;
+		}
+		float[] p = new float[3], d = new float[3];
+		for (ParticleSystem.Emitter em : list) {
+			if (em.curve != null || em.ownerJoint < 0 || em.ownerJoint >= jointWorld.length) {
+				continue;
+			}
+			float[] jw = jointWorld[em.ownerJoint];
+			float[] w = devple.gow.tools.anim.Mat4.mul(em.ownerLocal, jw);
+			devple.gow.tools.anim.Mat4.transformPoint(w, 0, 0, 0, p);
+			em.pos.set(p[0], p[1], p[2]);
+			if (em.ownerDir != null) {
+				devple.gow.tools.anim.Mat4.transformDir(w, em.ownerDir[0], em.ownerDir[1], em.ownerDir[2], d);
+				float l = (float) Math.sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+				if (l > 1e-6f) {
+					em.dir.set(d[0] / l, d[1] / l, d[2] / l);
+				}
+			}
+			em.space.set(jw);
+		}
+	}
+
+	/** 스크립트 Vis 슬롯 1 (효과 부품, 타입 0x1E EffectsServer): 끄면 그 GO 의 배치 이미터가 새로 만들지 않는다 ({@link ParticleSystem.Emitter#effectsOff}). */
+	public void setOwnerEffects(String owner, boolean on) {
+		for (ParticleSystem.Emitter em : emittersOf(owner)) {
+			em.effectsOff = !on;
+		}
+	}
+
 	/** SCR_Weather 이미터 → 소유 GO (스크립트 Vis 슬롯 16 으로 끌 수 있다). */
 	private final java.util.Map<ParticleSystem.Emitter, String> weatherOwners = new java.util.LinkedHashMap<>();
 	private java.util.function.Predicate<String> scriptsOff;

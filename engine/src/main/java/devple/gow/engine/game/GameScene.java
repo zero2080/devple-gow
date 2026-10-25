@@ -1642,6 +1642,13 @@ public final class GameScene implements Scene {
 						}
 					}
 				}
+				// 슬롯 1 = 타입 0x1E (EffectsServer — 배치 FXC 이미터) (0x1ABB3C → 0x1B1398) [확실: 디스어셈블]: 1 켬 / 2 끔 — 사이렌 영혼 SoulOn/SoulOff ·
+				// 문 반짝이 DoorSparkle-VisOff 는 슬롯 0 과 짝으로 쓴다 (43 §31.2-6). 예전엔 무시해 숨은 GO 의 이미터가 계속 냈다
+				if (values.length > 1 && (values[1] == 1 || values[1] == 2)) {
+					for (String o : objects) {
+						level.fx().setOwnerEffects(o, values[1] == 1);
+					}
+				}
 				// 슬롯 2 = 타입 0x27 (그림자) 속성 (0x1ABB78 → 0x1B1398) [확실: 디스어셈블]: 1 켬 / 2 끔
 				if (values.length > 2 && (values[2] == 1 || values[2] == 2) && shadows != null) {
 					for (String o : objects) {
@@ -4388,12 +4395,13 @@ public final class GameScene implements Scene {
 		poseRopes();
 		for (var b : nav.platformBodies()) {
 			if (b.anim() != null && b.scripted || b.follows()) { // 정지 CDV 오브젝트의 반복 act 는 렌더가 따로 돌린다 (반복 재생 배치). 부모 링크로 옮겨진 몸은 그 자세로
-				level.poseInstance(b.owner, b.joints(), b.hidden()); // 움직인 발판·문·회전방은 애니 자세로 (관절 숨김 포함: DMC 결계)
+				level.fx().followOwner(b.owner, b.joints()); // 그 GO 의 배치 이미터도 관절을 따라 (사이렌 영혼의 검은 연기, 43 §31.2-6)
+				level.poseInstance(b.owner, b.drawJoints(), b.hidden()); // 움직인 발판·문·회전방은 애니 자세로 (관절 숨김 포함: DMC 결계, SCR_GhostTrail 꼬리)
 			}
 		}
 		for (var b : nav.neighbourPlatforms().bodies()) { // 다른 슬롯 레벨 문·발판 (43 §13.8)
 			if (b.anim() != null && b.scripted || b.follows()) {
-				otherPosed.put(b.owner, new Object[]{b.joints(), b.hidden()});
+				otherPosed.put(b.owner, new Object[]{b.drawJoints(), b.hidden()});
 			}
 		}
 		level.setMaterialTimes(nav.navWorld.platforms().materialTimes()); // 스크립트 재질 애니 ("$", Platforms.MatClock)

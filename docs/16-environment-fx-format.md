@@ -465,5 +465,5 @@ PAND01A `PSambLite` .751 회색 .5 / 8000, `PSFirelite*` (.777,.284,0) .75, 반�
 - ~~안개 Z→알파 램프~~, ~~Fog_A ≥ 1 경로~~, ~~층 안개 키 알파·t 눈금~~ (§1.2, §1.3). 남은 것: 0x127918 단계 ③ 의 TEXA 상태 (A8 비트 7), 텍스처 층 안개 0x127240 의 UV 세부.
 - ~~PTC VU1 상수 의미~~, ~~+0x74~~ (읽지 않음), ~~종류 5~~, ~~연산 9/10/13/14~~, ~~0x10/0x20~~ (§2.3–2.4). 남은 것: 연산 6/7 의 주소 공간 (쓰는 PTC 없음), 종류 5 UV 오프셋의 정확한 화소 단위, 레코드 배치 바이트 (+0x8C) 의 4번 이후 속성.
 - ~~FXC 0xD 방출 지오메트리 포맷 (커브)~~ (§2.5). 남은 것: 표면 이미터 (서브타입 3) 의 메시 표면 참조, 커브 퍼짐 원뿔의 축, 노드 헤더 b, 필드 단위.
-- SCR_Water 물방울 원점, 0x0C 플래그; SCR_Mirror a/b; ~~SCR_AresSky~~ (§1.7); ~~SCR_LensFlare~~ (46) / GhostTrail / RopeSkinned / cloth / ThingOnASpring 본문.
+- SCR_Water 물방울 원점, 0x0C 플래그; SCR_Mirror a/b; ~~SCR_AresSky~~ (§1.7); ~~SCR_LensFlare~~ (46) / ~~GhostTrail~~ (43 §31.2-6: 템플릿 본문 = u32 1 · 오프셋 8 · 관절 이름 char[24] "tail", 인스턴스는 본문 없이 헤더 u16 0x22 = 관절 번호 2) / RopeSkinned / cloth / ThingOnASpring 본문.
 - renderFlags bit16 / 0x400, flags2 의미; 한 레벨 여러 SCR_Fog 의 전환 조건 (ESC).
