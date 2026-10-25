@@ -130,6 +130,13 @@ public final class AiBrain {
 		sightBlocked = p;
 	}
 
+	/** 결정 트리 조건 25 (인자 = Spawn 템플릿 번호) 공급자 — null 이면 {@link #setScriptSense} 의 값. */
+	private java.util.function.IntPredicate spawnSense;
+
+	public void setSpawnSense(java.util.function.IntPredicate p) {
+		spawnSense = p;
+	}
+
 	public void setScriptSense(java.util.function.IntUnaryOperator s) {
 		scriptSense = s != null ? s : c -> 0;
 	}
@@ -863,7 +870,9 @@ public final class AiBrain {
 			case DecisionTree.C_YAW_FROM_TARGET -> yawFromTarget(d);
 			case DecisionTree.C_TARGET_MOVE -> targetCombat != null && targetCombat.active() ? targetCombat.move().id() : -1;
 			case DecisionTree.C_HAS_TOKEN -> hasToken ? 1 : 0;
-			case DecisionTree.C_SCRIPT, 26, 27 -> scriptSense.applyAsInt(cond);
+			// 25: 인자 = Spawn 템플릿 → 그 "Entity Name" SpawnEnemy 가 더 만들 수 있나 (0x1A1A80, 케르베로스 DTre 081 의 토하기 VOMIT 4 갈래, 43 §40)
+			case DecisionTree.C_SCRIPT -> spawnSense != null ? (spawnSense.test(arg) ? 1 : 0) : scriptSense.applyAsInt(cond);
+			case 26, 27 -> scriptSense.applyAsInt(cond);
 			default -> 0;
 		};
 	}

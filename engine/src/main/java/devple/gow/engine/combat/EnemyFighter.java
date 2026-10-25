@@ -59,6 +59,8 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 	private final String navNode;
 	/** 모델 크기 = ScaleCenter/100 + ScaleRange/100 × (0.5 − rand) (0x1CEE00). */
 	public final float scale;
+	/** 그리기 배율 덧곱 — SCR_GrowTimer 변신 중 1 + p × Adult Scale (0x18F798, {@link GrowTimer}) [근사: 맞는 부피 · 내비 몸은 그대로]. */
+	public float growScale = 1f;
 	private final Random rnd;
 	public final Vector3f pos = new Vector3f();
 	public final Vector3f prevPos = new Vector3f();
@@ -814,7 +816,7 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 
 	public Matrix4f world(Matrix4f out, float alpha) {
 		Vector3f p = new Vector3f(prevPos).lerp(pos, alpha);
-		return out.translation(p).rotateY(yaw).scale(scale); // 모델 -Z 정면 (34 문서 §4), ScaleCenter
+		return out.translation(p).rotateY(yaw).scale(scale * growScale); // 모델 -Z 정면 (34 문서 §4), ScaleCenter
 	}
 
 	@Override

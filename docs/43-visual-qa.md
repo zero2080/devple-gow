@@ -2923,6 +2923,54 @@ jump:1.0:-400,-976;push:40:120,-988;…`, 둘 다 `-Dgow.giveAll -Dgow.debug.com
 
 - 엔진 테스트 747 통과 (7804ba7). 실제 세이브 위치 (`~/Library/Application Support/devple-gow`) 는 생기지 않았다.
 
+## 40. QA vs PS2 영상 3화 — 포세이돈의 시험 PAND02A 원형 경기장: 케르베로스 토하기 · 새끼가 자라 어른 · 깔려 물리기 (영상 1960–2880 초, 2026-10-26)
+
+영상 = HF4CELG5OxQ (3화, 전사 (보통) = `-Dgow.difficulty=1`), 프레임 423×317 (`work/verify/ep3_b/video/v<초>.jpg` 333 장 — 1960–2880 5 초 간격, 2255–2320 ·
+2455–2470 · 2490–2520 · 2570–2620 · 2775–2800 1 초 간격, 커밋 안 함). 엔진 = origin/main fdd299f 위, 1280×720 lockstep, 스크래치 홈, `--game PAND02A --arrive PAND00C
+--skip-movies` + 봇 (`-Dgow.auto=1`).
+
+레벨 [확실: 스크립트]: PAND02A (구역 제목 12 "포세이돈의 시험") — 허브 PAND00C 에서 Warp (WarpFromHub) → 원형 경기장. cerebusIntroMPEG 볼륨 → 동영상 p02Mp01
+(영상 2255–2282: 크레토스 클로즈업 → 새끼가 불타며 자라 머리 셋 케르베로스) → CerebStart · DMC 문 (DMCdog/dog1 dogIn) · 케르베로스 CerebusVAI1 (R_CEA 템플릿 81
+"cerebus vomit") + 새끼 CerebusPuppyTAI2–5 (R_CEP 86, Respawn, LevelData9 ≤ 16) → LevelData3 (DeathDetectZone 제거, Filter 2) = LevelData4 (생성 Action) 이고
+LevelData9 ≥ 16 이면 DMCCamOff · dogOut. 그 뒤 협곡 (Spawner/Spawner2 · 키클롭스 R_CY3 Patrol10/12 · 궁수 timedArchers · DMCCerebus) → PAND02AA.
+
+### 40.1 엔진 결함과 수정
+1. **새끼가 자라지 않았다 — SCR_GrowTimer 미구현 (영상 2370–2385: 경기장에 어른 케르베로스 둘 · 셋, 엔진은 처음 하나뿐).** 새끼의 생성 기술 SPAWNVOMIT 502 ·
+   SPAWNVOMITLAND 506 의 SCRIPT 0x01EE9AD5 = Hash127Upper("SCR_GrowTimer") idx 85. 원작 [확실: 디스어셈블] 등록 0x190210 → 시작 0x190030: GrowChar/085
+   "PuppyGrow" (R_CEP) 남은 시간 = +0x18 (30) + 난수 0x13E600 × +0x1C (0), 갱신 0x18FDD8 → 0x18F440: 매 프레임 1/60 (0x29D318) 빼고, 남은 시간 &lt; +0x24 (2 초)
+   이면 "FX Name" goCEPtranSpark 을 몸에 붙여 세기 +0x20 + (1 − 남은/2) × (1 − +0x20) (0x18F664), 남은 &lt; 0 이면 0x209918 (지금 기술 끝) · 0x209378 (액션
+   +0x2C u8 = 30 TRANSFORM, 무적) → 변신 0x18F798: p = 기술 진행률 (없으면 1), GO 행렬 세 축 × (1 + p × "Adult Scale" 1.5), p &gt; 0.95 (0x3F733333) 이면
+   엔티티 "GrowAdult" (#556a7bc2) 를 0x1A90D0 으로 읽고 자리 (+2) 만 새끼 것으로, 새끼를 지우고 (0x1DFFA8) 정규화 행렬 (0x1853E8) 에 0x1A9298.
+   → `combat/GrowTimer` (템플릿 · 시간 · 불꽃 세기 · 배율 · 0.95), `GameScene.growTick` (요청 · `EnemyFighter.growScale` · 지우고 GrowAdult), 새끼 제거는
+   보통 제거 (`ScriptWorld.destroy` — DestructionSensor · Respawn) [추정: LevelData3/4 균형 — GrowAdult 는 Action 이 없고 Filter 3 이라 어른의 죽음은
+   DeathDetectZone (Filter 2) 이 안 센다, 그러면 새끼 제거가 세어져야 DMC 조건이 맞는다]. 불꽃은 시작 때 한 번 [근사: 붙여서 세기 올림은 안 함].
+2. **케르베로스가 새끼를 토하지 않았다 — 결정 트리 조건 25 · SCR_Spawn 미구현.** DTre 081 (AI1 081 "cerebus vomit"): 토큰 → c25(80) → c25(81) 참이면 공격 목록에
+   VOMIT 4 (가중 15, 0–2000, 대기 5 초). 조건 25 = 0x1A1A80 [확실]: 인자 = Spawn 템플릿 → "Entity Name" 엔티티를 지금 레벨에서 찾아 0x1A8F70 (만든 수 +0x100
+   &lt; MaximumCount — 0 이면 거짓 — 이고 템플릿 자원 있음 0x132728). 엔진은 25 를 보스 다리 (늘 0) 에만 물어 VOMIT 을 고를 수 없었다. VOMIT 4 @0.60
+   SCRIPT 0x5BDB52BE = SCR_Spawn idx 81 → 0x19F388: Spawn/081 "VomitSpawnTransform" 을 소유 GO "Joint Name" synchJoint 의 월드 행렬에 0x1A9298
+   (정보를 넘겨 MaximumCount 검사 · 만든 수 증가 없음, Action LevelData4 + 1 은 돈다) → 새끼 86 이 생성 기술 502 SPAWNVOMIT 으로 (그 기술이 다시 GrowTimer).
+   Spawn 템플릿 플래그 셋 (바닥 붙임 · 대상 쪽 · 자리) 은 080/081 모두 0.
+   → `AiBrain.setSpawnSense` (조건 25 = 인자), `ScriptWorld.canSpawn` · `spawnAt`, `GameScene.scriptSpawn` (관절 행렬, 적 갱신 순회 중이라 다음 틱 머리에 [근사]).
+3. **케르베로스에게 깔려 물려도 HP 가 그대로였다 — 보스전 밖 영웅 SELF_HP 무시 (엔진 r2: 54–176 초 동안 MAICEALEAPBITE 381 만 되풀이, HP 가득).**
+   영웅 기술의 SELF_HP (이벤트 10) 는 `BossFight.heroEvent` 에만 있었다. 원작 0x2069AC [확실]: b ≥ 0 이면 0x204690(…, 플래그 7) — 무적 검사 없음, 주인 HP 0 이면
+   그대로, 피해 b (0x204774 의 배율은 신 모드 God Mode Enmy Dmg Mult 뿐 — 난이도 AI Damage Mult 아님), 음수면 0x1E1758 회복. 381 은 10 × 2 (0.40 · 0.54),
+   HP ≤ 10 이면 382 MAICEALEAPDEATH (SELF_HP 200), "AUTO fall&gt;4" (흔들기 게이지 &gt; 4) 면 383 탈출. 같은 규칙의 다른 잡힘 기술: 하피 HARMAIPECK 373 (2 × 6),
+   키클롭스 MAICY3MINIF0x · MAICYWMINI02F*, MAIMIN04, SKFMAIGRAB, 맞아 튐 HITBOUNCE 456 (15), GRABHEROFAIL 327 — 모두 예전엔 피해 없음.
+   → `DamageRules.heroSelfHp`, `GameScene` 영웅 이벤트 (보스가 묶였으면 BossFight 가 그대로) [근사: 신 모드 감소 생략].
+4. **흔들기 아이콘이 안 떴다 — SCR_FlashSprite (0x74B9D718) 미표시.** 0x19CD88 [확실]: 기술 SCRIPT 창 동안 HUD 아이콘 슬롯 4 = idx (0x21DA50(4, idx)), 끝 콜백
+   0x19CD58 이 −1. 슬롯 4 는 0–3 (R2 · 안내 센서 · 잡은 TAndF · 미니게임 0x192xxx) 보다 커서 앞선다. 영웅 기술: 흔들기 12 = MAICEALEAPBITE · HARMAIPECK ·
+   MAISKB20/30/31 · GRABHERO01 · 석화 FREEZEPOSE 120/121 · 분신 EVIGRABHEROLOOP 861, 연타 10 = MAIMIN02 · MAISATGRAB/STRUGGLE · MAIBARSHOWDOWN/SDSTRUG.
+   → `GameScene.minigameIconIndex` 가 영웅 기술의 활성 SCR_FlashSprite 를 먼저.
+5. [엔진 전용 봇] 잡힌 영웅 기술에 흔들기 분기 (방향 조건 7/8/15) 가 있으면 `AutoPad` 가 틱마다 스틱을 좌우 끝으로 (|Δ| 2 → 게이지 +0.4/틱) — 고치기 전 봇은
+   381 에서 영영 못 나왔다 (r4: 게이지 0). 고친 뒤 r5: 54.25 초 381 → 54.45 초 383 탈출.
+
+### 40.2 시험
+`CerberusArenaTest` (5): puppyGrowTemplate (085: 30 · 0 · 0 · 2 · 1.5 · GrowAdult · 30 · goCEPtranSpark, 1800 프레임, 남은 1 초 세기 0.5, 0.95 초과 한 번),
+growTimerCode (0x18F474 +0x24 · 0x18F9BC 0x3F73 · +0x28 · +0x2C · 0x209378/0x209918 · +0x18/+0x1C · 0x1A90D0 → 0x1DFFA8 → 0x1A9298), vomitNeedsSpawnerCondition
+(DTre 081 c25 · VOMIT 4, DTre 080 없음, Spawn/081 VomitSpawnTransform · synchJoint), scriptSpawnAtMatrix (PAND02A: canSpawn, GrowAdult 7 번 = 최대 6 무시 · 만든 수
+그대로 · 템플릿 81 · 기술 10 · 그룹 3 · Action 없음, VomitSpawnTransform 86 · 502 · 그룹 2 · LevelData4 + 1, VomitSpawn 없음), heroSelfHp (+ 0x207084 플래그 7,
+0x19CDB4 슬롯 4). 엔진 시험 752 통과.
+
 ## 시연 녹화 (-Dgow.record, -Dgow.bot) [엔진 전용]
 
 - `-Dgow.record=DIR` 로직 틱 `gow.record.every`(기본 2 = 30fps) 번마다 `DIR/f000000.jpg` 저장, `gow.record.secs` 초 뒤 종료. 녹화 중에는 lockstep (프레임당 틱 하나) 이라 렌더 속도와 무관하게 영상 시간이 게임 시간과 같다.

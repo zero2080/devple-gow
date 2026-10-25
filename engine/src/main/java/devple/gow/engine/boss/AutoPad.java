@@ -18,6 +18,8 @@ public final class AutoPad extends Input {
 	private float lx, ly;
 	private Object prompt;
 	private int step, frame;
+	/** 스틱 흔들기 탈출 (영웅 기술의 방향 조건 7/8/15, 예 케르베로스 MAICEALEAPBITE 381 → 383) — 틱마다 좌우 끝 (|Δ스틱| 2 → 게이지 +0.4/틱) [엔진 전용]. */
+	public boolean wiggle;
 
 	public AutoPad() {
 		super(0);
@@ -45,6 +47,8 @@ public final class AutoPad extends Input {
 			}
 		} else if (qte != null && qte.state() == RepeatPressQte.State.RUNNING && frame % 6 == 0) {
 			down.add(qte.button());
+		} else if (wiggle) {
+			lx = frame % 2 == 0 ? 1 : -1;
 		}
 	}
 

@@ -540,6 +540,8 @@ public final class GameScene implements Scene {
 			hero.combat.addEventListener(ev -> {
 				if (ev.type() == 8 && ev.hash() == SCR_FIRST_TIME_MSG) {
 					firstTimeHint(ev.index());
+				} else if (ev.type() == 10 && (boss == null || boss.boss() == null)) {
+					heroSelfHp(ev.b()); // 보스전 중이면 BossFight.heroEvent 가 같은 일을 한다
 				}
 			});
 			hero.player.onHint = id -> {
@@ -2639,7 +2641,23 @@ public final class GameScene implements Scene {
 		f.combat().setBystanders(() -> enemies.stream().map(Enemy::fighter).filter(o -> o != self && !o.dead()).toList(), true);
 		if (bossKind == null) { // 보스는 BossFight 가 처리
 			EnemyFighter ef = f;
+			EnemyFactory.Kind ek = kind;
+			ScriptWorld sw = spawner != null ? spawner : world;
+			// 결정 트리 조건 25 (0x1A1A80): Spawn 템플릿의 "Entity Name" SpawnEnemy 가 더 만들 수 있나 — 케르베로스 DTre 081 의 토하기 VOMIT 4 (43 §40)
+			f.brain().setSpawnSense(arg -> {
+				String n = ek.tweaks().findNode(String.format("/TweakTemplates/Spawn/%03d/", arg));
+				String ent = n != null ? ek.tweaks().s(n, "Entity Name", null) : null;
+				return ent != null && sw.canSpawn(ent);
+			});
 			f.combat().addEventListener(ev -> {
+				if (ev.type() == 8 && ev.hash() == SCR_SPAWN) {
+					scriptSpawn(ef, ek, sw, ev.index());
+				} else if (ev.type() == 8 && ev.hash() == devple.gow.engine.combat.GrowTimer.SCR_GROW_TIMER && !growTimers.containsKey(ef)) {
+					var d = devple.gow.engine.combat.GrowTimer.Def.of(ek.tweaks(), ev.index());
+					if (d != null) {
+						growTimers.put(ef, new devple.gow.engine.combat.GrowTimer(d, growRnd.nextFloat()));
+					}
+				}
 				if (ev.type() == 10) {
 					ef.selfHp(ev.b()); // SELF_HP
 				} else if (ev.type() == 48) {
@@ -3577,10 +3595,106 @@ public final class GameScene implements Scene {
 	}
 
 	private static final int SCR_NO_SHADOW = 0xBFC016FE, SCR_EXPLODE_DEATH = 0xBA76AD70;
+	/** SCR_Spawn (Hash127Upper, 등록 0x19F6B0 → 처리 0x19F388) — 기술 SCRIPT, idx = /TweakTemplates/Spawn/NNN/. */
+	static final int SCR_SPAWN = 0x5BDB52BE;
+	/** 자라는 중인 적 (SCR_GrowTimer, {@link devple.gow.engine.combat.GrowTimer}). */
+	private final java.util.Map<EnemyFighter, devple.gow.engine.combat.GrowTimer> growTimers = new java.util.IdentityHashMap<>();
+	private final java.util.Random growRnd = new java.util.Random(0x6E0);
+
+	/**
+	 * SCR_Spawn (0x19F388) [확실: 디스어셈블]: Spawn 템플릿 idx (적 WAD — R_CEA 080 "VomitSpawn" · 081 "VomitSpawnTransform", Joint "synchJoint")
+	 * 의 "Entity Name" SpawnEnemy 를 지금 레벨에서 찾아, 소유 GO 의 "Joint Name" 관절 월드 행렬 (없으면 GO 행렬) 에 0x1A9298 로 만든다.
+	 * 템플릿 플래그 #7e7fd1ec (바닥에 붙임 0x1D3F50) · #d0660fb7 (대상 쪽으로 돌림) · #36632ecc (자리 = 주인 자리) 는 두 템플릿 모두 0 이라
+	 * 엔진은 다루지 않는다 [근사]. 엔티티가 없는 레벨 (PAND02A 의 VomitSpawn) 이면 아무것도 안 함.
+	 */
+	private void scriptSpawn(EnemyFighter f, EnemyFactory.Kind k, ScriptWorld sw, int idx) {
+		String n = k.tweaks().findNode(String.format("/TweakTemplates/Spawn/%03d/", idx));
+		String ent = n != null ? k.tweaks().s(n, "Entity Name", null) : null;
+		if (ent == null || f.dead()) {
+			return;
+		}
+		String joint = k.tweaks().s(n, "Joint Name", null);
+		Matrix4f m = new Matrix4f();
+		if (joint == null || !devple.gow.engine.fx.MagicFx.joints(f).world(joint, m)) {
+			f.world(m, 1f);
+		}
+		m.normalize3x3();
+		float[] w = m.get(new float[16]);
+		pendingScriptSpawns.add(() -> sw.spawnAt(ent, w)); // 적 갱신 (목록 순회) 중에 불리므로 다음 틱 머리에 [근사: 원작은 그 자리에서]
+	}
+
+	private final List<Runnable> pendingScriptSpawns = new ArrayList<>();
+
+	/**
+	 * SCR_GrowTimer 갱신 (0x18FDD8 · 0x18F440 · 0x18F798, {@link devple.gow.engine.combat.GrowTimer}): 시간이 다 되면 지금 기술을 끊고 변신 액션 요청,
+	 * 변신 중 몸 배율 1 + p × Adult Scale, p &gt; 0.95 이면 새끼를 지우고 (0x1DFFA8 — 제거 메시지 6 → DestructionSensor · Respawn [추정]) 정규화한
+	 * 새끼 행렬에 "GrowAdult" 를 만든다. 불꽃 goCEPtranSpark 은 시작 때 한 번 [근사: 원작은 몸에 붙여 2 초 동안 세기를 올림].
+	 */
+	private void growTick() {
+		if (!pendingScriptSpawns.isEmpty()) {
+			List<Runnable> l = new ArrayList<>(pendingScriptSpawns);
+			pendingScriptSpawns.clear();
+			l.forEach(Runnable::run);
+		}
+		for (var it = growTimers.entrySet().iterator(); it.hasNext(); ) {
+			var g = it.next();
+			EnemyFighter f = g.getKey();
+			devple.gow.engine.combat.GrowTimer gt = g.getValue();
+			Enemy en = enemies.stream().filter(x -> x.fighter() == f).findFirst().orElse(null);
+			if (en == null || f.dead()) {
+				f.growScale = 1f;
+				it.remove();
+				continue;
+			}
+			boolean sparked = gt.spark() >= 0;
+			if (gt.tick()) {
+				f.combat().stop();
+				f.combat().request(gt.def.action());
+			}
+			if (!sparked && gt.spark() >= 0 && magicFx != null) {
+				magicFx.effect(gt.def.fx(), f.pos);
+			}
+			if (gt.phase() != devple.gow.engine.combat.GrowTimer.Phase.TRANSFORM) {
+				continue;
+			}
+			float p = f.combat().active() ? f.combat().progress() : 1f;
+			f.growScale = gt.scale(p);
+			if (gt.swap(p)) {
+				it.remove();
+				ScriptWorld sw = en.actor() != null ? worldOf(en.actor()) : world;
+				float[] w = new Matrix4f().translation(f.pos).rotateY(f.yaw).get(new float[16]);
+				enemies.remove(en);
+				en.model().close();
+				if (magicFx != null) {
+					magicFx.unbind(f.combat(), f);
+				}
+				enemyFall.remove(f);
+				if (en.actor() != null) {
+					sw.destroy(en.actor());
+					actorWorld.remove(en.actor());
+					neighbourActors.remove(en.actor());
+				}
+				System.out.printf("자람: %s → %s at (%.0f, %.0f, %.0f)%n", en.kind().assets().wad().name(), gt.def.entity(), f.pos.x, f.pos.y, f.pos.z);
+				sw.spawnAt(gt.def.entity(), w);
+			}
+		}
+	}
 	/** SCR_ArcherShoot (Hash127Upper, 등록 0x18DB88 → 처리 0x18DAA8) — 궁수 SHOOT 의 SCRIPT 이벤트. */
 	static final int SCR_ARCHER_SHOOT = 0x63F805BF;
 	/** Hash127Upper("SCR_FirstTimeMsg") — 기술 SCRIPT 이벤트, idx = 첫 안내 번호 (0x19CD20 → 0x1DBEB0). */
 	static final int SCR_FIRST_TIME_MSG = 0x42077801;
+
+	/**
+	 * 영웅 SELF_HP (보스전 밖): 잡힌 영웅 쪽 MAI 기술의 자기 피해 — 예전에는 보스전 (BossFight.heroEvent) 에서만 받아 케르베로스에게 깔려 물리는 동안
+	 * (MAICEALEAPBITE 381 반복, 43 §40) HP 가 그대로였고 HP ≤ 10 → 382 MAICEALEAPDEATH 분기도 오지 않았다. 규칙은 {@link devple.gow.engine.combat.DamageRules#heroSelfHp}.
+	 */
+	private void heroSelfHp(float b) {
+		float before = hero.player.hp;
+		hero.player.hp = devple.gow.engine.combat.DamageRules.heroSelfHp(before, hero.player.maxHp(), b);
+		if (hero.combat.debug) {
+			System.out.printf(java.util.Locale.ROOT, "[영웅] SELF_HP %.1f → HP %.1f%n", b, hero.player.hp);
+		}
+	}
 
 	/** 첫 안내 (0x1DBEB0): 비트·누적·플레이 2 초 규칙을 지나면 메시지 500 + id (있을 때만, 0x1B9528) — 버튼 대기 메시지, 버튼은 2.5 초 뒤 (0x1B8EF8). */
 	private void firstTimeHint(int id) {
@@ -3681,6 +3795,13 @@ public final class GameScene implements Scene {
 	}
 
 	private int minigameIconIndex() {
+		// SCR_FlashSprite (0x19CD88 [확실]): 기술 SCRIPT 창 동안 아이콘 슬롯 4 = idx, 끝 콜백 0x19CD58 이 −1 — 슬롯 0–3 (R2 · 안내 센서 · 잡은 TAndF ·
+		// 미니게임 0x192xxx) 보다 번호가 커서 앞선다. 잡힌 영웅 기술의 흔들기 12 (케르베로스 MAICEALEAPBITE 381 · 하피 HARMAIPECK 373 · 해골
+		// MAISKB20/30/31 · 석화 FREEZEPOSE 120/121), 연타 10 (MAIMIN02 · 사티로스), 분신 EVIGRABHEROLOOP 861 — 예전엔 아무 데서도 띄우지 않았다 [43 §40]
+		var flash = hero.combat.active() ? hero.combat.activeScript(devple.gow.engine.boss.BossFight.SCR_FLASH_SPRITE) : null;
+		if (flash != null && flash.index() >= 0 && flash.index() < devple.gow.engine.ui.MinigameIcon.CLIPS.length) {
+			return flash.index();
+		}
 		if (!grab.active()) {
 			// 아이콘 슬롯 8 개 중 번호가 큰 것 하나 (0x21E908): 2 = 잡은 TAndF·크랭크 연타 (0x1E17F0, 열리면 끔 0x1C38A8),
 			// 1 = 버튼 안내 센서 (0x1AAD40), 0 = R2 로 잡힐 가까운 오브젝트의 "Show R2" (0x1DC3F8) — ATHN01A 해치 HydraHatchDoor (TAndF 051)
@@ -4416,6 +4537,8 @@ public final class GameScene implements Scene {
 			if (boss != null) {
 				gi = boss.minigameInput(in, grab.timed(), grab.qte());
 			} else if (auto != null && grab.active()) {
+				// 잡힌 영웅 기술에 스틱 흔들기 분기 (방향 조건 7/8/15 = 게이지 > 2/4/15, 케르베로스 MAICEALEAPBITE 381 "AUTO fall>4 → 383 탈출") → 흔든다
+				autoPad.wiggle = hero.combat.active() && hero.combat.move().branches().stream().anyMatch(b -> b.dir() == 7 || b.dir() == 8 || b.dir() == 15);
 				autoPad.drive(grab.timed(), grab.qte()); // AUTO 검증: 결합 미니게임 (ATHN01F 침대 846–851 TimedPress) 자동 입력 [엔진 전용]
 				gi = autoPad;
 			}
@@ -4746,6 +4869,7 @@ public final class GameScene implements Scene {
 	public static final float SHATTER_DESTROY = 0.05f;
 
 	private void updateEnemies(float dt) {
+		growTick();
 		collectBodies();
 		for (Enemy en : enemies) {
 			EnemyFighter f = en.fighter();

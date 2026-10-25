@@ -1205,6 +1205,44 @@ public final class ScriptWorld {
 		created(a);
 	}
 
+	/**
+	 * 기술 SCRIPT 가 이름으로 부르는 SpawnEnemy (원작 0x1A9298 (엔티티, 정보, 행렬) — SCR_Spawn 0x19F388 · SCR_GrowTimer 변신 0x18F798) [확실]:
+	 * 정보를 0x1A90D0 이 미리 채워 넘기므로 Condition · MaximumCount 검사도 만든 수 (+0x100) 증가도 없다. Action (0x1AA320) 을 돌리고, 넘긴 행렬에
+	 * 엔티티 Filter 그룹으로 만든다 (0x1A4DB0 → 0x1A4E88). 예: PAND02A 케르베로스의 토하기 VOMIT 4 → Spawn/081 "VomitSpawnTransform" (새끼 86,
+	 * 생성 기술 502, Action LevelData4 + 1), 새끼가 자라면 "GrowAdult" (어른 81, 생성 기술 10 TAUNT1, Filter 3) — 43 §40.
+	 *
+	 * @return 만든 액터, 엔티티가 없거나 SpawnEnemy 가 아니거나 템플릿 ≤ 0 이면 null
+	 */
+	public ScriptActor spawnAt(String entityName, float[] world) {
+		ScriptEntity e = find(entityName);
+		if (e == null || e.type() != 10) {
+			return null;
+		}
+		int tpl = intSlot(e, "TemplateId");
+		if (tpl <= 0) {
+			return null;
+		}
+		if (TRACE) {
+			System.out.printf(java.util.Locale.ROOT, "[스크립트 %.2f] %s (기술 SCRIPT 생성)%n", time, e.name());
+		}
+		slot(e, EntitySlots.ACTION_SLOT);
+		ScriptActor a = new ScriptActor(e.group() + "#" + e.id(), intSlot(e, EntitySlots.FILTER), new float[]{world[12], world[13], world[14]}, e);
+		actors.add(a);
+		listener.spawnEnemy(new ScriptListener.SpawnRequest(e, a, tpl, String.valueOf(slot(e, "Patrol")), world.clone(), intSlot(e, "SpawnAction")));
+		created(a);
+		return a;
+	}
+
+	/**
+	 * 결정 트리 조건 25 (0x1A1A80 → 0x1A8F70) [확실]: 이름의 SpawnEnemy 가 만든 수 (+0x100) &lt; MaximumCount 이고 템플릿이 있으면 참.
+	 * MaximumCount 0 이면 거짓 (0x1A8FC4 slt — 0x1A9298 의 "0 = 무제한" 과 다르다). 기술 SCRIPT 생성 ({@link #spawnAt}) 은 만든 수를 늘리지 않는다.
+	 * 템플릿 자원이 읽혔는지 (0x132728) 는 엔진에서 보지 않는다 [근사].
+	 */
+	public boolean canSpawn(String entityName) {
+		ScriptEntity e = find(entityName);
+		return e != null && e.type() == 10 && e.spawnCount < intSlot(e, "MaximumCount") && intSlot(e, "TemplateId") > 0;
+	}
+
 	// ---- 오브젝트 생성 / 제거 ----
 
 	/** 게임이 만든 오브젝트 등록 (CreationSensor 모드 2..4 통지). */
