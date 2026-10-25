@@ -1817,9 +1817,33 @@ public final class HeroNavigator {
 		return Math.abs(sy) < 0.2f ? 0 : -Math.signum(sy) * Math.max(ROPE_MIN, Math.abs(sy) * ROPE_SPEED);
 	}
 
+	/**
+	 * 수평 줄에 매달린 채 전투 기술 중 (원작 Combat_StateMask 0x207DC0: +0x174 0x400 · 0x20000 → 분기 마스크 0x80 — □ ROPEHOHA 발차기 · △ ROPEPOWER01 ·
+	 * ○ ROPEHOHGRAB · 피격 ROPEHOHR1, 10 문서 §2.4) [확실: 분기]: 손은 줄 위 자리 그대로 (0x1C71A8 매달림 매 프레임), 줄 이동·내비 애니 없음 — 몸 애니는 기술이
+	 * 맡는다. 줄 시뮬레이션과 줄 시계는 그대로 돈다 [근사: 기술 중 줄 위 자리 고정].
+	 *
+	 * @param target 기술을 시작할 때 바라볼 대상 (null = 그대로) — 줄 방향 두 쪽 중 대상 쪽 [근사: 원작 자동 조준 0x2077A0 을 줄 축에 투영]
+	 */
+	public void holdRope(Vector3f target, float dt) {
+		stateTime += dt;
+		world.updateRopes(dt);
+		world.tickRopeClock(dt);
+		if (target != null && rope != null) {
+			Vector3f d = new Vector3f(rope.end()).sub(rope.top());
+			d.y = 0;
+			Vector3f to = new Vector3f(target).sub(body.position());
+			if (d.lengthSquared() > 1e-6f && to.x * to.x + to.z * to.z > 1e-4f) {
+				d.normalize().mul(Math.signum(d.x * to.x + d.z * to.z) >= 0 ? 1 : -1);
+				body.setYaw(yawOf(d));
+			}
+		}
+		placeOnRope();
+	}
+
 	private void traverse(Input in, float camYaw, float dt) {
-		// × = 잡은 뒤 0.5 초가 지나면 놓기 (0x1C552C: 수평 줄 0x20000 → 0x1E9030 모드 2) [확실], ○ 놓기 [엔진]
-		if (in.pressed(PadButton.CROSS) && world.ropeClock() > ROPE_JUMP_DELAY || in.pressed(PadButton.CIRCLE)) {
+		// × = 잡은 뒤 0.5 초가 지나면 놓기 (0x1C552C: 수평 줄 0x20000 → 0x1E9030 모드 2) [확실]. ○ 는 줄 잡기 기술 ROPEHOHGRAB (A202, 분기 0x80 —
+		// HeroRig 가 수평 줄에서 전투를 돌린다, 43 §34) — 예전 엔진의 "○ 놓기" 는 원작에 없다
+		if (in.pressed(PadButton.CROSS) && world.ropeClock() > ROPE_JUMP_DELAY) {
 			leave(new Vector3f(), 0, "ANIFall");
 			return;
 		}

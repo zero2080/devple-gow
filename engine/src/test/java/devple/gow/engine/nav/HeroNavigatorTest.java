@@ -825,6 +825,43 @@ class HeroNavigatorTest {
 		assertEquals(NavState.ZIPLINE, nav2.state(), "짚라인 × 무시");
 	}
 
+	/**
+	 * 수평 줄 싸움 (43 §34): ○ 는 줄 잡기 기술 ROPEHOHGRAB 이라 줄을 놓지 않는다 (예전 엔진 "○ 놓기" 는 원작에 없음). 줄 기술 중 {@link HeroNavigator#holdRope}
+	 * 는 손을 줄 위 자리에 두고, 기술을 시작할 때 대상 쪽 줄 방향을 본다.
+	 */
+	@Test
+	void traverseRopeFightHoldsHandsOnRopeAndFacesTarget() {
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -100, -100, 600, 100, -200, SurfaceAttr.GROUND);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		NavRope tr = new NavRope("tr", RopeDef.Type.TRAVERSE, 0, 20, v(0, 200, 0), v(320, 200, 0));
+		w.ropes().add(tr);
+		Body b = new Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		Pad in = new Pad();
+		b.grounded = false;
+		b.pos.set(160, 200 - HeroNavigator.ROPE_HAND, 0);
+		tick(nav, b, w, in);
+		assertEquals(NavState.ROPE_TRAVERSE, nav.state());
+		for (int i = 0; i < 60; i++) {
+			in.down.add(PadButton.CIRCLE);
+			tick(nav, b, w, in);
+		}
+		assertEquals(NavState.ROPE_TRAVERSE, nav.state(), "○ 는 줄을 놓지 않음");
+		float x = b.pos.x;
+		nav.holdRope(v(40, 160, 0), DT); // 대상이 −x 쪽
+		assertEquals(-1, HeroNavigator.forward(b.yaw).x, 1e-3f, "대상 쪽 줄 방향");
+		nav.holdRope(v(300, 160, 0), DT);
+		assertEquals(1, HeroNavigator.forward(b.yaw).x, 1e-3f);
+		for (int i = 0; i < 30; i++) {
+			nav.holdRope(null, DT);
+		}
+		assertEquals(x, b.pos.x, 0.5f, "기술 중 줄 위 자리 그대로");
+		Vector3f hand = nav.sim(tr).pointAt(nav.sim(tr).dist(), new Vector3f());
+		assertEquals(hand.y - HeroNavigator.ROPE_HAND, b.pos.y, 1e-3f, "손 = 줄 위 점");
+		assertEquals(NavState.ROPE_TRAVERSE, nav.state());
+	}
+
 	/** 깊은 물 (수면 0, 바닥 −300) + 동쪽 물가 없음. */
 	static NavWorld deepPool(SurfaceAttr... surface) {
 		List<LevelCollision.Tri> t = new ArrayList<>();

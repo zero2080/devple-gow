@@ -47,6 +47,8 @@ public final class HeroRig implements AutoCloseable {
 	public int difficulty = 1;
 	/** 기어오르기·줄·밀기 등 (38 문서). null 이면 기존 지상/공중 이동만. */
 	public devple.gow.engine.nav.HeroNavigator nav;
+	/** 지난 틱 수평 줄 위에서 돌던 전투 기술 (새 기술이면 대상 쪽 줄 방향을 본다, {@link devple.gow.engine.nav.HeroNavigator#holdRope}). */
+	private CombatFile.Move ropeMove;
 	private final AnimatedModel model;
 	/** 혼돈의 블레이드 (lWeapOH/rWeapOH 부착, 34 문서). 없으면 null. 블레이드 레벨이 바뀌면 그 레벨 무기 WAD 로 바꾼다 ({@link #swapBlades}). */
 	private devple.gow.engine.asset.BladeModels blades;
@@ -248,6 +250,17 @@ public final class HeroRig implements AutoCloseable {
 			}
 
 			/**
+			 * 분기 허용 상태 (Combat_StateMask 0x207DC0 [확실]): 수평 줄 손 이동 (+0x174 0x400 · 0x20000) = 0x80 — 줄 기술 ROPEHOHA □ · ROPEPOWER01 △ ·
+			 * ROPEHOHGRAB ○ · 피격 ROPEHOHR1 (A135) · 해골에게 잡힘 MAISKB30 (A323) 만 고를 수 있다. 그 밖 내비 상태는 예전대로 지상 / 공중.
+			 */
+			public int stateMask() {
+				if (nav != null && nav.state() == devple.gow.engine.nav.NavState.ROPE_TRAVERSE) {
+					return 0x80;
+				}
+				return ctl.grounded ? 0x2 : 0x4;
+			}
+
+			/**
 	 * 적/레벨 WAD 의 외부 애니 그룹(0x10003, 예 R_MIN 의 ANM_MAIMIN = 크레토스의 미노타우로스 처형 동작)을 영웅 세트에 연결.
 	 * 원작도 적 리소스가 로드될 때 영웅 애니 세트의 해당 그룹이 채워진다 (05 문서 §외부 그룹).
 	 */
@@ -305,7 +318,9 @@ public final class HeroRig implements AutoCloseable {
 
 	public void update(Input in, float camYaw, float dt, Vector3f aimTarget) {
 		boolean navActive = nav != null && nav.active();
-		if (!navActive) {
+		// 수평 줄 손 이동 중에는 전투도 돈다 (분기 마스크 0x80, {@link CombatOwner#stateMask}) — 원작 수평 줄 싸움 (영상 4865–4940, 43 §34)
+		boolean ropeCombat = navActive && nav.state() == devple.gow.engine.nav.NavState.ROPE_TRAVERSE;
+		if (!navActive || ropeCombat) {
 			combat.update(in, dt);
 		}
 		if (nav != null && !combat.active()) {
@@ -316,9 +331,17 @@ public final class HeroRig implements AutoCloseable {
 			}
 		} else if (nav != null) {
 			nav.clearPrompt(); // 기술 중에는 사용 질의 없음 → 안내 슬롯 0 지움 (0x1DC3F8)
+			if (ropeCombat) {
+				// 줄 기술 중: 손은 줄 위 자리 그대로, 기술을 시작하는 틱에 대상 쪽 줄 방향을 본다, 애니는 기술이 (루트 모션·중력 없음)
+				ctl.beginTick();
+				nav.holdRope(combat.move() != ropeMove ? aimTarget : null, dt);
+				ctl.navTick(dt);
+			}
 		}
+		ropeMove = ropeCombat && combat.active() ? combat.move() : null;
 		if (navActive) {
-			// 매달림·줄·밀기 중에는 전투·점프 입력 없음 [근사: 원작 줄 공격 기술은 미구현]
+			// 매달림·벽·밀기 중에는 전투·점프 입력 없음 (수평 줄은 위에서 전투). 이 상태들에서는 Combatant.update 를 건너뛰어 피격 구가 마지막 지상 자리에
+			// 남는다 [미구현: 벽·턱 피격 반응 — 43 §34 남은 것]
 		} else {
 			if (!combat.active() && in.pressed(PadButton.CROSS)) {
 				ctl.jump(Math.hypot(in.leftX(), in.leftY()) > 0.3);

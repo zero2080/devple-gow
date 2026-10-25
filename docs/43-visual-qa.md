@@ -2168,6 +2168,15 @@ HoleLoad → PAND01A). 엔진 = origin/main 4fe5fa2 위.
    끝점 거리 (비율 0.44–0.86: ATHN01D/01E 짚라인 · ATHN02B gorope8 · PAND01D gorope1 320/592 · PAND03D · PAND03E · PAND04C · PAND04E) → 미리 당겨진 팽팽한 줄.
    예전 엔진은 쉼 길이 = 노드 간격이라 장력이 없었다 → `RopeSim.fixed(…, restLength, …)` · `RopeSim.of(NavRope)` (`06_rope_sag_before_d2` ↔ `05_rope_taut_after_d3`:
    곧은 줄, 영웅 y −395 … −402, 줄 구역 넷 · RopeSpawner 발동, 해골 9 마리가 줄 위 (y −344 / −352) 에 나온다).
+5. **수평 줄에서 크레토스가 싸우지 못했다 (영상 4865–4940: 매달린 채 발차기 · "6 Hits", 해골이 크레토스에 매달리면 떨쳐 냄).** 엔진 HeroRig 는 내비 상태
+   (매달림 · 줄 · 밀기) 에서 Combatant.update 를 통째로 건너뛰어 ("원작 줄 공격 기술은 미구현") □ 가 아무것도 안 했고, 피격 구도 줄을 잡기 전 바닥 자리에 남아 해골의
+   ROPEHOHA (피해 5) · ROPELEAP 이 한 번도 맞지 않았다 (d4: 90 초 동안 해골 공격 50 번 · 적중 0). 원작 Combat_StateMask 0x207DC0 [확실]: +0x174 0x400 (줄) 과
+   0x20000 (수평 줄) 이면 분기 마스크 0x80 — 영웅 분기 A51 □ ROPEHOHA (발 부위 7 피해 12) · A68 △ ROPEPOWER01 (칼 부위 3 피해 20, 자세 태그 79 → 해골 A157
+   ROPEDECAP) · A202 ○ ROPEHOHGRAB (HIT_CONFIRM → MAISKB32, 해골 A226) · A135 피격 ROPEHOHR1 · A323 해골 ROPELEAP 에 잡힘 MAISKB30 (자동으로 떨쳐 냄) 이
+   모두 0x1082c0 / 0x1080c0 (줄 상태) 이다. 넉백은 지상 · 공중만 (0x2044FC) 이라 줄에서는 없다. → `CombatOwner.stateMask` (ROPE_TRAVERSE = 0x80), 수평 줄에서도
+   Combatant.update, 기술 중에는 `HeroNavigator.holdRope` (손은 줄 위 자리, 기술 첫 틱에 대상 쪽 줄 방향 [근사]). 엔진만의 "○ = 줄 놓기" 는 지웠다 (원작 ○ =
+   ROPEHOHGRAB, 놓기는 × 0.5 초 뒤). d5 (보통, 봇): ROPEHOHA 적중 12 · 해골 ROPEHOHR · 해골 ROPEHOHA 피해 5 → ROPEHOHR1 · ROPELEAP → 둘 다 maiSkb30 → 해골
+   death02 로 떨어짐 (`07_rope_fight_d5`). 시험 `RopeCombatTest` · `HeroNavigatorTest.traverseRopeFightHoldsHandsOnRopeAndFacesTarget`.
 
 ## 시연 녹화 (-Dgow.record, -Dgow.bot) [엔진 전용]
 
