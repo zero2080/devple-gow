@@ -2021,12 +2021,27 @@ public final class HeroNavigator {
 
 	/**
 	 * 세이브 · 체크포인트 되읽기 (Load_PlayerBlock 0x1DC130 은 이동 상태 +0x174 = 스냅숏 +0x40 을 그대로 — 물 0x80 · 0x100 · 0x200 도) [확실]:
-	 * 물속에서 찍은 스냅숏이면 그 하위 상태로 곧바로 물 상태. 수면 (+0x230) 은 위쪽 첫 Water 면 (없으면 머리 위 멀리 — 다음 수면 질의가 정한다)
-	 * [근사: 원작 스냅숏에 +0x230 이 담기는지 미확인]. 예전 엔진은 지상 / 공중으로 되돌려 PAND02F 물속 체크포인트 (CheckPointGroup6 · 7) 에서
-	 * 크라토스가 바닥까지 가라앉아 걸어 다녔다 (43 §42).
+	 * 물속에서 찍은 스냅숏이면 그 하위 상태로 곧바로 물 상태. 수면 (+0x230) 은 위쪽 첫 Water 면 [근사: 원작 스냅숏에 +0x230 이 담기는지 미확인].
+	 * 예전 엔진은 지상 / 공중으로 되돌려 PAND02F 물속 체크포인트 (CheckPointGroup6 · 7) 에서 크라토스가 바닥까지 가라앉아 걸어 다녔다 (43 §42).
+	 * <p>
+	 * 발 위쪽에 Water 면이 없으면 물 상태로 두지 않고 거짓 (호출자가 지상 / 공중 그대로) — 원작 물 상태 갱신 0x1C9BB8 은 머리 높이 수면 질의 0x1E57D8 이
+	 * 맞을 때만 떠 있기 0x1C93B8 (+0x174 0x80, 수면 높이 맞춤) 이고 빗나가면 가라앉기 0x1C94B0 (0x100) 이라 없는 수면에 맞추는 일이 없다 [확실: 갈래].
+	 * 예전 (bd6a17a) 은 수면을 못 찾으면 머리 위 100000 을 수면으로 두고 떠 있기 맞춤이 영웅을 y ≈ 99398 로 옮겼다 — 하네스 순간이동이 물 상태를
+	 * 이어 뭍 위 점에서 되풀이 (ATHN02A · ATHN01C 순간이동 급증, 43 §45) [근사: 물 없는 곳의 물 스냅숏은 원작에 없다].
 	 */
-	public void restoreWater(Water w) {
+	public boolean restoreWater(Water w) {
 		Vector3f p = body.position();
+		NavWorld.Floor surface = null;
+		for (float y = p.y + 16; y <= p.y + 4000; y += 16) { // 발 위로 16 씩: 천장 (단단한 면) 은 지나 첫 Water 면 (최대 4000)
+			NavWorld.Floor f = world.floor(p.x, y, p.z, 16);
+			if (f != null && f.has(SurfaceAttr.WATER) && f.y() > p.y) { // 발이 수면 아래 — 발 아래 수면 (뭍 위 점, ATHN01C 갑판 아래 물) 은 아니다
+				surface = f;
+				break;
+			}
+		}
+		if (surface == null) {
+			return false;
+		}
 		state = NavState.SWIM;
 		stateTime = 0;
 		water = w == Water.DIVE && !diveAbility ? Water.SINK : w;
@@ -2034,23 +2049,20 @@ public final class HeroNavigator {
 		waterVy = diveVy = 0;
 		plunging = divingIn = noDiveFall = false;
 		dashCharging = dashing = false;
-		waterY = p.y + SWIM_DEPTH + 100000f;
-		waterNoDiving = false;
-		for (float y = p.y - 48; y <= p.y + 4000; y += 16) { // 발 아래 64 부터 위로 16 씩: 천장 (단단한 면) 은 지나 첫 Water 면 (최대 4000)
-			NavWorld.Floor f = world.floor(p.x, y, p.z, 16);
-			if (f != null && f.has(SurfaceAttr.WATER)) {
-				waterY = f.y();
-				waterNoDiving = f.has(SurfaceAttr.NO_DIVING);
-				break;
-			}
-		}
-		if (water == Water.TREAD) {
+		waterY = surface.y();
+		waterNoDiving = surface.has(SurfaceAttr.NO_DIVING);
+		if (water == Water.TREAD && p.y < waterY - SWIM_DEPTH - 2 * 3.2f) {
+			// 떠 있기인데 수면 질의 창 (발 + 28.16 ± 2·3.2, 0x1E57D8) 보다 깊다 — 원작 0x1C9BB8 은 질의가 빗나가 가라앉기 0x1C94B0 (+0x174 0x100) [확실: 갈래].
+			// 하네스 순간이동이 떠 있던 영웅을 물속 볼륨 점 (PAND02D 수영장 바닥) 에 놓을 때 (43 §45)
+			water = Water.SINK;
+		} else if (water == Water.TREAD) {
 			p.y = Math.min(p.y, waterY - SWIM_DEPTH);
 		}
 		body.setVy(0);
 		body.setGrounded(false);
 		body.launch().zero();
 		body.play(waterAnim(), true);
+		return true;
 	}
 
 	/** 원작 가속 도우미 0x1E5FE0: 목표가 0 이 아니면 |목표| ≥ min, 같은 부호로 커지면 acc, 아니면 dec 만큼 다가감 [확실]. */

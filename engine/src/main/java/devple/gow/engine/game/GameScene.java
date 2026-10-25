@@ -810,8 +810,8 @@ public final class GameScene implements Scene {
 			// 물 상태 (+0x174 0x80 · 0x100 · 0x200) 도 그대로 — 물속 체크포인트 · Warp (43 §42)
 			String ws = loadPos != null ? restoreHeroState : warped ? warpHeroState : null;
 			if (ws != null && ws.startsWith("SWIM")) {
-				nav.navigator.restoreWater(swimState(ws));
-				System.out.println("이동 상태 " + ws + " → 물 (수면 " + nav.navigator.waterSurface() + ")");
+				boolean in = nav.navigator.restoreWater(swimState(ws));
+				System.out.println("이동 상태 " + ws + (in ? " → 물 (수면 " + nav.navigator.waterSurface() + ")" : " → 위에 수면 없음 (물 상태 아님)"));
 			}
 			if (warpOnWall()) {
 				// 사다리·벽에 붙은 채 Warp (SEWR02 사다리 → ATHN03D 우물 사다리 WarpFSewr01, 영상 924–929): 도착 Start 에서 같은 벽 질의로 다시 붙는다.
@@ -4479,7 +4479,7 @@ public final class GameScene implements Scene {
 				var w = nav.navigator.water();
 				respawn(new Vector3f(tp[0], tp[1], tp[2]));
 				hero.ctl.yaw = yaw;
-				if (swim) { // 물속 경로 순간이동은 물 상태 그대로 [엔진 전용 하네스]
+				if (swim) { // 물속 경로 순간이동은 물 상태 그대로 — 도착점 위에 수면이 없으면 (뭍 위 볼륨 점) 지상 / 공중 [엔진 전용 하네스, 43 §45]
 					nav.navigator.restoreWater(w);
 				}
 			}

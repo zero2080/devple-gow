@@ -144,6 +144,33 @@ class PoseidonWaterTest {
 	}
 
 	/**
+	 * 발 위에 수면이 없는 점 (뭍 위 · 수면보다 높은 갑판) 에서 물 상태를 되돌리면 물 상태가 아니다 — 원작은 머리 높이 수면 질의 0x1E57D8 이 맞을 때만
+	 * 떠 있기 0x1C93B8 (수면 맞춤). 예전엔 수면 = 머리 위 100000 으로 두고 떠 있기 맞춤이 영웅을 y ≈ 99398 로 옮겼다 (ATHN02A, 43 §45).
+	 */
+	@Test
+	void restoreWaterWithoutSurfaceAboveStaysOnLand() {
+		NavWorld w = deepPool();
+		Body b = new Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		b.pos.set(0, 56, 0); // 수면 (y 0) 보다 56 위 (ATHN01C 갑판 점 −60 · 물 −116)
+		b.grounded = false;
+		nav.reset();
+		assertFalse(nav.restoreWater(HeroNavigator.Water.TREAD));
+		assertNotEquals(NavState.SWIM, nav.state());
+		assertEquals(56, b.pos.y, 1e-3f, "수면으로 끌어내리거나 올리지 않음");
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, 400, 2800, 1200, 3600, -700, SurfaceAttr.GROUND); // 물 없는 바닥만
+		NavWorld dry = new NavWorld(LevelCollision.of(t));
+		Body b2 = new Body();
+		HeroNavigator nav2 = new HeroNavigator(b2, dry, null);
+		b2.pos.set(801, -602, 3216);
+		b2.grounded = false;
+		nav2.reset();
+		assertFalse(nav2.restoreWater(HeroNavigator.Water.TREAD));
+		assertEquals(-602, b2.pos.y, 1e-3f, "물이 없는 곳: 수면 100000 에 맞추지 않음");
+	}
+
+	/**
 	 * PAND02D 돌진 문 godashdoorgrp* = Breakable (Brkb 0 HP 1) + 공 하나 CDV (반지름 56, 재질 Ground · TakeDamage): 몸 구를 밀어낸다.
 	 * Breakable 이 아닌 공 CDV 는 몸이 아니다.
 	 */

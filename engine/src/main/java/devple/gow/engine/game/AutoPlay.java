@@ -35,6 +35,8 @@ public final class AutoPlay {
 	static final boolean NO_VOLUMES = System.getProperty("gow.auto.novol") != null;
 	static final float WAIT = Float.parseFloat(System.getProperty("gow.auto.wait", "0"));
 	static final float FIGHT = 500f, WALK_LIMIT = 3f, DWELL = 1f, GOAL_WAIT = 90f, ARRIVE = 40f;
+	/** 볼륨 점으로 순간이동한 뒤 그 점에 도착 판정이 날 때까지 기다리는 시간 — 넘으면 그 점을 포기 (물속 점, 43 §45). */
+	static final float TELEPORT_HOLD = 1f;
 	/** 목표에서 기다리는 주기: 앞 6 초는 목표 위 (R1), 뒤 4 초는 마지막 방문 점으로 물러난다 — 목표 위에 서 있으면 보류되는 스크립트 (ATHN01A 해치). */
 	static final float GOAL_CYCLE = 10f, GOAL_STAY = 6f;
 
@@ -243,6 +245,18 @@ public final class AutoPlay {
 			return bot;
 		}
 		if (legTime > WALK_LIMIT) {
+			if (teleportedToCur && legTime > WALK_LIMIT + TELEPORT_HOLD) {
+				// 순간이동해도 그 점에 머물지 못함 — 물속 볼륨 점 (떠 있던 영웅은 가라앉기 → 부력으로 떠오름, PAND02D 수영장 바닥) · 몸이 밀어내는 점
+				// (PAND02D 돌진 문 공 CDV 안, bd6a17a). 예전엔 도착할 때까지 매 틱 다시 순간이동했다 (PAND02D 60 회) — {@link #TELEPORT_HOLD} 초 뒤 이 점을
+				// 포기한다 (43 §45) [엔진 전용 하네스]
+				log(String.format(Locale.ROOT, "t=%.2f 볼륨 포기 (순간이동해도 못 머묾, 영웅 %s) %s", time, fmt(new float[]{hero.x, hero.y, hero.z}), fmt(cur)));
+				gaveUp++;
+				cur = null;
+				return bot.press(null);
+			}
+			if (teleportedToCur && Math.abs(cur[1] - hero.y) >= 64) {
+				return bot.press(null); // 높이를 못 지킴 (물속 점) — 다시 순간이동해도 같다
+			}
 			teleport(hero, cur);
 			return bot.press(null);
 		}
@@ -689,6 +703,8 @@ public final class AutoPlay {
 	private int goalDeaths;
 	/** 지금 볼륨 점에 순간이동으로 갔는지. */
 	private boolean teleportedToCur;
+	/** 순간이동해도 머물지 못해 포기한 볼륨 점 수 (결과의 방문 분모에 넣는다). */
+	private int gaveUp;
 
 	/** 레벨 전환 요청: next 면 성공으로 끝내고 true, 아니면 막는다 (false). */
 	public boolean allow(String target, Vector3f hero) {
@@ -710,7 +726,7 @@ public final class AutoPlay {
 	private void finish(String result, Vector3f hero) {
 		done = true;
 		String line = String.format(Locale.ROOT, "%s\t%s\t%s\t%.0fs\t방문 %d/%d\t순간이동 %d\t사망 %d\t막은 전환 %s\t마지막 %s\t오브 %d%n", level, next, result, time,
-				visited, visited + todo.size(), teleports, deaths, vetoed, fmt(new float[]{hero.x, hero.y, hero.z}), redOrbs);
+				visited, visited + todo.size() + gaveUp, teleports, deaths, vetoed, fmt(new float[]{hero.x, hero.y, hero.z}), redOrbs);
 		System.out.print("AUTO 결과 " + line);
 		String f = System.getProperty("gow.auto.log");
 		if (f != null) {
