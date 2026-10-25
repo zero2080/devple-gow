@@ -56,6 +56,12 @@ public final class GameSession {
 	/** 직전 Warp 로 떠나온 레벨의 화면 상태 — 원작은 그 레벨을 꺼진 채 메모리에 두므로 바로 Warp 로 돌아오면 그대로 (GameScene.goToLevel, 43 §13.10). */
 	public GameScene.Resident warpLeft;
 	/**
+	 * Warp 순간 영웅 이동 상태 (NavState 이름, null = 모름). 원작 Warp_Jump 0x1B2E08 은 영웅 행렬만 도착 Start 로 바꾸고 (SetMatrix 0x1E79D0) 이동 상태
+	 * +0x174 는 그대로 둔다 — 줄만 놓는다 [확실, 43 §13.9]. 그래서 SEWR02 사다리를 오르다 Warp 하면 ATHN03D 우물 사다리에 매달린 채 도착해 계속 오른다
+	 * (영상 924–929). 새 씬이 도착 Start 에서 벽 질의로 다시 붙인다 (43 §30).
+	 */
+	public String warpHeroState;
+	/**
 	 * 두 슬롯에 올라 있는 레벨의 스크립트 세계 (레벨 이름 대문자 → 세계, 최대 2). 원작 LoadCheck·걸어 넘기는 이음은 "현재 레벨" 표시만 바꾸고 두 슬롯
 	 * 스크립트가 그대로 돈다 (0x1BCA10). 같은 레벨을 다시 LoadWad 해도 이미 슬롯에 있으면 읽지 않는다 (0x1BC110: 슬롯 이름이 같으면 건너뜀) [확실].
 	 * 엔진 씬은 이음마다 새로 만들므로 이 세계를 넘겨 써서 LevelData·한 번 발동·지연을 잇는다 (43 §18) — 예전엔 ATHN04B 에서 광장으로 돌아오면

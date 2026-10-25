@@ -914,4 +914,33 @@ class NavDataTest {
 			}
 		}
 	}
+
+	/**
+	 * Warp_Jump 는 이동 상태 +0x174 를 잇는다 (43 §30): SEWR02 사다리를 오르다 Warp 하면 ATHN03D WarpFSewr01 (160, 347.2, 1488.6, 요 0) 은 바닥 없는
+	 * 우물 한가운데, 우물 사다리 면 (z 1488, 법선 +z, y 167–505) 바로 앞이다. 도착점에서 벽 질의로 사다리에 붙고 (예전엔 가까운 바닥 (145, 505, 1482) 으로
+	 * 옮겼다 [근사]) 스틱 위로 오르면 꼭대기에서 복도 (504) 로 내려선다 — 영상 926–929 (우물을 내려다보는 camFrm02, 사다리로 올라옴).
+	 */
+	@Test
+	void athn03dWarpArrivalClimbsOutOfTheWell() throws Exception {
+		LevelData d = level("ATHN03D");
+		LevelCollision lc = new LevelCollision(d.sheets);
+		NavWorld w = new NavWorld(lc);
+		assertTrue(Float.isNaN(lc.groundHeight(160, 347.2f + 32, 1488.6f, 600)), "도착점 아래 바닥 없음");
+		HeroNavigatorTest.Body b = new HeroNavigatorTest.Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		b.grounded = false;
+		b.yaw = 0; // Start 행렬 단위 → 요 0 (−z, 사다리 쪽)
+		b.pos.set(160, 347.2f, 1488.6f);
+		nav.reset();
+		assertTrue(nav.reattachWall(), "도착 Start 에서 사다리에 붙음");
+		assertEquals(NavState.LADDER, nav.state());
+		assertEquals(347.2f, b.pos.y, 0.5f, "높이 그대로");
+		HeroNavigatorTest.Pad in = new HeroNavigatorTest.Pad();
+		for (int i = 0; i < 60 * 12 && nav.state() == NavState.LADDER; i++) {
+			in.ly = 1;
+			nav.update(in, 0, HeroNavigatorTest.DT);
+		}
+		assertEquals(NavState.GROUND, nav.state(), "꼭대기에서 내려섬 (ANILDis1)");
+		assertEquals(504f, b.pos.y, 2f, "복도 바닥");
+	}
 }

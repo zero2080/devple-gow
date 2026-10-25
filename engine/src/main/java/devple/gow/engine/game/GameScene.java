@@ -774,9 +774,14 @@ public final class GameScene implements Scene {
 				}
 			}
 		}
+		boolean warped = arrival != null && arrival.kind() == LevelLink.Kind.WARP;
+		if (warped) {
+			// Warp_Jump 는 이동 상태를 잇는다 (GameSession.warpHeroState) — 하네스 --arrive 는 -Dgow.arrive.heroState=LADDER 로 [엔진 전용]
+			warpHeroState = session.warpHeroState != null ? session.warpHeroState : System.getProperty("gow.arrive.heroState");
+			session.warpHeroState = null;
+		}
 		String arrivalCam = placeSpawn();
 		respawn(spawn);
-		boolean warped = arrival != null && arrival.kind() == LevelLink.Kind.WARP;
 		if (arrival == null) {
 			// 세계 시작 0x29D924: 새 게임 (셸 0x29D964 → 0x1A6EC0 = 0) · 세이브·체크포인트 되읽기 (0x1B4450 = 스냅숏 세계 시각) 만 바꾼다 [확실: 쓰는 곳 둘뿐].
 			// Warp 와 이음은 이어진다 — 예전 엔진은 Warp 에서도 다시 잡아 Warp 로 들어온 레벨 시작의 CheckPoint (ARENA06 TimerControl-AutoCheckPoint 등) 를
@@ -792,6 +797,20 @@ public final class GameScene implements Scene {
 			if (loadPos != null && restoreHeroState != null && restoreHeroState.matches("WALL_CLIMB|LADDER|WALL_WALK")) {
 				boolean on = nav.navigator.reattachWall();
 				System.out.println("되읽은 이동 상태 " + restoreHeroState + (on ? " → 벽에 다시 붙음" : " → 벽 질의 빗나감 (공중)"));
+			}
+			if (warpOnWall()) {
+				// 사다리·벽에 붙은 채 Warp (SEWR02 사다리 → ATHN03D 우물 사다리 WarpFSewr01, 영상 924–929): 도착 Start 에서 같은 벽 질의로 다시 붙는다.
+				// 빗나가면 예전처럼 가까운 바닥 [근사]
+				boolean on = nav.navigator.reattachWall();
+				System.out.println("Warp 이동 상태 " + warpHeroState + (on ? " → 도착점 벽에 붙음" : " → 벽 질의 빗나감"));
+				if (!on) {
+					float[] at = LevelEntry.snapToFloor(col, new float[]{spawn.x, spawn.y, spawn.z}, 256);
+					if (at != null) {
+						spawn.set(at[0], at[1], at[2]);
+						respawn(spawn);
+						nav.navigator.warpArrived();
+					}
+				}
 			}
 		}
 		ph = devple.gow.engine.core.PerfMonitor.phase(". spawn", ph);
@@ -1125,6 +1144,14 @@ public final class GameScene implements Scene {
 		}
 	}
 
+	/** Warp 로 들어올 때 이어받은 영웅 이동 상태 (NavState 이름, null = 없음/Warp 아님). */
+	private String warpHeroState;
+
+	/** 벽·덩굴·사다리에 붙은 채 Warp 로 들어왔는가 (원작 Warp_Jump 는 이동 상태 +0x174 를 그대로 둔다). */
+	private boolean warpOnWall() {
+		return warpHeroState != null && warpHeroState.matches("WALL_CLIMB|LADDER|WALL_WALK");
+	}
+
 	/** 시작 위치·방향 결정 ({@link LevelEntry}). 반환 = 도착 카메라 이름 (없으면 ""). */
 	private String placeSpawn() {
 		if (loadPos != null) {
@@ -1149,7 +1176,8 @@ public final class GameScene implements Scene {
 			System.out.println("시작 지점: " + s.source() + " (숙주 " + hostLevel + " 바닥)");
 			return s.camera();
 		}
-		float[] at = LevelEntry.snapToFloor(col, s.pos(), 256);
+		// 벽·사다리에 붙은 채 Warp 하면 원작은 Start 자리 그대로 (바닥 없음 — WarpFSewr01 은 우물 사다리 중간) → enter 가 다시 붙인다
+		float[] at = warpOnWall() ? s.pos() : LevelEntry.snapToFloor(col, s.pos(), 256);
 		if (at == null) {
 			at = s.pos();
 		} else if (at != s.pos()) {
@@ -2081,6 +2109,7 @@ public final class GameScene implements Scene {
 		GameScene.Resident back = session.warpLeft;
 		if (a.kind() == LevelLink.Kind.WARP) {
 			session.warpLeft = nav != null ? new Resident(levelName, level.removedInstances(), nav.platformStates()) : null;
+			session.warpHeroState = nav != null ? nav.navigator.state().name() : null; // Warp_Jump 는 이동 상태를 잇는다 (사다리 → 사다리)
 			if (back != null && back.wad().equalsIgnoreCase(wad) && a.resident() == null) {
 				a = new Arrival(a.kind(), a.from(), a.pos(), a.yaw(), a.camera(), List.of(back));
 			}
@@ -3445,6 +3474,8 @@ public final class GameScene implements Scene {
 	 * HUD XButtonOnOff 프레임 1). 예전 엔진은 4 초 뒤 저절로 닫았다 (ATHN02A 아테나 석상 218/322, ATHN01F 쌍둥이 317/319).
 	 */
 	private boolean messageWait, messageButtonLate;
+	/** AUTO·봇이 버튼 메시지 한 쪽을 읽는 시간 (초, -Dgow.auto.msgread, 기본 1.5) — 영상과 장면 대조할 때 길게 [엔진 전용]. */
+	private static final float BOT_MESSAGE_READ = Float.parseFloat(System.getProperty("gow.auto.msgread", "1.5"));
 	/**
 	 * 버튼 대기 메시지가 전역 정지 슬롯 1 을 거는지 — 원작 0x1B9F60 은 GameMgr +0x153C (초) 가 정확히 0 이면 0x1BF080(1, 0) (정지 안 함) ·
 	 * 0x21D970(1) (0x29F458 = 1, 일시정지 풀 때 소리 채널 0 만 다시 묶음 0x21E1C0), 음수일 때만 0x1BF080(1, 1) [확실: 디스어셈블]. 초 0 = 첫 안내
@@ -4036,8 +4067,8 @@ public final class GameScene implements Scene {
 				messageButtonLate = false;
 				hud.variables().event("PS2_MessageTemplate_Event", 10);
 			}
-			// AUTO 검증·봇은 쪽마다 1.5 초 읽고 ○ — 타자 중이면 끝 표시와 넘기기를 한 번에 [엔진 전용]
-			boolean botOk = (auto != null || bot != null) && messagePressTime > 1.5f && !messageButtonLate;
+			// AUTO 검증·봇은 쪽마다 1.5 초 (-Dgow.auto.msgread) 읽고 ○ — 타자 중이면 끝 표시와 넘기기를 한 번에 [엔진 전용]
+			boolean botOk = (auto != null || bot != null) && messagePressTime > BOT_MESSAGE_READ && !messageButtonLate;
 			if (botOk) {
 				hud.variables().typeComplete();
 			}
