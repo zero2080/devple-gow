@@ -211,7 +211,7 @@ public final class AnimatedModel implements AutoCloseable {
 				blend = assets.classify(mat, tex != null);
 				tint = l.rgba();
 				// 추가 레이어 · 첫 레이어 환경맵 (구운 메시와 같은 해석) — 첫 레이어 플립북·UV 는 matAnim 이 맡는다
-				fx = assets.materialFx(mat, p.hasUv, p.hasNormal);
+				fx = assets.materialFx(mat, p.hasUv, p.hasNormal, model.renderFlags);
 			}
 			parts.add(new Part(new SkinnedMesh(v, idx), tex, blend, tint, p.hasNormal, p.jointLocal(skeleton), assets.materialAnim(p.material),
 					used.stream().mapToInt(Integer::intValue).toArray(), litColor, late, p, WadAssets.postFogLayer(mat), fx));

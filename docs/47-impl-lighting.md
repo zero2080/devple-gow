@@ -75,6 +75,7 @@
   유니폼 `uLgtMat` (× 엔진 물체 색 `colorScale`), `uLgtAdd`. 정점 셰이더 `vLgt = min(A + M·L + 1/128, 255/128)`, 조각 셰이더는 조명 경로에서 uTint.rgb 를 곱하지 않는다.
   `LightRig.shade(n, M, A, out)` 같은 식 (`LightServerTest` 2 건 추가).
 - 남은 것: 조명 경로 알파 = qw78.w (정점 α 무시) 인데 엔진은 정점 α × uTint.a 그대로 (조명 모델 레이어 α·p28·p38 은 대부분 1) [근사].
+- 조명 없는 모델 (0x1000 없음) 은 VU 플래그 4 가 꺼져 qw78.w 를 쓰지 않는다 → 2·3 번째 레이어 알파에 p28 · p38 을 곱하지 않는다 (`WadAssets.extraLayerAlpha`, 43 §30, 16 §3.3).
 
 ## 4. 엔진
 - `LightServer`: 레벨 WAD 의 LGT_ 전부 (켜짐) + 무기 WAD 의 블레이드 라이트. `gather` = 0x1521B0 그대로 (공간 색인 대신 전체 검사, 비전역 최대 32 [추정: 순서]).

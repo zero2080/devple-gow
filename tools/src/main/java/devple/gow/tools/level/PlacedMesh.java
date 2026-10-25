@@ -46,6 +46,7 @@ public final class PlacedMesh {
 		float[][] skinMats = sk.skin(jointWorld);
 		SkinnedModel skm = new SkinnedModel(gm, lod, -1);
 		TriMesh out = new TriMesh(gm.name);
+		out.renderFlags = gm.renderFlags;
 		float[] a = new float[3];
 		float[] b = new float[3];
 		float[] n = new float[3];

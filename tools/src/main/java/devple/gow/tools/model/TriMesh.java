@@ -25,6 +25,11 @@ public final class TriMesh {
 
 	public final String name;
 	public final List<Sub> subs = new ArrayList<>();
+	/**
+	 * 원본 모델 MDL +0x28 렌더 플래그 ({@link GowModel#renderFlags}, 모르면 0). 0x1000 이면 원작 VU 플래그 4 — 레이어 알파가 p28·p38 를 받는다
+	 * (엔진 {@code WadAssets.materialFx}, 43 §30).
+	 */
+	public long renderFlags;
 
 	public TriMesh(String name) {
 		this.name = name;
@@ -36,6 +41,7 @@ public final class TriMesh {
 	 */
 	public static TriMesh of(GowModel m, int lod) {
 		TriMesh t = new TriMesh(m.name);
+		t.renderFlags = m.renderFlags;
 		for (GowMesh mesh : m.meshes) {
 			for (int p = 0; p < mesh.parts.size(); p++) {
 				GowMesh.Part part = mesh.parts.get(p);

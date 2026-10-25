@@ -487,7 +487,7 @@ public final class WadAssets implements AutoCloseable {
 				if (blend == RenderModel.Blend.ALPHA) {
 					tint[3] *= mat.param28() * l.param38();
 				}
-				fx = materialFx(mat, s.hasUv, s.hasNormal);
+				fx = materialFx(mat, s.hasUv, s.hasNormal, p.tm().renderFlags);
 			}
 			parts.add(new RenderModel.Part(new Mesh(v, idx, GL_TRIANGLES), tex, blend, tint, s.hasNormal, fx,
 					lit != null ? lit : new float[]{tint[0], tint[1], tint[2], 0, 0, 0}, late));
@@ -495,8 +495,27 @@ public final class WadAssets implements AutoCloseable {
 		return new RenderModel(p.name(), parts, p.min(), p.max());
 	}
 
-	/** 플립북 프레임 / 머티리얼 ANM / 2·3번째 레이어가 있으면 MaterialFx, 없으면 null. */
-	MaterialFx materialFx(MaterialResource mat, boolean hasUv, boolean hasNormal) {
+	/**
+	 * 원작 VU 플래그 4 를 모델이 늘 켜는가 = MDL 렌더 플래그 0x1000 (조명 모델 228 개 전부 0x1800) [확실: 0x167A98 → 0x168310].
+	 * 플래그 4 의 다른 출처는 그리기 기록 +0x10 의 거리 페이드 α ≠ 1 (0x1580C0 → 0x1585E8, 엔진에 없음) 과 머티리얼 rf 0x4000 (디스크 0 개).
+	 */
+	public static final long VU_MATERIAL_ALPHA = 0x1000;
+
+	/**
+	 * 2·3 번째 레이어의 알파 배율 (43 §30) [확실: 메시 VU1 마이크로코드 0x091–0x098 · 0x154410 · 0x167A98 / 확인: 영상 54–56 ATHN07 둥근 문].
+	 * 0x154410 이 레이어마다 qw78.w = 물체 α × p28 × p38 을 만들지만 메시 프로그램은 VU 플래그 4 (vi10 bit 10) 일 때만 vf30.w = qw78.w 로 정점 α 를 바꾸고,
+	 * 아니면 vf30 = 1 이라 정점 α 는 메시 정점색 α 그대로다 (조명 없는 커널은 정점색을 ftoi0 로 그대로 넘긴다). 그래서 조명 없는 모델 (렌더 플래그 0x1000 없음,
+	 * 레벨 배치 대부분) 의 레이어 As = 텍스처 α × 정점 α 이고 p28 · p38 은 쓰이지 않는다. 예전 엔진은 늘 p38 (0.25) 를 곱해, GS 0x01 반전 블렌드 레이어
+	 * (Cd − Cs)·As + Cs 가 3/4 를 덮어써 ATHN07 둥근 문 MAT_phong15 (환경맵 ballenv7 + timeDoorA + ballenv7 메시 UV) 위에 공 사진이 반원마다 늘어나 보였다 —
+	 * 원작은 timeDoorA 의 α (문양 금속 부분) 로 환경맵 금빛이 비치고 나머지는 문양 색이다. 조명 모델 (0x1000) 은 예전처럼 p38 · p28 을 곱한다.
+	 * 첫 레이어는 그대로 둔다 (p28 · p38 ≠ 1 은 정렬 플래그 0x1537C8 이기도 하고, 조명 없는 모델의 첫 레이어 α 는 영상으로 확인하지 않았다 [미확인]).
+	 */
+	static float extraLayerAlpha(MaterialResource mat, MaterialResource.Layer l, long modelRenderFlags) {
+		return (modelRenderFlags & VU_MATERIAL_ALPHA) != 0 ? l.param38() * mat.param28() : 1f;
+	}
+
+	/** 플립북 프레임 / 머티리얼 ANM / 2·3번째 레이어가 있으면 MaterialFx, 없으면 null. modelRenderFlags = MDL 렌더 플래그 ({@link #extraLayerAlpha}). */
+	MaterialFx materialFx(MaterialResource mat, boolean hasUv, boolean hasNormal, long modelRenderFlags) {
 		MaterialAnim.Anim anim = matAnims.get(mat.name());
 		Texture[] frames = hasUv ? textureFrames(mat.layers().getFirst().texture()) : null;
 		// 첫 레이어 환경맵 (VU 플래그 2): 발리스타 손잡이 틀 MAT_M02MetalTrim01b (rf 0x86, 크롬 공 TXR_entities02_file330 — 원 밖은 검정) 을
@@ -513,7 +532,7 @@ public final class WadAssets implements AutoCloseable {
 				default -> RenderModel.Blend.ALPHA;
 			};
 			float[] tint = layerTint(mat, l, t != null);
-			tint[3] *= l.param38() * mat.param28();
+			tint[3] *= extraLayerAlpha(mat, l, modelRenderFlags);
 			// 레이어 렌더 플래그 bit1 (0x02) = 환경맵 VU 경로 → 법선 있는 메시에서 구면 환경맵 UV (MaterialFx.ENV_FLAG). bit2 (0x04) 는 머티리얼 색 (환경맵 아님)
 			boolean env = (l.renderFlags() & MaterialFx.ENV_FLAG) != 0;
 			layers.add(new MaterialFx.Layer(i, t, textureFrames(l.texture()), b, tint, env, litColor(mat, l)));
