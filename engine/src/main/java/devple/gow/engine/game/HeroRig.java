@@ -65,6 +65,11 @@ public final class HeroRig implements AutoCloseable {
 	private final Matrix4f bladeTickWorld = new Matrix4f();
 	private devple.gow.engine.asset.ArtemisBladeModel artemis;
 	private int artemisStageLoaded = -1;
+	/**
+	 * 아르테미스의 검을 든 채 숨김 (원작 0x1DB788 의 숨김 — 검 GO 꺼짐 · 혼돈의 블레이드 보임): 줄 · 사다리 · 턱 · 물 · 물체 붙잡기 · 좁은 바닥 ·
+	 * SCR_HideBerserkBlade 기술 동안. 상태가 끝나면 저절로 다시 보인다 ({@link BerserkBladeRule}).
+	 */
+	private boolean artemisHidden;
 	private final Path rom;
 	/** BERSERKENTER 0.22 의 SCRIPT 이벤트 (SCR_EnableBerserkBlade) / BERSERKEXIT 의 SCR_DisableBerserkBlade 해시 (Hash127Upper). */
 	private static final int SCR_ENABLE_BERSERK = 0xe9283e7e, SCR_DISABLE_BERSERK = 0x33681849;
@@ -319,6 +324,7 @@ public final class HeroRig implements AutoCloseable {
 	public boolean autoAim;
 
 	public void update(Input in, float camYaw, float dt, Vector3f aimTarget) {
+		ctl.berserkBank = player.artemisEquipped; // 내비 애니 뱅크 (+0x328 +0xA8): 장착 0x19C240 이 1, 해제가 0 — 숨김은 그대로
 		boolean navActive = nav != null && nav.active();
 		// 수평 줄 손 이동 중에는 전투도 돈다 (분기 마스크 0x80, {@link CombatOwner#stateMask}) — 원작 수평 줄 싸움 (영상 4865–4940, 43 §34)
 		boolean ropeCombat = navActive && nav.state() == devple.gow.engine.nav.NavState.ROPE_TRAVERSE;
@@ -379,6 +385,7 @@ public final class HeroRig implements AutoCloseable {
 		} else if (combat.activeScript(SCR_DISABLE_BERSERK) != null && player.artemisEquipped) {
 			player.artemisEquipped = false;
 		}
+		berserkBladeUpdate();
 		magic.select(in, ctl.position); // 방향키 마법 선택 (원작 sub_001D7E10)
 		if (player.hp > 0) {
 			player.regenMagic(dt); // 스크립트 Internal 0x12 마법 재생 (0x1D6F20, ATHN02D 미노타우로스 방 10/초)
@@ -387,6 +394,42 @@ public final class HeroRig implements AutoCloseable {
 		// 포세이돈 연타 회전 (SCR_Lightning 0x195160: 영웅 행렬에 Y 회전 Mash Max Spin · 연타율)
 		ctl.yaw += magic.lightningSpin() * dt;
 		updateTint();
+	}
+
+	/**
+	 * 아르테미스의 검 숨김 · 해제 (원작 0x1DB788, 매 프레임 — {@link BerserkBladeRule}): 수평 줄 · 오르는 벽이면 해제 (장착 비트를 지우고 다시 들려면
+	 * L1+R1), 줄 · 사다리 · 좁은 턱 · 턱 · 물 · 물체 붙잡기 · 좁은 바닥 · SCR_HideBerserkBlade 기술이면 숨김 (혼돈의 블레이드가 보이고 끝나면 검이
+	 * 저절로 돌아옴), 아니면 보임. +0x2D8 0x800000 (올라서기 · 사다리 내려서기 애니) 은 엔진이 그 애니를 지상 상태에서 곧바로 섞어 끝내므로 보지
+	 * 않는다 [근사].
+	 */
+	private void berserkBladeUpdate() {
+		int bits = heroStateBits();
+		BerserkBladeRule.Action a = BerserkBladeRule.decide(player.artemisEquipped, bits,
+				combat.activeScript(BerserkBladeRule.SCR_HIDE_BERSERK_BLADE) != null, false);
+		if (a == BerserkBladeRule.Action.UNEQUIP) {
+			player.artemisEquipped = false; // 0x19C240(0): +0xC &= ~0x20, 검 GO 지움, 애니 뱅크 0, 블레이드 보임
+		}
+		artemisHidden = a == BerserkBladeRule.Action.HIDE;
+		if (a != lastBerserkAction && ARTEMIS_LOG) {
+			var m = combat.move();
+			System.out.printf("[아르테미스의 검] %s (+0x174 0x%X%s)%n", a, bits, m != null ? ", 기술 " + m.id() : "");
+		}
+		lastBerserkAction = a;
+	}
+
+	private BerserkBladeRule.Action lastBerserkAction = BerserkBladeRule.Action.NONE;
+	private static final boolean ARTEMIS_LOG = System.getProperty("gow.debug.combat") != null;
+
+	/** 아르테미스의 검이 손에 보이는가 (장착이고 숨김이 아님). 아니면 혼돈의 블레이드 GO 가 보인다 (원작 0x201908 / 0x201930). */
+	public boolean artemisVisible() {
+		return player.artemisEquipped && !artemisHidden;
+	}
+
+	/** 영웅 +0x174 (원작 이동 상태 비트, {@link BerserkBladeRule#stateBits} 가 보는 것). */
+	public int heroStateBits() {
+		var n = nav;
+		return BerserkBladeRule.stateBits(n != null ? n.state() : null, ctl.grounded, ctl.jumped() || n != null && n.airJump(),
+				n != null && n.wallBack(), n != null && n.balancing());
 	}
 
 	private boolean tintGod, tintLightning;
@@ -433,7 +476,7 @@ public final class HeroRig implements AutoCloseable {
 	 */
 	public void tickBlades(float dt) {
 		var m = combat.move();
-		boolean blades = !player.artemisEquipped; // 0x1FAFC8: 블레이드 GO +0x4 & 4 (아르테미스의 검이면 블레이드 GO 없음)
+		boolean blades = !artemisVisible(); // 0x1FAFC8: 블레이드 GO +0x4 & 4 (검이 보이면 블레이드 꺼짐 0x201930, 숨기면 다시 켬 0x201908)
 		chain.update(this::jointWorld, combat.active(), m != null && (m.flags() & 0x80) != 0, dt, blades ? ctl.position : null, bladeWalls);
 		for (BladeChain.Side s : chain.sides) {
 			if (blades && !s.sweepTo.isEmpty()) {
@@ -525,7 +568,7 @@ public final class HeroRig implements AutoCloseable {
 				continue;
 			}
 			BladeChain.Side s = chain.sides[side];
-			boolean on = s.valid() && !player.artemisEquipped && trail(side);
+			boolean on = s.valid() && !artemisVisible() && trail(side);
 			if (s.lightValid) {
 				l.setPosition(s.lightPoint);
 				if ((l.def.type() & devple.gow.engine.light.LightDef.DIRECTIONAL) != 0 && s.lightDir.lengthSquared() > 1e-8f) {
@@ -565,12 +608,12 @@ public final class HeroRig implements AutoCloseable {
 	}
 
 	/**
-	 * 사슬 고리·사슬 빛·궤적 (45 문서 §3). 반투명이라 불투명 패스 뒤에 부른다. 아르테미스의 검이면 없음.
+	 * 사슬 고리·사슬 빛·궤적 (45 문서 §3). 반투명이라 불투명 패스 뒤에 부른다. 아르테미스의 검이 보이면 없음 (숨김이면 블레이드처럼 있음).
 	 *
 	 * @param god 신들의 분노 god 판 머티리얼·Trail Tint
 	 */
 	public void drawChains(Camera cam, float aspect, float alpha, boolean god) {
-		if (blades == null || player.artemisEquipped || System.getProperty("gow.nochain") != null) {
+		if (blades == null || artemisVisible() || System.getProperty("gow.nochain") != null) {
 			return;
 		}
 		if (chainRenderer == null) {
@@ -588,7 +631,7 @@ public final class HeroRig implements AutoCloseable {
 	 * 보이는 사슬마다 베지어를 마디 수로 나눈 점 (월드, 47 문서 §7.5).
 	 */
 	public void submitChainShadows(devple.gow.engine.light.ShadowCasters sc, float alpha) {
-		if (sc == null || blades == null || player.artemisEquipped || System.getProperty("gow.nochain") != null) {
+		if (sc == null || blades == null || artemisVisible() || System.getProperty("gow.nochain") != null) {
 			return;
 		}
 		Matrix4f fix = renderFix(alpha);
@@ -626,7 +669,7 @@ public final class HeroRig implements AutoCloseable {
 		var pose = ctl.animator().pose();
 		model.draw(cam, aspect, w, pose, white);
 		var sk = ctl.animator().skeleton();
-		if (player.artemisEquipped) {
+		if (artemisVisible()) { // 숨김 (0x1DB788) 이면 검 GO 꺼짐 → 혼돈의 블레이드
 			int stage = Math.min(2, player.level.get(Weapon.ARTEMIS));
 			if (stage != artemisStageLoaded) {
 				if (artemis != null) {

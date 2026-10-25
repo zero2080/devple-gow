@@ -317,9 +317,10 @@ public final class GameScene implements Scene {
 	/** 블레이드 god 판 (0x1FA9A0, 45 문서 §2): 영웅 코스튬·블레이드 레벨의 R_WPN 이펙트 GO. */
 	private void setGodBlades(devple.gow.engine.fx.MagicFx fx, HeroRig h) {
 		fx.setGodBlades(Content.file(session.rom, "R_WPN" + h.player.costume + "_" + Math.max(0, Math.min(5, h.bladeLevel())) + ".WAD"),
-				() -> !h.player.artemisEquipped);
-		// 아르테미스의 검 GO goBerserkBlade (0x19C240, 표면 이미터 보라 빛 — 43 §33): 단계 = HeroRig 의 R_BRSRK 단계와 같은 식
-		fx.setArtemisBlade(() -> h.player.artemisEquipped ? Math.min(2, h.player.level.getOrDefault(Weapon.ARTEMIS, 0)) : -1);
+				() -> !h.artemisVisible());
+		// 아르테미스의 검 GO goBerserkBlade (0x19C240, 표면 이미터 보라 빛 — 43 §33): 단계 = HeroRig 의 R_BRSRK 단계와 같은 식.
+		// 숨김 (0x1DB788: 줄 · 사다리 · 물체 붙잡기 · 잡기 기술 …) 동안은 GO 를 끈다 (vt+0x44) — 엔진은 이펙트를 멈췄다 보일 때 다시 낸다 [근사]
+		fx.setArtemisBlade(() -> h.artemisVisible() ? Math.min(2, h.player.level.getOrDefault(Weapon.ARTEMIS, 0)) : -1);
 	}
 
 	/** 페이드 동안 미리 만든 것 (48 문서 §9, null = enter 에서). */
@@ -4774,7 +4775,7 @@ public final class GameScene implements Scene {
 		}
 		var cur = c.animator().current();
 		String n = cur != null ? cur.name : "";
-		boolean run = n.equals("walkBlend2"), walk = n.equals("walkBlend1");
+		boolean run = n.equals("walkBlend2") || n.equals("berWalkBlend2"), walk = n.equals("walkBlend1") || n.equals("berWalkBlend1"); // 뱅크 1 = 아르테미스의 검
 		if (hero.combat.active() || !(run || walk)) {
 			stepTimer = 0;
 			return;

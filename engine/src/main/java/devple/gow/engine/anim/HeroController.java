@@ -58,6 +58,13 @@ public final class HeroController implements NavBody {
 	/** 지상 이동 모양 (균형 걷기 등, null = 기본) / 속도 배율. */
 	private String walkOverride, idleOverride;
 	private float speedScale = 1f;
+	/**
+	 * 이동 애니 뱅크 1 (원작 내비 애니 표 +0x328 의 +0xA8 — 아르테미스의 검 장착 0x19C240 이 1, 해제가 0, 0x1F7408 이 표 +0xA4 의 [+0xA8] 번째
+	 * 뱅크에서 고른다) [확실: 디스어셈블]. TWK goHero Navigation "Bank 1": ANIStand berserkIdle, ANIWalk berwalk (berWalkBlend0..2),
+	 * ANIJump · ANIVJump berJumpAir, ANIDblJump berJumpDoubleAir, ANIFall berFallN, ANILand berLand — 칼을 오른 어깨에 걸치고 서고 뛴다
+	 * (영상 5104 ↔ 블레이드일 때 4128 은 두 팔을 흔듦). 숨김 (0x1DB788) 은 뱅크를 바꾸지 않는다. HeroRig 가 장착 비트로 둔다.
+	 */
+	public boolean berserkBank;
 	/** 마지막 지상 이동 속도 / 공중 정면 수평 속도 (원작 +0x260 z, 0x1EB650). */
 	private float groundSpeed, airSpeed;
 
@@ -181,13 +188,13 @@ public final class HeroController implements NavBody {
 	public boolean jump(boolean moving) {
 		if (grounded) {
 			jumps = 1;
-			anim.play(moving ? "jumpAir" : "jumpUp", true);
+			anim.play(bank(moving ? "jumpAir" : "jumpUp"), true);
 			airSpeed = moving ? groundSpeed : 0;
 			vy = Math.max(vy, 0) + JUMP_SPEED; // 0x1E9E78: 현재 수직 속도에 더함
 		} else if (jumps < 2 && vy < HeroNavigator.DOUBLE_MAX_VY && vy > HeroNavigator.DOUBLE_MIN_VY) {
 			// 0x1EA130: 수직 속도가 (Sold+0xD0, +0xCC) 안일 때만, 수직 속도 = +0xC8
 			jumps = 2;
-			anim.play("jumpdoubleair", true);
+			anim.play(bank("jumpdoubleair"), true);
 			vy = HeroNavigator.DOUBLE_JUMP;
 		} else {
 			return false;
@@ -212,9 +219,9 @@ public final class HeroController implements NavBody {
 			jumps = 0;
 			launch.zero();
 			airSpeed = 0;
-			anim.play("land", true); // ANILand
+			anim.play(bank("land"), true); // ANILand
 		}
-		if (anim.current() != null && anim.current().name.equals("land") && !anim.finished()
+		if (anim.current() != null && anim.current().name.equalsIgnoreCase(bank("land")) && !anim.finished()
 				&& Math.hypot(in.leftX(), in.leftY()) < 0.15f) {
 			anim.update(dt);
 			return;
@@ -222,14 +229,17 @@ public final class HeroController implements NavBody {
 		float sx = in.leftX(), sy = in.leftY();
 		float mag = Math.min(1f, (float) Math.hypot(sx, sy));
 		if (mag < 0.15f) {
-			anim.play(idleOverride != null ? idleOverride : "standIdle", false);
+			anim.play(idleOverride != null ? idleOverride : bank("standIdle"), false);
 		} else {
 			// 스틱 → 월드 방향 (카메라 정면 = 스틱 위)
 			float dirYaw = camYaw + (float) Math.atan2(-sx, sy);
 			float d = wrap(dirYaw - yaw);
 			yaw += d * Math.min(1f, TURN_RATE * dt);
-			anim.play(walkOverride != null ? walkOverride : mag > RUN_THRESHOLD ? "walkBlend2" : "walkBlend1", false);
-			float speed = walkOverride != null ? clipSpeed(anim.find("walkBlend1")) * speedScale : clipSpeed(anim.current());
+			String walk = mag > RUN_THRESHOLD ? "walkBlend2" : "walkBlend1";
+			anim.play(walkOverride != null ? walkOverride : bank(walk), false);
+			// 속도는 뱅크 0 클립으로: 원작 지상 이동 0x1EAEC8 은 Sold +0x178 × 스틱 (애니 뱅크와 무관, 32 문서) — 뱅크 1 berWalkBlend2 의
+			// zeroJoint 는 걷기와 같은 −3.2 라 그대로 쓰면 검을 든 달리기가 걷기 속도 (48) 가 된다
+			float speed = walkOverride != null ? clipSpeed(anim.find("walkBlend1")) * speedScale : clipSpeed(anim.find(walk));
 			groundSpeed = speed;
 			// 정면 -Z 를 yaw 만큼 회전
 			position.add((float) -Math.sin(yaw) * speed * dt, 0, (float) -Math.cos(yaw) * speed * dt);
@@ -258,9 +268,29 @@ public final class HeroController implements NavBody {
 		}
 		position.fma(dt, launch);
 		if (vy < 0 && anim.finished()) {
-			anim.play("fallv", false);
+			anim.play(bank("fallv"), false);
 		}
 		anim.update(dt);
+	}
+
+	/**
+	 * 뱅크 0 이동 클립 → {@link #berserkBank} 면 뱅크 1 클립 (TWK Navigation "Bank 1"). 세트에 없으면 (다른 코스튬 등) 뱅크 0 그대로.
+	 */
+	public String bank(String clip) {
+		if (!berserkBank) {
+			return clip;
+		}
+		String b = switch (clip) {
+			case "standIdle" -> "berserkIdle";
+			case "walkBlend1" -> "berWalkBlend1";
+			case "walkBlend2" -> "berWalkBlend2";
+			case "jumpAir", "jumpUp" -> "berJumpAir";
+			case "jumpdoubleair" -> "berJumpDoubleAir";
+			case "fallv" -> "berFallN";
+			case "land" -> "berLand";
+			default -> clip;
+		};
+		return b.equals(clip) || anim.find(b) != null ? b : clip;
 	}
 
 	/** 루프 이동 클립의 초당 이동량. */

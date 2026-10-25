@@ -941,3 +941,15 @@ ATHN01B 에도 선체 천장 (−44 ~ −64, 법선 −0.94 ~ −1) 과 빗면 �
   교차점 북쪽 면 (−1432) + 9.6, 발 956.8 에 한 손 매달림 / 0.6 초 = 윗면 986 → 들보가 막아 붙잡지 않고 들보 위로),
   `NavDataTest.arenaFenceKeepsTheHeroOnTheNarrowDisc` (ARENA06 원본: 틈 (r 279.5) 에서 울타리를 따라 걸으면 몸 질의 없이는 다섯 선분이 비고, 있으면 원판 안으로 밀려 섬;
   바깥으로 곧장 · 45° 로 1.5 초 걸어도 최대 반지름 &lt; 271 에서 늘 바닥).
+
+## 25. 이동 상태와 아르테미스의 검 (BerserkBlade_Update 0x1DB788, 43 §37) [확실: 디스어셈블]
+- 플레이어 갱신 0x1D6CF0 이 매 프레임 영웅 +0x174 로 검을 고른다: **수평 줄 (0x400 · 0x20000) · 오르는 벽 (0x20, 사다리 0x400000 · 좁은 턱 0x300000 아님) = 해제**
+  (장착 비트를 지움 — 줄 · 벽에서 내려와도 혼돈의 블레이드, L1+R1 로 다시 듦), **매단 줄 · 짚라인 (0x400) · 사다리 · 좁은 턱 (0x20) · 턱 · 평균대 매달림 (0x10) · 물 (0x380) ·
+  밀기 상자 · 크랭크 · 레버 · CSM 상자 · 문 (물체 붙잡기 0x4000) · Narrow 좁은 바닥 (0x80000) · 애니 구동 전환 (+0x2D8 0x800000) = 숨김** (검 GO 끔, 블레이드 보임 —
+  상태가 끝나면 검이 저절로 돌아옴). 나머지 (지상 · 공중) = 보임.
+- 장착 0x19C240 은 내비 애니 표 (+0x328) +0xA8 = 1 로 **이동 애니 뱅크 1** 을 고른다 (0x1F7408: 표 +0xA4 의 [+0xA8] 번째 뱅크, TWK goHero Navigation "Bank 1" —
+  berserkIdle · berWalkBlend0..2 · berJumpAir · berJumpDoubleAir · berFallN · berLand · CrankPushR/PullR, ladderidle · ropeswing* · slide 는 ANM 에 없음). 해제는 0.
+- 엔진: `BerserkBladeRule.stateBits` (내비 상태 → +0x174: GROUND 0x1 (balancing |0x80000), AIR 0x4/0x8, LEDGE_HANG 0x10, WALL_CLIMB 0x20, WALL_WALK
+  0x20|0x100000 (wallBack 0x200000), LADDER 0x20|0x400000, ROPE 0x400, ROPE_TRAVERSE 0x400|0x20000, ZIPLINE 0x400|0x40000, SWIM 0x80, PUSH · INTERACT 0x4000),
+  `HeroRig.heroStateBits`, `HeroController.berserkBank` (지상 이동 클립만 — 내비게이터가 고르는 ANIJump · ANIFall · ANILand · 크랭크의 뱅크 1 은 [미구현]).
+  +0x2D8 0x800000 은 엔진 `land()` 가 올라서기 애니를 지상 상태에서 바로 섞어 끝내므로 보지 않는다 [근사].

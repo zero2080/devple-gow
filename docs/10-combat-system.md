@@ -595,6 +595,20 @@ if (guard) {
 - **선택**: 방향키 → 3, ← 4, ↓ 5, ↑ 6 (sub_001D7E10).
   - 미보유면 SND_SELECT_NULL. HUD 아이콘 = `PS2_PickUp_Event` (0 / 2·id−1 / 2·id).
 
+### 10.2 아르테미스의 검 — 장착 · 숨김 · 해제 [확실: 디스어셈블, 43 §37]
+- **장착 비트** = 플레이어 (0x29DC1C) +0xC &amp; 0x20. 켜기는 L1+R1 → BERSERKENTER (555) 의 SCRIPT SCR_EnableBerserkBlade (0x19C578, 0.22) 뿐, 끄기는
+  BERSERKEXIT (556) 의 SCR_DisableBerserkBlade (0x19C5C0) · 아래 해제 · Progress_Reset 0x1D6818 (새 게임 · 체크포인트 재시작 · 불러오기 — 저장하지 않는다) ·
+  아테나의 검 0x1C2EB0. 이 비트를 보는 곳: 분기 플래그 0x2000 / 0x8000 (0x208578 → §2.4), 피해 배율 (0x1DBD18 → §5.3). HUD 에는 지금 무기 표시가 없다
+  (BerserkBlade_Status = 보유 아이템 비트 0x40).
+- **장착 0x19C240(1)**: 검 GO (/Player/BerserkBlade "Stage n GO Name" = goBerserkBlade) 를 영웅 RWEAPIH 에 붙이고 이미터 +0xB4 = 1, 내비 애니 표 (+0x328)
+  +0xA8 = 1 (이동 애니 뱅크 1: berserkIdle · berWalkBlend · berJumpAir · berFallN · berLand), 혼돈의 블레이드 숨김 (0x201930). 해제 0x19C240(0) 은 반대
+  (GO 지움, 뱅크 0, 블레이드 보임 0x201908).
+- **매 프레임 0x1DB788** (장착일 때): 영웅 +0x174 가 수평 줄 (0x400 &amp; 0x20000) 이거나 오르는 벽 (0x20, 사다리 0x400000 · 좁은 턱 0x300000 아님) 이면
+  **해제** — 다시 들려면 L1+R1. 그 밖에 SCR_HideBerserkBlade (0x8CACF07D: 잡기 GRAB · 처치 MAI* · 마법 · 메두사 머리 · 석화 등 영웅 기술 87 개의 [0, 1] 창) 이거나
+  +0x174 &amp; (0x4000 물체 붙잡기 | 0x400 줄 | 0x10 턱 | 0x380 물 | 0x80000 좁은 바닥 | 0x20 벽) 이거나 +0x2D8 &amp; 0x800000 이면 **숨김** (검 GO 끔 · 블레이드 보임,
+  비트 · 뱅크 · 피해 배율 그대로) — 상태가 끝나면 저절로 다시 보인다.
+- 엔진: `BerserkBladeRule`, `HeroRig.berserkBladeUpdate` / `artemisVisible`, `HeroController.berserkBank`.
+
 ---
 
 ## 11. 오브 · 히트 카운터 · 보너스
@@ -708,6 +722,9 @@ AI1 키: `HitPoints`, `MaxHitPoints`(0x5938A592), `Damage Multiplier`, `Block`(�
 | 0x1DB5B8 | Player_HitCounterInc | | 확실 |
 | 0x1D93C0 / 0x1DCB20 / 0x1DCA58 | Magic_CanCast / Magic_Has / Magic_Use | | 확실 |
 | 0x1D9348 | Player_ItemStage | 마법/검 단계 0x3044B8+(id-3) | 확실 |
+| 0x19C240 / 0x1DB788 | Berserk_Equip(on) / BerserkBlade_Update | 아르테미스의 검 장착 · 해제 / 매 프레임 숨김 · 해제 (§10.2) | 확실 |
+| 0x19C578 / 0x19C5C0 / 0x19C6C0 · 0x19C608 | SCR_Enable / Disable / HideBerserkBlade (+ 끝 콜백) | 0x29D818 검 GO, 0x29D814 숨김, 0x29D810 업그레이드 적재 중 | 확실 |
+| 0x201908 / 0x201930 | Blades_Show / Blades_Hide (슬롯) | 블레이드 GO 부품 · 사슬 켜기 / 끄기 | 확실 |
 | 0x304060 | g_playerTweaks | +0 MaxHP[5], +0x14 MaxMagic[6], +0x60 WeaponLevel[6]×0x50, +0x240 Costume[6]×0x20, +0x300 GodMode On/Off(0x304360/64) | 확실 |
 | 0x30449C / 0x3044A0 | g_magic / g_godMeter | | 확실 |
 | 0x3044B6/B7 | HP 레벨 / MP 레벨 | | 추정(B7 확실) |
