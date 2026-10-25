@@ -2175,6 +2175,111 @@ DEST00@2400,507,1282,0 --skip-movies`, 쉬움): 협곡 → 첫 세이렌 옆 순
 `04b_door_star_socket_zoom_before_after`, `04c_three_stars_v2454_vs_engine`, `05_soul_door_cam_v1490` (영상 1490 · 1491 · 1495 · 1497 | 엔진 kill 뒤),
 `06_door_open_to_save_v2453_2520` (영상 2453 · 2456 · 2510.5 · 2512 · 2512.5 · 2514 · 2520 | 엔진 r16).
 
+## 32. QA vs PS2 영상 2화 — 뿔피리와 크로노스: DEST02 돌 상자 · 부조 → DEST03 뿔피리 · 모래 벽 · 세이렌 → 둘째 뿔피리 · 크로노스 → PAND00A 세이브 · 다리 → PAND00B/00E 모래 길 · 죽어 가는 병사 · 키클롭스 · 크랭크 (영상 2520–3520 초, 2026-10-25)
+
+영상 = hoXYXNef60U (2화, 전사 (보통) = `-Dgow.difficulty=1`, 길 찾기만 쉬움), 프레임 728×409 (`work/verify/horn_cronos/video/v<초>.jpg` 183 장, 커밋 안 함).
+엔진 = origin/main 위 (첫 커밋 9f8f70d 때 4fe5fa2+, 마지막 대조 7521ac5 + aced5e0 · cc7e2fa), 1280×720 lockstep, 스크래치 홈.
+레벨 연결 [확실: 스크립트]: DEST02 (SaveGameZone 세이브 14 (2433, 512, 6739) → 아래 홀 (바닥 274, 해골 함정 SkellyTrap1–4 리스폰) · 문장 문 PushBlockLiftDoor
+(TAndF 208 "DestLiftDoor", id 1020) 뒤 벽감의 돌 상자 PushBlock-BlockOnFloor (Creator, 그룹 103) · 초록 상자 RespawnChest1 (CSM 008 순환) · 동쪽 턱 (390 → 위층 384) ·
+ExitLiftDoor (TAndF 208, id 1021) · 북동 복도 부조 ReliefMsgLeft/ReliefCU (ReliefCamL/R, 메시지 170 / 169)) → DEST03 (HornCSM1 CSM 021 "DesertHorn" id 1030 → BlowCam ·
+3 초 뒤 sandWedge-Animator1 · EndCutscene 13 초 → 열린 모래 복도 (FirstMpeg LoadEntry 에서 먼 타이탄 aoTITAI1 스폰, 템플릿 321, Patrol1030) → 원형 단:
+PlayFirstMpeg 동영상 d01Mp01 · StormCmbtCam 세이렌 싸움 → SecondMpeg d01Mp03 → SecondMpgDone: LevelData3 · Goto CentrePlatform · HornCSM2 VisOn · 체크포인트 →
+HornCSM2 (id 1031) → Horn2Cam · ThirdMpeg-fadeDown 11.4 초 · d01Mp02 12 초 · LoadForWarp/Warp "Pand00A" 12.2 초) → PAND00A (fromDest03 체크포인트 · SaveGameZone 세이브 15 ·
+구역 제목 9 "판도라의 사원" (GlobalData0 ≠ 9 일 때) · 줄다리) → PAND00B (LoadSwitch2 LoadWad 로 PAND00E 를 다른 슬롯에 · 장작더미 Mpeg-TriggerVol → p00MP02 →
+Gate1 · 병사 MimeGuy-aoXUSAI1 (템플릿 300) 대화 211 / 212 · CycCam 키클롭스 (R_CY3 템플릿 42 둘) · 둥근 단 문 크랭크 godoorcrank (Push "Core Ext Crank", Type 1, 12 초)
+→ DemoDoors 열림 → 사원 홀 (§33)).
+
+### 32.1 장면 대응
+| 영상 | 원작 (스크립트·데이터) | 엔진 |
+|---|---|---|
+| 2520–2545 | DEST02 세이브 뒤 서쪽 위층 (512) → 아래 홀 (274) | 같은 길 (경로는 (2758, 300, 6700) 순간이동) |
+| 2558–2566 | 문장 문: R2 (2562) · 연타로 들어 올림 → 문 뒤 벽감에 돌 상자 | b4 4.6 초 R2 → INTERACT · 연타 6 초 → "상황 동작 완료: LIFT gopushblockliftdoor" (같음) |
+| 2566–2615 | 상자를 벽감에서 끌어냄 (2566 · 2570) → 홀에서 옆으로 밂 (2600–2615), 그 사이 해골 군단병 싸움 (2575–2585), 문 너머 초록 상자 | 고치기 전: 상자를 잡을 수도 막히지도 않음 · 부서지는 act 로 파편이 둘레에 흩어짐 (§32.2-6) → 고친 뒤 b4 11.9 초 잡음 (2768, 6800 면) → 17.9 초 z 6816 → 6684 끌어냄, 해골 리스폰 · 초록/파랑/빨강 순환 상자 (`09`) |
+| 2620–2665 | 싸움 · 상자 동쪽으로 (반쯤 묻힌 톱니바퀴 2650) | 19.8–37.7 초 x 2768 → 3136 (턱 벽에서 멈춤). 톱니바퀴 V2-32 UV (cc7e2fa) 뒤 같은 어두운 금속 (`16`) |
+| 2670 | 상자 위에서 카리아티드 벽의 위층 턱으로 점프 | b3 (쉬움) 39.7 초 상자 윗면 307 · 41 초 LEDGE_HANG · 42.3 초 위층 384 — 같은 높은 카메라 (`10`). 보통 (b4) 은 봇이 맞아 점프가 빗나감 |
+| 2676 | ExitLiftDoor 앞 싸움 | 같은 TAndF 문 (연타) |
+| 2702–2716 | 부조 복도: ReliefCamL/R · 양피지 메시지 170 / 169 ("…거인 크로노스의 등에", "사슬로 연결되어 있습니다.") | 같은 카메라 · 메시지 (r1) |
+| 2716–2732 | DEST03 원형 단 뿔피리 R2 (2718) → BlowCam 옆 → 뒤로 물러남 · 모래 구름 (2719–2723) → 두 기둥 사이 정면, 모래 벽이 솟음 (2725–2726) → 복도가 열림 (2732) | 고치기 전 모래 벽이 처음부터 갈라져 있음 (`01`, §32.2-1) → 고친 뒤 닫힌 채 (`02`) · R2 4.32 초 100 % · BlowCam (`03`) · 7.32 초 sandWedge · 17.33 초 EndCutscene (`04`) |
+| 2740–2762 | 열린 모래 복도 → 계단 · 기둥 옆 상자 → 원형 단의 둘째 뿔피리 (맑은 하늘) | tit3: 같은 길 · 같은 맑은 하늘 (StrmCam1 → 3 → 6) |
+| 2770–2788 | PlayFirstMpeg: FadeOut 2 초 · Idle → d01Mp01 (모래 폭풍 · 크라토스 · 세이렌 둘) | `--skip-movies` 로 건너뜀 |
+| 2792–2930 | MpegDone: CMV 질의 끔 + StormCmbtCam → 원형 단 세이렌 싸움 | 같은 카메라 · 싸움 중 R2 가 계속 떠 있었음 (`06`, §32.2-3) → 고친 뒤 없음 (`07`). 봇은 세이렌을 못 이겨 경로는 `post:501:d01Mp03` |
+| 2930–2950 | 세이렌을 다 잡음 → SecondMpeg d01Mp03 → SecondMpgDone: LevelData3 · Goto CentrePlatform · HornCSM2 VisOn · 체크포인트 → 보통 카메라로 뿔피리 (2944) | 고치기 전 싸움 카메라 StormCmbtCam 이 남음 → 고친 뒤 StrmCam6 (`08`, §32.2-2) |
+| 2970–2981 | 둘째 뿔피리 Horn2Cam: 높은 원경 (타이탄이 오른쪽 위 모래 언덕에) → 가까운 높은 컷 → 낮은 옆 → 어깨 뒤 → 반대쪽 → 다시 높은 원경 | h3 2.6 초 R2 → Horn2Cam (3.3 초 전환) → 같은 컷 순서 · 같은 빠르기 (`11a` · `11b`). 뿔피리 재질은 aced5e0 전후 같음. 원경의 타이탄 없음 (경로가 LoadEntry 를 건너뜀) |
+| 2983–2998 | d01Mp02 (종 클로즈업 · 크라토스 뒤 · 일어서는 크로노스 "최후의 거인 크로노스…") | ThirdMpeg-fadeDown 11.4 초 → 동영상 12 초 (건너뜀) → Warp 12.2 초 |
+| 3076–3094 | PAND00A 도착 · 세이브 제단 R2 | 같음 (빛기둥 · R2) |
+| 3098–3104 | 저장 파일 선택: 슬롯 1 = 그림 · "길 잃은 영혼들의 사막" · "2023/1/ 9  6:17:26 am" · "전사(보통)  2:50:17" → 덮어쓰기 | s1 (DEST02 저장 14) → s2 PAND00A: 같은 그림 · "길 잃은 영혼들의 사막" · "2026/10/25 11:13:23 am" · "전사(보통)  0:00:02" → 덮어쓸까? (`12`, cf7f631 확인) |
+| 3110 | 줄다리 · 구역 제목 9 "판도라의 사원" | 같음 |
+| 3118–3190 | PAND00B 모래 길 (짙은 모래 안개) · DragCutscene | 같음 — fbbc209 (안개 객체가 없는 프레임은 안개 없음) 뒤에도 모래 안개 유지 확인 |
+| 3194–3262 | 장작더미 → FadeOut 0.7 초 → p00MP02 (죽어 가는 병사) | 고치기 전 이웃 슬롯 PlayMovie 를 버려 동영상·501 없음 → 관문 닫힌 채, 병사 없음 (§32.2-4) → 고친 뒤 15.63 초 Gate1-EvtFromMpeg · 이웃 스폰 300 |
+| 3262–3270 | 병사 대화 211 / 212 (TalkCam) | 같은 메시지 (p4 22.6 초 211, 36.15 초 212), 구도는 조금 멂 (`13`) [근사] |
+| 3330–3460 | CycCam · 키클롭스 싸움 (3370 □ 붙잡기) | 같은 CycCam 구도 (`13` 아래) · R_CY3 템플릿 42 둘 |
+| 3466–3510 | 둥근 단 크랭크: 크라토스가 기둥 둘레를 돌며 밂 (3476–3482) → DemoDoors | 고치기 전 잡은 자리에 선 채 기둥만 돎 (§32.2-5) → 고친 뒤 둘레를 돎 (`14`) → 문 열림 (`15`) |
+
+### 32.2 엔진 결함과 수정
+1. **DEST03 모래 벽이 처음부터 갈라져 있었다 (영상 2716–2732: 뿔피리 뒤 닫힌 장막 → 분 뒤 갈라짐).** GO 생성 0x1307C8 이 GO +0xF8 = 인스턴스 플래그
+   (메모리 기록 +0x26), 타입 5 Animator 등록 0x1AAFE8 (메시지 0, 모드 1) 이 소유 GO +0xF8 을 2 로 덮고, GO 컴포넌트 갱신 0x130F48 은 +0xF8 비트 0 이 없으면
+   애니 컴포넌트를 건너뛴다 (0x130F88–0x130F94) [확실]. 엔진은 반복 시작 act 를 모두 스스로 돌려 gosandwedge (sandWedge 12.33 초, sandWedge-Animator1 "!0" 모드 8,
+   뿔피리 100 % 3 초 뒤) 가 적재 때 이미 갈라졌고 충돌은 t = 0 이었다. `LevelData.animatorOwners` / `selfAnimates` — LevelScene ambient 와 Platforms 자동 반복이
+   이것을 요구. 전 레벨 모드 1 Animator 소유 반복 GO 40 개 (OLYMP01 입구 문 · PAND02I 포세이돈 문 · PAND03F/G 문 · PAND04G 미끄럼 · ATHN08B 벽 · DEST02 컨베이어 …)
+   와 플래그 0 인 2 개 (PAND00B goelevatorgrpa, PAND03A gocutcambgrp) 가 스크립트가 틀 때까지 시작 자세. (9f8f70d)
+2. **Goto 뒤 싸움 카메라가 남았다 (영상 2950).** Warp_Jump 0x1B2E08 → 0x1EFC98 (0x1B2FD0–0x1B2FDC) → 카메라 리셋 0x1EDF48 (이름 없음): 상태 링 비움, "default",
+   전환 0 볼륨 선택, CMV 질의 0x29F138 = 1 (0x1EE20C) [확실]. 엔진은 영웅만 옮겨 d01Mp03 의 Goto CentrePlatform 뒤에도 StormCmbtCam (질의 끔) 이 남았다.
+   `CameraRig.reset` 을 두 Goto 경로에 — 데이터의 모든 Goto 는 뒤에 카메라 요청을 부르므로 그대로 적용된다. (9f8f70d)
+3. **세이렌 싸움 내내 "R2" 가 떠 있었다.** 0x1DC3F8 은 영웅이 자유 상태가 아니면 사용 질의를 건너뛰고 (0x1DC42C–0x1DC44C) 끝에서 슬롯 0 을 지운다 (0x1DC648)
+   [확실]. 엔진은 기술 중에 마지막 질의를 남겨 뿔피리의 R2 가 싸움 내내 보였다. `HeroNavigator.clearPrompt` (HeroRig), 세이브 포인트 안내도 같은 조건. (9f8f70d)
+4. **죽어 가는 병사 동영상 · 관문 · 병사가 없었다 (영상 3194–3262).** PAND00E 는 PAND00B 의 LoadSwitch2 LoadWad 로만 올라오는 이웃이라 (LoadCheck 없음) 장작더미
+   Mpeg-TriggerVol → FadeOut 0.7 초 → Mpeg-p00MP02play 는 늘 이웃 슬롯 스크립트에서 불린다. 원작 동영상 재생기와 끝 이벤트 501 은 슬롯 구분이 없다 (PostEvent 큐
+   0x303DB8 하나) [확실]. 엔진 이웃 리스너가 PlayMovie 를 버려 Mpeg-EvtMpegDone 체크포인트 · 이벤트 200 (PAND00B Gate1-EvtFromMpeg → 관문 → LevelData11 → 키클롭스
+   스폰 조건) · 병사 (템플릿 300) 가 모두 빠졌다. `SceneNav.Host.neighbourMovie` → 지금 레벨과 같은 재생기 (501 은 공유 큐로 이웃 센서에). (ad5895a)
+5. **크랭크를 돌려도 크라토스가 잡은 자리에 서 있었다 (영상 3476–3482: 기둥 둘레를 돌며 민다).** 붙은 영웅은 매 프레임 잡은 손잡이 관절을 다시 읽는다 (0x1C4258)
+   [확실]. godoorcrank 의 handle1/2 는 도는 "Anim" 관절 아래다. `SceneNav.poseItems` 가 자세 뒤 크랭크류 (Push Type 1–4) 손잡이를 다시 읽고, `Interactables.refreshHandles`
+   는 같은 배열을 고쳐 써 HeroNavigator 가 잡은 손잡이를 따라간다 [근사: 레버·CSM·TAndF 는 영상 대조가 없어 그대로]. (2436838)
+6. **DEST02 돌 상자를 잡을 수도, 밀 수도, 올라설 수도 없었다 — 퍼즐을 풀 수 없음 (영상 2558–2670).** 상자는 Creator PushBlock-BlockOnFloor (Name0 "PushPullBlock",
+   슬롯 3 = 211, 4 = 950, 6 = 0, CreateAtStart) 가 만든다. 원작 Creator 0x1ACCA8 → 0x1A5130 이 슬롯 3·4·5·6 을 생성 기록 +0x34/+0x36/+0x38/+0x3A 에 두고, 0x1A5298
+   이 새 GO 의 비헤이비어 목록을 만든다 [확실: 디스어셈블]: 슬롯 3 ≥ 0 → **PushPull** (클래스 이름 포인터 0x29D8EC, 템플릿 = 슬롯 3, id = 슬롯 6), 슬롯 4 ≥ 0 →
+   **Breakable** (0x29D8F0, 템플릿 = 슬롯 4), 슬롯 5 ≥ 0 → **IO_CSM** (0x29D8F4, 템플릿 = 슬롯 5, 과제 id = 슬롯 6 — 상자), 이름 "goSavePoint" (0x28DF50 비교) →
+   **SavePoint** (0x29D8F8, 슬롯 6) → 0x1AD978 이 GO 생성. 원형 GO (레벨 원점 gopushpullblock, 관절 44 = 몸 · 받침 · 파편 30) 에는 BHV 가 없다. Name1 이 없으면 0x1AD110 이
+   −1 → 0x1A5298 은 +0x26 &lt; 0 이라 act 를 틀지 않는다 [확실]. 엔진은 Creator 오브젝트를 이펙트 GO 로만 만들어 (충돌·R2 없음) 유일한 act "PushPullBlock" (14.1 초 —
+   몸 숨김 2–121 프레임 · 파편 흩어짐 = 부서짐) 을 돌렸다 → 받침이 부서지고 파편이 둘레에 흩어진 채 (d4 녹화) 크라토스가 상자를 통과했다.
+   `Interactables.addPush` / `placeCreated` (Push 211 "DesertPush": 반 너비 Radius 1.0 × 16 = 16, 높이 #044ed4a7 2.0 × 16 = 32, 손잡이 관절 없음 → 옆면 잡기
+   0x1C3CD8), `SceneNav.createPush` (CDV_PushPullBlock 몸 — `Platforms.add` 가 바인드 관절을 남겨 shift 가 됨), `GameScene.spawnCreated` 가 act 0 초에 세우고
+   (`hold`, [근사: 쉬는 자세 = act 0 초 = 바인드]) `updateCreatedBoxes` 가 렌더 행렬 · 그룹 103 스크립트 액터를 밀린 몸에 맞춘다 (TrapDamage-BoxEntry 같은 그룹 판정).
+   이음 recreate 는 액터 (밀린) 자리에 다시 만든다 [근사]. 같은 경로로 ATHN01D Crate (PushPullBox, Push 030 "HydraPushBox" 반 너비 12 · Brkb 919) 와 PAND04C
+   BlockCreator (Push 098 · Brkb 951) 도 밀기 상자가 된다. (7521ac5)
+7. **놓은 상자가 바닥 아래로 17 가라앉았다.** 놓인 높이 (`HeroNavigator.restDy`) 를 관절 0 ±16 의 바닥으로 쟀는데 이 상자는 관절 0 = 몸 가운데 (GO 원점 위 15.9,
+   바닥 위 17.2) 라 바닥을 못 찾아 0 이 되었다. 거기 바닥이 없으면 GO 원점 (밑면) 아래로 다시 잰다 [근사: 원작 상자 물리 위치 = GO + 위·6.4, 0x2119A8].
+   → 상자 윗면 307 에 올라서 위층 턱 (390) 에 매달린다 (영상 2670). (7521ac5)
+8. 하네스 [엔진 전용]: 경로 단계 `pull:초:fx,fz` — (fx, fz) 쪽으로 돌아 R2 를 누른 채 스틱을 영웅 정면 반대로 (상자 끌어내기). 미는 쪽은 `crank:초:fx,fz` 로 같다.
+
+### 32.3 시험
+`StartPoseMirrorTest.scriptAnimatedAndFlagZeroGosHoldTheirStartPose` (gosandwedge 플래그 1 · Animator 소유 · 시작 자세, PAND00B goelevatorgrpa 플래그 0, DEST02 gogearanim
+반복 · goconveyer 정지, ATHN08A gofellergroup20), `CameraRigTest.gotoResetReenablesVolumeQuery` (DEST03 (3680, 550, 3296) StormCmbtCam 질의 끔 → reset → StrmCam*),
+`HeroNavigatorTest.usePromptIsClearedWhileTheNavigatorIsNotQueried`, `PandoraDyingSoldierTest` (PAND00B + PAND00E 연결 세계: 장작더미 → 이웃 PlayMovie p00MP02 →
+501 → 템플릿 300 스폰 · Gate1-AnimGate), `NavDataTest.doorCrankHandleFollowsTheTurningCrank` (3 초에 손잡이가 기둥 둘레로 20° 넘게, 같은 배열 · 반지름),
+`CreatorPushBlockTest` (DEST02 슬롯 3/4/5/6 = 211/950/−1/0 · 원형 BHV 없음 · DesertPush 16/32 · 관절 0 = GO + 15.9 · 남쪽 면 잡기 · 몸 윗면 = 밑면 + 32 · shift 로 벽감이 빔 ·
+턱 높이 계산, ATHN01D Crate HydraPushBox 12), `HeroNavigatorTest.boxWithACentredRootJointRestsOnTheFloorWhenReleased` (관절 0 바닥 위 17.2 → 끌고 놓아도 17.2).
+엔진 시험 711 개 통과 (d440b08 위).
+
+### 32.4 남은 것 · 미확인
+- 타이탄 (aoTITAI1, 템플릿 321 "AOTIT", Patrol1030 · Site1031) 이 멈춰 있다 [미확인]: 영상 2970 은 오른쪽 위 모래 언덕에 엎드려 기는 거인. 데이터 — TWK_goAOTIT
+  Navigation ANIStand = TIT1d01Mi03 (4 초 반복), ANIWalk = TIT1d01Mi02 (10 초, Cycle 13), AI1_321 "AI Mode" · DecisionTree 0 · Ignore Hits, WYP_Patrol1030 (2468 바이트).
+  엔진은 WYP 경로를 읽지 않고 (`AiBrain.setPatrol` 을 부르는 곳이 없다 — DEST01 세이렌 patrol2/3 도 같음) 이동 act 도 없어 (2452, 33, 1171) 에 "main" 으로 서 있다.
+  Horn2Cam 대조 (h3) 는 `--arrive` 로 LoadEntry 를 건너뛰어 타이탄이 아예 없다.
+- 뿔피리 클로즈업 (2974–2975) 의 옅은 흰 광택이 엔진에서는 더 짙은 금색 [미확인] — aced5e0 (무조명 추가 층 α) 전후 엔진 모습은 같다.
+- TalkCam 대화 구도가 영상보다 조금 멀고 병사가 왼쪽 [근사] — 병사 스폰 자리 (2640, −826, 645) · 크라토스 대화 자리 차이로 본다, 미조사.
+- 먼지 벽 (DEST03 모래 벽 파티클) 밝기 [미확인] — 데이터는 가산 0x48, 영상이 더 진하다 (`05`).
+- 상자 Breakable 950 (Hit Points 10000) · TrapDamage-BoxEntry → EvtArrow 1020 (10000) 으로 상자가 부서지고 BlockCreator 가 다시 만드는 경로는 엔진에 없다 [미확인: 영상에
+  부서지는 장면 없음]. 공격으로 부서지는 ATHN01D Crate (Brkb 919, 8) 도 아직 부서지지 않는다.
+- 보통 난이도에서 봇은 해골 군단병에 맞아 상자 위 점프가 빗나간다 (길 찾기 b3 는 쉬움) — 봇 한계, 고칠 대상 아님.
+- 2800–2930 세이렌 싸움 자체 (봇이 이기지 못함) 와 3330–3460 키클롭스 싸움의 세부 (□ 붙잡기 연출) 는 컷 단위로만 대조.
+
+### 32.5 증거 (`work/verify/horn_cronos/`, 커밋 안 함)
+`01_dest03_sandwall_open_before_fix_4s` · `02_…_closed_after_fix_2s` · `03_dest03_blowcam_6s` · `04_dest03_sand_parting_16s` · `05_dest03_dustwall_fx_off_vs_on` ·
+`06_siren_fight_stale_R2_before_fix` · `07_…_no_R2_after_fix` · `08_goto_centreplatform_strmcam6_12s` · `09_dest02_block_v2566-2615_vs_engine_pull_push` (영상 2566 · 2570 ·
+2600 · 2615 | 엔진 b4 13 · 15 · 17 · 20 초) · `10_dest02_block_climb_v2670_vs_engine_on_block_ledge` (영상 2670 | b3 상자 위 · 턱 매달림) ·
+`11a_dest03_horn2_video_v2970-2990` · `11b_dest03_horn2cam_engine_0.5s` · `12_pand00a_save_slot_v3098_vs_engine` · `13_pand00e_talk_cyclops_video_vs_engine` ·
+`14_pand00b_crank_orbit_engine` · `15_pand00b_demodoors_video_vs_engine` · `16_dest02_gear_v2650-2660_vs_engine_zoom`, `video/` (영상 프레임 183 장).
+
 ## 34. QA vs PS2 영상 2화 — 아틀라스의 시험: PAND01A 구멍 방 → 위층 · 방패 · 수레 → PAND01D 줄 싸움 · 하데스의 망령 → 세이브 (영상 4050–5189 초, 2026-10-25)
 
 영상 = hoXYXNef60U (2화, 전사 (보통) = `-Dgow.difficulty=1`). 레벨 연결 [확실: 스크립트]: PAND01A (구역 11 "아틀라스의 시험" — ZoneReportGroup (−240, −2, −36),

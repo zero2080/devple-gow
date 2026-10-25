@@ -743,6 +743,11 @@ PAND05B `pBoxPand05B-Marker511` → `semoMovieHaveBox-…-semo08marker511` (Filt
   → chestGrab 덜컹 → chestOpen 녹색 분출·뚜껑 열림, "상황 동작 완료: CHEST gochest2" + HealthChest 오브. ATHN01D 도 gochest2/3 (042, 종류 2)·gochest4 (041 HydraWeapon, 종류 4) 생성.
 - 시험 `game/ChestPropsTest`: 순환 2→3→4, ATHN01B HydraHealth 종류 2·오브 014 "HealthChest"·손잡이 1·길이 1.967·CDV 충돌·health/health2 만 보임·chestParts → chestOpen,
   chestGrab/chestOpen 이미터 곡선이 디스크립터 번호대로 (HSemit1 / HSemit2·3), ATHN01B 쓰러진 기둥이 부서지기 전엔 복도를 막고 뒤엔 통과 (41 §2.1).
+- **비헤이비어는 Creator 슬롯이 정한다** [확실: 0x1A5298]: 0x1A5130 이 슬롯 3·4·5·6 을 생성 기록 +0x34/+0x36/+0x38/+0x3A 에 두고 0x1A5298 이 슬롯 3 ≥ 0 → PushPull
+  (클래스 이름 0x29D8EC, 템플릿 = 슬롯 3, id = 슬롯 6), 4 ≥ 0 → Breakable (0x29D8F0), 5 ≥ 0 → IO_CSM (0x29D8F4, 과제 id = 슬롯 6 — 상자), "goSavePoint" → SavePoint (0x29D8F8,
+  슬롯 6) 를 붙여 0x1AD978 로 GO 를 만든다. 레벨 원형 GO (gopushpullblock 등) 에는 BHV 가 없다. Name1 act 가 없으면 act 를 틀지 않는다 (+0x26 &lt; 0). 엔진: 슬롯 3 = 상자 종류
+  Push 템플릿이면 `Interactables.addPush` · `SceneNav.createPush` (CDV 몸 `Platforms.add`) · `GameScene.spawnCreated` (act 0 초 고정 · `updateCreatedBoxes`) 로 밀기 상자 —
+  DEST02 돌 상자 퍼즐 (43 §32.2-6), ATHN01D Crate, PAND04C. Breakable (슬롯 4) 은 아직 없다.
 - 남은 것: 같은 Creator 경로의 다른 이름 — ATHN01B `hydraHL-aoBHB1a01Hl23/24`·`aoHAR1a01Hl26/27` (소유 gohydrahl, Name1 = 인스턴스 이름, Animator 10 이 재생) 같은 "ao*" 애니 오브젝트와
   ~~R_SAVEPT 세이브 포인트 모델은 아직 만들지 않는다~~ → 세이브 포인트 몸 = **R_PERMK 오브젝트 `savepoint`** (MDL_SavePoint 빛기둥 SFXlightBeam·starBurst +
   ANM "SavePoint" 4 초 반복 + SEM_SNDSavePoint, GO 템플릿 gosavepoint) 를 상자와 같은 Creator 경로로 소유 GO 행렬에 만든다 [확실: 0x1ACCA8 · 데이터] — R_SAVEPT.WAD 는
