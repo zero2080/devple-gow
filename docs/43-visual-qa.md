@@ -2923,6 +2923,67 @@ jump:1.0:-400,-976;push:40:120,-988;…`, 둘 다 `-Dgow.giveAll -Dgow.debug.com
 
 - 엔진 테스트 747 통과 (7804ba7). 실제 세이브 위치 (`~/Library/Application Support/devple-gow`) 는 생기지 않았다.
 
+## 39. QA vs PS2 영상 3화 — 아틀라스의 시험 나머지: PAND01B 톱날 방 · 창살 레버 · 가시벽 컨베이어 → PAND01C 절벽 · 손잡이 방 → PAND01BB 아틀라스 석상 크랭크 · 공 → 건축가 아들의 관 → PAND00D 기억 동영상 Semo05 (영상 0–1960 초, 2026-10-26)
+
+영상 = HF4CELG5OxQ (3화, 전사 (보통) = `-Dgow.difficulty=1`), 프레임 = 메인 세션이 4:3 게임 화면만 자른 423×317 (`work/verify/ep3_a/video/v<초>.jpg` 737 장 — 5 초 간격 0–1960, 1 초 간격
+1040–1090 · 1150–1170 · 1280–1300 · 1440–1600 · 1700–1880, 커밋 안 함). 엔진 = origin/main fdd299f 위, 1280×720 lockstep, 스크래치 홈, 경로 하네스.
+레벨 연결 [확실: 스크립트 · 배치]: PAND01B (LoadCheckA ← PAND01A, 톱날 방 (−1360, ·, −1360) · 레버 leverSAW (id 43) / leverSAW1 (id 42) → 창살 barsClose / barsFar
+(70 % 에 열림, 100 % 뒤 12 초에 닫힘 = 두 레버를 차례로 당기고 12 초 안에 지나감) → 구덩이 복도 beforePITtrig · 등 대고 좁은 턱 (BackPress 벽 x −1407, 바닥 x −1406…−1398,
+z −1047…−796) → atlasLiftDoor (TAndF) → LoadCheckBB) · 서쪽 BreakThatWall → 가시벽 Block1/3/4 · 컨베이어 → LoadCheckC → PAND01C (절벽 · 하피 · 오르는 해골 ·
+손잡이 방 handleTrig: 사이렌 · 방패 해골 → 질문 1019 → 메시지 258 → LoadWad Pand01B, ChestZone 에서 세이브 포인트 19 생성) → PAND01BB (아틀라스 석상 · 공: 크랭크
+RamleverGroup (Push 220 "Pand1BBAtlas" Type 1) 에 손잡이 없음 106 / 있음 질문 1005 → HandleOn → 돌리면 neptune · StatueBall 이 Animate2Crank, 손잡이를 가져오면
+StarthandleSkellys/Minos (궁수 R_SK2 ×3 · 미노타우로스 R_MI5 ×2) · NewLever → 동영상 p01Mp01 → 공이 벽을 뚫음 → 다리 → 건축가 아들의 관 (책 메시지 175 · 뚜껑 크랭크
+gocoffinlidcrank · TAndF CoffinHeadRip 141 → 카드 257 "건축가 아들의 머리" · CoffinBase 내려감) → WarpTo00D) → PAND00D PlaySemoMovie (Semo05) → LoadWad Pand00C.
+
+### 39.1 장면 대응
+| 영상 (초) | 장면 | 원작 (스크립트·데이터) | 엔진 (실행 · 초) | 결과 |
+|---|---|---|---|---|
+| 0–40 | 세이브 빛기둥 → 사다리 · 등잔 복도 | **PAND01B 세이브 포인트 18** (−989, −96, −2004) | sv1 | 같은 복도 · 등잔 · 빛기둥 (2화 끝 저장 자리 — 아래 39.3) |
+| 45–160 | 톱날 방: 들어가면 바닥 홈의 톱날, 해골 싸움, 레버 R2 | SawBladeONnOFF → SawBladeEnt VisOn, leverSAW | l2 · l3 · l5 | 같음 (톱날 · 레버 · 창살). 레버 손잡이 (−1157.5, 23, −1132.8) 축 −z / (−1488.3, 23, −1469.8) 축 +x |
+| 160–235 | 벽 부수고 횃불 방 싸움 → 가시벽 컨베이어 복도 | BreakThatWall · BreakDoorEnemies R_SK4 · Block1/3/4 AnimPlay 0.6 · Conveyer 1.5 | k1 · k2 | 같은 장치 (가시벽 왕복 · 컨베이어 판). 봇 실행은 해골에 막혀 판단 못 함 |
+| 240–330 · 705–760 · 840–905 | PAND01C 절벽 (하피 · 오르는 해골 · 초록 상자) | Bridgespawner · CS1–5 SkellyLevel4Climb · HarpyLevel2 | c1 | 같은 절벽 · 모래 안개 |
+| 360–445 | 톱날 방 레버 둘 → 창살 통과 | 위 | l5 (두 레버 · 11.47 초 beforePITtrig) | 같음 |
+| 445–480 · 640–655 · 770–795 | 구덩이 복도 등 대고 좁은 턱 | BackPress 벽 (`HeroNavigator` WALL_WALK 0x200000) | p3 (벽 쪽으로 밀어 붙고 턱을 따라 −1032 → −779) | 같음 (등을 벽에, 정면 = 법선) |
+| 480–490 | 아틀라스 공 방 R2 → "크랭크에 손잡이가 없습니다." | StatueControl-CrankVolume 1024 → Dummy4NoHandle 106 | s1 · s2 | 같은 문구 · 구도. 석상 R2 = 105 (Statcam) 도 같음 |
+| 760–790 | 오르는 벽에서 죽음 → 검은 화면 "로딩 중..." → 구덩이 턱에 등을 대고 다시 | 마지막 체크포인트 = beforePITtrig (턱 위에서 찍힘, PAND01C Checkpoint1/2 는 재발동 −1 이라 두 번째 방문엔 안 탐) | p4 (고치기 전: "벽 질의 빗나감 (공중)") → p5 | **고침 (39.2)**. "로딩 중..." 글 (메시지 4085) 은 엔진에 없다 (39.3) |
+| 900–1020 | 아치 방 싸움 (방패 해골 떼) · 붉은 손잡이 방 (사이렌 · 방패 해골) | FloorDropControl RoomEntry → DMCcyl2 · 문 닫힘 카메라 · Siren ×2 · SkellyLevel2Shield ×5 | h1 | 같은 방 · 같은 적 |
+| 1030–1080 | 질문 "손잡이를 가져가시겠습니까?" → 카드 → 강화 메뉴 | handleTrig 1019 → uPickedYes 258 | — | 질문 · 카드 문구는 메시지 표 그대로 (강화 메뉴는 이 구간에서 비교 안 함) |
+| 1147–1170 | PAND01C 절벽 세이브 빛기둥 R2 → 저장 | 세이브 포인트 19 (H8 false, ChestZone 이 GlobalData0 뒤 생성) | sv2 (ChestZone 전이라 아직 없음) | 슬롯 이름 [미확인] (39.3) |
+| 1180–1420 | 돌아와 공 방 아래 싸움 (궁수 · 가시 갑옷 미노타우로스) | StarthandleSkellys / StarthandleMinos (GotStatueHandle) | r1 (상태 미리 둠: 궁수 ×3 · R_MI5 ×2 Patrol11/12) | 같은 적 구성 |
+| 1442–1470 | 질문 1005 → 손잡이 끼움 (낮은 카메라) → 크랭크를 밀며 돔 → 공이 올라가 아틀라스 석상 | HMsgSensorYES → HandleCam 3 초 · HandleOn (+1 초) · RamStatic Off → RamLever 1023 (id 40) → neptune / StatueBall Animate2Crank | r2 · r4 (손잡이 (−1262.6, 51.2, −644.1) 축 ±x) | 같음 (`r4.png`) |
+| 1570–1600 | 석상 · 안개 · 둥근 구멍 너머 다리 | NewLever BallUp → p01Mp01 | — | 동영상 (몰지 않음) |
+| 1610–1640 | 다리 → 열린 사원, 양피지 3–4 쪽 | bookold CSM 142 → 메시지 175 (4 쪽) | co1 | 같은 문구 (4 쪽) |
+| 1640–1675 | 관 (황금 석상) R2 연타 → 머리를 뜯어 들어 올림 → 카드 | 뚜껑 크랭크 140 → CollOn → TAndF 141 (Acc 20 · Dec 20) → 100 % 2.5 초 뒤 257 · CoffinBase | co4 (8 초 연타 21.45 초 완료, 23.97 초 카드) | 같은 순서. 머리가 손 높이에 늦게 나옴 [미확인] |
+| 1680–1715 | 초록 복도 · 상자 · 계단 | PAND01BB 아래층 → WarpTo00D | — | 몰지 않음 |
+| 1717–1840 | 기억 동영상 (자막) | PAND00D PlaySemoMovie → Semo05 → 501 → LoadWad Pand00C | mv1 (녹화) · mv2 | 첫 자막 "판도라의 상자를 찾으려 했던 자들의 시체가 그의 앞에 있었다" 같음 |
+| 1859–1870 | 눈 방 세이브 → 저장 | PAND00D 세이브 포인트 16 (−448, 0, 3296) | sv5 | 같은 방. 슬롯 이름 [미확인] (39.3) |
+
+### 39.2 엔진 결함과 수정
+1. **등 대고 좁은 턱에서 찍힌 체크포인트를 되읽으면 구덩이로 떨어졌다 (영상 770–790: 죽은 뒤 "로딩 중..." → 구덩이 턱에 등을 댄 채 다시 시작).** PAND01B beforePITtrig
+   (CheckPoint, 재발동 대기 없음) 는 x −1404…−1308 · z −1072…−1032 로 턱 시작 (z −1047…−1032) 을 덮는다 — PAND01BB 에서 턱을 따라 돌아오면 턱 위에서 체크포인트가
+   찍히고, 그 뒤 PAND01C 체크포인트들은 한 번만 (H1 −1) 이라 두 번째 방문에선 다시 찍히지 않는다. 원작 Load_PlayerBlock 0x1DC130 은 행렬과 +0x174 (0x200000 = BackPress
+   벽 따라 걷기, 몸 정면 = 벽 법선 0x1C8000) 를 그대로 되돌린다 [확실: 43 §26]. 엔진 `HeroNavigator.reattachWall` 은 몸 정면으로만 벽 질의를 해 등 뒤 벽을 놓치고
+   ("되읽은 이동 상태 WALL_WALK → 벽 질의 빗나감 (공중)") 공중이 되어 구덩이 쪽 Slide 경사로 미끄러졌다. → 정면 질의가 빗나가면 등 쪽으로 다시 질의하고 그 면이
+   BackPress 면 등 대고 걷기로 붙인다 [근사: 원작은 질의 없이 상태를 되돌림] (p5: "→ 벽에 다시 붙음", 영상 790 과 같은 자세 · 구도 `p5.png`).
+   시험 `HeroNavigatorTest.restoredBackPressSnapshotReattachesBackToTheWall` (등 뒤 BackPress = 붙음 · 등 대고 · 정면 = 법선, 등 뒤 Climbable = 안 붙음).
+
+### 39.3 남은 것 · 미확인
+- **세이브 슬롯 이름**: Save_SlotText 0x22E810 은 파일 u16 +0xC (= 영웅 +0x8C → 0x22D390 → 0x2A2704 → 0x2312B0) 에 0x258 (600) 을 더한 메시지 [확실]. 그런데 영상의 이름은
+  세이브 포인트 Creator 슬롯 6 + 600 과 맞지 않는다: 2화 3098 PAND00A (15) → "길 잃은 영혼들의 사막" 614, 2화 끝 → 3화 0 초의 되읽은 자리가 **PAND01B (18)** 등잔 복도인데
+  2화 5182 의 이름은 "아틀라스의 시험" 617 (§34.1-3 은 PAND01A 17 로 보았다 — 3화 첫 프레임 (`sv1` ↔ v0) 로 보면 18), 3화 1150 PAND01C (19) → "아틀라스에게 가는 길" 618,
+  3화 1865 PAND00D 눈 방 (16) → "아틀라스의 절벽" 619. 앞 셋은 599 + 번호지만 눈 방은 맞지 않는다. 0x22E2A8 의 번호 = *[[생성 인자 +0x1C] + 4] 를 Creator 0x1ACCA8 →
+  0x1A49C8 까지 따라가지 못했다 (§34 의 "슬롯 6" 은 이 경로를 확인하지 않은 것) — 엔진 `MemoryCardFlow.slotName` (600 + 번호) 은 그대로 두었다.
+- 체크포인트 되읽기 화면: 원작은 검은 화면 오른쪽 아래에 "로딩 중..." (메시지 4085) 을 띄운다 (영상 785). 엔진은 검은 한 프레임 뒤 밝아짐 — 메시지 4085 를 쓰는 코드는 찾지 못했다.
+- 관 머리 뜯기: 영상 1670 은 크레토스가 들어 올린 손에 머리, 엔진 co4 는 손을 든 뒤 머리가 엉덩이 높이에 잠깐 보인다 (오브젝트 headRip03 과 영웅 headRip03 의 시각 · 붙는 관절) — 1 초 프레임이 없어 확인 못 함.
+- 녹화 lockstep 에서 동영상 (Semo05) 이 매우 느리게 나간다 (mv1: 138 초 동안 첫 장면) — 하네스 쪽, 녹화 없는 실행은 끝 이벤트 501 → LoadWad Pand00C 가 바로 이어짐 (mv2).
+- 몰지 않은 것: 톱날 · 가시벽에 맞는 피해, PAND01C 손잡이 방 바닥 무너짐 (FloorFall1–3 → PAND01CC) 의 끝까지, p01Mp01 뒤 공 굴리기 장면 (1570–1600), 강화 메뉴 값 (1060–1080),
+  1280–1420 싸움 시간 비교 (봇).
+
+### 39.4 증거 (`work/verify/ep3_a/`, 커밋 안 함)
+`video/` (영상 737 장), 스크래치 `ep3a/`: `p5.png` (고친 뒤 턱 되읽기 ↔ v790), `p4.log` (고치기 전 "벽 질의 빗나감"), `s2.png` (106 문구), `r4.png` (크랭크 · 공 · 석상), `co4.png`
+(관 · 머리 · 카드 ↔ v1655–1675), `sv.png` · `sv3.png` · `sv5.png` (세이브 포인트 18 / 19 / 17 / 16 ↔ v0 · v1140 · v1868), `mv1.png` (Semo05 첫 자막).
+엔진 테스트 (rebase 뒤) 전부 통과.
+
 ## 40. QA vs PS2 영상 3화 — 포세이돈의 시험 PAND02A 원형 경기장: 케르베로스 토하기 · 새끼가 자라 어른 · 깔려 물리기 (영상 1960–2880 초, 2026-10-26)
 
 영상 = HF4CELG5OxQ (3화, 전사 (보통) = `-Dgow.difficulty=1`), 프레임 423×317 (`work/verify/ep3_b/video/v<초>.jpg` 333 장 — 1960–2880 5 초 간격, 2255–2320 ·
