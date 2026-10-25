@@ -2971,6 +2971,63 @@ growTimerCode (0x18F474 +0x24 · 0x18F9BC 0x3F73 · +0x28 · +0x2C · 0x209378/0
 그대로 · 템플릿 81 · 기술 10 · 그룹 3 · Action 없음, VomitSpawnTransform 86 · 502 · 그룹 2 · LevelData4 + 1, VomitSpawn 없음), heroSelfHp (+ 0x207084 플래그 7,
 0x19CDB4 슬롯 4). 엔진 시험 752 통과.
 
+## 43. QA vs PS2 영상 3화 — 하데스의 시험: PAND00C 허브 잠수 → PAND03J 폭포 웅덩이 · 통나무 홀 · 세이브 → PAND03A 하데스의 홀 (피 웅덩이 · 제물 제단 · 켄타우로스 · 하데스의 원) → PAND03B 미로 → PAND03A 석상 머리 크랭크 · 붉은 방 세이브 → PAND03C 문 홀 · 굴러오는 불덩이 (영상 5760–7723 초, 2026-10-26)
+
+영상 = HF4CELG5OxQ (3화, 전사 (보통) = `-Dgow.difficulty=1`), 프레임 423×317 (`work/verify/ep3_e/video/v<초>.jpg` — 5770–7680 10 초 간격, 5815–5832 1 초,
+6375–6385 · 7525–7535 · 7665–7720 보탬, 커밋 안 함). 엔진 = origin/main fdd299f 위, 1280×720 lockstep, 스크래치 홈, `--skip-movies`, 레벨마다 `--game L`
+(+ `--arrive PAND00C`), 경로 `-Dgow.auto.route` · 봇 `-Dgow.auto=1` (90 초 순회: PAND03B/03C/03D/03E/03F/03H/03I/03J).
+
+경로 [확실: 스크립트 · 영상]: 5770–5823 PAND00C 허브 웅덩이로 잠수 · 관 (Lvl3TubeCam, Lvl3Warp-WarpVol → Warp) → 5826 PAND03J WarpFromHub (CoreTubeCam4) 폭포
+웅덩이 → 5830 복도 · 5840 해골 문장 문 (MinotaurLock) · 5850 크랭크 → 5860–5880 용암 커튼 홀 · 불타는 통나무 → 5920 세이브 (663, −96, 1308) → 5940 머리 장식 복도
+→ 5950–5960 PAND03A 하데스의 홀 · 구역 제목 13 "하데스의 시험" · 피 웅덩이 둘 (gosac6loop1/2, z −224 / 240) → 6020 제물 제단 (KeyDoorHoriz, 메뉴 "하데스가 당신이
+지나가기 전에 그의 제단에 피의 제물을…" 예 = 1021 (1, 1011)) → 동영상 p03MP98 · 켄타우로스 CentaurLevel1AI2–5 (R_CNM 90) 계단 → 6100–6220 하데스의 원 (Sac6Loop
+On · AnimRing · $sacCir 재질 애니, 원 안 처치 LevelData7/8 > 3) → 6240–6400 미로 PAND03B (6250 "더 이상 전진할 수 없습니다. 어두워서…", 바닥 용암 칸 · 6375–6385
+사망 · 체크포인트) → 6400–7400 미로 (메두사 R_ME2 · 해골 궁수 · 빛줄기 · 둥근 창살 바닥 기둥 6820/6920–6960 · 6880 업그레이드 · 7000–7040 붉은 하데스 석상 R2
+(HeadMsg 146) · DoorText 피 글자) → 7420–7480 PAND03A 위층 거대 석상 머리 · R2 크랭크 (S1CrankHead) → 7500–7520 붉은 방으로 떨어짐 (PressPlate 마커 → SaveGameZone
+(−66, 0, −266) 생성) → 7540–7620 세이브 ("하데스의 홀") → 7640 사다리 → 7660–7720 PAND03C 문 홀 · 불덩이가 계단으로 굴러옴. PAND03G (보스 이음, §27.6) 는 이 구간에 없다.
+
+### 43.1 엔진 결함과 수정
+1. **컨텍스트 그룹 밖 템플릿 GO 를 레벨에 만들었다 — PAND03A 홀의 검은 파편 구름 · 불덩이 · 피 웅덩이 위 통나무 (영상 5950–5960 에는 없음, 엔진 전체)** (4bc5f0e)
+   [확실: 호출 그래프 · 데이터]. PAND03J golog · gologshatter 는 원점 (0, 0, 0) 에 놓였고 어느 `GROUP{ RES CXT_x … RES go… }` 에도 없다 — TWK_Arrow_060
+   (BMILogLauncher) 의 "GO Name" = golog, "Hit Effect" = gologShatter, 즉 통나무 화살과 명중 효과의 **복사 원본**. 원작 GO 생성 0x1307C8 의 유일한 호출자는
+   컨텍스트 클래스 (생성자 0x133C58, vtable 0x2C1D70) 메서드 0x133E30 (컨텍스트 +0x8C 목록에 만든다) — 컨텍스트에 없는 인스턴스는 GO 가 되지 않는다.
+   엔진은 모든 배치를 그리고 FXC 이미터를 만들어, PAND03J 가 이웃 슬롯일 때 PAND03A 홀 원점 (두 웅덩이 사이) 에서 FWparts 불 · rubbleParti 검은 파편
+   (600/초) 이 끝없이 나오고 (용암 기둥 왼쪽에 검은 조각 구름 · 흰 불덩이) 통나무 메시가 피 웅덩이를 가로질러 누워 있었다. 전 WAD 조사: 컨텍스트가 있는 WAD 의
+   그룹 밖 인스턴스는 화살 · 명중 효과 (golog · gologshatter · gobrokenarrowb), 히드라 · 아레스 · BMI 효과 (gobha* · gobar* · gobmi* · gosteamvent01 …), 밀기
+   상자 원본 (DEST02 · PAND04C gopushpullblock — 실제 상자는 gopushblock), 적 AI1 템플릿 (goao* · gofamily · goevi) 뿐. 이 GO 를 쓰는 엔진 코드 (Creator ·
+   BmiFight · ArrowShots) 는 모두 `EffectSystem` 복사로 만든다.
+   → `LevelEmitters.template` (컨텍스트가 있는 WAD 에서 소속 없음) 이면 레벨 이미터를 만들지 않고, `LevelScene` 도 그리지 않는다 — AI1 템플릿 (aiTemplateObjects)
+   은 예전 동작 그대로 [근사: 원작은 그것도 안 그릴 것 — 다른 작업 영역이라 그대로 둠]. 이미터가 빠진 레벨: ATHN01B/01C/01E (히드라 효과), ATHN08A/08B/08C,
+   DEST02, PAND03G/03I/03J, PAND04C. 증거 `01_hall_specks…` · `02_log_on_pool…`.
+2. 하네스: 경로 단계 `post:번호:인자0:인자1` (메뉴 "예" = `post:1021:1:1011` — 제단 메뉴 · 동영상 없이 켄타우로스 · 하데스의 원 확인) [엔진 전용].
+
+### 43.2 장면 대조
+| 영상 | 엔진 |
+|---|---|
+| 5950–5960 PAND03A 홀 · 구역 제목 13 · 피 웅덩이 · 용암 기둥 | 고치기 전: 왼쪽 용암 기둥 앞 검은 조각 구름 · 흰 불덩이, 웅덩이 위 통나무 → 고친 뒤 같은 구도 (`01` · `02`). 구역 제목 10 초 (21 문서) |
+| 6020 제단 메뉴 → 6040 켄타우로스 계단 → 6100–6220 하데스의 원 (청색 그리스 무늬 띠 · 소켓 넷) | `post:1021:1:1011` → R_CNM 스폰 · gosac6loop1/2 AnimRing · $sacCirFire01/02 · $sacCirRing · $sacCirSubMat · DMC 결계 dogIn, 그리스 무늬 띠 같음 (`03`) |
+| 5920 세이브 빛기둥 (PAND03J) · 7540 세이브 (PAND03A) | PAND03J (663, −96, 1308) 은 처음부터, PAND03A (−66, 0, −266) 는 PressPlate 마커 104 (석상) 뒤 생성 — 봇 순회에서 생성 확인 |
+| 6400–7400 미로 회색 돌 복도 · 빛줄기 · 메두사 · 창살 | PAND03B 봇 순회 — 같은 복도 · 빛줄기 · R_ME2 · 창살 문 (`05`) |
+| 7660–7720 PAND03C 문 홀 · 불덩이 | PAND03C 기본 시작은 불덩이 복도 (영상 앞 문 홀은 03A → 03C 걷기 이음) — 대조 안 함 |
+
+### 43.3 남은 것 · 미확인
+- [미확인] **허브 잠수 도착 카메라 (영상 5826–5828: 위에서 폭포 웅덩이 · 웅덩이에서 나오는 크레토스)**: 엔진 `--arrive PAND00C` 는 CMV golv3tubecams hull 2 →
+  CoreTubeCam4 (레일 + 접선 틀 0x400, 설계 요 −180 ± 60). 첫 표본 (0x1F20F0, 매듭 × 4) 의 비용 극소가 둘 (u ≈ 9 (1304, −342, 2727) 13.0 · u ≈ 14.5
+  (904, −356, 2625) 7.6) 이라 먼 쪽을 골라, 접선 틀에서 영웅 방향 국소 요 57.6° 가 −180 ± 60 밖 → 120° 로 잘려 화면 밖 62° — 크레토스가 (1039, −381, 2766) 까지
+  걸어가도 파란 바위벽만 보인다 (`04`). §8.2 와 같은 "리셋 기준점 [근사]" 문제로 보인다 (Warp 직후 기준점 = 엔진은 영웅 머리, 원작은 직전 상태의 눈 + 정면·거리).
+  카메라는 공유 코드라 고치지 않았다.
+- [미확인] 하데스의 원 안 검은 덩어리: gosac6fade1/2 · loop1/2 의 FXC_emitter1 (서브타입 6 구, 관절 2, dist 0–0.15, PTC_particle1 색 ≈ 0) 이 엔진에선 원 가운데
+  위에 뭉친 검은 구름, 영상 6110 은 원 안 바닥 전체가 검다. 구 이미터 반경 (엔진 = 배율 × sectionRadius [추정]) 미해석.
+- [미대조] 미로 바닥 용암 칸 함정 (6300–6370) · 6250 "어두워서" 메시지 · 붉은 석상 R2 (HeadMsg 146) · DoorText 피 글자 · 석상 머리 크랭크 (7420–7480) · 붉은 방
+  낙하 · 03C 문 홀은 봇으로 그 자리에 가지 못해 영상과 나란히 보지 못했다. 영상 6380 붉은 소용돌이는 사망 화면 (YOU ARE DEAD → 체크포인트) — 엔진 사망 화면은
+  기존 (§ 체크포인트).
+- 실제 세이브 위치 (`~/Library/Application Support/devple-gow`) 는 생기지 않았다 (모든 실행 = 스크래치 홈).
+
+### 43.4 시험 · 증거
+`TemplateEmitterTest` (PAND03J 템플릿 = {golog, gologshatter} · 원점 · 횃불 gotorchfire1 은 레벨 이미터, PAND03A 템플릿 없음). 엔진 테스트 754 (db86e34 위, 이 작업 +2).
+증거 `work/verify/ep3_e/` (커밋 안 함): `01_hall_specks_v5950_v5960_before_after` (영상 | 고치기 전 | 고친 뒤), `02_log_on_pool_v5960_before_after`,
+`03_hades_circles_v6100_v6110_vs_engine`, `04_tube_arrival_v5825_v5828_vs_engine`, `05_maze_v6410_v6520_vs_engine_03b`.
+
 ## 시연 녹화 (-Dgow.record, -Dgow.bot) [엔진 전용]
 
 - `-Dgow.record=DIR` 로직 틱 `gow.record.every`(기본 2 = 30fps) 번마다 `DIR/f000000.jpg` 저장, `gow.record.secs` 초 뒤 종료. 녹화 중에는 lockstep (프레임당 틱 하나) 이라 렌더 속도와 무관하게 영상 시간이 게임 시간과 같다.
