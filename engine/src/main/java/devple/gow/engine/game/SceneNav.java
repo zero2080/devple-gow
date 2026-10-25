@@ -102,6 +102,14 @@ public final class SceneNav {
 		}
 
 		/**
+		 * 이웃 레벨 스크립트의 동영상 (Entity:0xD PlayMovie / 0x10 PreloadMovie, {@link ScriptListener#movie}) — 원작 동영상 재생기와 끝 이벤트 501 은
+		 * 슬롯 구분이 없다: PostEvent 큐 0x303DB8 하나에 모든 슬롯 엔티티가 걸린다 ({@link ScriptWorld#linkEvents}). PAND00E 는 PAND00B 의 LoadWad 로만
+		 * 올라오는 이웃이라 (LoadCheck 없음) 그 Mpeg-p00MP02play (죽어 가는 병사 동영상, 영상 3194–3262) 는 늘 이웃 슬롯에서 불린다 (43 §32).
+		 */
+		default void neighbourMovie(String name, int op, int arg) {
+		}
+
+		/**
 		 * 이웃 레벨 스크립트의 Idle(bool) (Internal 0xC) — 원작 0x1BF080 → 전역 정지 0x29DB58 하나라 이웃 슬롯 스크립트도 영웅을 세운다
 		 * (예 ATHN04A LedgeJumpCams-TriggerVol: ATHN04B 가 현재인 채 난간에 들어서면 Idle + SuicideCam 10.5 초, 43 §18).
 		 */
@@ -529,6 +537,11 @@ public final class SceneNav {
 			@Override
 			public void spawnEnemy(SpawnRequest r) {
 				host.neighbourSpawn(r);
+			}
+
+			@Override
+			public void movie(String name, int op, int arg) {
+				host.neighbourMovie(name, op, arg);
 			}
 
 			@Override

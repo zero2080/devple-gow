@@ -1431,6 +1431,14 @@ public final class GameScene implements Scene {
 			}
 
 			@Override
+			public void neighbourMovie(String name, int op, int arg) {
+				// 이웃 슬롯 스크립트의 PlayMovie — 지금 레벨 것과 같은 재생기 · 끝 501 (공유 이벤트 큐로 이웃 센서도 받는다, 43 §32)
+				if (op == 0 && pendingEngine != null) {
+					playMovie(pendingEngine, name);
+				}
+			}
+
+			@Override
 			public void neighbourIdle(boolean idle) {
 				scriptIdle = idle; // 원작 전역 정지 0x29DB58 은 하나 (현재 레벨 리스너의 0xC 와 같음)
 				devple.gow.engine.combat.AiTargets.globalHold = globalIdle();
