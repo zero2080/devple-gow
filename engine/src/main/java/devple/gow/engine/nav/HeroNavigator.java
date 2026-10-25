@@ -313,6 +313,15 @@ public final class HeroNavigator {
 		return state == NavState.GROUND ? promptItem : null;
 	}
 
+	/**
+	 * 이번 틱은 사용 질의를 하지 않는다 (전투 기술 중 — HeroRig 가 내비게이터를 돌리지 않을 때). 원작 0x1DC3F8 은 영웅이 자유 상태가 아니면
+	 * (0x1DC42C–0x1DC44C: 대기 0x29DC70 = 2) 질의 0x1C3F18 을 건너뛰고 끝에서 슬롯 0 을 −1 로 지운다 (0x1DC648–0x1DC654) [확실] — 예전 엔진은
+	 * 마지막 질의 결과가 남아 싸우는 내내 "R2" 가 떠 있었다 (DEST03 세이렌 싸움, 뿔피리 옆에서 시작, 43 §32).
+	 */
+	public void clearPrompt() {
+		promptItem = null;
+	}
+
 	/** 강제로 지상 상태로 (리스폰·Goto). */
 	public void reset() {
 		if (item != null && (state == NavState.PUSH || state == NavState.INTERACT)) {

@@ -1008,6 +1008,29 @@ class HeroNavigatorTest {
 	}
 
 	@Test
+	void usePromptIsClearedWhileTheNavigatorIsNotQueried() {
+		// 43 §32: 원작 0x1DC3F8 은 자유 상태가 아니면 질의를 건너뛰고 슬롯 0 을 지운다 — 예전 엔진은 마지막 질의 결과가 남아
+		// DEST03 세이렌 싸움 내내 (뿔피리 옆에서 시작) "R2" 가 떠 있었다
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -400, -400, 400, 400, 0, SurfaceAttr.GROUND);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		Body b = new Body();
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		Interactables items = new Interactables();
+		Interactables.Item box = items.add(new Interactables.Item(Interactables.Kind.PUSH, "gopbox", v(0, 0, -40), 225, 503, "pushIdle", null,
+				"Pandora's Box", 16));
+		box.showPrompt = true;
+		nav.setItems(items);
+		tick(nav, b, w, new Pad());
+		assertSame(box, nav.promptItem(), "상자 앞 → R2 안내");
+		nav.clearPrompt(); // HeroRig: 전투 기술 중 (내비게이터를 돌리지 않음)
+		assertNull(nav.promptItem());
+		b.pos.set(300, 0, 300);
+		tick(nav, b, w, new Pad());
+		assertNull(nav.promptItem(), "멀어지면 질의 결과도 없음");
+	}
+
+	@Test
 	void pushBoxMovesAndPostsAttachDetach() {
 		List<LevelCollision.Tri> t = new ArrayList<>();
 		floor(t, -400, -400, 400, 400, 0, SurfaceAttr.GROUND);

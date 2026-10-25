@@ -239,6 +239,55 @@ public final class LevelData {
 		}
 	}
 
+	private java.util.Set<String> animatorOwners;
+
+	/**
+	 * 소유 ESC 에 모드 1 Animator (타입 5) 가 있는 GO 인스턴스 이름 (ScriptWorld 와 같은 소유자 규칙: ESC 를 참조하는 첫 배치).
+	 * 원작 Animator 메시지 0 (등록, 0x1AAFE8 → 0x1AB000–0x1AB01C) 은 모드 1 이면 소유 GO +0xF8 = 2 로 덮어써 비트 0 을 끈다 [확실: 코드] —
+	 * GO 컴포넌트 갱신 0x130F48 은 +0xF8 비트 0 이 꺼진 GO 의 애니 컴포넌트를 돌리지 않으므로 (0x130F88–0x130F94) 시작 act 가 반복 act 라도
+	 * 스크립트가 틀 때까지 시작 자세에 멈춰 있다. 타입 6 (Animator 변형) 의 메시지 처리 0x1AB740 은 비어 있다.
+	 */
+	public java.util.Set<String> animatorOwners() {
+		if (animatorOwners == null) {
+			java.util.Set<String> out = new java.util.HashSet<>();
+			for (WadTag t : wad.resources()) {
+				if (t.magic() != devple.gow.tools.script.EscScript.MAGIC || !t.name().startsWith("ESC_")) {
+					continue;
+				}
+				devple.gow.tools.script.EscScript s;
+				try {
+					s = new devple.gow.tools.script.EscScript(t.data());
+				} catch (RuntimeException ex) {
+					continue;
+				}
+				if (!s.target.equals("SCR_Entities")) {
+					continue;
+				}
+				LevelLayout.Placement owner = layout.placements().stream().filter(p -> p.object().refs().contains(t.name())).findFirst().orElse(null);
+				if (owner == null) {
+					continue;
+				}
+				for (devple.gow.tools.script.EscScript.Entity e : s.entities) {
+					if (e.type() == 5 && e.param() == 1) {
+						out.add(owner.instance().name());
+					}
+				}
+			}
+			animatorOwners = out;
+		}
+		return animatorOwners;
+	}
+
+	/**
+	 * 배치 GO 의 애니 컴포넌트가 매 프레임 스스로 도는가 (반복 시작 act 가 저절로 재생되는가) [확실: 코드]:
+	 * GO 생성 0x1307C8 이 +0xF8 = 인스턴스 플래그 (메모리 레코드 +0x26 = 파일 0x1E — 시작 시간 0x58 / act 0x5C 가 파일 0x50 / 0x54 인 것과 같은 +8) 로 두고
+	 * (0x130820–0x130850), 모드 1 Animator 가 등록 때 2 로 덮어쓴다 ({@link #animatorOwners}). 갱신 0x130F48 은 비트 0 이 켜진 GO 만 애니를 돌린다.
+	 * 예: DEST03 gosandwedge (플래그 1 + sandWedge-Animator1) — 뿔피리를 불 때까지 모래벽이 닫혀 있다 (영상 2716–2724), PAND00B goelevatorgrpa (플래그 0).
+	 */
+	public boolean selfAnimates(LevelLayout.Placement p) {
+		return (p.instance().flags() & 1) != 0 && !animatorOwners().contains(p.instance().name());
+	}
+
 	/** 카메라 이름(CAM_ 없이, 대소문자 무시)으로 배치 카메라 찾기. CMV 이름표의 "RCM_x" 를 그대로 넘겨도 된다. */
 	public PlacedCamera camera(String name) {
 		String n = name.startsWith("RCM_") ? name.substring(4) : name.startsWith("CAM_") ? name.substring(4) : name;

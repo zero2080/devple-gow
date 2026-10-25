@@ -86,6 +86,36 @@ class StartPoseMirrorTest {
 	}
 
 	@Test
+	void scriptAnimatedAndFlagZeroGosHoldTheirStartPose() throws Exception {
+		// 43 §32: GO +0xF8 = 인스턴스 플래그 (0x1307C8), 모드 1 Animator 등록이 2 로 덮음 (0x1AAFE8) → 0x130F48 이 애니를 돌리지 않음.
+		// DEST03 모래벽 gosandwedge: 반복 act sandWedge (12.33 초) 지만 sandWedge-Animator1 (뿔피리 100 % + 3 초) 전에는 닫힌 자세 (영상 2716–2724)
+		WadFile w = wad("DEST03");
+		LevelData d = new LevelData(w);
+		LevelLayout.Placement wedge = placement(d, "gosandwedge");
+		assertEquals(1, wedge.instance().flags() & 1);
+		assertTrue(start(w, d, "gosandwedge").act().looping());
+		assertTrue(d.animatorOwners().contains("gosandwedge"));
+		assertFalse(d.selfAnimates(wedge), "모드 1 Animator 가 붙은 GO 는 스스로 돌지 않는다");
+		assertFalse(d.selfAnimates(placement(d, "gondgrpfakemovingwall")));
+		// 시작 자세: 갈라지는 모래 덩어리 (관절 3 sandPartingChunk95) 가 보이고 쐐기는 뿔피리 앞 (z 6019.5)
+		StartPose sp = start(w, d, "gosandwedge");
+		assertTrue(sp.hidden() == null || !sp.hidden()[3]);
+		assertEquals(6019.5f, sp.jointWorld()[0][14], 0.5f);
+		// 플래그 0 (비트 0 꺼짐) 인 반복 act GO: PAND00B goelevatorgrpa — 예전 엔진은 26.7 초마다 −8386 아래로 감았다
+		LevelData b = new LevelData(wad("PAND00B"));
+		LevelLayout.Placement elev = placement(b, "goelevatorgrpa");
+		assertEquals(0, elev.instance().flags());
+		assertFalse(b.selfAnimates(elev));
+		// 스크립트 없는 플래그 1 반복 act 는 그대로 돈다: DEST02 크러셔 톱니 gogearanim (Vis 엔티티만, Animator 없음)
+		LevelData d2 = new LevelData(wad("DEST02"));
+		assertTrue(d2.selfAnimates(placement(d2, "gogearanim")));
+		assertFalse(d2.selfAnimates(placement(d2, "goconveyer")), "컨베이어는 CreationSensor → Conveyer-AnimCycle 로만 돈다");
+		// ATHN08A 나무 흔들림 (스크립트 없음) 도 그대로
+		LevelData a8 = new LevelData(wad("ATHN08A"));
+		assertTrue(a8.selfAnimates(placement(a8, "gofellergroup20")));
+	}
+
+	@Test
 	void mirrorPlanes() throws Exception {
 		// OLYMP02 gomirror = 대리석 바닥 (MAT_tnMarblePlainNew00b, 알파 블렌드) — 수평 평면
 		WadFile w = wad("OLYMP02");

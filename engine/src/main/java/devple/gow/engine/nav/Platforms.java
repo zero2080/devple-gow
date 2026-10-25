@@ -491,8 +491,9 @@ public final class Platforms {
 			if (sp.act() != null) {
 				body.joints = sp.jointWorld();
 				body.prev = body.joints;
-				if (!scripted && sp.act().looping() && sp.act().duration > 0 && sp.act().hasSkeletalData()) {
-					// 정지 CDV 오브젝트의 반복 시작 act (렌더의 반복 재생 배치와 같은 규칙, LevelScene) — 충돌도 그 자세를 따른다 (HDES01C 죽음 굴림대 등)
+				if (!scripted && lv.selfAnimates(p) && sp.act().looping() && sp.act().duration > 0 && sp.act().hasSkeletalData()) {
+					// 정지 CDV 오브젝트의 반복 시작 act (렌더의 반복 재생 배치와 같은 규칙, LevelScene) — 충돌도 그 자세를 따른다 (HDES01C 죽음 굴림대 등).
+					// 인스턴스 플래그 비트 0 이 꺼진 GO 는 돌지 않는다 (GO +0xF8, 0x130F48 — LevelData.selfAnimates)
 					float d = sp.act().duration;
 					body.anim = sp.act();
 					body.time = ((sp.time() % d) + d) % d;

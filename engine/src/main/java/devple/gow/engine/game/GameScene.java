@@ -1370,8 +1370,10 @@ public final class GameScene implements Scene {
 
 			@Override
 			public void teleport(float[] pos, float yaw) {
+				// 이웃 레벨 스크립트의 Goto (Warp_Jump 0x1B2E08): 같은 카메라 리셋 0x1EDF48(0) — CMV 질의 켬, 상태 링 비움 (43 §32)
 				spawnYaw = yaw;
 				respawn(new Vector3f(pos[0], pos[1], pos[2]));
+				cameraRig.reset();
 			}
 
 			@Override
@@ -1660,6 +1662,10 @@ public final class GameScene implements Scene {
 						float[] p = t.position();
 						spawnYaw = (float) Math.atan2(t.world[8], t.world[10]);
 						respawn(new Vector3f(p[0], p[1], p[2]));
+						// Warp_Jump 0x1B2FD0–0x1B2FDC → 0x1EFC98 → 카메라 리셋 0x1EDF48(0): 상태 링 비움 + 볼륨 선택 전환 0 + CMV 질의 0x29F138 = 1
+						// [확실: 코드]. 앞서 Internal 0x9(false) 로 끈 질의가 되켜진다 — DEST03 Goto CentrePlatform 뒤 StormCmbtCam 이 풀린다 (영상 2950, 43 §32).
+						// 같은 동작에서 뒤이어 부르는 0x9(false) · SwitchCamera (PAND00E MimeSpot → TalkCam) 는 그 뒤에 적용된다
+						cameraRig.reset();
 						String cam = t.type() == 9 ? String.valueOf(world.slot(t, "CameraName")) : "";
 						if (!cam.isEmpty()) {
 							cameraRig.request(cam);
@@ -3397,8 +3403,10 @@ public final class GameScene implements Scene {
 			if (near != null) {
 				return near.showPrompt ? devple.gow.engine.ui.MinigameIcon.PROMPT : devple.gow.engine.ui.MinigameIcon.NONE;
 			}
-			// 0x1DC3F8: 세이브 포인트 4 m 안이면 슬롯 0 = 14 (R2) — 가까운 R2 오브젝트 (0x1C3F18) 가 있으면 그 "Show R2" 가 덮는다
-			return nearSavePoint() && !globalIdle() && messageId < 0 ? devple.gow.engine.ui.MinigameIcon.PROMPT : devple.gow.engine.ui.MinigameIcon.NONE;
+			// 0x1DC3F8: 세이브 포인트 4 m 안이면 슬롯 0 = 14 (R2) — 가까운 R2 오브젝트 (0x1C3F18) 가 있으면 그 "Show R2" 가 덮는다.
+			// 기술 중 (자유 상태 아님) 이면 질의를 건너뛰고 슬롯 0 을 지운다 (0x1DC42C–0x1DC44C → 0x1DC648) — 43 §32
+			return nearSavePoint() && !globalIdle() && messageId < 0 && !hero.combat.active()
+					? devple.gow.engine.ui.MinigameIcon.PROMPT : devple.gow.engine.ui.MinigameIcon.NONE;
 		}
 		if (grab.timed() != null) {
 			return grab.timed().iconIndex();

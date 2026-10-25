@@ -324,8 +324,10 @@ public final class LevelScene implements Scene {
 			if (sp.act() != null) {
 				startPosed++;
 				// 비헤이비어 (PushPull 크랭크·레버, IO_CSM, Breakable …) 가 있는 GO 는 그 클래스가 애니 시간을 정한다 (R1 진행 시간 0x215928,
-				// 파괴 0x1DDF70) → 스스로 돌지 않는다 (PAND00C 고리 goring1crank 는 반복 act 지만 크랭크로만 돈다)
-				if (!data.behaviors.containsKey(p.instance().name()) && sp.act().looping() && sp.act().duration > 0 && sp.act().hasSkeletalData()
+				// 파괴 0x1DDF70) → 스스로 돌지 않는다 (PAND00C 고리 goring1crank 는 반복 act 지만 크랭크로만 돈다).
+				// 인스턴스 플래그 비트 0 이 꺼졌거나 모드 1 Animator 가 붙은 GO 도 (+0xF8 비트 0, 0x130F48) 스크립트가 틀 때까지 시작 자세 —
+				// DEST03 모래벽 gosandwedge 는 뿔피리 뒤 sandWedge-Animator1 이 틀기 전까지 닫혀 있다 (영상 2716–2728, 43 §32)
+				if (!data.behaviors.containsKey(p.instance().name()) && data.selfAnimates(p) && sp.act().looping() && sp.act().duration > 0 && sp.act().hasSkeletalData()
 						&& p.object().skeleton().size() <= devple.gow.engine.asset.AnimatedModel.MAX_JOINTS) {
 					amb = new Ambient(p.instance().name().toLowerCase(Locale.ROOT), p.object().skeleton(), sp.act(),
 							p.instance().matrix(), sp.time());

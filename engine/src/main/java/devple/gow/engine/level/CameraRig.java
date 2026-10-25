@@ -375,6 +375,25 @@ public final class CameraRig {
 		volumeQuery = on;
 	}
 
+	/** CMV 볼륨 질의가 켜져 있는가 (전역 0x29F138, 시험용). */
+	public boolean volumeQuery() {
+		return volumeQuery;
+	}
+
+	/**
+	 * 카메라 리셋 0x1EDF48(관리자, 이름 0) [확실: 코드]: 상태 링을 비우고 (+0x750/+0x754 = −1, 항목마다 0x1F25F0), 현재 이름을 "default" 로,
+	 * 지금 대상 자리의 볼륨 선택 (0x1EE8E0) 을 전환 0 으로 걸고 (0x1EEE88(…, 0.0)), CMV 질의 0x29F138 = 1. 스크립트 Goto (Warp_Jump 0x1B2E08 →
+	 * 0x1B2FDC → 0x1EFC98 → 0x1EDF48(0)) 가 부른다 — 그래서 Goto 는 앞서 Internal 0x9(false) 로 끈 질의를 되켜고 카메라를 끊는다
+	 * (DEST03 세이렌 싸움 StormCmbtCam → d01Mp03 → Goto CentrePlatform 뒤 보통 카메라, 영상 2950, 43 §32). 이어지는 요청 (Start CameraName 0x1A8E10,
+	 * 같은 동작의 SwitchCamera) 은 그 뒤에 들어간다.
+	 */
+	public void reset() {
+		shots.clear();
+		active.clear();
+		volumeQuery = true;
+		framedLast = false; // 다음 갱신은 반드시 선택한다 (빈 상태 링)
+	}
+
 	/** Vis 이펙터 슬롯 4 (Attr11_1, 오브젝트 속성 0x11 = 충돌 서버 볼륨 추정): 1 켬, 2 끔. 꺼진 소유자의 CMV 는 무시. */
 	public void setOwnerVolumes(String owner, boolean on) {
 		if (on) {

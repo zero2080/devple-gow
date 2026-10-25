@@ -314,6 +314,8 @@ public final class HeroRig implements AutoCloseable {
 				ctl.navTick(dt);
 				navActive = true;
 			}
+		} else if (nav != null) {
+			nav.clearPrompt(); // 기술 중에는 사용 질의 없음 → 안내 슬롯 0 지움 (0x1DC3F8)
 		}
 		if (navActive) {
 			// 매달림·줄·밀기 중에는 전투·점프 입력 없음 [근사: 원작 줄 공격 기술은 미구현]

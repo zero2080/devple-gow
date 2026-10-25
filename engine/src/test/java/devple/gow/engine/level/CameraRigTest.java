@@ -92,6 +92,30 @@ class CameraRigTest {
 	}
 
 	@Test
+	void gotoResetReenablesVolumeQuery() throws Exception {
+		// 43 §32: DEST03 세이렌 싸움 — PlayFirstMpeg-MpegDone 이 CMV 질의를 끄고 StormCmbtCam (우선순위 15) 을 건다. d01Mp03 뒤 SecondMpgDone 의
+		// Goto CentrePlatform (Warp_Jump → 0x1EFC98 → 0x1EDF48(0)) 이 질의를 되켜고 상태 링을 비워 보통 볼륨 카메라로 끊는다 (영상 2950)
+		LevelData d = load("DEST03");
+		CameraRig rig = new CameraRig(d);
+		Vector3f hero = new Vector3f(3680, 550, 3296);
+		rig.update(1 / 60f, hero, 0, false);
+		rig.setVolumeQuery(false);
+		rig.request("StormCmbtCam");
+		rig.update(1 / 60f, hero, 0, false);
+		assertEquals("StormCmbtCam", rig.current());
+		for (int i = 0; i < 60; i++) {
+			rig.update(1 / 60f, hero, 0, false); // 질의가 꺼져 있으면 유지
+		}
+		assertEquals("StormCmbtCam", rig.current());
+		assertFalse(rig.volumeQuery());
+		rig.reset(); // Goto
+		assertTrue(rig.volumeQuery());
+		rig.update(1 / 60f, hero, 0, false);
+		assertTrue(rig.current().startsWith("StrmCam"), rig.current());
+		assertFalse(rig.cutThisTick(), "리셋 첫 선택은 컷 판정 밖 (입력 기준 유지 없음)");
+	}
+
+	@Test
 	void scriptRequestAndVolumeOff() throws Exception {
 		LevelData d = load("ATHN01A");
 		CameraRig rig = new CameraRig(d);
