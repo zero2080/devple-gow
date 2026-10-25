@@ -26,7 +26,8 @@ public final class ArtemisBladeModel implements AutoCloseable {
 	private ArtemisBladeModel(WadAssets assets, Skeleton sk, AnimatedModel model) {
 		this.assets = assets;
 		this.model = model;
-		model.layer3 = true; // 무기 궤적 객체 0x12DE70 도 0x150738(모델, 2) → 층 3 [추정: 아르테미스의 검이 이 경로]
+		// 층 2 (43 §31): R_BRSRK 머티리얼은 모두 flags2 0x100 (반투명 단계, 그림자 합성 뒤) — 무기 궤적 0x12DE70 의 0x150738(…, 2) → 층 3 은
+		// 0x23EB58 로 만든 궤적 띠 인스턴스 (0x12E118 – 0x12E1F8) 라 검 모델이 아니다 [확실: 디스어셈블 · 데이터]
 		this.idle = Pose.idle(sk);
 	}
 

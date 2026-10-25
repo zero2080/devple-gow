@@ -2224,7 +2224,9 @@ public final class GameScene implements Scene {
 			}
 		});
 		oldNb.forEach((n, k) -> {
-			if (!kinds.containsKey(n) && !neighbourKinds.containsKey(n)) {
+			if (n.startsWith(levelName + ":")) {
+				kinds.put(n, k); // 다른 슬롯이던 때 낸 레벨 템플릿 종류 (neighbourTemplateKind) — 이제 현재 레벨 것 (levelTemplateKind 와 같은 키, 43 §31)
+			} else if (!kinds.containsKey(n) && !neighbourKinds.containsKey(n)) {
 				neighbourKinds.put(n, k); // 예전 다른 슬롯들의 종류 (loadNeighbourKinds 는 씬 동안 쌓는다 — 그대로)
 			}
 		});
@@ -2422,7 +2424,11 @@ public final class GameScene implements Scene {
 		EnemyFactory.Kind kind = bossKind != null ? bossKind : kinds.entrySet().stream().filter(e -> !e.getKey().contains(":") && e.getValue() != null
 				&& e.getValue().hasTemplate(tpl)).map(Map.Entry::getValue).findFirst().orElse(null);
 		if (kind == null && neighbour) { // 다른 슬롯 레벨의 리소스 (loadNeighbourKinds — 슬롯마다 상주, 0x1BB928)
-			kind = neighbourKinds.values().stream().filter(k -> k != null && k.hasTemplate(tpl)).findFirst().orElse(null);
+			kind = neighbourKinds.entrySet().stream().filter(e -> !e.getKey().contains(":") && e.getValue() != null && e.getValue().hasTemplate(tpl))
+					.map(Map.Entry::getValue).findFirst().orElse(null);
+		}
+		if (kind == null && neighbour) {
+			kind = neighbourTemplateKind(tpl); // 다른 슬롯 레벨 WAD 자체 AI1 (DEST01 아테나 석상 aoXSA 307, 43 §31)
 		}
 		if (kind == null && neighbour) {
 			System.out.printf("이웃 스폰 생략: %s 템플릿 %d (올린 적 종류에 없음)%n", r.source().name(), tpl);
@@ -2582,6 +2588,38 @@ public final class GameScene implements Scene {
 		if (bridge != null) {
 			bridge.stoneKill(f); // 1046 Stone Kill → 스크립트 (0x265E04, ATHN02D EventSmash1)
 		}
+	}
+
+	/**
+	 * 다른 슬롯 레벨 WAD 자체 AI1 템플릿의 종류 (처음 쓸 때 로드, 없으면 null) — 키 "레벨:오브젝트" 로 {@link #neighbourKinds} 에 둔다.
+	 * 원작 레벨 WAD 는 슬롯마다 상주하고 SpawnEnemy 효과 0x1AC850 → 0x1A4DB0 은 그 슬롯 스크립트에서 똑같이 적을 만든다 (43 §17.2-1 의 RSRCS 와 같은 까닭) —
+	 * DEST00 의 LoadWad("Dest01") 로 DEST01 이 다른 슬롯에 올라오면 시작 엔티티의 SpawnAtStart 아테나 석상 둘 (d01Mi01a/b-aoXSAAI1/2, 템플릿 307 =
+	 * 레벨 오브젝트 goaoxsa) 이 그때 생긴다. 예전 엔진은 RSRCS 종류만 찾아 "이웃 스폰 생략" 했고, 이음 뒤에도 시작 엔티티가 다시 돌지 않아 사막 입구 석상
+	 * (영상 1065 · 1145–1153 의 안개 속 석상 실루엣, R2 대화 345) 이 없었다 (43 §31).
+	 */
+	private EnemyFactory.Kind neighbourTemplateKind(int ai1) {
+		LevelData od = otherData;
+		String on = otherName;
+		if (od == null || od.wad == null || on == null) {
+			return null;
+		}
+		Tweaks lt = new Tweaks();
+		lt.load(od.wad);
+		String obj = EnemyFactory.levelTemplateObject(lt, ai1);
+		if (obj == null) {
+			return null;
+		}
+		String key = on + ":" + obj;
+		if (!neighbourKinds.containsKey(key)) {
+			EnemyFactory.Kind k = null;
+			try {
+				k = EnemyFactory.load(Stages.wad(session.rom, on), session.permk, ai1, obj);
+			} catch (IOException | RuntimeException ex) {
+				System.out.println("이웃 레벨 템플릿 " + ai1 + " (" + key + ") 로드 실패: " + ex.getMessage());
+			}
+			neighbourKinds.put(key, k);
+		}
+		return neighbourKinds.get(key);
 	}
 
 	/** 레벨 WAD 자체 AI1 템플릿의 종류 (처음 쓸 때 로드, 없으면 null). */

@@ -179,6 +179,23 @@ public final class SceneFog {
 		return true;
 	}
 
+	/**
+	 * 그림자 합성 (render.ShadowRenderer, 층 2 불투명 단계 뒤 — 원작 0x160518 은 안개 노드 앞, 43 §31): 안개 유니폼 + 지금 깊이 (그림자 받는 면까지)
+	 * 를 사본에 복사해 묶는다. 이 복사는 영웅 등 뒤 단계 전의 깊이라, 안개 앞 반투명 패스용 사본은 {@link #armDepth} 뒤 처음 쓸 때 다시 복사한다.
+	 *
+	 * @return 안개가 걸리면 true (그림자 셰이더 uShadowFog)
+	 */
+	public boolean applyShadow(Shader s) {
+		if (!on()) {
+			return false;
+		}
+		env.applyFog(s, cam, height);
+		copied = false;
+		bindSceneDepth(s);
+		copied = false;
+		return true;
+	}
+
 	/** 렌즈플레어 셰이더: 장면 깊이 안개 (uFogPass 1). */
 	public boolean applyScene(Shader s) {
 		s.use();

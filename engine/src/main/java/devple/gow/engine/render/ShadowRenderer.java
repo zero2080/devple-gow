@@ -62,6 +62,15 @@ public final class ShadowRenderer implements AutoCloseable {
 		return shadow ? Math.max(c - SUBTRACT_8BIT, 0) : c;
 	}
 
+	/**
+	 * 안개를 이미 받은 화소에서 뺄 양 (0..1, 43 §31): 원작은 그림자 합성 (층 2, 0x160518) 뒤에 안개 노드 (층 2 칸 5, 0x1281C8) 가 프레임을
+	 * 안개색에 섞으므로 (1 − F)·(c − 38) + F·f = [(1 − F)·c + F·f] − (1 − F)·38 — 안개 블렌드 0 이면 38·(1 − F), 가산·감산 안개 (1·2) 는
+	 * c − 38 ± F·f 라 38 그대로 [확실: 순서 0x160CC0 · 식 / 근사: 0 에서 멈추는 자리 (원작은 빼기에서, 엔진은 안개 뒤에서)].
+	 */
+	public static float foggedSubtract(float fogFactor, int fogBlend) {
+		return fogBlend == 0 ? SUBTRACT * (1 - Math.clamp(fogFactor, 0f, 1f)) : SUBTRACT;
+	}
+
 	/** 볼륨 삼각형 (바깥 반시계) 을 스텐실로 세고 그림자 화소를 어둡게 한다. 불투명 장면 (깊이) 이 그려진 뒤 부른다. */
 	public void draw(Camera cam, float aspect, ShadowVolume.Out tris) {
 		int n = tris.triangles();
@@ -107,11 +116,19 @@ public final class ShadowRenderer implements AutoCloseable {
 		glEnable(GL_BLEND);
 		glBlendEquation(GL_FUNC_REVERSE_SUBTRACT);
 		glBlendFunc(GL_ONE, GL_ONE);
+		// 안개 (43 §31): 받는 면 화소의 안개 계수만큼 빼는 양을 줄인다 (foggedSubtract) — 장면 깊이 사본은 지금 깊이 (그림자 받는 면까지)
+		devple.gow.engine.fx.SceneFog fog = devple.gow.engine.fx.SceneFog.current();
+		boolean fogged = fog != null && fog.applyShadow(shader);
+		shader.set("uShadowFog", fogged ? 1 : 0);
 		shader.set("uScreen", 1);
 		shader.set("uColor", new org.joml.Vector4f(SUBTRACT, SUBTRACT, SUBTRACT, 0));
 		glBindVertexArray(screenVao);
 		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 		glBindVertexArray(0);
+		if (fogged) {
+			devple.gow.engine.fx.FxEnvironment.disableFog(shader);
+			shader.set("uShadowFog", 0);
+		}
 		// 복원
 		glBlendEquation(GL_FUNC_ADD);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);

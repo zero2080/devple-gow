@@ -2080,6 +2080,57 @@ HUD·메시지 상자·구역 제목 (§19.2-5 의 넘겨 띄우기)·이펙트�
 - 이분 (결정적, 같은 빌드 두 번씩 같은 결과): ATHN03C · ATHN05B 모두 68b8f16 = 전 값, 69cfd3e = 후 값 (71ea2e4 · 22d2e77 도 후 값).
 - 실제 세이브 위치 (`~/Library/Application Support/devple-gow`) 는 생기지 않았다. 엔진 테스트 676 통과.
 
+## 31. QA vs PS2 영상 2화 — 길 잃은 영혼들의 사막: DEST00 협곡 → DEST01 모래 폭풍 · 아테나 석상 · 세이렌 사냥 → DEST02 세이브 (영상 1040–2520 초, 2026-10-25)
+
+영상 = 박대봉 2화 (https://www.youtube.com/watch?v=hoXYXNef60U, 전사 (보통)), 프레임 728×409 (4:3 게임 화면이 가운데, `work/verify/desert_sirens/video/v<초>.jpg`
+112 장, 커밋 안 함). 엔진 = origin/main 4fe5fa2 위, 1280×720 lockstep, `-Dgow.difficulty=1` (보통).
+레벨 연결 [확실: 스크립트]: ATHN03E → DEST00 (구역 제목 8 "길 잃은 영혼들의 사막" · 협곡 · 상자 둘 · wadLoadDest01 LoadWad("Dest01") · LoadCheckDsrt1 이음) →
+DEST01 (StartMovie-MovieTrigger: FadeOut 1 초 → 동영상 Semo04 → MpegDone: 첫 세이렌 Siren1Stuff 스폰 · 메시지 345 9 초 · LoadWad("Dest00") · IdleOff + CheckPoint;
+아테나 석상 둘 d01Mi01a/b (템플릿 307, R2 대화 345 / 414–416); SwitchSiteZone (첫 세이렌 근처 진입 또는 세이렌 피격 1035 115–123·160) → SirenCam · 0.6 초 PAUSE ·
+5 초 뒤 SwitchSite 1025 (2, 1) → 체크포인트; 세이렌 셋 = Filter 119 → 118 (patrol3) → 120 (patrol2), 처치마다 sirenSpirit 날기 · 문 카메라 SirenDrCam · 메시지
+415 / 416 / 417 · 문 별 SirenEnter/Glow; 2·3 째 사냥 동안 구역 (Siren2Sec1–15 · Siren3Sec1–18) 마다 갑옷 미노타우로스 (템플릿 51) 둘씩 리스폰; 셋째 뒤 EndDoor 열림 ·
+DMCdog 문 열림) → LoadCheckDsrt2 → DEST02 (SaveGameZone 세이브 (2433, 512, 6739)). 영상의 처치는 넷 (1490 · 2015 · 2335 · 2445) 이고 메시지는 415 · 415 · 416 · 417 —
+둘째 415 는 첫 세이렌을 다시 죽인 것 (사이에 체크포인트 재시작, 첫 처치 뒤 체크포인트는 석상 1 대화 MimeDone → Dummy4Checkpt 에서만) 으로 본다 [추정: 영상에 사망 화면은
+10 초 간격 섬네일에 없음].
+
+### 31.1 장면 대응
+| 영상 | 원작 (스크립트·데이터) | 엔진 |
+|---|---|---|
+| 1035–1060 | DEST00 협곡: 구역 제목 · 상자 · 어두운 협곡을 내려감, 카메라는 협곡 위 EntryCam 에 남아 크레토스가 작아짐 (1055 · 1060) | 같은 카메라 · 같은 구도 (`03` 1 행 1 열) |
+| 1065–1068 | DEST01 입구: 어두운 모래 안개 속 석상 실루엣 쪽으로 걷다가 페이드 (FadeOutEntry 1 초) | 고치기 전 석상 없음 (§31.2-2), 크레토스·석상 안개 없음 (§31.2-1) → 고친 뒤 같음 (`03` 2 행 1 열) |
+| 1072–1144 | 동영상 Semo04 (빛나는 아테나 석상 · 판도라의 신전을 진 크로노스) | `--skip-movies` 로 건너뜀 (MpegDone 501 → 같은 흐름) |
+| 1145–1153 | 메시지 345 "사이렌의 노래를 따라가라, 크레토스. …" (9 초) — 크레토스 뒤 카메라, 안개 속 석상 실루엣 | 같은 메시지 · 같은 구도 (`01` · `02`) |
+
+### 31.2 엔진 결함과 수정
+1. **캐릭터·자세 GO 가 안개를 전혀 받지 않았다.** `FxEnvironment.applyFog` / `disableFog` 가 셰이더 프로그램을 묶지 않고 glUniform 을 불러, `GameScene.drawActors`
+   (영웅·적 셰이더) · `LevelScene.renderPosed` (자세 GO 셰이더) · 거울 반사의 영웅에 건 안개가 **그때 묶여 있던 다른 프로그램** 으로 갔다 (같은 소스면 같은 위치 —
+   레벨 자세 GO 셰이더가 대신 받고, 다른 소스면 엉뚱한 유니폼). 원작 안개는 층 2 칸 5 노드의 후처리라 층 2 의 모든 것 (레벨 · 캐릭터 · 자세 GO) 에 Z 로 걸린다 [확실:
+   0x125D08 → 0x15F288(층 2, 칸 5, 0x7100), 0x161A80 의 층 1–4 차례, 16 §1.2]. DEST01 gofogregsand (CentreZ 16500, Fog_A 1) 는 175 앞의 크레토스에 0.55, 297 앞의
+   석상에 0.74 — 영상 1150 · 1170 · 1200 · 1300 은 크레토스가 모래 안개에 반쯤 묻히는데 엔진은 또렷했다 (`01` · `02`). 수정: 두 함수가 먼저 `s.use()`.
+   셰이더 디버그 (안개 계수를 색으로) 로 확인: 고치기 전 영웅 화소 uFogMode 0, 고친 뒤 계수 0.54 (식 0.555).
+2. **블레이드·아르테미스의 검 = 층 2** [확실: 0x1F9F28 – 0x1FA010 · 0x12E118 – 0x12E1F8 · 데이터]. 47 §7.4.2 의 "Blades_Init 의 0x150738(모델, 2) → 층 3" 은
+   0x23EB58 로 만든 **사슬 띠 인스턴스** (MAT_chainlink/chainglow, 서버 vtable +0x2C 의 반환, +0xD4 = 3) 였고 무기 궤적 0x12DE70 도 궤적 띠다. 블레이드 모델 머티리얼
+   (R_WPN* `MAT_M01Blade128` …, R_BRSRK* `MAT_Berserker1A`) 은 flags2 0x100 (층 2 반투명 단계 = 그림자 합성 뒤) 이라 안개를 받는다 — 영상 1065 · 1150 의 등 블레이드도
+   크레토스와 같이 묻힌다. `BladeModels` · `ArtemisBladeModel` 의 `layer3` 를 뺐고 (단계는 0x100 으로 그대로 LATE), `AnimatedModel` 은 층 3 모델·층 3·4 머티리얼
+   (flags2 0x18) 파트에 uFogOff, 가산·뺄셈 파트에 uFogAdd ((1 − F) 배, 구운 메시 `Renderer` 와 같은 규칙) 를 모든 모델에 건다 (예전엔 이펙트 GO `sceneFog` 만).
+3. **그림자도 안개 아래.** 원작 그림자 합성 0x160518 은 층 2 불투명 단계 뒤 · 안개 노드 앞이라 (1 − F)·(c − 38) + F·f — 엔진은 이미 안개를 받은 화소에서 38 을 빼
+   안개 속 크레토스 아래 그림자만 또렷했다. `ShadowRenderer` 어둡게 하기 패스가 그 화소 장면 깊이 (지금 깊이 사본, `SceneFog.applyShadow` — 안개 앞 반투명 패스용
+   사본은 armDepth 뒤 다시 복사) 의 계수로 38·(1 − F) 만 뺀다 (안개 블렌드 0; 가산·감산 안개는 38 그대로) [확실: 순서 / 근사: 0 에서 멈추는 자리].
+4. **사막 입구 아테나 석상이 없었다.** DEST01 d01Mi01a/b-aoXSAAI1/2 (SpawnAtStart, 템플릿 307 = DEST01 자체 AI1 → 오브젝트 goaoxsa) 는 DEST00 의 LoadWad("Dest01")
+   로 DEST01 이 **다른 슬롯** 일 때 시작 엔티티가 돈다. 엔진의 이웃 스폰은 RSRCS 종류 (43 §17.2-1) 만 찾아 "이웃 스폰 생략" 하고, 이음 뒤에도 시작 엔티티가 다시 돌지
+   않아 석상이 끝내 없었다 (영상 1065 · 1145–1153 의 석상 실루엣, R2 대화 345 · 414–416). 원작 레벨 WAD 도 슬롯마다 상주한다 → `GameScene.neighbourTemplateKind`
+   (다른 슬롯 레벨 WAD 의 AI1 → "레벨:오브젝트" 종류, `neighbourKinds`), 이음 때 새 현재 레벨의 것을 `kinds` 로 옮긴다 (`levelTemplateKind` 와 같은 키). 확인: 협곡 경로
+   (r3) 에서 "이웃 적 스폰: DEST01.WAD (템플릿 307)" 둘, 이음 뒤 적 종류 `[R_MI2, DEST01:aoxsa, R_SID]`.
+
+### 31.3 시험
+`DesertSirensQaTest` — `desertFogHazesCharactersAtCameraDistance` (DEST01 안개 데이터 · 175 → 0.555, 297 → 0.742, 70 → 0), `shadowSubtractionIsUnderTheFog`
+(38·(1 − F), 가산·감산 안개는 38), `bladeModelsAreLayer2AndLayer3IsTheChainStrip` (블레이드·검 머티리얼 0x100 · 층 3·4 아님, Blades_Init · 0x12DE70 의 0x23EB58 →
++0xD4 = 3 → 0x150738(…, 2) 순서), `desertAthenaStatueIsANeighbourLevelTemplate` (SpawnAtStart · 307 · RSRCS 에 없음 · DEST01 레벨 템플릿 aoxsa).
+
+### 31.5 증거 (`work/verify/desert_sirens/`, 커밋 안 함)
+`01_fog_v1150_before_after` (영상 1150 | 고치기 전 | 고친 뒤), `02_fog_kratos_closeup_v1150_before_after`, `03_entrance_statue_after_seam` (엔진 협곡 → 입구 → 메시지 345 6 장 |
+영상 1060 · 1065 · 1150).
+
 ## 34. QA vs PS2 영상 2화 — 아틀라스의 시험: PAND01A 구멍 방 → 위층 · 방패 · 수레 → PAND01D 줄 싸움 · 하데스의 망령 → 세이브 (영상 4050–5189 초, 2026-10-25)
 
 영상 = hoXYXNef60U (2화, 전사 (보통) = `-Dgow.difficulty=1`). 레벨 연결 [확실: 스크립트]: PAND01A (구역 11 "아틀라스의 시험" — ZoneReportGroup (−240, −2, −36),

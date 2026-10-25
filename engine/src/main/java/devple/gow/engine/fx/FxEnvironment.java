@@ -248,9 +248,13 @@ public final class FxEnvironment {
 	/**
 	 * fog.glsl 안개 유니폼 설정 (basic.frag · particle.frag · lensflare.frag 공용). 안개가 없거나 꺼져 있으면 끈다.
 	 *
+	 * 셰이더 프로그램을 먼저 묶는다 — glUniform 은 지금 묶인 프로그램에 걸리므로, 예전에는 영웅·적 셰이더 (GameScene.drawActors) 와 자세 GO 셰이더
+	 * (LevelScene.renderPosed) 에 건 안개가 그때 묶여 있던 다른 프로그램으로 가서 캐릭터가 안개를 전혀 받지 않았다 (DEST01 모래 폭풍, 43 §31).
+	 *
 	 * @param texUnit 안개 텍스처 유닛 (basic = 1, 파티클은 열기 아지랑이 프레임 복사본이 1 이라 {@link SceneFog#FOG_TEX_UNIT})
 	 */
 	public void applyFog(Shader s, Camera cam, int fbHeight, int texUnit) {
+		s.use();
 		FxEnvironment f = src();
 		EnvParams.Fog fog = override != null ? override : f.fog;
 		EnvParams.LayeredFog layered = override != null ? null : f.layered;
@@ -388,6 +392,7 @@ public final class FxEnvironment {
 	}
 
 	public static void disableFog(Shader s) {
+		s.use();
 		s.set("uFogMode", 0);
 	}
 }

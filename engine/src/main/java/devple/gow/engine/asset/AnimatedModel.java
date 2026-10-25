@@ -31,7 +31,7 @@ public final class AnimatedModel implements AutoCloseable {
 	/**
 	 * @param litColor 동적 라이트 경로의 머티리얼 색 (MAT 헤더 색 × 레이어 rgb, VU qw 76 — {@link WadAssets#litColor})
 	 * @param src     원본 스킨 파트 — 혼합 노드 팔레트 ({@link SkinnedModel.Part#palette}, 05 문서 "범위 밖 슬롯")
-	 * @param postFog 안개 뒤 층 (3·4) 머티리얼 ({@link WadAssets#postFogLayer}) — {@link #sceneFog} 모델만 본다
+	 * @param postFog 안개 뒤 층 (3·4) 머티리얼 ({@link WadAssets#postFogLayer}) — 안개 없음 (모든 모델, 43 §31)
 	 * @param fx      추가 레이어 · 첫 레이어 환경맵 (구운 레벨 메시와 같은 {@link devple.gow.engine.fx.MaterialFx}, null = 없음) — 자세 GO 도 정적일 때와 같이 그린다
 	 */
 	private record Part(SkinnedMesh mesh, Texture texture, RenderModel.Blend blend, float[] tint, boolean lit,
@@ -104,8 +104,10 @@ public final class AnimatedModel implements AutoCloseable {
 	/** 스크립트 이름 (Vis 슬롯 2 / SCR_NoShadow 로 끄기). */
 	public String shadowKey;
 	/**
-	 * 그리기 층 3 (0x150738(모델, 2) → 머티리얼 bit 35: 블레이드 Blades_Init 0x1FA010) — 층 2 가 다 끝난 뒤라 모든 파트가 그림자 합성 뒤
-	 * ({@link devple.gow.engine.render.DrawStage#LATE}). 기본 false = 층 2 (파트별 머티리얼 단계).
+	 * 그리기 층 3 (0x150738(인스턴스, 2) → 머티리얼 bit 35) — 층 2 가 다 끝난 뒤라 모든 파트가 그림자 합성 뒤
+	 * ({@link devple.gow.engine.render.DrawStage#LATE}) 이고 안개 노드 (층 2 칸 5) 뒤라 안개를 받지 않는다. 기본 false = 층 2 (파트별 머티리얼 단계).
+	 * 원작에서 이 호출을 받는 것은 사슬·궤적 띠 (0x23EB58 인스턴스: Blades_Init · 0x12DE70 · 0x2192B8) 와 하늘 (1) · 거울 (0) 뿐이라
+	 * 블레이드·아르테미스의 검 모델은 층 2 다 (43 §31).
 	 */
 	public boolean layer3;
 	/**
@@ -115,7 +117,8 @@ public final class AnimatedModel implements AutoCloseable {
 	/**
 	 * 이펙트 GO (EffectSystem): 안개 앞 반투명 패스로 그린다 ({@link devple.gow.engine.fx.SceneFog}, 16 §1.2) — 호출자가 셰이더에 장면 안개를 걸고,
 	 * 파트마다 불투명 = 조각 깊이 (지오메트리와 같음), 반투명 = 장면 깊이 사본 (uFogScene, 원작 안개 패스는 깊이를 쓰지 않는 화소에 뒤 장면 Z 의
-	 * 계수), 가산·뺄셈 = (1 − F) 배 (uFogAdd), 층 3·4 머티리얼 = 안개 없음 (uFogOff). false (캐릭터·레벨 GO) 면 예전 그대로.
+	 * 계수), 가산·뺄셈 = (1 − F) 배 (uFogAdd), 층 3·4 머티리얼 = 안개 없음 (uFogOff). false (캐릭터·레벨 GO) 면 반투명 파트도 조각 깊이
+	 * (가산·뺄셈 (1 − F) · 층 3·4 머티리얼 · {@link #layer3} 안개 없음은 같다, 43 §31).
 	 */
 	public boolean sceneFog;
 
@@ -363,17 +366,15 @@ public final class AnimatedModel implements AutoCloseable {
 				// 노멀맵 (원작에 없음, 44 문서): 첫 레이어 텍스처, 불투명·알파 블렌드만 (환경맵 첫 레이어 제외 — Renderer 와 같음)
 				boolean nm = (mode == RenderModel.Blend.OPAQUE || mode == RenderModel.Blend.ALPHA) && !(p.fx() != null && p.fx().env0())
 						&& devple.gow.engine.render.Renderer.bindNormalMap(shader, p.texture());
-				if (sceneFog) {
-					shader.set("uFogScene", opaque ? 0 : 1);
-					shader.set("uFogAdd", mode == RenderModel.Blend.ADD || mode == RenderModel.Blend.SUB ? 1 : 0);
-					shader.set("uFogOff", p.postFog() ? 1 : 0);
-				}
+				// 안개 (16 §1.2, 43 §31): 원작 안개 노드는 층 2 칸 5 의 후처리라 층 2 캐릭터·자세 GO 도 Z 로 받는다 — 가산·뺄셈 파트는 (1 − F) 배
+				// (Renderer 의 구운 메시와 같음), 층 3 (블레이드) · 층 3·4 머티리얼은 안개 뒤. 장면 깊이 사본은 이펙트 GO 반투명 파트만 (sceneFog)
+				shader.set("uFogScene", sceneFog && !opaque ? 1 : 0);
+				shader.set("uFogAdd", mode == RenderModel.Blend.ADD || mode == RenderModel.Blend.SUB ? 1 : 0);
+				shader.set("uFogOff", layer3 || p.postFog() ? 1 : 0);
 				p.mesh().draw();
-				if (sceneFog) {
-					shader.set("uFogScene", 0);
-					shader.set("uFogAdd", 0);
-					shader.set("uFogOff", 0);
-				}
+				shader.set("uFogScene", 0);
+				shader.set("uFogAdd", 0);
+				shader.set("uFogOff", 0);
 				if (nm) {
 					shader.set("uNmOn", 0);
 				}
@@ -440,18 +441,14 @@ public final class AnimatedModel implements AutoCloseable {
 			shader.set("uEnvUv", l.env() && p.lit() ? 1 : 0);
 			float[] uv = ft >= 0 ? fx.uv(l.index(), ft) : null;
 			shader.set("uUvOffset", uv != null ? uv[0] : 0f, uv != null ? uv[1] : 0f);
-			if (sceneFog) {
-				shader.set("uFogScene", 1);
-				shader.set("uFogAdd", lb == RenderModel.Blend.ADD || lb == RenderModel.Blend.SUB ? 1 : 0);
-				shader.set("uFogOff", p.postFog() ? 1 : 0);
-			}
+			shader.set("uFogScene", sceneFog ? 1 : 0);
+			shader.set("uFogAdd", lb == RenderModel.Blend.ADD || lb == RenderModel.Blend.SUB ? 1 : 0);
+			shader.set("uFogOff", layer3 || p.postFog() ? 1 : 0);
 			p.mesh().draw();
 		}
-		if (sceneFog) {
-			shader.set("uFogScene", 0);
-			shader.set("uFogAdd", 0);
-			shader.set("uFogOff", 0);
-		}
+		shader.set("uFogScene", 0);
+		shader.set("uFogAdd", 0);
+		shader.set("uFogOff", 0);
 		shader.set("uEnvUv", 0);
 		shader.set("uUvOffset", 0f, 0f);
 		glDisable(GL_BLEND);

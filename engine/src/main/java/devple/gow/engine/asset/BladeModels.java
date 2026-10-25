@@ -28,7 +28,9 @@ public final class BladeModels implements AutoCloseable {
 		this.assets = assets;
 		this.skeleton = sk;
 		this.model = model;
-		model.layer3 = true; // Blades_Init 0x1FA010: 0x150738(모델, 2) → 층 3 = 그림자 합성 뒤 (47 §7.4.2)
+		// 층 2 (43 §31): 블레이드 머티리얼은 모두 flags2 0x100 (영웅과 같은 반투명 단계 = 그림자 합성 뒤, DrawStage.lateMaterial bit 40) 이고 안개를 받는다.
+		// Blades_Init 0x1FA010 의 0x150738(…, 2) → 층 3 은 블레이드 GO 가 아니라 0x23EB58 로 만든 사슬 띠 (MAT_chainlink/chainglow) 의 인스턴스다
+		// [확실: 0x1F9F28 – 0x1FA010 · 데이터] — 예전 47 §7.4.2 의 "블레이드 = 층 3" 은 그 인스턴스를 모델로 읽은 것
 		this.idle = Pose.idle(sk);
 	}
 
