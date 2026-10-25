@@ -50,6 +50,8 @@ public final class MagicFx implements AutoCloseable {
 	static final int MFX_LAND = 0x35159154, MFX_SLICE = 0xE54A19A6, MFX_SLICE_SOUND = 0x0F01C134;
 	/** Hash127Upper: SCR_ShowMedusaHead (0x197280), SCR_ShowThunderbolt (0x19FF60), SCR_ThrowThunderbolt (0x1A0B00). */
 	public static final int SCR_SHOW_MEDUSA_HEAD = 0xE5D96CF1, SCR_SHOW_THUNDERBOLT = 0x8D7EAE7F, SCR_THROW_THUNDERBOLT = 0x96EDE590;
+	/** Hash127Upper("SCR_BerserkBladeFX") — BERSERKENTER [0, 1] 의 SCRIPT 이벤트 (Items_RegisterScr 0x19CF28 → 0x19C798). */
+	public static final int SCR_BERSERK_BLADE_FX = 0x5968598D;
 
 	/**
 	 * 레벨 충돌 질의 (무기-월드 베기, 바닥 피 자국, 착지). GameScene 이 LevelCollision 으로 제공.
@@ -294,8 +296,71 @@ public final class MagicFx implements AutoCloseable {
 				showThunderbolt(c, e.index());
 			} else if (e.hash() == SCR_THROW_THUNDERBOLT) {
 				hideThunderbolt();
+			} else if (e.hash() == SCR_BERSERK_BLADE_FX) {
+				berserkBladeFx();
 			}
 		});
+	}
+
+	/**
+	 * SCR_BerserkBladeFX (0x19C798, BERSERKENTER 시작): 아르테미스의 검 WAD 맥락 (0x19C1F0 "WAD_R_Brsrk") 에서 영웅 "RWRIST" 관절 월드 행렬로
+	 * "goMAIBSActive" 를 만들어 그 관절에 붙인다 (0x2283A8(…, 행렬, 영웅, 관절)) [확실: 이름·관절 / 추정: 부착]. 오브젝트 maibsactive 는 관절 배율 1/32,
+	 * act MAIBSactive 0.93 초가 0.2 초 무렵 표면 이미터 BBglowemit (BBEFXgeomShape, 313/초, PTC_BBglowpart 파랑-보라 (83, 75, 204) 가산 0.12 초) 와
+	 * 불티 둘을 잠깐 켠다 — 검을 뽑을 때 손목 옆 보라 빛 (영상 4014).
+	 */
+	private void berserkBladeFx() {
+		stage("R_BRSRK", Math.max(0, artemisStage.getAsInt()));
+		fx.play("goMAIBSActive", out -> {
+			if (!heroJoints.world("rWrist", out)) {
+				out.translation(heroPos).translate(0, 40, 0).rotateY(heroYaw);
+			}
+			return true;
+		});
+	}
+
+	/** 아르테미스의 검 단계 (0..2, 들지 않았으면 −1) — GameScene 이 영웅 상태로 둔다. */
+	private java.util.function.IntSupplier artemisStage = () -> -1;
+	private EffectSystem.Effect artemisFx;
+	private int artemisFxStage = -1;
+
+	public void setArtemisBlade(java.util.function.IntSupplier stage) {
+		artemisStage = stage != null ? stage : () -> -1;
+	}
+
+	/**
+	 * 아르테미스의 검 GO (0x19C240): 장착 때 /Player/BerserkBlade "Stage n GO Name" (= goBerserkBlade, WAD_R_Brsrk) 을 만들어 영웅 RWEAPIH 관절에
+	 * 붙이고 (0x131460), 종류 &lt; 0xB 부품 (이미터) 의 생성률 배율 +0xB4 를 1 로 (0x19C3C4 – 0x19C414) — 표면 이미터 Bglowemit1 (700/초) ·
+	 * Bfireemit1 (1000/초) 가 칼날 모양 MSH_berzergeomShape1 위에 파랑-보라 (25, 29, 78) 가산 파티클 (0.15 / 0.10 초, PTC 0x30 = 검을 따라감) 을 낸다
+	 * [확실: 코드·데이터]. 메시는 {@code ArtemisBladeModel} 이 그린다 (hideMesh). 해제 (0x19C488) 는 GO 를 지운다 (0x132768).
+	 */
+	private void artemisBlade() {
+		int st = artemisStage.getAsInt();
+		if (st >= 0 && (artemisFx == null || artemisFx.done() || st != artemisFxStage)) {
+			if (artemisFx != null) {
+				artemisFx.stop();
+			}
+			stage("R_BRSRK", st);
+			String go = tw.s("/Player/BerserkBlade/", "Stage " + st + " GO Name", "goBerserkBlade");
+			artemisFx = fx.play(go, out -> {
+				if (!heroJoints.world("rWeapIH", out)) {
+					out.translation(heroPos).translate(0, 40, 0).rotateY(heroYaw);
+				}
+				return true;
+			}, Float.MAX_VALUE);
+			if (artemisFx != null) {
+				artemisFx.hideMesh = true;
+			}
+			artemisFxStage = st;
+		} else if (st < 0 && artemisFx != null) {
+			artemisFx.stop();
+			artemisFx = null;
+			artemisFxStage = -1;
+		}
+	}
+
+	/** 아르테미스의 검 GO (테스트). */
+	public EffectSystem.Effect artemisBladeFx() {
+		return artemisFx;
 	}
 
 	/**
@@ -1144,6 +1209,7 @@ public final class MagicFx implements AutoCloseable {
 		screen.update(m.lightningScript(), m.stage(3), dt);
 		godMode(heroCombat != null && heroCombat.owner() != null && heroCombat.owner().godMode());
 		normalBlades();
+		artemisBlade();
 		recentSounds.replaceAll((k, v) -> v - dt);
 		recentSounds.values().removeIf(v -> v <= 0);
 		for (Hittable h : enemies) {

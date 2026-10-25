@@ -71,6 +71,14 @@ public final class ParticleSystem implements AutoCloseable {
 		/** 커브 이미터 접선 / 법선 속력 (P+0x24 / P+0x28, dir 에 대한 비), 생성 거리 최소·최대 (×16 월드). */
 		public float tangentSpeed, normalSpeed, distMin, distMax;
 		/**
+		 * 표면 이미터 (FXC 서브타입 3, 원작 0x1252E0) 의 방출면: MSH_ 정점 (노드 로컬 xyz…), 정점 법선, 삼각형 정점 번호, 삼각형마다 누적 면적 (u16)
+		 * 과 노드 월드 ({@link #surfaceWorld} = 노드 로컬 · 관절 · GO, 매 프레임 소유자가 둔다). null = 표면 아님. 생성은 {@link #surfacePoint} ·
+		 * {@link #spawnOnSurface} — 접선 / 법선 속력 · 생성 거리는 {@link #tangentSpeed} 들을 같이 쓴다.
+		 */
+		public float[][] surfacePos, surfaceNrm;
+		public int[] surfaceTris, surfaceArea;
+		public final Matrix4f surfaceWorld = new Matrix4f();
+		/**
 		 * 원뿔·전방향 이미터 (FXC 서브타입 1/2) 의 생성 거리 (월드): 위치 = 이미터 원점 + 뽑은 방향 · lerp(최소, 최대) (0x122E78 이 P+0x18/0x1C × 16 을
 		 * 이미터 월드 행렬로 옮긴다 — 배율 포함) [확실]. 둘 다 0 이면 예전 상자 생성 ({@link ParticleDef#box}).
 		 */
@@ -386,7 +394,9 @@ public final class ParticleSystem implements AutoCloseable {
 		px[i] = c.x + r(b[0]);
 		py[i] = c.y + r(b[1]);
 		pz[i] = c.z + r(b[2]);
-		if (e.curve != null && e.curve.length >= 6) {
+		if (e.surfaceTris != null && e.surfaceTris.length >= 3) {
+			spawnOnSurface(e, i);
+		} else if (e.curve != null && e.curve.length >= 6) {
 			spawnOnCurve(e, i);
 		} else if (d.cone() >= 0) {
 			// FXC 서브타입 1 (0x122E78): +Y 기준 원뿔 → 이미터 방향으로 회전
@@ -499,6 +509,70 @@ public final class ParticleSystem implements AutoCloseable {
 			vy[i] = bdir.y * sp;
 			vz[i] = bdir.z * sp;
 		}
+	}
+
+	/**
+	 * 표면 위 한 점 (원작 0x1252E0 앞부분) [확실: 코드]: u (0..65535) 보다 누적 면적이 작은 동안 다음 삼각형 (0x125350 – 0x12538C, 면적 비례),
+	 * 무게중심 r1 · r2 (합이 1 을 넘으면 둘 다 1 − r 로 접어 삼각형 안에 고르게, 0x125454 – 0x125470) → 점 = P0·r1 + P1·r2 + P2·(1 − r1 − r2),
+	 * 법선 = 같은 무게의 정점 법선 합을 정규화 (0x1254D4 – 0x125580). 모두 노드 로컬 좌표.
+	 *
+	 * @return 고른 삼각형 번호
+	 */
+	static int surfacePoint(float[][] pos, float[][] nrm, int[] tris, int[] area, float u, float r1, float r2, Vector3f outPos, Vector3f outNrm) {
+		int n = tris.length / 3;
+		int k = 0;
+		while (k < n - 1 && area[k] < u) {
+			k++;
+		}
+		if (r1 + r2 > 1) {
+			r1 = 1 - r1;
+			r2 = 1 - r2;
+		}
+		float r3 = 1 - r1 - r2;
+		float[] a = pos[tris[3 * k]], b = pos[tris[3 * k + 1]], c = pos[tris[3 * k + 2]];
+		outPos.set(a[0] * r1 + b[0] * r2 + c[0] * r3, a[1] * r1 + b[1] * r2 + c[1] * r3, a[2] * r1 + b[2] * r2 + c[2] * r3);
+		float[] na = nrm[tris[3 * k]], nb = nrm[tris[3 * k + 1]], nc = nrm[tris[3 * k + 2]];
+		outNrm.set(na[0] * r1 + nb[0] * r2 + nc[0] * r3, na[1] * r1 + nb[1] * r2 + nc[1] * r3, na[2] * r1 + nb[2] * r2 + nc[2] * r3);
+		if (outNrm.lengthSquared() > 1e-12f) {
+			outNrm.normalize();
+		}
+		return k;
+	}
+
+	/**
+	 * 표면 이미터 한 파티클 (원작 0x1252E0) [확실: 코드]: 점·법선 N 은 {@link #surfacePoint}, 방향 b = N·법선 속력 (P+0x28) + T·접선 속력 (P+0x24),
+	 * T = ((난수 − ½)³ × N) 정규화 (0x1255CC – 0x125688, 둘 다 0 이면 b = 0), 위치 += b̂ · (최소 + 난수 · (최대 − 최소))·16 (0x125690 – 0x12570C),
+	 * 속도 = b · (속력 − 랜덤/2 + 난수 · 랜덤)·16 (b 정규화 안 함, 0x125714 – 0x12575C) — 모두 노드 로컬에서 만든 뒤 노드 월드 (0x29CA68+0xC0) 로
+	 * 옮긴다 (위치는 이동 포함, 속도는 3×3 · 배율 포함, 0x125768 – 0x1257CC). 이미터 자체의 방향 (P+0x00) 은 쓰지 않는다.
+	 */
+	private void spawnOnSurface(Emitter e, int i) {
+		ParticleDef d = e.def;
+		Vector3f p = new Vector3f(), nrm = new Vector3f();
+		surfacePoint(e.surfacePos, e.surfaceNrm, e.surfaceTris, e.surfaceArea, rnd.nextFloat() * 65535f, rnd.nextFloat(), rnd.nextFloat(), p, nrm);
+		Vector3f b = new Vector3f();
+		if (e.normalSpeed != 0) {
+			b.fma(e.normalSpeed, nrm);
+		}
+		if (e.tangentSpeed != 0) {
+			Vector3f t = new Vector3f(rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f, rnd.nextFloat() - 0.5f).cross(nrm);
+			if (t.lengthSquared() > 1e-12f) {
+				b.fma(e.tangentSpeed, t.normalize());
+			}
+		}
+		float bl = b.length();
+		if ((e.distMin != 0 || e.distMax != 0) && bl > 1e-6f) {
+			p.fma((e.distMin + rnd.nextFloat() * (e.distMax - e.distMin)) * 16f / bl, b);
+		}
+		float spd = Float.isNaN(e.speed) ? d.speed() : e.speed, sr = Float.isNaN(e.speedRnd) ? d.speedRnd() : e.speedRnd;
+		b.mul(spd - sr / 2 + rnd.nextFloat() * sr);
+		e.surfaceWorld.transformPosition(p);
+		e.surfaceWorld.transformDirection(b);
+		px[i] = p.x;
+		py[i] = p.y;
+		pz[i] = p.z;
+		vx[i] = b.x;
+		vy[i] = b.y;
+		vz[i] = b.z;
 	}
 
 	/** 미리 채우기: 비처럼 시작부터 화면에 차 있어야 하는 이미터. */

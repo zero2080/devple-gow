@@ -318,6 +318,8 @@ public final class GameScene implements Scene {
 	private void setGodBlades(devple.gow.engine.fx.MagicFx fx, HeroRig h) {
 		fx.setGodBlades(Content.file(session.rom, "R_WPN" + h.player.costume + "_" + Math.max(0, Math.min(5, h.bladeLevel())) + ".WAD"),
 				() -> !h.player.artemisEquipped);
+		// 아르테미스의 검 GO goBerserkBlade (0x19C240, 표면 이미터 보라 빛 — 43 §33): 단계 = HeroRig 의 R_BRSRK 단계와 같은 식
+		fx.setArtemisBlade(() -> h.player.artemisEquipped ? Math.min(2, h.player.level.getOrDefault(Weapon.ARTEMIS, 0)) : -1);
 	}
 
 	/** 페이드 동안 미리 만든 것 (48 문서 §9, null = enter 에서). */

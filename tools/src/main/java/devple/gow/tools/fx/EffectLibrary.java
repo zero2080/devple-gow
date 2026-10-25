@@ -35,7 +35,23 @@ public final class EffectLibrary {
 	 * @param ptc     PTC_ 모양 (+0x54 모양 이름으로 연결)
 	 * @param channel 노드 헤더 +0x0A s16 = ANM 타입 10 채널 묶음 번호 (−1 = 없음 → FXC 상수 생성률)
 	 */
-	public record EmitterDef(FxResources.Emitter fxc, FxResources.Shape ptc, int channel) {
+	public record EmitterDef(FxResources.Emitter fxc, FxResources.Shape ptc, int channel, Surface surface) {
+
+		public EmitterDef(FxResources.Emitter fxc, FxResources.Shape ptc, int channel) {
+			this(fxc, ptc, channel, null);
+		}
+	}
+
+	/**
+	 * 표면 이미터 (FXC 서브타입 3) 의 방출면: 이미터 +0x6C 모양 이름 → 0xD 노드 (+0x70 같은 이름, {@link FxResources#geom}) 의 +0x58 MSH_ 메시
+	 * (MESH_EXTRA 0x70). 원작 갱신 0x25E5C0 이 0x12EDA8 로 노드 월드 (노드 로컬 · 소유 GO 관절 월드) 를 0x29CA68+0xC0 에 두고, 파티클마다 0x1252E0 이
+	 * 누적 면적 표 (삼각형 +6) 로 삼각형을 골라 무게중심 난수 (r1 + r2 &gt; 1 이면 1 − r 로 접기) 로 점·보간 법선을 만든다 [확실: 코드].
+	 *
+	 * @param joint 0xD 노드 헤더 +0x08 관절 (−1 = 노드 로컬만)
+	 * @param local 0xD 노드 +0x10 로컬 행렬 (행벡터 16)
+	 * @param mesh  방출면 메시
+	 */
+	public record Surface(int joint, float[] local, devple.gow.tools.model.MshMesh mesh) {
 	}
 
 	/**
@@ -303,7 +319,7 @@ public final class EffectLibrary {
 				if (e != null) {
 					FxResources.Shape sh = fx.shape(e.shape(), objAt);
 					if (sh != null) {
-						em.add(new EmitterDef(e, sh, e.header()[1]));
+						em.add(new EmitterDef(e, sh, e.header()[1], e.subtype() == 3 ? surface(wad, fx, e, objAt) : null));
 					}
 				} else if (fx.fields.containsKey(r)) {
 					fields.add(fx.field(r, objAt));
@@ -325,6 +341,34 @@ public final class EffectLibrary {
 		}
 		return new EffectDef(gi.name().toLowerCase(Locale.ROOT), gi.object(), wad, gi.scale() > 0 ? gi.scale() : 1f, model, sk, anim,
 				List.copyOf(em), List.copyOf(fields), sound, acts, sem);
+	}
+
+	/** 표면 이미터의 방출면 (0xD 노드 → MSH_). 노드나 메시가 없으면 null (예전처럼 이미터 원점에서 낸다). */
+	private static Surface surface(WadFile wad, FxResources fx, FxResources.Emitter e, int objAt) {
+		FxResources.Geom g = e.geom() == null || e.geom().isEmpty() ? null : fx.geom(e.geom(), objAt);
+		if (g == null || g.curve() == null || !g.curve().startsWith("MSH_")) {
+			return null;
+		}
+		// 같은 이름은 오브젝트 그룹 앞의 마지막 정의 (FXC_ · PTC_ 와 같은 규칙), 없으면 처음 정의
+		List<WadTag> tags = wad.tags();
+		WadTag pick = null;
+		for (int i = 0; i < tags.size(); i++) {
+			WadTag t = tags.get(i);
+			if (t.tag() == devple.gow.tools.wad.WadTagType.MESH_EXTRA && t.hasData() && t.name().equals(g.curve())) {
+				if (pick == null || i < objAt) {
+					pick = t;
+				}
+			}
+		}
+		if (pick == null) {
+			return null;
+		}
+		try {
+			devple.gow.tools.model.MshMesh m = new devple.gow.tools.model.MshMesh(pick.name(), pick.data());
+			return m.tris.length >= 3 ? new Surface(g.joint(), g.local(), m) : null;
+		} catch (IllegalArgumentException ex) {
+			return null;
+		}
 	}
 
 	/** 이펙트 이름 (대소문자 무시, "go" 접두 생략 가능) → 정의. 없으면 null. */

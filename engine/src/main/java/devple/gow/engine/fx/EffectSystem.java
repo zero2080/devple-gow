@@ -270,6 +270,7 @@ public final class EffectSystem implements AutoCloseable {
 					jointWorld = bindWorld; // 애니 없는 GO (하늘 group2): 바인드 관절
 				}
 			}
+			float[][] surfJoints = null;
 			for (int i = 0; i < emitters.size(); i++) {
 				EffectLibrary.EmitterDef ed = def.emitters().get(i);
 				ParticleSystem.Emitter e = emitters.get(i);
@@ -279,6 +280,12 @@ public final class EffectSystem implements AutoCloseable {
 				int j = fx.header().length > 0 ? fx.header()[0] : -1;
 				float[] d = fx.subtype() == 1 || fx.subtype() == 8 ? fx.dir() : new float[]{0, 1, 0};
 				float speedMul = Math.min(s, 4f);
+				EffectLibrary.Surface sf = ed.surface();
+				if (sf != null && def.skeleton() != null && surfJoints == null) {
+					surfJoints = jointWorld != null ? jointWorld : act != null && act.hasSkeletalData()
+							? def.pose(act, act == def.anim() ? time : actTime).world(def.skeleton())
+							: bindWorld != null ? bindWorld : (bindWorld = def.skeleton().bindWorld());
+				}
 				boolean jointEmitter = jointWorld != null && j >= 0 && j < jointWorld.length;
 				if (jointEmitter) {
 					// 관절 이미터: (행벡터) FXC 로컬 · 관절 월드 · GO 월드 = 열벡터 GO · 관절 · 로컬 (LevelEmitters 와 같은 곱, 로컬 이동을 자르지 않음)
@@ -314,6 +321,26 @@ public final class EffectSystem implements AutoCloseable {
 					if (ld.lengthSquared() > 1e-8f) {
 						e.dir.set(ld).normalize();
 					}
+				}
+				if (sf != null) {
+					// 표면 이미터 (서브타입 3, 0x25E5C0 → 0x12EDA8 · 0x1252E0): 노드 월드 = GO 월드 · 노드 관절 월드 · 노드 로컬 — 관절 배율 (goBerserkBlade
+					// 0.25, goMAIBSActive 1/32) 이 노드 로컬 배율과 곱해져 MSH 좌표가 그대로 칼날 모양이 된다. 속력 배율도 이 행렬이 진다 (speedMul 1)
+					int gj = surfJoints != null && sf.joint() >= 0 && sf.joint() < surfJoints.length ? sf.joint() : -1;
+					e.surfaceWorld.set(world);
+					if (gj >= 0) {
+						e.surfaceWorld.mul(new Matrix4f().set(surfJoints[gj]));
+					}
+					e.surfaceWorld.mul(new Matrix4f().set(sf.local()));
+					e.surfaceWorld.getTranslation(e.pos);
+					e.surfacePos = sf.mesh().pos;
+					e.surfaceNrm = sf.mesh().normal;
+					e.surfaceTris = sf.mesh().tris;
+					e.surfaceArea = sf.mesh().cumArea;
+					e.tangentSpeed = fx.tangentSpeed();
+					e.normalSpeed = fx.normalSpeed();
+					e.distMin = fx.minDist();
+					e.distMax = fx.maxDist();
+					speedMul = 1f;
 				}
 				float at = act == def.anim() ? time : actTime;
 				float ct = act != null && act.looping() && act.duration > 0 ? at % act.duration : at;
