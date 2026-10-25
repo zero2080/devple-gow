@@ -2214,6 +2214,7 @@ Gate1 · 병사 MimeGuy-aoXUSAI1 (템플릿 300) 대화 211 / 212 · CycCam 키�
 | 3262–3270 | 병사 대화 211 / 212 (TalkCam) | 같은 메시지 (p4 22.6 초 211, 36.15 초 212), 구도는 조금 멂 (`13`) [근사] |
 | 3330–3460 | CycCam · 키클롭스 싸움 (3370 □ 붙잡기) | 같은 CycCam 구도 (`13` 아래) · R_CY3 템플릿 42 둘 |
 | 3466–3510 | 둥근 단 크랭크: 크라토스가 기둥 둘레를 돌며 밂 (3476–3482) → DemoDoors | 고치기 전 잡은 자리에 선 채 기둥만 돎 (§32.2-5) → 고친 뒤 둘레를 돎 (`14`) → 문 열림 (`15`) |
+| 3488–3506 | 크랭크 옆 상자 Chest2 (CSM 011 MagicShard) → 깃털 카드 "…3 개를 더 찾아야 합니다." · 빈 왕좌 둘 · Chest6 (CSM 010 HealthShard) → 고르곤의 눈 카드 (여섯째: "체력치가 증가합니다. 제물이 받아들여졌습니다.") | c1: 두 상자 열림 · 아이템 카드 종류 4 / 3 · 같은 문구 꼴 (하네스는 개수 0 에서 시작해 "5 개를 더") (`17`) |
 
 ### 32.2 엔진 결함과 수정
 1. **DEST03 모래 벽이 처음부터 갈라져 있었다 (영상 2716–2732: 뿔피리 뒤 닫힌 장막 → 분 뒤 갈라짐).** GO 생성 0x1307C8 이 GO +0xF8 = 인스턴스 플래그
@@ -2264,7 +2265,9 @@ Gate1 · 병사 MimeGuy-aoXUSAI1 (템플릿 300) 대화 211 / 212 · CycCam 키�
 - 타이탄 (aoTITAI1, 템플릿 321 "AOTIT", Patrol1030 · Site1031) 이 멈춰 있다 [미확인]: 영상 2970 은 오른쪽 위 모래 언덕에 엎드려 기는 거인. 데이터 — TWK_goAOTIT
   Navigation ANIStand = TIT1d01Mi03 (4 초 반복), ANIWalk = TIT1d01Mi02 (10 초, Cycle 13), AI1_321 "AI Mode" · DecisionTree 0 · Ignore Hits, WYP_Patrol1030 (2468 바이트).
   엔진은 WYP 경로를 읽지 않고 (`AiBrain.setPatrol` 을 부르는 곳이 없다 — DEST01 세이렌 patrol2/3 도 같음) 이동 act 도 없어 (2452, 33, 1171) 에 "main" 으로 서 있다.
-  Horn2Cam 대조 (h3) 는 `--arrive` 로 LoadEntry 를 건너뛰어 타이탄이 아예 없다.
+  Horn2Cam 대조 (h3) 는 `--arrive` 로 LoadEntry 를 건너뛰어 타이탄이 아예 없다. WYP_Patrol1030 (자원 0x14) 의 꼴 [추정: 필드 이름]: 머리 "WypHeadr" + 표 위치
+  (0xF0 노드 · 0x5A0 간선 · 0x7F8 경로), 노드 50 개 × 24 바이트 (x, y, z f32 · u16 쌍 셋), 간선 u16 100 개 = 고리 0→1→3→5→…→48→47→…→4→2→49→0 (모든 노드),
+  경로 이름 "Patrol1030" 과 노드마다 반경 20 / 10 — 남쪽 모래 언덕 x 2522–4792, z 84–1323 을 도는 고리. 첫 노드 (2522, 62, 1140) 가 스폰 자리 곁이다.
 - 뿔피리 클로즈업 (2974–2975) 의 옅은 흰 광택이 엔진에서는 더 짙은 금색 [미확인] — aced5e0 (무조명 추가 층 α) 전후 엔진 모습은 같다.
 - TalkCam 대화 구도가 영상보다 조금 멀고 병사가 왼쪽 [근사] — 병사 스폰 자리 (2640, −826, 645) · 크라토스 대화 자리 차이로 본다, 미조사.
 - 먼지 벽 (DEST03 모래 벽 파티클) 밝기 [미확인] — 데이터는 가산 0x48, 영상이 더 진하다 (`05`).
@@ -2278,7 +2281,8 @@ Gate1 · 병사 MimeGuy-aoXUSAI1 (템플릿 300) 대화 211 / 212 · CycCam 키�
 `06_siren_fight_stale_R2_before_fix` · `07_…_no_R2_after_fix` · `08_goto_centreplatform_strmcam6_12s` · `09_dest02_block_v2566-2615_vs_engine_pull_push` (영상 2566 · 2570 ·
 2600 · 2615 | 엔진 b4 13 · 15 · 17 · 20 초) · `10_dest02_block_climb_v2670_vs_engine_on_block_ledge` (영상 2670 | b3 상자 위 · 턱 매달림) ·
 `11a_dest03_horn2_video_v2970-2990` · `11b_dest03_horn2cam_engine_0.5s` · `12_pand00a_save_slot_v3098_vs_engine` · `13_pand00e_talk_cyclops_video_vs_engine` ·
-`14_pand00b_crank_orbit_engine` · `15_pand00b_demodoors_video_vs_engine` · `16_dest02_gear_v2650-2660_vs_engine_zoom`, `video/` (영상 프레임 183 장).
+`14_pand00b_crank_orbit_engine` · `15_pand00b_demodoors_video_vs_engine` · `16_dest02_gear_v2650-2660_vs_engine_zoom` · `17_pand00b_feather_eye_cards_v3492-3504_vs_engine`,
+`video/` (영상 프레임 183 장).
 
 ## 34. QA vs PS2 영상 2화 — 아틀라스의 시험: PAND01A 구멍 방 → 위층 · 방패 · 수레 → PAND01D 줄 싸움 · 하데스의 망령 → 세이브 (영상 4050–5189 초, 2026-10-25)
 
