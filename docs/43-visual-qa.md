@@ -3863,10 +3863,26 @@ Pand4GCrane) · 매단 블록 (goblocktranslatebg) → 3960–3973 키클롭스 
    고친 뒤 구덩이로 떨어지면 1976 Death 바닥에 닿아 곧바로 사망 → 세이브 앞 체크포인트 (`01_saw_pit_engine_after`, 영상 `01_saw_pit_video_2985_3002`).
    60 초 봇 (쉬움): PAND04G · PAND01A · ATHN03A · PAND04C 같음, **PAND03A 방문 6 → 13 / 순간이동 31 → 5** (예전엔 피 웅덩이 홀 압력판 원뿔에 서서 볼륨을 포기 —
    "순간이동해도 못 머묾").
+2. **기중기를 돌려도 거의 돌지 않다가 끝에서 매단 블록이 반대편으로 순간이동했다 — 블록을 구덩이 · 압력판 · 석상 위로 옮길 수 없음 (영상 3780–3900 · 4080–4140: 크랭크를
+   돌리면 다리 같은 팔이 크게 돌고 매단 블록이 갈라진 구덩이 위로 → 3985–3995 블록이 내려가 바닥을 깸, 엔진 전체 — 가산 트랙 유지).**
+   gocrane (Push "Pand4GCrane", 기중기형 크랭크 · 진행 = ANM_crane 24 초) 을 19 초 돌리면 진행 시간은 0 → 24 로 가는데 CraneAni 의 yaw 는 −142° → −155° (13°) 뿐이고
+   24 초째에 −37° 로 뛰었다 → goblocktranslatebg (부모 링크) 의 Marker103 이 LowZone 에 0.02 초 들렀다 나감 (`02_crane_engine_before`).
+   ANM_crane CraneAni 회전 성분: 절대 9921 (프레임 0–1) → 가산 −16, −24, −16 (3 프레임) + **유지 65 / 66** × 11 → 절대 −1668 (프레임 719). 엔진 굽기 (`Animation.apply`) 는
+   가산 트랙을 (start, start+count] 에만 더해 유지 동안 멈췄다 (예측 9313, 절대 키 −1668 과 1 만 단위 차).
+   원작 [확실: 디스어셈블]: 재생 0x111760 은 트랙 구간을 [start, start+count+hold−1] 프레임으로 잡고 (0x111880–0x11193C, entry +4 count · +6 start · +8 hold),
+   가산이면 지난 시각 · 지금 시각의 표본 번호를 count−1 로 묶어 (0x111A40 movz) 그 사이 경과만큼 더한다 — 유지 구간은 마지막 변화량이 프레임마다 계속 붙는다.
+   → `Animation.apply`: 가산 (start, start+count+hold−1], 표본 min(k, count−1) — **§52 (d692b3c, PAND04F 승강기) 와 같은 고침을 따로 찾았고 rebase 에서 그쪽 코드를 남겼다**
+   (이 커밋은 기중기 시험 · 증거). 예측 −1663 (절대 −1668). 유지는 전 WAD 가산 트랙에서 늘 ≥ 1 (회전 22046 개가 1,
+   1734 act 가 > 1) — hold 1 은 예전과 같고, 절대 키로 이어지는 성분 19546 개 연속성 (오차 ≤ 2) 은 15741 → 15924 로 는다 (나빠진 것 22 는 양자화 차 수준).
+   고친 뒤 크레인은 24 초에 −255° 고르게 돌고 (`CraneAnimHoldTest`), 크랭크 4 초에 LowZone (5.25 진입) → TopZone → 13 초 PressPlateZone 을 차례로 지나며,
+   LowZone 에서 멈추고 레버 (1023 101) → BlockLowCave → BreakZone → gocrack "Crack" 애니 (구덩이 바닥 깨짐) 가 원작 순서대로 돈다 (`02_crane_engine_after`).
+   60 초 봇 (쉬움) ATHN01A · ATHN01C · ATHN02A · PAND00C · DEST02 · PAND03E · PAND04G 같음 (ATHN02A 마지막 위치만 21 차), **ARENA14 사망 1 → 0 · 오브 0 → 17**
+   (움직이는 발판 ANM_animplats 의 유지 이동 — 예전엔 발판에서 떨어져 (32, −493) 낙사).
 
 ### 54.4 시험 · 증거
-`OpenHullBoundTest` (PAND04G CDV_PressPlate1 아래로 열림 · 판 위 바닥 2724 · 구덩이 위 압력판 바닥 없음 · 원뿔 안 먼 점 밀지 않음 · 구덩이 바닥 = KillMe 1975.8).
-증거 `work/verify/ep5_c/` (커밋 안 함): `01_saw_pit_video_2985_3002` · `01_saw_pit_engine_before` · `01_saw_pit_engine_after`.
+`CraneAnimHoldTest` (ANM_crane CraneAni 0.1 초마다 3° 미만 · 24 초 −255° · 4.5 초 블록이 LowZone 위), `OpenHullBoundTest` (PAND04G CDV_PressPlate1 아래로 열림 · 판 위 바닥 2724 · 구덩이 위 압력판 바닥 없음 · 원뿔 안 먼 점 밀지 않음 · 구덩이 바닥 = KillMe 1975.8).
+증거 `work/verify/ep5_c/` (커밋 안 함): `01_saw_pit_video_2985_3002` · `01_saw_pit_engine_before` · `01_saw_pit_engine_after`, `02_crane_engine_before` · `02_crane_engine_after`.
+
 ## 55. QA vs PS2 영상 5화 — 판도라의 상자: PAND04G 건축가의 쪽지 · 아내의 머리 · 해골 문 → PAND04H 눈 덮인 테라스 → PAND04IB 나선 계단 → PAND04J 상자 방 싸움 (불 기둥 · 하피 · 사망 둘) → PAND05A 세 신의 석상 · 크랭크 · 상자 탁자 · 엘리베이터 → PAND05B 상자 밀기 · Semo08 → HDES01A (영상 4400–5760 초, 2026-10-29)
 
 영상 = M-jC8VJVlzg (5화 "엔딩", 전사 (보통) = `-Dgow.difficulty=1`), 프레임 422×317 (`work/verify/ep5_d/video/v<초>.jpg` — 4404–4446 · 4578–4632 · 5330–5420 ·
