@@ -4094,6 +4094,11 @@ public final class GameScene implements Scene {
 	/** 사망 메뉴 상태: 0 없음, 1 "죽었습니다" 화면 (DeadMenu On), 2 선택 대기. */
 	private int deadMenu;
 	private float deadMenuTime;
+	/**
+	 * "죽었습니다" 화면에서 선택지까지 (0x220830: 0x29F46C = 0x29F470 의 2.5 초, 0x2208B0 이 1/60 초씩 줄여 0 이면 0x220360 이 +0x25C = 2 / 3 —
+	 * 쉬움 제안 0x1DBF90) [확실: 디스어셈블 · 데이터 0x29F470 = 2.5]. 예전 엔진 2 초. 영상 4화 1137 제목 → 1140 쉬움 제안.
+	 */
+	static final float DEAD_MENU_CHOICE_DELAY = 2.5f;
 
 	/**
 	 * 사망 메뉴 (FLP_HUDK DeadMenu, 원작 0x220360): PS2_DeadMenu_Event 1 = "죽었습니다" (SND_IG_YOUAREDEAD, Pause_Check 7), 잠시 뒤 2 = 선택
@@ -4106,6 +4111,7 @@ public final class GameScene implements Scene {
 		deadMenuTime = 0;
 		hud.variables().set("PS2_Menu_Choice", 0);
 		hud.variables().event("PS2_DeadMenu_Event", 1);
+		startTimeWarp(devple.gow.engine.fx.TimeWarpBlur.DEATH_FADE); // 0x21D770 → 0x220830: TimeWarpBlur 999 "DeathFade" (붉은 소용돌이)
 	}
 
 	private boolean easyOffer() {
@@ -4115,7 +4121,7 @@ public final class GameScene implements Scene {
 	}
 
 	private void updateDeadMenu(float dt) {
-		if (deadMenu == 1 && (deadMenuTime += dt) > 2f) {
+		if (deadMenu == 1 && (deadMenuTime += dt) > DEAD_MENU_CHOICE_DELAY) {
 			deadMenu = 2;
 			hud.variables().event("PS2_DeadMenu_Event", easyOffer() ? 3 : 2);
 		}
@@ -4424,6 +4430,12 @@ public final class GameScene implements Scene {
 		}
 		if (deadMenu > 0) {
 			updateDeadMenu(dt);
+		}
+		if (timeWarp != null) {
+			timeWarp.advance(dt); // 0x143048: 게임 상태와 무관하게 프레임마다 (사망 메뉴 정지 중에도)
+			if (!timeWarp.active()) {
+				timeWarp = null;
+			}
 		}
 		if (paused || leaving) {
 			return;
@@ -5659,6 +5671,7 @@ public final class GameScene implements Scene {
 			levelHud.render(e);
 		}
 		hud.render(e);
+		renderTimeWarp(); // HUD 도 섞인다 — 영상 4화 1138–1139 소용돌이 동안 "YOU ARE DEAD" 제목 · 체력 막대가 사라짐 [추정: 원작 그리기 순서]
 	}
 
 	/** 이번 프레임 안개를 가져온 레벨 환경 (두 슬롯 중, {@link #selectFogSource}). */
@@ -5769,6 +5782,35 @@ public final class GameScene implements Scene {
 	}
 
 	private devple.gow.engine.render.CameraFilterRenderer filterRenderer;
+	/** 사망 흐림 "DeathFade" 등 시간 왜곡 흐림 (43 §47.2) — 진행 중이면 그 값, 아니면 null. */
+	private devple.gow.engine.fx.TimeWarpBlur timeWarp;
+	private devple.gow.engine.render.TimeWarpBlurRenderer timeWarpRenderer;
+
+	/** 시간 왜곡 흐림 시작 (0x220830 → 0x182D50 → 0x142DE0): 템플릿 n, 없으면 그대로. */
+	void startTimeWarp(int n) {
+		devple.gow.engine.fx.TimeWarpBlur b = devple.gow.engine.fx.TimeWarpBlur.load(orbTweaks, n);
+		if (b == null || System.getProperty("gow.notimewarp") != null) {
+			return;
+		}
+		timeWarp = b;
+		if (timeWarpRenderer != null) {
+			timeWarpRenderer.reset();
+		}
+	}
+
+	/**
+	 * HUD 까지 그린 화면 위에 (원작 0x143048 은 그리기 목록 0x17A240 → 0x140988 안 — 층 순서는 따라가지 못함 [추정]): 영상 4화 1137 은 떨어지는 실루엣 위
+	 * "YOU ARE DEAD" 제목, 1138–1139 소용돌이에는 제목 · 체력 막대가 없고 1140 (≈ 3 초, A 0 → 1 구간) 에 선택지가 다시 보인다 — A → 0 이면 지금 화면 (HUD 포함) 이 빠진다.
+	 */
+	private void renderTimeWarp() {
+		if (timeWarp == null) {
+			return;
+		}
+		if (timeWarpRenderer == null) {
+			timeWarpRenderer = new devple.gow.engine.render.TimeWarpBlurRenderer();
+		}
+		timeWarpRenderer.draw(timeWarp.sample());
+	}
 	/** 동적 라이트 서버 (47 문서). -Dgow.nolights 면 null. */
 	private devple.gow.engine.light.LightServer lights;
 	private int lightFrame;
@@ -5945,6 +5987,9 @@ public final class GameScene implements Scene {
 		devple.gow.engine.core.PerfMonitor.removeGauge("level");
 		if (filterRenderer != null) {
 			filterRenderer.close();
+		}
+		if (timeWarpRenderer != null) {
+			timeWarpRenderer.close();
 		}
 		hero.close();
 		hud.close();
