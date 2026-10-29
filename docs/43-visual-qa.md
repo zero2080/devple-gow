@@ -3816,14 +3816,16 @@ ATHN04B (a04Mp04 → ATHN04A) · ATHN05A · ATHN06C 의 내리기는 막은 전�
 - 테트리스 퍼즐 완성 · 짚라인 오르기 미대조, 보통 난이도 전투 피해 미대조 (§50).
 - 근사: 빛 없는 모델 틴트 예외 규칙 (§47), 사망 페이드 그리기 순서, 동영상 힙 "영웅 슬롯 = 엔진 현재 레벨".
 
-## 52. QA vs PS2 영상 5화 — 광기의 절벽 끝: PAND04E 세이브 → 해골이 벽에서 나오는 큰 암벽 오르기 → 꼭대기 레버 (P04MP05) → PAND04F 우리 승강기 → PAND04G 입구 · 세이브 (영상 0–1650 초, 2026-10-29)
+## 52. QA vs PS2 영상 5화 — 광기의 절벽 계속: PAND04E 세이브 → 해골이 벽에서 나오는 큰 암벽 → 헤라 석상에 목걸이 (Key1AnimCam · 움직이는 턱) → 꼭대기 레버 · 상자 → 되돌아 물길 · PAND04D 탑 → 사망 두 번 → PAND04C 세이브 (영상 0–1650 초, 2026-10-29)
 
 영상 = M-jC8VJVlzg (5화 엔딩, 전사 (보통) = `-Dgow.difficulty=1`), 프레임 422×317 (`work/verify/ep5_a/video/v<초>.jpg`, 커밋 안 함).
 엔진 = origin/main 위, 1280×720 lockstep, 스크래치 홈 (`home-ep5a`), `--skip-movies`. 시작 상태 = 4화 끝 (PAND04EE 헤라의 목걸이 → `-Dgow.arrive.state=PAND04E:Gkey2=1`,
-PAND04E GlobalData 이름 0 key1 · 1 key2 · 2 block1 · 3 hangManOn · 4 LeverPulled).
+PAND04E GlobalData 이름 0 key1 (아프로디테) · 1 key2 (헤라) · 2 block1 · 3 hangManOn · 4 LeverPulled — PAND04C 는 같은 이름에 5 LeverPulled · 6 CaveClear4D …).
+이 구간은 대부분 PAND04E 의 큰 암벽 (x 1169 의 Climbable 벽 y 1088–2176, z −2926 … −2162) 을 오르내리며 벽 해골 (CSgroup1–9, R_SK4 템플릿 28) 과 싸우고, 헤라 목걸이를 건 뒤
+아프로디테 목걸이 (PAND04C SpikeRmKey, key1) 를 찾아 PAND04E 물길 · PAND04D 탑 · PAND04C 로 되돌아가는 길이다. PAND04F (승강기) · PAND04G 는 이 구간에 없다.
 
 ### 52.1 엔진 결함과 수정
-1. **PAND04F 우리 승강기가 13 초 동안 서 있다가 끝에서 한 번에 739 를 뛰어 탄 크라토스가 떨어졌다 (엔진 전체: ANM 가산 트랙의 hold).**
+1. **PAND04F 우리 승강기가 13 초 동안 서 있다가 끝에서 한 번에 739 를 뛰어 탄 크라토스가 떨어졌다 (엔진 전체: ANM 가산 트랙의 hold — 이 구간 영상에는 승강기를 타는 장면이 없다: 1530–1560 의 둥근 나무 발판은 PAND04D 탑 크랭크, B 가 본 2250–2350 도 PAND04C/04D).**
    PAND04F goelevator (레버 goelevatorlever newLeever 템플릿 12, id 140 → 1023 인자 100 → LevelData0 = 100 → Elevator-AnimFor "!0" 모드 8) 의 act "Elevator"
    (13.33 초, 401 프레임) 관절 1 y 는 절대 −81.2 (0 프레임) → 가산 1 + 11 프레임 (끝 변화량 1.918) · **hold 193** → 가산 204 + 3 프레임 · **hold 191** →
    가산 397 + 2 → 절대 664.9 (399 프레임) 이다. 엔진 `Animation.apply` 는 가산 트랙을 start &lt; f ≤ start + count 에서만 더하고 hold 를 버려 우리 바닥이
@@ -3837,10 +3839,49 @@ PAND04E GlobalData 이름 0 key1 · 1 key2 · 2 block1 · 3 hangManOn · 4 Lever
    → `Animation.apply`: start + count &lt; f ≤ start + count + hold − 1 이면 sample[count − 1] 을 더함 (프레임 수 · act 길이는 그대로 duration). 고친 뒤 우리가
    초당 ≈ 57.5 (1.918 × 30) 로 고르게 올라 영웅이 함께 1973 → 2721 (13.3 초, ElevUpZone 18.28 초) — `01_pand04f_elevator_engine_after.png`.
    60 초 봇 (쉬움) ATHN01A · ATHN02A · PAND01A · PAND04C: 고치기 전과 결과 (방문 · 순간이동 · 사망) 같음 (ATHN02A 마지막 위치만 다름).
+2. **떨어지다 체크포인트 구를 지나 Death 바닥에 내려서면, 그 자리가 체크포인트로 찍혀 다시 시작할 때마다 또 죽었다 (엔진 전체; 영상 1170 · 1410 은 협곡으로 떨어져
+   "YOU ARE DEAD" → 붉은 소용돌이 → 사망 메뉴 → "로딩 중..." → R2 세이브 빛기둥에서 다시).**
+   PAND04E 벽 아래 턱 (1088) 의 CheckPointGroup1 (1165, 1104, −2838) 바로 옆은 864 의 Death 구덩이다. 턱에서 벽 쪽으로 뛰다 떨어지면 CheckPoint 가 기다리다
+   (떨어지는 동안 +0x174 0x8 로 미룸) 구덩이 바닥에 내려선 틱의 프레임 끝 (0x1B3070) 에 찍혔고, Death 검사는 다음 틱 `HeroNavigator` 지상 갱신에서야 돌았다 →
+   스냅숏 (1122, 864, −2721) 에서 다시 시작하자마자 사망 → 다시 … (자동 플레이에서는 끝없이 다시 올려 OutOfMemoryError). 원작 [확실: 디스어셈블]: 영웅 갱신 0x1EBD78 의
+   이동 0x1EA200 (0x1ECCF4 · 0x1ECE30, 콜백 주소 0x1EA3F0) · 0x1EA5F0 이 바닥 질의 0x1E3298 / 0x1E36B0 에 콜백 0x1E1E80 (면 bitfield0 &amp; 0x40 → 0x29E170 = 1) 을
+   걸고, **같은 갱신**의 0x1ECFD8 이 0x29E170 을 보고 HP × 100 피해 (0x1ED048 → 0x204690) · +0x174 0x08000000 — 그래서 프레임 끝 스냅숏은 HP &lt; 1 로 미뤄진다.
+   §56 (c071c33) 이 같은 경로로 "기술 중" Death 바닥만 `GameScene.physics` 에서 보게 했는데, 걷기 · 떨어짐도 같은 틱에 죽도록 기술 조건을 뺐다 [확실]. 고친 뒤 같은 경로
+   (`1140,1100,-2840;jump:1:1,0;up:12`) 는 구덩이에서 한 번 죽고 레벨 적재 자리 (세이브) 에서 다시 시작한다. 60 초 봇 (쉬움) PAND03E 사망 3 · DEST02 1 · PAND04E 0 ·
+   HDES01C 0 · ATHN05B 0 (§56 과 같음).
+
+### 52.2 장면 대응 (경로 [확실: 스크립트 · 영상])
+| 영상 (초) | 장면 | 원작 (스크립트 · 데이터) | 엔진 | 결과 |
+|---|---|---|---|---|
+| 0–10 | PAND04E 세이브 빛기둥 (R2) · 사다리 | SaveOnGroup (916, 983, −3517, key2 == 1) → Creator SaveGameZone 33 (887, 928, −3151) | 같은 자리 · 빛기둥 (SaveOnGroup 을 지나야 생김) | 같음 |
+| 20–170 · 260–380 · 450–580 | 큰 암벽 오르기 · 벽에서 나오는 해골 (검은 구멍, "Hits") | CSpawnZoneGroup1–9 → CSgroup* SkellyLevel4ClimbAI (R_SK4 28), 슬롯 7 = 504 SKSWALLSPAWN (LevelData1–3 은 VisController 가 1 초 뒤 504) → PlayFX 034 goSpawnHole | r3: 벽 (1145, 1090, −2835 에서 뛰어 붙음) · CSgroup1 셋 (생성 동작 없음) · CSgroup2 의 504 두 번 goSpawnHole | 같음 (구멍의 검은 원반 모습은 대조 못 함 — 52.3) |
+| 180–192 | 줄다리 · 사다리 · 헤라 석상 앞 | Bridge1/2MarkerGroup · LadderAnimated | — | 대조 안 함 |
+| 193–211 | 헤라 석상 R2 → "헤라의 석상에 목걸이를 걸어주시겠습니까?" → 머리가 돌며 목걸이 → Key1AnimCam (바퀴 · 사슬 옆 크라토스) → 폭포 · 움직이는 턱 카메라 → 돌아옴 | UseWorldHeraKey (1024, key2 == 1) → 1017 → EvtMenuYes: key2 = 2, LeftSparkle VisOff, Cog1 "!0", 음악 4QH, CamOn 3.5 초, Ledge2 AnimForward 9.5 초 (모드 10, 속도 2) → 마커 459 · AnimPause 12.1 초, CamOff 13.5 초 → ZipCam23 | r8: 메뉴 2.32 → CamOn 5.83 → Ledge2 11.85 → 마커 14.35 → CamOff 15.85 (영상 메뉴 195 → AnimCam ≈ 201 → 턱 카메라 203 → 211) | 같음 (석상 뒷면 밝기 다름 — 52.3) |
+| 1040 · 1520 | 바퀴 R2 / "목걸이를 한 헤라의 석상입니다." | UseWorldHeraUsedKey (key2 == 2) → 메시지 281 | — | 대조 안 함 |
+| 217 | 아프로디테 석상 "예전에는 목걸이가 걸려 있었던 것으로 보입니다" | UseWorldAphroNoKey (key1 == 0) → 메시지 253 | — | 대조 안 함 |
+| 240 · 1070 | 꼭대기 상자 | Chesty7/8 · ChestOrLever (key1 ≠ 0 ∧ ¬LeverPulled 이면 레버 대신 상자) | — | 대조 안 함 |
+| 꼭대기 | 레버 → 동영상 | MagicalMpegLever (newLeever id 442) 1023 인자 100 → P04MP05, LeverPulled | r4: use + 6 초 → P04MP05 (동영상 힙이 다른 슬롯 PAND04EE 내림) | 같은 스크립트 (영상 장면 위치 미확인) |
+| 600 · 900 · 1590–1600 | 횃불 돌문 (붉은 눈 얼굴) · 원반 장식 문 | PAND04D/04C | — | 4화 §50 범위 |
+| 960–1020 | 물길 잠수 · 손발 거품 | PAND04E SwimCam · HeroBubbles (§50.1-3) | — | 4화에서 대조 |
+| 1090 · 1100 | 세이브 다시 ("광기의 동굴" 칸) | SaveGameZone 33 | r9: R2 → 스냅숏 · 저장 질문 | 같음 |
+| 1170 · 1410 | 협곡으로 떨어져 사망 → 사망 메뉴 → "로딩 중..." → 세이브 빛기둥에서 다시 | 마지막 스냅숏 = 1090 의 R2 세이브 (벽의 CheckPointGroup* 는 재발동 −1 이라 두 번째 오르기엔 안 탐) | r9: 세이브 뒤 die → 세이브 자리 · 빛기둥 다시 생김 | 같음 ("로딩 중..." 은 §57.4) · Death 바닥 체크포인트 → **52.1-2 고침** |
+| 1530–1560 | 굴 · PAND04D 탑 위 둥근 크랭크 발판 | PAND4DCrank (§50) | — | 4화에서 대조 |
+| 1615–1650 | 방패 석상 · 상자 · 줄 · 세이브 질문 | PAND04C (B 구간으로 이어짐) | — | — |
+
+### 52.3 남은 것 · 미확인
+- [미확인] **헤라 석상 머리가 돌 때 뒤쪽 원반이 엔진에서 밝은 보랏빛에 검은 얼룩** (영상 196–197 은 어두운 회색 돌 부조) — gocog1 MDL_Cog1 (rf 0, 조명 없음) 의
+  MAT_bridge_cog5 (환경맵 file13 rf 0x86 + GS 0x01 반전 블렌드 file14, α 대부분 0) 또는 MAT_BridgeCog_lambert2 (file12, 정점색 6–65) 중 어느 것인지 가리지 못했다
+  (`02_hera_cog_back_engine.jpg` ↔ `02_hera_cog_back_video197.jpg`).
+- [미대조] 벽에서 나오는 해골의 goSpawnHole (영상 39–41: 검은 원반 + 붉은 불티, R_PERMK PTC_Dmpart 흰색 · flags 0x606 · 이미터 FXC_DMemit 초당 323) — 엔진 카메라에
+  구멍이 잡히는 장면을 만들지 못했다. 벽 싸움 · 보통 난이도 피해는 대조 안 함.
+- 플레이어가 꼭대기 · 물길 · PAND04D 를 여러 번 오가 장면 순서를 다 맞추지 않았다 (10 초 간격 프레임으로 위치만 확인).
 
 ### 52.4 시험 · 증거
-`AnimAdditiveHoldTest` (PAND04F goelevator "Elevator": 데이터 hold 193 · 2–13 초 초당 50–65 오름 · 끝 = 시작 + 748 · 마지막 프레임에 뛰지 않음).
-증거 `work/verify/ep5_a/` (커밋 안 함): `01_pand04f_elevator_engine_after.png`.
+`AnimAdditiveHoldTest` (PAND04F goelevator "Elevator": 데이터 hold 193 · 2–13 초 초당 50–65 오름 · 끝 = 시작 + 748 · 마지막 프레임에 뛰지 않음),
+`DeathFloorSameTickTest` (PAND04E 벽 아래 구덩이 (1122, 864, −2721) = Death, 그 위 공중 · 턱 1088 · 세이브 자리는 아님).
+증거 `work/verify/ep5_a/` (커밋 안 함): `01_pand04f_elevator_engine_after.png`, `02_hera_cog_back_engine.jpg` · `02_hera_cog_back_video197.jpg`,
+`03_hera_necklace_engine.png`.
+
 ## 54. QA vs PS2 영상 5화 — 건축가의 무덤 (PAND04G): 세이브 · 톱날 구덩이 사망 → 체크포인트 · 갈라진 구덩이 쪽지 · 기중기 · 키클롭스 · 블록 타고 내려가기 · 병사의 쪽지 (영상 2820–4400 초, 2026-10-29)
 
 영상 = M-jC8VJVlzg (5화 "엔딩", 전사 (보통) = `-Dgow.difficulty=1`), 프레임 422×317 (`work/verify/ep5_c/video/v<초>.jpg`, 커밋 안 함). 엔진 = origin/main b05dbf2 위,

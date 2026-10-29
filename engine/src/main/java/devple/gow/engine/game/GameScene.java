@@ -5610,8 +5610,12 @@ public final class GameScene implements Scene {
 		if (Float.isNaN(g) && p.y < checkpoint.y - 3000) {
 			heroDied(); // 바닥 없는 곳으로 떨어짐
 		}
-		if (c0.grounded && hero.combat.active() && deathFloorUnder(p)) {
-			heroDied(); // 기술 중 Death 바닥 (아래 deathFloorUnder)
+		if (c0.grounded && deathFloorUnder(p)) {
+			// Death 바닥: 기술 중이든 아니든 내려선 이 틱에 죽는다 (아래 deathFloorUnder — 원작은 상태와 무관하게 같은 영웅 갱신 0x1ECFD8 에서 HP × 100).
+			// 예전엔 기술 중만 여기서 보고 보통 걷기·떨어짐은 다음 틱 내비게이터 (HeroNavigator 지상 검사) 에 맡겨, 그 사이 프레임 끝 0x1B3070 이
+			// 기다리던 CheckPoint 를 Death 바닥 위 자리로 찍었다 — 다시 시작하자마자 또 죽는 고리 (PAND04E 벽 아래 CheckPointGroup1 → 864 구덩이, 43 §52.1-2).
+			// 원작 스냅숏은 같은 프레임 HP < 1 이라 미뤄진다 [확실: 0x1EA200 (0x1EA3F0) · 0x1EA5F0 바닥 콜백 0x1E1E80 → 0x29E170 → 0x1ECFD8 순서].
+			heroDied();
 		}
 		// 생물끼리 밀어내기 (0x1E2DD8 — 벽 충돌 앞, 영웅도 같은 내비게이션 코드)
 		collectBodies();
