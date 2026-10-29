@@ -1103,7 +1103,7 @@ public final class SceneNav {
 		return navWorld.platforms().states();
 	}
 
-	/** 붙잡는 오브젝트 (레버·크랭크·밀기 상자) — 영웅이 손잡이에 닿아야 하므로 벽 판정에서 뺀다. */
+	/** 붙잡는 오브젝트 (레버·크랭크) — 영웅이 손잡이에 닿아야 하므로 벽 판정에서 뺀다. */
 	private java.util.Set<String> grabbed;
 
 	/** 움직이는 오브젝트 CDV (문·창살·회전방) 로 영웅 구 밀어내기. */
@@ -1111,19 +1111,44 @@ public final class SceneNav {
 		return collideBodies(c, r, devple.gow.engine.nav.NavWorld.HERO_BODY_EXCLUDE);
 	}
 
-	/** {@link #collideBodies(Vector3f, float)} 를 몸 제외 마스크로 ({@link devple.gow.engine.nav.NavWorld#bodyExclude}). */
+	/**
+	 * {@link #collideBodies(Vector3f, float)} 를 몸 제외 마스크로 ({@link devple.gow.engine.nav.NavWorld#bodyExclude}).
+	 * <p>
+	 * 밀기 상자 (PushPull Type 0·7·8) 의 CDV 는 영웅 몸을 막는다 — 붙어 있는 그 상자만 뺀다 (43 §50.1). 원작은 GO 의 CDV 마다 충돌 인스턴스를 올리고 몸
+	 * 질의 0x1E2100 은 면 속성 마스크로만 거른다: ATHN06B 석상 CDV 는 영웅용 hull (Entities_groundRockNOAI) 과 적용 hull (…NoPl) 을 따로 두고, PAND04EE
+	 * 테트리스 블록 · DEST02 돌 상자 hull 은 거르는 속성이 없다 [확실: 데이터]. 잡기 0x1C3918 → 0x1C3CD8 은 영웅 앞 점 (발 + 17.6 위, 9.6 앞) 과 옆면 가운데의 거리 &lt; 20
+	 * 이라 면에 막혀 선 자리 (몸 구 12) 에서 잡힌다 [확실: 코드]. 예전 엔진은 모든 밀기 상자를 뺐다 — PAND04EE 정육면체 gopushbox1 · 블록을 그대로 걸어 지나가 영상
+	 * 4880 처럼 면에 서서 잡을 수 없었다 [근사: 붙은 상자 제외 — 원작은 붙은 동안 영웅을 손잡이 자리에 바로 둔다 0x1C43C0].
+	 */
 	public boolean collideBodies(Vector3f c, float r, long exclude) {
 		if (grabbed == null) {
-			grabbed = new java.util.HashSet<>();
-			for (Interactables x : List.of(items, neighbourItems)) {
-				for (Interactables.Item it : x.items()) {
-					if (it.kind == Interactables.Kind.LEVER || it.kind == Interactables.Kind.PUSH) {
-						grabbed.add(it.owner);
-					}
+			grabbed = leverOwners(items, neighbourItems);
+		}
+		boolean attached = navigator.state() == devple.gow.engine.nav.NavState.PUSH || navigator.state() == devple.gow.engine.nav.NavState.INTERACT;
+		return navWorld.collideBodies(c, r, bodySkip(grabbed, attached ? navigator.item() : null), exclude); // 이 레벨 + 다른 슬롯 레벨 문·발판 (이웃 Animator 자세)
+	}
+
+	/** 영웅 몸 밀어내기에서 늘 빼는 몸: 레버·크랭크류 (손잡이가 hull 안쪽) — 두 슬롯. */
+	public static java.util.Set<String> leverOwners(Interactables... lists) {
+		java.util.Set<String> out = new java.util.HashSet<>();
+		for (Interactables x : lists) {
+			for (Interactables.Item it : x.items()) {
+				if (it.kind == Interactables.Kind.LEVER) {
+					out.add(it.owner);
 				}
 			}
 		}
-		return navWorld.collideBodies(c, r, grabbed, exclude); // 이 레벨 + 다른 슬롯 레벨 문·발판 (이웃 Animator 자세)
+		return out;
+	}
+
+	/** 레버 목록 + 지금 붙어 있는 밀기 상자 (held = 붙은 아이템, 없으면 null). 붙지 않은 밀기 상자는 막는다. */
+	public static java.util.Collection<String> bodySkip(java.util.Set<String> levers, Interactables.Item held) {
+		if (held == null || held.kind != Interactables.Kind.PUSH) {
+			return levers;
+		}
+		java.util.Set<String> s = new java.util.HashSet<>(levers);
+		s.add(held.owner);
+		return s;
 	}
 
 	/**

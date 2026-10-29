@@ -3596,6 +3596,29 @@ R_CNM · 미노타우로스 R_MI4 · 해골). PAND03E (적 없음, 바람개비 
 황금빛 등딱지), `02_pand03h_book_coffin_v2530_v2550_vs_engine` (책 153 · 뚜껑 · 머리), `03_pand03i_army_of_hades_v2682_v2750_vs_engine` (메시지 152 · DMConCam ·
 메시지 101), `04_hub_arrival_v2794_v2796_vs_engine` (관 바닥에 선 엔진 ↔ 구멍 밖으로 나오는 영상).
 
+## 50. QA vs PS2 영상 4화 — 광기의 절벽: PAND04AA 세이브 · 구역 제목 15 → PAND04C 절벽 (줄 · 우리 승강기 · 세이브) → PAND04D 탑 · 줄다리 → PAND04E 헤라 석상 · 소용돌이 물길 → PAND04EE 테트리스 블록 방 · 헤라의 목걸이 (영상 3860–5195 초, 2026-10-29)
+
+영상 = 7QAMXQj38Io (4화, 전사 (보통) = `-Dgow.difficulty=1`, 세이브 화면 3960 · 4880 에서 확인), 프레임 422×317 (`work/verify/ep4_e/video/v<초>.jpg`, 커밋 안 함).
+이 구간은 하데스 (HDES) 가 아니라 판도라의 사원 **광기의 절벽** (구역 제목 15 · 16) 이다 [확실: 스크립트 ZoneReportGroup · 메시지 630–632]. 엔진 = origin/main 위, 1280×720
+lockstep, 스크래치 홈 (`home-ep4e`), `--skip-movies`.
+
+### 50.1 엔진 결함과 수정
+1. **밀기 상자를 그냥 걸어 지나갔다 — PAND04EE 테트리스 정육면체 · 블록을 면에 서서 잡을 수 없음 (영상 4880: 정육면체를 잡고 창살 문까지 민다, 엔진 전체).**
+   `SceneNav.collideBodies` 가 영웅 몸 구 밀어내기에서 **모든** 밀기 상자 (Kind.PUSH) 를 레버·크랭크와 함께 뺐다 ("손잡이에 닿아야 하므로"). 정적 이동 선분
+   (`NavWorld.blockMove`) 은 정적 시트만 보므로 상자 CDV 는 영웅을 전혀 막지 않았다 — `--game PAND04EE` 에서 (815, 880, −4442) → 동쪽으로 걸으면 gopushbox1
+   (861, −4442, 반 너비 16) 을 뚫고 문 앞 (916) 까지 가고, R2 를 눌러도 잡기 거리 (앞 점 ↔ 옆면 가운데 &lt; 20, 0x1C3CD8) 밖이라 잡히지 않았다 (`01_pushbox1_engine_before`).
+   원작 [확실: 데이터 · 코드]: 몸 질의 0x1E2100 은 GO 충돌 인스턴스를 면 속성 마스크로만 거른다 — ATHN06B 석상 CDV 는 영웅을 막는 hull (Entities_groundRockNOAI) 과
+   적을 막는 hull (…NoPl) 을 따로 두고, PAND04EE 블록 · DEST02 돌 상자 hull 에는 거르는 속성이 없다. 잡기 0x1C3918 → 0x1C3CD8 은 면에 막혀 선 자리에서 닿는다.
+   → 붙지 않은 밀기 상자는 막고, **붙어 있는 그 상자만** 뺀다 (`SceneNav.bodySkip` / `leverOwners`) [근사: 원작은 붙은 동안 영웅을 손잡이 자리에 바로 둔다 0x1C43C0].
+   레버·크랭크류는 예전대로 뺀다. 고친 뒤 (833, −4444) 에서 막혀 잡고 (`[밀기 잡음] gopushbox1 … 손잡이 [845.3, 896.0, −4442.4, −1, 0]`) 928 까지 민다
+   (`01_pushbox1_engine_after`, 영상 4880 과 같은 자리). 전 WAD 밀기 상자 21 개의 hull 옆면은 Push 몸 반 너비와 같거나 몇 유닛 차 (PAND04G 석상 +z 33 ↔ 24,
+   PAND03B 미로 벽은 관절 0 이 −32 라 GO 기준 ±32) — 몸 구 12 로 막힌 자리의 앞 점은 모든 면에서 잡기 거리 20 안이다. 발리스타 (손잡이 관절) r15 경로 앞 64 초
+   (§22) 그대로 (−667 → 14, 4728). 60 초 봇 (쉬움) DEST02 · ATHN06B · ATHN01D · ATHN05B · PAND02A · PAND01A · ATHN01C · PAND04C 결과 (방문 · 순간이동 · 사망) 고치기 전과 같다.
+
+### 50.4 시험 · 증거
+`PushBoxBodyTest` (PAND04EE gopushbox1 Square 16 · 크랭크는 레버 목록 · 붙지 않은 상자는 몸 구를 면 + 12 로 밀어냄 · 붙은 상자는 밀지 않음).
+증거 `work/verify/ep4_e/` (커밋 안 함): `01_pushbox1_engine_before` · `01_pushbox1_engine_after`.
+
 ## 시연 녹화 (-Dgow.record, -Dgow.bot) [엔진 전용]
 
 - `-Dgow.record=DIR` 로직 틱 `gow.record.every`(기본 2 = 30fps) 번마다 `DIR/f000000.jpg` 저장, `gow.record.secs` 초 뒤 종료. 녹화 중에는 lockstep (프레임당 틱 하나) 이라 렌더 속도와 무관하게 영상 시간이 게임 시간과 같다.
