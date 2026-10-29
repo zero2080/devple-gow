@@ -3867,6 +3867,16 @@ public final class GameScene implements Scene {
 		if (flash != null && flash.index() >= 0 && flash.index() < devple.gow.engine.ui.MinigameIcon.CLIPS.length) {
 			return flash.index();
 		}
+		// 보스 동기 기술의 TimedPress · 연타 (슬롯 3, 0x192ED0 은 잡기 결합과 같은 영웅 기술 이벤트): 예전엔 잡기 결합 (grab) 만 보아 BMI 올라타기
+		// 451–453 의 회전 아이콘이 한 번도 뜨지 않았다 (영상 4화 2095–2099 · 2125 Up180/360 화살표, 43 §48). 메시지 · 질문 중에는 0x21E908 이
+		// 아이콘을 다시 고르지 않는다 (올라타기 안내 589 는 초 0 — ○ 로 닫을 때까지 숨김)
+		var bs = boss != null ? boss.sync() : null;
+		if (bs != null && bs.active()) {
+			int bi = devple.gow.engine.ui.MinigameIcon.heroMinigame(bs.timed(), bs.qte());
+			if (bi != devple.gow.engine.ui.MinigameIcon.NONE) {
+				return messageId < 0 && questionId < 0 ? bi : devple.gow.engine.ui.MinigameIcon.NONE;
+			}
+		}
 		if (!grab.active()) {
 			// 아이콘 슬롯 8 개 중 번호가 큰 것 하나 (0x21E908): 2 = 잡은 TAndF·크랭크 연타 (0x1E17F0, 열리면 끔 0x1C38A8),
 			// 1 = 버튼 안내 센서 (0x1AAD40), 0 = R2 로 잡힐 가까운 오브젝트의 "Show R2" (0x1DC3F8) — ATHN01A 해치 HydraHatchDoor (TAndF 051)

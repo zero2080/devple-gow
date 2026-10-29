@@ -23,6 +23,18 @@ public final class MinigameIcon {
 		return !globalIdle && messageId < 0;
 	}
 
+	/**
+	 * 영웅 기술의 미니게임 아이콘 (슬롯 3): TimedPress 시작 0x192ED0 (SCRIPT 명령, 0x193274 에서 등록) 은 종류에 따라 0x21DA50(3, 0..9) 를
+	 * 무조건 부르고 끝 0x192C90 이 −1 을 넣는다 [확실: 디스어셈블] — 적 잡기 결합이든 보스 동기 (BMI 올라타기 451–453, 히드라 810, 아레스 …) 든
+	 * 같은 영웅 기술 이벤트다. 연타 진행 중 = 10 XButtonPress [추정: 35 §6 과 같은 근사]. 둘 다 없으면 {@link #NONE}.
+	 */
+	public static int heroMinigame(devple.gow.engine.combat.TimedPressQte timed, devple.gow.engine.combat.RepeatPressQte qte) {
+		if (timed != null) {
+			return timed.iconIndex();
+		}
+		return qte != null && qte.state() == devple.gow.engine.combat.RepeatPressQte.State.RUNNING ? BUTTON_PRESS : NONE;
+	}
+
 	private int current = NONE;
 
 	public int current() {

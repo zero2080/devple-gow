@@ -103,7 +103,14 @@ class BmiFightTest {
 		r.fight.contact(200, 0);
 		assertTrue(until(r, 1, () -> fight.sync().active() && fight.sync().pairedMove() == BmiFight.RIDE_MOUNT), "450: " + r.bossMoves + " hero " + r.heroMoves);
 		assertTrue(r.log.contains("message 589"), "1035(450) → SwirlyMessage 589: " + r.log);
-		assertTrue(until(r, 25, () -> r.bossMoves.contains(BmiFight.RIDE_WIN)), "올라타기 → 455: " + r.bossMoves + " hero " + r.heroMoves);
+		// HUD 미니게임 아이콘 (슬롯 3, 0x192ED0): 보스 동기 기술의 TimedPress 도 영웅 기술 이벤트 — 206 "arcPress180rand" = 180° 회전 4..7, 207 "arcPress360rand" = 8..9
+		java.util.Set<Integer> icons = new java.util.TreeSet<>();
+		assertTrue(until(r, 25, () -> {
+			icons.add(devple.gow.engine.ui.MinigameIcon.heroMinigame(fight.sync().timed(), fight.sync().qte()));
+			return r.bossMoves.contains(BmiFight.RIDE_WIN);
+		}), "올라타기 → 455: " + r.bossMoves + " hero " + r.heroMoves);
+		assertTrue(icons.stream().anyMatch(i -> i >= 4 && i <= 7), "180° 회전 아이콘: " + icons);
+		assertTrue(icons.stream().anyMatch(i -> i == 8 || i == 9), "360° 회전 아이콘 (453 의 207): " + icons);
 		assertTrue(r.heroMoves.containsAll(java.util.List.of(451, 452, 453, 455)), "영웅 451–453 → 455: " + r.heroMoves);
 		assertTrue(fight.sync().timedPassed() >= 7, "TimedPress 206/207 ×7: " + fight.sync().timedPassed() + "/" + fight.sync().timedFailed());
 		assertTrue(until(r, 6, () -> move(b) == BmiFight.LOG_STUN), "455 → 208 LOGSTUNIDLE: " + r.bossMoves);

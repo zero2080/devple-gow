@@ -473,6 +473,9 @@ public final class HeroNavigator {
 			promptItem = near != null && !released.contains(near) && near.usable() ? near : null;
 			if (in.pressed(PadButton.USE)) {
 				Interactables.Item it = near;
+				if (System.getProperty("gow.debug.items") != null) {
+					System.out.printf(java.util.Locale.ROOT, "R2 잡기 질의: 발 (%.1f, %.1f, %.1f) 정면 (%.2f, %.2f) → %s%n", p.x, p.y, p.z, fwd.x, fwd.z, it != null ? it.owner : "없음");
+				}
 				handle = g != null ? (float[]) g[1] : null;
 				// 놓은 뒤 되감기는 중인 오브젝트는 0 으로 돌아갈 때까지 잡히지 않는다 (원작: 잡기 클래스 비트 0x400000 / 0x30000 을 끄고 0 에서 다시 켬,
 				// CSM 0x2160B4 → 0x216254, 레버 0x21287C → 0x21290C) [확실]

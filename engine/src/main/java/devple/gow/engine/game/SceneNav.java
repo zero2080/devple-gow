@@ -254,6 +254,16 @@ public final class SceneNav {
 		});
 		hero.nav = navigator;
 		System.out.printf("내비게이션: 줄 %d, 발판 %d, R1 오브젝트 %d%n", navWorld.ropes().size(), navWorld.platforms().bodies().size(), items.items().size());
+		if (System.getProperty("gow.debug.items") != null) { // R1 오브젝트 목록 (위치 · 손잡이 · 잡기 판정) [엔진 전용 진단]
+			for (devple.gow.engine.nav.Interactables.Item it : items.items()) {
+				StringBuilder hs = new StringBuilder();
+				for (float[] h : it.handles) {
+					hs.append(String.format(java.util.Locale.ROOT, " (%.1f, %.1f, %.1f 축 %.2f, %.2f)", h[0], h[1], h[2], h[3], h[4]));
+				}
+				System.out.printf(java.util.Locale.ROOT, "  R1 %s %s 템플릿 %d id %d (%.1f, %.1f, %.1f) 반경 %.1f 판정 dy %.1f r %.1f cos %.2f 뒤 %.1f 쓸수있음 %b 손잡이%s%n",
+						it.kind, it.owner, it.template, it.id, it.pos.x, it.pos.y, it.pos.z, it.radius, it.grabDy, it.grabR, it.grabCos, it.grabBack, it.usable(), hs);
+			}
+		}
 	}
 
 	/** Animator 엔티티(타입 5/6) 가 가리키는 소유 GO 이름들 = 발판 후보. */
