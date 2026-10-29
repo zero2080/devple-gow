@@ -3942,6 +3942,68 @@ Pand4GCrane) · 매단 블록 (goblocktranslatebg) → 3960–3973 키클롭스 
 증거 `work/verify/ep5_d/` (커밋 안 함): `01_pbox_dome_before_engine_vs_v4616_v5340`, `02_pbox_after_engine_vs_v5348_v5352_v5340_v5398`,
 `03_pbox_after_engine_crank_table_elevator`, `04_video_5330-5420`, `05_pand04j_cine1_engine`, `06_video_4404-4632`, `07_video_deaths_4822-4954`.
 
+## 56. QA vs PS2 영상 5화 — 하데스: HDES01A 척추 · 뼈 기둥 → HDES01B 회전 칼날 통나무 · 떠 있는 북 낙사 → HDES01C 바위 턱 싸움 · 칼날 기둥 오르기 · 세이브 · 업그레이드 → HDES01D/E 사티로스 경기장 · 척추 다리 → 줄 (영상 5760–8250 초, 2026-10-29)
+
+영상 = M-jC8VJVlzg (5화 "엔딩", 전사 (보통) = `-Dgow.difficulty=1`), 프레임 422×317 (`work/verify/ep5_e/video/v<초>.jpg` — 5760–5850 1 초, 6400–6550 · 7600–7660 ·
+8140–8250 2 초, 그 밖 10 초, 커밋 안 함). 엔진 = origin/main b05dbf2 위, 1280×720 lockstep, 스크래치 홈 (`home-ep5e`), `--skip-movies`,
+`--game HDES01A…E [--arrive 이전 레벨[@x,y,z]]`, 경로 `-Dgow.auto.route`, 봇.
+
+### 56.0 장면 대응 (경로 [확실: 스크립트 · 영상])
+| 영상 (초) | 장면 | 원작 (스크립트 · 데이터) | 엔진 | 결과 |
+|---|---|---|---|---|
+| 5760–5830 | 붉은 허공의 큰 척추 위 크라토스 | HDES01A Start (−8439, −4617, 512) | 같은 척추 · 구도 (`r1`) | 같음 |
+| 5836–5850 | 척추 끝 받침 · 구역 제목 "하데스의 통로" · 초록 상자 · 세이브 "덮어쓰시겠습니까?" | ZoneReportGroup 17 (GlobalData:0 ≠ 17), Chest4/5, SaveGameZone 36 | 같은 제목 · 상자 · 빛기둥 (`a1`) | 같음 |
+| 5860–5930 | 판도라 신전의 나무 탑 받침 (하데스가 아님) | — | — | 영상 편집으로 보임 [미확인] |
+| 5940–6040 | 뼈 기둥 꼭대기를 뛰어 건넘 · 기둥 위 상자 · 세이브 빛기둥 | Plat1/Plat2Enemies (R_SK5 템플릿 29), Chest1/3, FallAnimZone ×3 | 같은 기둥 · 상자 · 떨어지는 영혼 (fallguy*) | 같음 |
+| 6050–6130 | HDES01B 첫 뼈 받침 싸움 (불 해골 · 콤보 15) | R_SK3 템플릿 35, CheckPointGroup6 | 같은 받침 · 해골 (`b1`, 보통 봇) | 싸움 대조 안 함 |
+| 6150–6320 | 칼날이 도는 붉은 통나무 위를 균형 걸음으로 건넘 · 6200 떨어짐 | gogroup866–877 · 925 (ANM 52–80 초 반복, CDV 18 면 기둥 = **NarrowTwist** (Ground · Narrow) + 칼날 BladeDamage 10/10) | 같은 통나무 · 칼날 회전 · 균형 걸음 (balanceWblend1) | 56.2 |
+| 6330–6400 | 불 해골 받침 → 상자 · 세이브 빛기둥 (R2) | HDES01B SaveGameZone (−3108, −3878, 463), Chest9 (CSM 008 순환) | 같은 받침 · 빛기둥 · 순환 상자 (`b3`) | 같음 |
+| 6400–6550 | 떠 있는 북 (DeathPlat) 을 건너다 먼 턱의 불 궁수 줄에 맞아 떨어짐 → 붉은 허공 낙하 (DEATHFALL01) → YOU ARE DEAD (낙하 중인 실루엣 위) → 붉은 소용돌이 → 세이브 빛기둥에서 다시 · 초록 상자 다시 가득. 6544 다섯째 사망 쉬움 제안 | HDES01C godeathplatmain00–04 (SEM Hover), archerEnt (4 초마다 1019 45 → 그룹 66–68), FallAnimZone (1019 504), 허공 아래 Death 바닥 (HDES01B −5088.6, HDES01C −4836.7) | 고치기 전: DEATHFALL01 중에는 Death 바닥 위에 2.5 초 서 있다가 죽음 → **56.1** | 고침 |
+| 6560–6960 | HDES01C 바위 턱: 불 궁수 줄 · 불 미노타우로스 · 6960 DMC 개 머리 문 (초록 빛) | MovePlatAI / BottomEnem / RightEnemies / LeftLow / LeftHigh (R_SK3 · R_MIF), DMCdog | 같은 스폰 순서 (DestructionSensor 사슬) | 싸움 대조 안 함 |
+| 6990–7590 | 칼날 기둥 방: 바닥 상자 (7020) → 도는 기둥 벽을 오름 · 칼날 · 7470 바닥에서 다시 (떨어짐) | godeathroller01–010 (CDV ClimbRock1 + DamageBlade 10/10), CheckPointGroup1 (−1436, −2752, 713), WallSpawner 궁수 | 같은 방 · 상자 (`c2`) · 기둥 | 오르기는 봇으로 몰지 못함 |
+| 7600–7660 · 7740 | 꼭대기 상자 → 세이브 "지옥의 강 아래 전사(보통) 7:21:56" → 업그레이드 (아르테미스의 검 2) | HDES01C SaveGameZone 38 (−1328, −1536, 1088) | 같은 자리 (`c3`) | 메뉴는 §47 · §50 과 같음 |
+| 7680–7790 | HDES01D 뼈 바닥 · 기둥 · 7760 같은 세이브 빛기둥 | HDES01D (적 없음) Checkpoint · FallAnimZone ×3 | 같은 바닥 (`d1`) | 같음 |
+| 7800–8130 | 경기장: 불 사티로스 (하데스의 군대 마법) · 상자 둘 · 8100 상자 | HDES01E BABSpawner (반지름 185) → Saytr AI1 5 + AI2 6 (Respawn), 죽을 때마다 LevelData:5 +1 → n 번째 기둥 Animator "!0" 모드 8 · 첫 죽음 BABFirstCam 3.5 초 | 같은 스폰 · 기둥이 하나씩 솟음 · BABFirstCam (`e5`, `e8` — 바닥은 HDES01D 충돌) | 같음 |
+| 8140–8152 | 솟은 척추 기둥 다리를 달림 | gofirstpost … goelevanthpost (x 256 → 1520, y −1040 → −880) | 기둥 11 개 (Platforms 몸) | 같음 |
+| 8158–8168 | 동영상 h01Mp03 (줄이 내려옴) | ropeDownMPEG → PlayMovie → 501 → rope3 VisON · ropeBlock | `--skip-movies` → rope3 · 추 보임 (`e1`) | 같음 |
+| 8170–8206 | rope3 를 오름 → 천장 구멍 | warpAtRet01A (구 (3303, 300) r 100) Warp | 줄 속도 24 /초 (38 §줄) | 같음 [근사: 영상에서 잡은 높이 미측정] |
+| 8208–8224 | ATRET01A 무덤 · 구역 제목 "오라클의 사원" (8212–8216 에 다시 하데스 줄 위 제목) → a06Mp05 | ZoneReportGroup 6, §13.9 무덤 줄 도착 | F 구간 (§57) | — |
+
+### 56.1 엔진 결함과 수정
+1. **전투 기술 중에는 Death 바닥이 죽이지 않았다 — 하데스 허공으로 떨어진 크라토스가 DEATHFALL01 이 끝날 때까지 (≈ 2.5 초) Death 바닥 위에 서 있었다 (영상 6418–6420 ·
+   6462–6466 · 6476–6478 · 6538–6540: 떨어지는 중에 곧 YOU ARE DEAD, 엔진 전체)** [확실: 디스어셈블 · 데이터].
+   - 데이터: 하데스 다섯 레벨 모두 붉은 허공 1000–2000 아래에 Death 바닥 (HDES01A −5765.9, B −5088.6, C −4836.7 · −4844.6, D −2033.6, E −1600 … −1944) 이 있고,
+     낙하 길목의 FallAnimZone (1019 504 → 영웅 M504 DEATHFALL01, stateMask 7, 소리) 이 떨어지는 크라토스에게 기술을 건다.
+   - 원작: 지상·공중 이동 0x1EA5F0 (0x1EAA5C · 0x1EAB94) 과 자유 이동 0x1EA200 (0x1EA3F0) 이 이동 선분 질의에 콜백 **0x1E1E80** 을 건다 — 맞은 면 재질 bitfield0 & 0x40
+     (Death) 이면 0x29E170 = 1. 영웅 갱신 0x1EBD78 의 **0x1ECFD8** 이 그 값을 보고 (줄 +0x174 & 0x400 이 아니면) 최대 HP × 100 피해 (0x204690) · +0x174 |= 0x08000000
+     → §47.2 의 곧바로 사망. 기술 (stateMask & 0x1C ≠ 0) 도 0x1EA5F0 경로라 상태와 무관하다.
+   - 엔진: Death 바닥 검사가 `HeroNavigator` 지상 갱신에만 있었고, `HeroRig` 는 전투 기술 중 내비게이터를 돌리지 않는다 → DEATHFALL01 (또는 다른 기술) 이 끝날 때까지
+     사망이 미뤄졌다 (HDES01C 낙하: 3.9 초 착지 → 6.5 초 사망).
+   → `GameScene.deathFloorUnder` — 기술 중 착지한 발밑 (발 + 4 → − 4, 내비게이터와 같은 질의) 이 Death 면 곧 `heroDied`. 고친 뒤 3.1 초 착지 = 사망 (`01_fall_death_v6534-6542_vs_engine`).
+   - 60 초 봇 (쉬움, 고치기 전 → 뒤): PAND03E 사망 2 → 3 (예전엔 끝에 (23, −296, −143) **Death 바닥 (−296.2) 위에 서서** 끝남 — 같은 결함), HDES01A · B · C · D ·
+     ATHN05B · DEST02 같음 (HDES01B 마지막 자리만 30 유닛 다름).
+
+### 56.2 원작과 같아 고치지 않은 것
+- **회전 통나무 실림**: 엔진에서 가만히 선 크라토스가 통나무 회전 (≈ 4.5 °/초) 에 실려 5 초 뒤 옆으로 떨어진다. 원작 0x1E6248 을 VU0 매크로까지 풀어 보니
+  (0x1E6668 이 매 틱 지난 관절 행렬 (이동 0) 과 오프셋 +0x200 = 영웅 − 관절 원점을 저장, 0x1E6248 이 오프셋을 R_prevᵀ·R_now 로 돌려 영웅 = 관절 원점 + 오프셋,
+  회전 행만 위 (0, 1, 0) 로 다시 직교화해 yaw 만) 위치는 **전체 회전으로** 실린다 — 엔진 `Platforms.ride` 와 같다 [확실: 디스어셈블]. 영상 6160–6300 의 균형 걸음은
+  플레이어가 계속 걸은 것으로 본다 [추정].
+- 사티로스 경기장 기둥 (Animator 모드 8 = 시간 유지라 다시 발동해도 이어짐), BABFirstCam (이웃 슬롯 SwitchCamera 도 요청됨), 낙하 사망 화면 순서 (§47.2) 는 같다.
+- 하네스 함정 (엔진 결함 아님): `--arrive 레벨` 만 주면 이웃 슬롯이 없어 HDES01D/E 도착 첫 화면이 검은 배경 (안개 컨텍스트가 이웃 시트에 있음) 이고 경기장 바닥
+  (HDES01D 충돌) 이 없다 — `--arrive 이전@x,y,z` 로 이웃을 올려야 한다. 도착점이 진입 볼륨 안이면 (BABSpawner 반지름 185) 진입으로 치지 않는다 (§13.9).
+
+### 56.3 남은 것 · 미확인
+- 칼날 기둥 (DeathRoller) 벽 오르기 7080–7590 · 떠 있는 북 (DeathPlat) 건너기 · 먼 턱 궁수 일제 사격 (archerEnt 1019 45) 은 봇 경로로 몰지 못해 대조하지 않았다.
+- HDES01C WallSpawner 궁수 (턱 −2655) 의 화살이 쏘자마자 (0.05 초) 턱 가장자리 "벽" 에 막힌다 — 원작 활 관절 · 겨냥 높이 미대조 [미확인].
+- 순환 상자 (CSM 008 종류 5) 의 처음 보이는 종류: 엔진은 파랑 (5 → 3) 부터, 영상은 다시 시작 직후 늘 초록 (6424 · 6472 · 6490) 에서 연다 — 처음 종류 · 주기 미확인.
+- 5860–5930 의 판도라 나무 탑 장면 (하데스 세이브 직후) 은 영상 편집으로 본다 [미확인].
+- 실제 세이브 위치 (`~/Library/Application Support/devple-gow`) 는 생기지 않았다 (모든 실행 = 스크래치 홈).
+
+### 56.4 시험 · 증거
+`DeathFloorTest` (2: HDES01C 허공 바닥 −4836.7 Death · 칼날 기둥 방 바닥은 아님 · 바닥 위 100 은 아님, HDES01B −5088.6 Death; R_PERMK M504 stateMask 7 → 0x1EA5F0 경로).
+증거 `work/verify/ep5_e/` (커밋 안 함): `01_fall_death_v6534-6542_vs_engine` (위 영상 6534 북 · 6538 낙하 · 6540 낙하 중 YOU ARE DEAD · 6542 소용돌이, 아래 엔진 HDES01C 낙하 →
+DEATHFALL01 → 착지 = 사망).
+
 ## 57. QA vs PS2 영상 5화 — 아테네 귀환 · 아레스 · 엔딩: ATRET01A–C → ATHN08A–C (아레스 보스전 · 가족 · 신들의 검) → ATHN07B → OLYMP01 → OLYMP02 왕좌 · 클리어 저장 · 크레딧 (영상 8250–10635 초, 2026-10-29)
 
 영상 = M-jC8VJVlzg (5화 엔딩, 전사 (보통) = `-Dgow.difficulty=1`), 30 초 접촉 시트 (스크래치 `vid5/s30_*.png`), 프레임 `work/verify/ep5_f/video/` (커밋 안 함).

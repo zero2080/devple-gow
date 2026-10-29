@@ -5506,6 +5506,24 @@ public final class GameScene implements Scene {
 		return m != null && (m.stateMask() & 0x1C) == 0;
 	}
 
+	/**
+	 * 발밑이 Death 바닥인가 — 전투 기술 중 (내비게이터가 돌지 않아 {@code HeroNavigator} 의 Death 검사가 빠지는 때) 용.
+	 * 원작: 지상·공중 이동 0x1EA5F0 (0x1EAA5C · 0x1EAB94) 과 자유 이동 0x1EA200 (0x1EA3F0) 이 이동 선분 질의에 콜백 0x1E1E80 을 건다 —
+	 * 맞은 면 재질의 bitfield0 &amp; 0x40 (Death) 이면 0x29E170 = 1. 영웅 갱신 0x1EBD78 의 0x1ECFD8 이 그 값을 보고 (줄 +0x174 0x400 이 아니면)
+	 * 최대 HP × 100 피해 (0x204690) + 0x08000000 → 곧바로 사망 메뉴 [확실: 디스어셈블]. 기술 (FallAnimZone 의 1019 504 DEATHFALL01 포함) 도 같은 이동
+	 * 경로라 Death 바닥에 닿는 순간 죽는다. 예전 엔진은 기술이 끝나 내비게이터가 다시 돌 때까지 (HDES01C 낙하 ≈ 2.5 초) Death 바닥 위에 서 있었다
+	 * (43 §56).
+	 */
+	private boolean deathFloorUnder(Vector3f p) {
+		return nav != null && deathFloorUnder(nav.navWorld, p);
+	}
+
+	/** 발 (p) 바로 아래 (발 + 4 → 발 − 4, 내비게이터의 지상 검사와 같은 질의) 바닥이 Death 속성인가. */
+	static boolean deathFloorUnder(devple.gow.engine.nav.NavWorld world, Vector3f p) {
+		devple.gow.engine.nav.NavWorld.Floor f = world.floor(p.x, p.y + 4, p.z, 8);
+		return f != null && f.has(devple.gow.tools.level.SurfaceAttr.DEATH);
+	}
+
 	/** 지면 추종 + 중력 + 벽 밀어내기. 내비게이터가 위치를 정하는 상태(매달림·줄·밀기 …)면 건너뛴다. */
 	private void physics(float dt) {
 		Vector3f p = hero.ctl.position;
@@ -5591,6 +5609,9 @@ public final class GameScene implements Scene {
 		}
 		if (Float.isNaN(g) && p.y < checkpoint.y - 3000) {
 			heroDied(); // 바닥 없는 곳으로 떨어짐
+		}
+		if (c0.grounded && hero.combat.active() && deathFloorUnder(p)) {
+			heroDied(); // 기술 중 Death 바닥 (아래 deathFloorUnder)
 		}
 		// 생물끼리 밀어내기 (0x1E2DD8 — 벽 충돌 앞, 영웅도 같은 내비게이션 코드)
 		collectBodies();
