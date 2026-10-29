@@ -39,6 +39,12 @@ public final class GameSession {
 	public int difficulty = 1;
 	/** 코스튬 (셸 PS2_Costume_Choice, 세이브 options[8]) → R_HERO&lt;n&gt; / R_WPN&lt;n&gt;_&lt;레벨&gt; / /Player/Costume n 배율 (11 문서 §2.4). */
 	public int costume;
+	/**
+	 * HUD EndGame (+0x1B8, 옵션 블록 [10]) — 스크립트 Internal 0x3A SetEndGame (0x1B11E4): ATHN08C 마지막 결투 2, ATHN07B 아테나의 블레이드 3.
+	 * FLP_HUDK 업그레이드 메뉴 (PowerOrbCheck · PowerLevelCheck: 2 = 마법 없음 MagicUnavailable, 3 = 블레이드 줄만) 와 아이템 카드가 읽는다.
+	 * 셸 적재 (0x21F630 → 0x1BC630 → 0x1B7FE0) 만 0 으로, 세이브 · 체크포인트 옵션 블록이 되살린다 (0x22DB64) [확실].
+	 */
+	public int endGame;
 	/** 누적 플레이 시간 (초): GameScene 이 일시정지가 아닐 때 더한다. 세이브 슬롯 표시용. */
 	public float playTime;
 	/**

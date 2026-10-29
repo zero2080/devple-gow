@@ -100,6 +100,16 @@ class EndGameSaveTest {
 		assertEquals(0x8, Unlocks.load(card), "단계 0x18 → 0x19");
 	}
 
+	/** 옵션 블록 [10] HUD EndGame (0x22DB64) 은 세이브 · 체크포인트 스냅숏에 남는다. */
+	@Test
+	void endGameOptionRoundTrips() throws Exception {
+		SaveGame g = sample();
+		g.endGame = 3;
+		Path f = card.resolve("x.save");
+		g.write(f);
+		assertEquals(3, SaveGame.read(f).endGame);
+	}
+
 	/** FLP_HUDK SaveGameMenu "On": SaveScreen GotoFrame2(SaveGame_Event), SaveQuestion 은 종류 ≥ 2 면 프레임 1 (클리어 문구 + "게임 진행 상황을…"). */
 	@Test
 	void hudShowsTheCompletionScreen() throws Exception {

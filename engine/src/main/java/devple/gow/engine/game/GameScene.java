@@ -542,6 +542,7 @@ public final class GameScene implements Scene {
 			UiVariables vars = preVars != null ? preVars : new UiVariables();
 			hud = preHud != null ? preHud : new UiLayer(new WadAssets(Content.file(session.rom, Region.of(session.rom).perm())), true, Region.of(session.rom).flpHud(), session.messages, vars);
 			levelHud = preLevelHudDone ? preLevelHud : loadLevelHud(vars);
+			vars.set("PS2_EndGame", session.endGame); // HUD +0x1B8 (옵션 [10] 되살림, GameSession#endGame)
 			ph = devple.gow.engine.core.PerfMonitor.phase(". hud", ph);
 			session.sound.load(level.data().wad);
 			levelBanks.put(levelName, level.data().wad.name());
@@ -1776,6 +1777,12 @@ public final class GameScene implements Scene {
 					int m = Unlocks.grant(SaveGame.dir(), kind, session.difficulty);
 					endGameKind = Unlocks.endGameKind(kind, session.difficulty);
 					System.out.printf("CompleteGame(%d) 난이도 %d → 해금 비트 0x%X, 끝 종류 %d%n", kind, session.difficulty, m, endGameKind);
+				}
+				if (func == devple.gow.engine.script.GameScriptHost.SET_END_GAME && !args.isEmpty()) {
+					// SetEndGame (0x1B11E4): HUD EndGame (+0x1B8) = n — ATHN08C 2 (마지막 결투), ATHN07B 3 (아테나의 블레이드)
+					session.endGame = (int) num(args.get(0));
+					hud.variables().set("PS2_EndGame", session.endGame);
+					System.out.println("SetEndGame " + session.endGame);
 				}
 				if (func == 0xB && !args.isEmpty()) { // 질문 (원작 0x21D9C8 → GameMgr +0x152C) → HUD 메뉴 템플릿 → 1021 (선택 번호, 메시지 번호)
 					openQuestion((int) num(args.get(0)));

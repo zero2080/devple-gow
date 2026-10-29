@@ -47,6 +47,8 @@ public final class SaveGame {
 	public String music = "";
 	public int difficulty;
 	public int costume;
+	/** 옵션 블록 [10] HUD EndGame (GameSession#endGame). */
+	public int endGame;
 	public float hp, mp;
 	/** 마법 재생 MP/초 (PlayerProgress +0x64 = 0x3044A4, 스크립트 Internal 0x12). */
 	public float mpRegen;
@@ -118,6 +120,7 @@ public final class SaveGame {
 		g.yaw = yaw;
 		g.difficulty = s.difficulty;
 		g.costume = p.costume;
+		g.endGame = s.endGame;
 		g.hp = p.hp;
 		g.mp = p.mp;
 		g.mpRegen = p.mpRegen;
@@ -238,6 +241,7 @@ public final class SaveGame {
 	/** 세계 블록: 플레이 시간 · GlobalData · 초기화 기록 · 타이머 · 레벨 상태 표 (0x1B4450 · 0x1B1588 · 0x1B15E0). 두 슬롯 세계는 버린다. */
 	private void restoreWorld(GameSession s) {
 		s.costume = costume;
+		s.endGame = endGame; // 0x22DB64: 옵션 [10] → HUD +0x1B8
 		s.playTime = playTime;
 		s.music = music != null ? music : ""; // 0x22BD80: 음악 그룹 블록 — 새 씬이 튼다 (GameScene.resumeMusic)
 		s.scriptHost.globalData().clear();
@@ -298,6 +302,7 @@ public final class SaveGame {
 		}
 		pr.setProperty("difficulty", Integer.toString(difficulty));
 		pr.setProperty("costume", Integer.toString(costume));
+		pr.setProperty("endGame", Integer.toString(endGame));
 		pr.setProperty("hp", Float.toString(hp));
 		pr.setProperty("mp", Float.toString(mp));
 		pr.setProperty("mpRegen", Float.toString(mpRegen));
@@ -353,6 +358,7 @@ public final class SaveGame {
 		g.heroState = pr.getProperty("heroState");
 		g.difficulty = Integer.parseInt(pr.getProperty("difficulty", "1"));
 		g.costume = Integer.parseInt(pr.getProperty("costume", "0"));
+		g.endGame = Integer.parseInt(pr.getProperty("endGame", "0"));
 		g.hp = Float.parseFloat(pr.getProperty("hp"));
 		g.mp = Float.parseFloat(pr.getProperty("mp"));
 		g.mpRegen = Float.parseFloat(pr.getProperty("mpRegen", "0"));

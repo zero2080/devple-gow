@@ -3846,6 +3846,15 @@ OLYMP02 스크립트 (왕좌 gothroneseat 1023 (100, 550)): `PlaySemo13` → `Mp
   질문 (영상 10590 과 같은 문구) → 카드 · 파일 선택 → unlocks.properties mask=1 → Bonus20 → Restarting. 증거 `work/verify/ep5_f/01_endgame_prompt_engine.png`.
 - 시험 `EndGameSaveTest` (끝 종류 표, RAM → 카드, 해금만 쓰기는 덮어쓰기 질문 없이 슬롯 파일 그대로, 세이브 포인트 저장도 해금 기록, FLP SaveScreen/SaveQuestion 프레임).
 
+### 57.2 SetEndGame (Internal 0x3A) — HUD EndGame 이 늘 0 이었다 [확실: 디스어셈블 · FLP]
+- 0x1B11E4: 인자 → HUD +0x1B8 (`EndGame`, Hud_RegisterFlashVars 이름 표 0x2B6808). ATHN08C `athn08Cstart-gotBlades` 2 (마지막 결투), ATHN07B `gotBlades-giveBlades` 3
+  (아테나의 블레이드 — 메시지 429 카드 · BladesLevel 6 과 함께). 셸 적재 (0x21F630 / 0x21F9F8 → 0x1BC630 → HUD 초기화 0x1B7FE0 의 0x1B8068) 만 0 으로 하고,
+  옵션 블록 [10] 으로 세이브 · 체크포인트에 남는다 (되읽기 0x22DB64).
+- FLP_HUDK 가 읽는 곳: 업그레이드 메뉴 PowerOrbCheck (2 → NeededOrbs 끔), PowerLevelCheck (1 &lt; EndGame → 블레이드 메달 줄 TextLevels 다르게), 메뉴 입력
+  (EndGame 2 → MagicUnavailable · SND_PU_EMPTY, 3 → 블레이드만), 아이템 카드 clip 프레임 29 (2 → 곧 AnimateOff), 템플릿 0x1BA56C (2 → 스타일 0x30C).
+- 엔진: `GameScriptHost.SET_END_GAME` 은 인자만 꺼내고 버렸다 → `GameSession.endGame` + HUD `PS2_EndGame` (씬마다 새 HUD 에도), `SaveGame.endGame` (옵션 [10]).
+  확인: `--game ATHN08C` 0.1 초 "SetEndGame 2". 시험 `EndGameSaveTest.endGameOptionRoundTrips`.
+
 ## 시연 녹화 (-Dgow.record, -Dgow.bot) [엔진 전용]
 
 - `-Dgow.record=DIR` 로직 틱 `gow.record.every`(기본 2 = 30fps) 번마다 `DIR/f000000.jpg` 저장, `gow.record.secs` 초 뒤 종료. 녹화 중에는 lockstep (프레임당 틱 하나) 이라 렌더 속도와 무관하게 영상 시간이 게임 시간과 같다.
