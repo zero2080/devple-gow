@@ -3871,7 +3871,8 @@ PAND04E GlobalData 이름 0 key1 (아프로디테) · 1 key2 (헤라) · 2 block
 ### 52.3 남은 것 · 미확인
 - [미확인] **헤라 석상 머리가 돌 때 뒤쪽 원반이 엔진에서 밝은 보랏빛에 검은 얼룩** (영상 196–197 은 어두운 회색 돌 부조) — gocog1 MDL_Cog1 (rf 0, 조명 없음) 의
   MAT_bridge_cog5 (환경맵 file13 rf 0x86 + GS 0x01 반전 블렌드 file14, α 대부분 0) 또는 MAT_BridgeCog_lambert2 (file12, 정점색 6–65) 중 어느 것인지 가리지 못했다
-  (`02_hera_cog_back_engine.jpg` ↔ `02_hera_cog_back_video197.jpg`).
+  (`02_hera_cog_back_engine.jpg` ↔ `02_hera_cog_back_video197.jpg`). 실험 (커밋 안 함): `AnimatedModel` 의 2·3 번째 레이어를 끄면 원반이 고른 보랏빛 (안개 · 하늘 색) 이 되어
+  첫 레이어 (환경맵 크롬 file13 × 정점색 13–74) 가 그려지지 않거나 비쳐 보이는 것으로 보인다 — 검은 얼룩은 반전 블렌드 레이어 file14 (`02_hera_cog_back_engine_nolayers.png`).
 - [미대조] 벽에서 나오는 해골의 goSpawnHole (영상 39–41: 검은 원반 + 붉은 불티, R_PERMK PTC_Dmpart 흰색 · flags 0x606 · 이미터 FXC_DMemit 초당 323) — 엔진 카메라에
   구멍이 잡히는 장면을 만들지 못했다. 벽 싸움 · 보통 난이도 피해는 대조 안 함.
 - 플레이어가 꼭대기 · 물길 · PAND04D 를 여러 번 오가 장면 순서를 다 맞추지 않았다 (10 초 간격 프레임으로 위치만 확인).
