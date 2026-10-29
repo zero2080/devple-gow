@@ -1492,6 +1492,7 @@ public final class GameScene implements Scene {
 			@Override
 			public void neighbourMovie(String name, int op, int arg) {
 				// 이웃 슬롯 스크립트의 PlayMovie — 지금 레벨 것과 같은 재생기 · 끝 501 (공유 이벤트 큐로 이웃 센서도 받는다, 43 §32)
+				movieHeapCheck(name, op);
 				if (op == 0 && pendingEngine != null) {
 					playMovie(pendingEngine, name);
 				}
@@ -1888,6 +1889,7 @@ public final class GameScene implements Scene {
 
 			@Override
 			public void movie(String name, int op, int arg) {
+				movieHeapCheck(name, op);
 				if (op == 0 && pendingEngine != null) {
 					playMovie(pendingEngine, name);
 				}
@@ -2105,6 +2107,55 @@ public final class GameScene implements Scene {
 	 * 컷신 재생 (33 문서): 씬 스택에 MovieScene 을 올려 게임을 멈추고, 끝나면 음악을 다시 켜고
 	 * 스크립트에 종료 이벤트 501(인자 0 = 동영상 이름)을 보낸다 (36 문서: ATHN01D TwinKickDoor-main-movieDone 이 EventArg(0) == "Semo02" 를 검사).
 	 */
+	/** -Dgow.nomovieheap: 동영상 힙 검사로 다른 슬롯을 내리지 않음 (회귀 비교용) [엔진 전용]. */
+	private static final boolean NO_MOVIE_HEAP = System.getProperty("gow.nomovieheap") != null;
+	/** 미리 읽어 둔 동영상 이름 (원작 0x33691E) — 같은 이름의 PlayMovie 는 힙 검사를 다시 하지 않는다 (0x1B34C0 strcmp). */
+	private String moviePreloaded;
+	/** 동영상 준비가 다른 슬롯을 내리기로 함 — 스크립트 순회가 끝난 다음 틱 머리에 ({@link #movieDropTick}). */
+	private boolean movieDropPending;
+	/** 레벨 이름 → WAD HEADER 힙 크기 ({@link LevelLink#levelHeap}). */
+	private final Map<String, Integer> levelHeaps = new HashMap<>();
+
+	/**
+	 * PlayMovie (op 0) / PreloadMovie (op 2) 의 "Levels" 힙 검사 0x1B3490 ({@link LevelLink#movieDropsOther}): 빈 블록이 모자라면 영웅이 있지 않은
+	 * 슬롯 = 다른 슬롯 레벨을 내린다 [확실: 0x1B3490 / 근사: 빈 블록 = 힙 − 두 HEADER, 영웅 슬롯 = 엔진 현재 레벨]. 내려간 레벨은 레벨 기억으로 남고
+	 * 스크립트가 다시 LoadWad 하면 되살아난다 (모드 5 생성 센서 · 전송기가 다시 돈다 — PAND00D FakeEyeDoor-ReloadWadC → PAND00C EyeDoor-EvtLoaded 202, 43 §49).
+	 */
+	private void movieHeapCheck(String name, int op) {
+		if (op != 0 && op != 2 || name == null || name.isEmpty() || NO_MOVIE_HEAP) {
+			return;
+		}
+		boolean same = name.equalsIgnoreCase(moviePreloaded);
+		moviePreloaded = op == 2 ? name : null;
+		String other = link != null ? link.other() : null;
+		if (same || other == null) {
+			return;
+		}
+		if (LevelLink.movieDropsOther(levelHeap(levelName), levelHeap(other))) {
+			System.out.printf("동영상 %s: Levels 힙 빈 블록 %d ≤ 0x322417 → 다른 슬롯 %s 내림%n", name,
+					LevelLink.LEVELS_HEAP - levelHeap(levelName) - levelHeap(other), other);
+			movieDropPending = true;
+		}
+	}
+
+	private int levelHeap(String lv) {
+		return levelHeaps.computeIfAbsent(lv.toUpperCase(java.util.Locale.ROOT), k -> LevelLink.levelHeap(Stages.wad(session.rom, k)));
+	}
+
+	/** {@link #movieHeapCheck} 가 정한 다른 슬롯 내리기 (0x1BBA20(1, 슬롯, 3)) — 스크립트 순회 밖에서. */
+	private void movieDropTick() {
+		if (!movieDropPending) {
+			return;
+		}
+		movieDropPending = false;
+		if (link == null || link.other() == null) {
+			return;
+		}
+		unloadOther();
+		warpSlot = null;
+		link.dropOther();
+	}
+
 	private void playMovie(Engine e, String name) {
 		if (System.getProperty("gow.skipmovies") != null || devple.gow.tools.video.MovieNames.skipped(name)) {
 			// --skip-movies 또는 movies.properties skip (49 문서 §10): 재생 없이 바로 끝 이벤트 (자동 연출·검증용)
@@ -4724,6 +4775,7 @@ public final class GameScene implements Scene {
 		}
 		shake.update(dt, cam);
 		session.sound.setUnderwater(cameraRig.underwater()); // 수중 카메라 → 소리 수중 처리 (29 문서 §10)
+		movieDropTick();
 		world.tick(dt, contact.x, contact.y, contact.z);
 		scriptTimers(dt);
 		orbPickups.update(dt, p, hero.player.hp > 0, orbSink);

@@ -373,6 +373,9 @@ public final class SceneNav {
 			setNeighbourItems(ni);
 			navWorld.neighbourRopes().addAll(NavRope.of(data)); // 이웃 줄도 잡힌다 (0x1C5CD8 충돌 월드 질의, 43 §34)
 			if (kept == null) {
+				// 시작 큐보다 먼저 이벤트 큐를 잇는다: 원작 큐는 하나 (0x303DB8) 라 새로 읽은 레벨의 시작 전송기 (EventTransmitter 모드 5) 를 다른 슬롯 센서도
+				// 받는다 — PAND00C EyeDoor-EvtLoaded 202 "telling wad D that C has reloaded" → PAND00D FakeEyeDoor-EvtCReloaded → 205 엘리베이터 (43 §49)
+				world.linkEvents(nw);
 				neighbourStarting = nw;
 				nw.start();
 				neighbourStarting = null;

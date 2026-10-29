@@ -112,6 +112,55 @@ public final class LevelLink {
 		}
 	}
 
+	/**
+	 * "Levels" 힙 크기: Heap_SetupLevels 0x1BB5F0 이 루트 힙에서 0x1000300 바이트를 떼어 "Levels" 힙 (0x29DAF4) 을 만든다 — 두 레벨 슬롯은 그 안에
+	 * WAD HEADER (0x378) 값만큼 (Tag_Header 0x185760 → 0x186590: 4 정렬, 가장 큰 빈 블록보다 크면 그만큼) 하위 힙을 받고, 0x29D4C8 에 따라 힙의 위/아래
+	 * 끝에서 잡는다 (0x13DE68 / 0x13DCB8). Hero · Slots · Upgrade 힙은 루트 힙의 따로 블록 (0x1BB510) [확실].
+	 */
+	public static final int LEVELS_HEAP = 0x1000300;
+	/** 동영상 준비 0x1B3490 이 요구하는 "Levels" 힙의 가장 큰 빈 블록: 0x1B350C–0x1B3518 {@code slt 0x322417, 빈 블록} 이 거짓이면 다른 슬롯을 비운다 [확실]. */
+	public static final int MOVIE_MIN_FREE = 0x322417;
+
+	/**
+	 * PlayMovie / PreloadMovie (0x1B3440 · 0x1AF848 → 0x1B3490) 가 다른 슬롯을 비우는지: 미리 읽어 둔 같은 이름이 아니면 0x13E238("Levels" 힙, 8) 로
+	 * 가장 큰 빈 블록을 재고 0x322417 이하면 영웅이 있지 않은 슬롯 (0x1B3520–0x1B358C: 영웅 문맥 +0x88 과 슬롯 +0x5C 비교) 을 0x1BC940(1 − 영웅 슬롯, 3)
+	 * → 0x1BBA20(1, 슬롯, 3) 으로 내린다 (슬롯 +0x68 & 1 = 올라 있을 때만) [확실]. 엔진은 빈 블록 = Levels 힙 − 두 슬롯 HEADER 값 [근사: 블록 머리 ·
+	 * 미리 읽은 동영상 버퍼 무시] — PAND00C (7 MB) + PAND00D (8 MB) = 빈 1 MB → 눈 방 마지막 빛줄기 동영상 p00MP03 에서 PAND00C 가 내려가고
+	 * FakeEyeDoor-ReloadWadC 가 다시 읽어 EyeDoor-EvtLoaded (202) · 205 (엘리베이터) 가 온다 (43 §49). PAND00B (9) + PAND00E (2) = 빈 5 MB → 그대로
+	 * (죽어 가는 병사 p00MP02 의 이웃 501, 43 §32).
+	 *
+	 * @param heapCurrent 영웅 슬롯 레벨의 HEADER 값
+	 * @param heapOther   다른 슬롯 레벨의 HEADER 값 (없으면 0)
+	 */
+	public static boolean movieDropsOther(int heapCurrent, int heapOther) {
+		return heapOther > 0 && (long) LEVELS_HEAP - align4(heapCurrent) - align4(heapOther) <= MOVIE_MIN_FREE;
+	}
+
+	private static long align4(int v) {
+		return ((long) v + 3) & ~3L;
+	}
+
+	/** WAD 첫 태그 HEADER (0x378) 의 값 = 레벨 힙 크기 (R_PERMK 는 −1, 없으면 0). 파일 앞 36 바이트만 읽는다. */
+	public static int levelHeap(java.nio.file.Path wad) {
+		try (java.io.InputStream in = java.nio.file.Files.newInputStream(wad)) {
+			byte[] b = in.readNBytes(36);
+			if (b.length < 36) {
+				return 0;
+			}
+			java.nio.ByteBuffer bb = java.nio.ByteBuffer.wrap(b).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+			return Short.toUnsignedInt(bb.getShort(0)) == devple.gow.tools.wad.WadTagType.HEADER ? bb.getInt(32) : 0;
+		} catch (java.io.IOException | RuntimeException e) {
+			return 0;
+		}
+	}
+
+	/** 동영상 준비가 다른 슬롯을 내렸다 (0x1BBA20(1, 슬롯, 3)): 같은 레벨을 다시 LoadWad 하면 새로 읽는다. */
+	public void dropOther() {
+		other = null;
+		otherActive = false;
+		warpReady = false;
+	}
+
 	/** LoadCheck 반환값: 그 WAD 가 슬롯에 있는지. */
 	public boolean loaded(String wad) {
 		String w = norm(wad);

@@ -3596,6 +3596,76 @@ R_CNM · 미노타우로스 R_MI4 · 해골). PAND03E (적 없음, 바람개비 
 황금빛 등딱지), `02_pand03h_book_coffin_v2530_v2550_vs_engine` (책 153 · 뚜껑 · 머리), `03_pand03i_army_of_hades_v2682_v2750_vs_engine` (메시지 152 · DMConCam ·
 메시지 101), `04_hub_arrival_v2794_v2796_vs_engine` (관 바닥에 선 엔진 ↔ 구멍 밖으로 나오는 영상).
 
+## 49. QA vs PS2 영상 4화 — 판도라의 반지 마무리: 고리 크랭크 · 세이브 · PAND00D 빛 방 · 가시 굴 싸움 · 눈 방 마지막 손잡이 → 빛줄기 동영상 p00MP03 → 엘리베이터 → PAND04AA 사티로스 → Semo06 (영상 2880–3860 초, 2026-10-29)
+
+영상 = 7QAMXQj38Io (4화, 전사 (보통)), 프레임 422×317 (`work/verify/ep4_d/video/v<초>.jpg` 48 장, 커밋 안 함). 엔진 = 464352b 위, lockstep 녹화, 스크래치 홈,
+경로 하네스 (`-Dgow.auto.route`, `-Dgow.arrive.state=PAND00C:L3=true,L4=true,L5=true,L7=true,L8=true,L9=true,GCrushersOff=true;PAND00D:GCrushersOff=true` = 고리 1·3·4 남쪽 ·
+해골 문 · 고리 3 문 · 물속 해골 문 · 분쇄기 끔, 손잡이 100 % = `post:1023:100:22`).
+
+### 49.1 장면 대응
+| 영상 (초) | 장면 | 원작 (스크립트·데이터) | 엔진 | 결과 |
+|---|---|---|---|---|
+| 2885–2970 | 고리 회랑 · 톱니 문 · 크랭크 받침 | PAND00C 고리 크랭크 (§36) | §36 에서 대조 | 이번엔 몰지 않음 |
+| 2990–3000 | 세이브 질문 "제우스께서 게임 진행 상황을…" | SaveGameZone | §33 · §36 | 같은 메뉴 (몰지 않음) |
+| 3000–3085 | 두 부조 · 금빛 기둥 방, 쪽지 164 "신께서 판도라의 상자를 깊숙이 숨겼지만…", 얼굴 샘 (체력 · 마법), R2 빛기둥 | PAND00D NewBook 164 · Health/MagicShower | — | [미확인] 이번에 몰지 않음 |
+| 3125–3300 | 크랭크 · 문, 회랑, 가시 굴 싸움 → 빨간 오브 | PAND00C/00D 고리 · 분쇄기 굴 (Spawner2–4 해골) | — | [미확인] |
+| 3310–3345 | 눈 방 석상 손잡이 마지막 돌리기 | PAND00C EyeDoor (goeyedoor 과제 22) | `post:1023:100:22` | 같은 흐름 |
+| 3345–3400 | 빛줄기 · 가시 굴 · 사막이 타는 동영상 | 204 → PAND00D FakeEyeDoor-EvtAllLinedUp → **p00MP03** | 동영상 재생 (b2) | 같음 |
+| 3405 | 동영상 끝 → 톱니 크랭크 클로즈업 | 다시 읽은 PAND00C: EyeDoor-EvtResetAfterMovie · **FinalEyeOffCam1–3 (EyeOffCam)** | 고치기 전 없음 → 고친 뒤 4.0 · 8.0 초에 EyeOffCam (b3) | **고침 (49.2)** |
+| 3425–3445 | 피 묻은 가시 굴 → 해골 문 아치 | 분쇄기 굴 → 고리 1 | b5 (걸음 + 순간이동) | 같은 길 |
+| 3465–3485 | 둥근 바닥 가운데 레버 → 엘리베이터 | ElevatorLever (Push, 과제 111) → 1023 100 % → WarpToLvl4 LoadForWarp Pand04AA, 30 초 뒤 Warp | **고치기 전: 레버가 숨은 채 (205 가 안 옴) → 진행 불가** → 고친 뒤 LeverOn · 동쪽에서 R2 → 100 % → 30 초 뒤 Warp (b8) | **고침 (49.2)** |
+| 3485–3585 | PAND04AA 손 위 도착 → 사티로스 등장 · 계단 광장 싸움 | WarpFrmCore (camInsideHands) · satintro · SaytrEnemies | 60 초 봇 (lv_PAND04AA) | 같은 광장 · 같은 적 (몰아서 대조하지 않음) |
+| 3605–3745 | 기억 동영상 (아레스에게 맹세 · 사슬) | PAND04AA Semo06 → 끝 LoadWad Pand04C | — | 동영상 (엔진 재생기) |
+| 3765–3860 | 하피 · 광기의 절벽 입구 → 세이브 완료 | PAND04C (영상 E 구간, §50) | — | 범위 밖 |
+
+### 49.2 엔진 결함과 수정 — 동영상이 다른 슬롯을 내리고, 다시 읽은 레벨의 시작 전송기가 이웃에 닿는다
+**영상 3405–3485 · 엔진 고치기 전**: 마지막 손잡이 뒤 p00MP03 이 끝나면 PAND00D FakeEyeDoor-ReloadWadC 가 `LoadWad Pand00C` 를 부르지만 엔진은 이미 슬롯에 있는 레벨이라
+아무 일도 없었다 → PAND00C EyeDoor-EvtLoaded (202 "telling wad D that C has reloaded") 가 안 옴 → FakeEyeDoor-EvtCReloaded · EvtSendSwitchStatue (205) 없음 →
+ElevatorHousing-EventSwitchStatue 가 엘리베이터 석상 · **레버 (LeverOn)** · 리프트를 켜지 않아 PAND04AA 로 갈 수 없었다 (순회 검증은 1023 을 강제해 지나갔다, 36 §4).
+가짜 눈 문 (FakeEyeDoor) 도 진짜 문과 겹친 채, EyeOffCam 연출 (영상 3405) 도 없었다.
+
+원작 [확실: 디스어셈블]:
+1. **PlayMovie 0x1B3440 · PreloadMovie (0x1AF848) → 0x1B3490**: 미리 읽어 둔 이름 (0x33691E) 과 다르면 (0x28DF50) "Levels" 힙 (0x29DAF4) 의 가장 큰 빈 블록을
+   0x13E238(힙, 8) 로 재고, **0x322417 이하면** (0x1B350C–0x1B3518) 영웅 문맥 +0x88 과 슬롯 +0x5C 를 비교해 영웅이 있는 슬롯 a2 를 찾고 (0x1B3520–0x1B358C)
+   **0x1BC940(1 − a2, 3) → 0x1BBA20(1, 슬롯, 3)** 으로 다른 슬롯을 내린다 (슬롯 +0x68 & 1 일 때만).
+2. "Levels" 힙 = Heap_SetupLevels 0x1BB5F0 이 루트 힙에서 뗀 **0x1000300** 바이트. Tag_Header 0x185760 → 0x186590 이 레벨 WAD 의 HEADER (0x378) 값 (4 정렬,
+   빈 블록보다 크면 그만큼) 을 이 힙의 위 / 아래 끝 (0x29D4C8 → 0x13DE68 / 0x13DCB8) 에서 하위 힙으로 잡는다. Hero · Slots · Upgrade 힙은 루트의 따로 블록 (0x1BB510).
+   HEADER 값: PAND00C 7 MB, PAND00D 8 MB → 빈 ≈ 1 MB → 눈 방 p00MP03 은 PAND00C 를 내린다. PAND00B 9 + PAND00E 2 → 빈 5 MB → 죽어 가는 병사 p00MP02 는 내리지 않아
+   이웃 501 이 산다 (§32) — 데이터가 두 경우와 맞는다.
+3. 이벤트 큐는 하나 (0x303DB8, §32) — 다시 읽힌 PAND00C 의 시작 큐에서 도는 전송기 (EventTransmitter 모드 5, EyeDoor-EvtLoaded 202) 를 PAND00D 센서가 받는다.
+
+고침:
+- `LevelLink.movieDropsOther` (Levels 힙 − 두 HEADER ≤ 0x322417) · `levelHeap` (WAD 앞 36 바이트) · `dropOther` [근사: 블록 머리 · 미리 읽은 동영상 버퍼 무시,
+  영웅 슬롯 = 엔진 현재 레벨].
+- `GameScene.movieHeapCheck`: 지금 · 이웃 슬롯 스크립트의 PlayMovie (op 0) · PreloadMovie (op 2) 에서 (같은 이름 미리 읽기 뒤 PlayMovie 는 건너뜀) 내리기로 하면
+  다음 틱 머리 (`movieDropTick`, 스크립트 순회 밖) 에 `unloadOther` (레벨 기억 · 렌더 · 충돌 · 라이트) + `link.dropOther()` — 이후 LoadWad 가 레벨 기억으로 되살린다
+  (`SceneNav.setOther` → `ScriptWorld.restore`, 모드 5 생성 센서 · 전송기는 다시 돈다). `--skip-movies` 도 같은 규칙. 비교용 `-Dgow.nomovieheap` [엔진 전용].
+- `SceneNav.setOther`: 새로 읽는 이웃 세계는 **시작 큐 전에** 이벤트 큐를 잇는다 (예전엔 시작 뒤 — 시작 전송기가 이웃에 닿지 않았다).
+- 결과 (b3 · b5 · b8): 동영상 → "다른 슬롯 PAND00C 내림" → 0.1 초 LoadWad → "이웃 레벨 기억으로 되살림: PAND00C" → EyeDoor-EvtLoaded → FakeEyeDoor-EvtCReloaded ·
+  VisOff → 205 → ElevatorHousing-EventSwitchStatue · ElevatorStatueOn · **LeverOn** · LiftOn → EyeOffCam (4 · 8 초) → 레버 (손잡이 동쪽 (−200, 0, 1258) 에서 R2) 1023
+  100 % → WarpToLvl4 LoadForWarp Pand04AA → 30 초 뒤 Warp.
+
+동영상 · 힙 표 (도구 `MovieDrop`, 이웃 후보 = `work/verify/levels.txt`): 동영상을 트는 37 레벨 중 대부분의 이웃 짝이 "내림" (예 ATHN01E a01Mp03 · ATHN03A a03Mp01 ·
+PAND04AA Semo06 · PAND04E Semo07 · DEST03 d01Mp0x) — 그 스크립트들은 동영상 끝에 다른 슬롯을 다시 LoadWad 하거나 (PAND04AA MpegPlayer-VisLoad → Pand04C,
+ATHN06C → WarpToAth7 LoadForWarp) LoadWad 볼륨으로 돌아온다. 내리지 않는 짝: PAND00B/00E, PAND05B (5 MB) 의 이웃 전부, ATHN08B/08C, HDES01E.
+
+### 49.3 시험 · 회귀
+`EyeBeamElevatorTest` (2): movieHeapCheckDropsTheOtherSlot (0x1B34F0 · 0x1B3504 · 0x1B350C/10 · 0x1B3594 · 0x1BB7C4/D8, HEADER 7/8 MB · 9/2 MB, dropOther → LoadWad 다시 올림),
+reloadedHubTellsEyeRoomAndEnablesTheElevator (두 슬롯 세계: 204 → p00MP03 → 501 → LoadWad Pand00C → 기억으로 되살린 PAND00C 202 → FakeEyeDoor-VisOff → LevelData 22 · LeverOn).
+전체 772 통과.
+
+60 초 봇 (쉬움, `-Dgow.nomovieheap` 비교, 순간이동 · 방문 · 사망): ATHN01E 5 · 8/25 · 0 = 같음, DEST03 4 · 7/7 · 0 = 같음, PAND00C 12 · 21/27 · 0 = 같음,
+PAND02A 2 · 5/15 · 0 = 같음 (마지막 자리만 다름), PAND04AA 1 · 0/5 · 0 = 같음, ATHN06C 12 · 12/13 · 0 = 같음 (a06Mp02 · Semo03 미리 읽기에서 ATHN06B · ATHN07 내림,
+막은 전환 [ATHN07, ATHN06B] → [ATHN06B]).
+
+### 49.4 남은 것 · 미확인
+- 영상 3000–3300 (PAND00D 빛 방 · 쪽지 164 · 얼굴 샘 · 크랭크 · 가시 굴 싸움) 과 3485–3585 (PAND04AA 사티로스) 는 엔진으로 나란히 몰지 않았다.
+- 영웅 슬롯: 원작은 영웅 문맥 (0x3300CC 가상 함수 → +0x88) 과 슬롯 +0x5C 를 비교한다 — 엔진은 현재 레벨 (LoadCheck · 이음) 로 본다 [근사]. 경계에서 동영상이 돌면 다를 수 있다.
+- 빈 블록은 두 HEADER 만 뺀 값 — 미리 읽은 동영상 버퍼 (0x29D96C = Levels 힙) · 블록 머리 · 조각남은 무시 [근사]. 경계값 근처 짝 (DEST02/DEST03 빈 3.0 MB) 은 어긋날 수 있다.
+- 엘리베이터 레버는 손잡이 쪽 (동쪽) 에서만 잡힌다 (0x1C3F18 손잡이 축 판정) — 영상 3465 의 크레토스도 레버 왼쪽 (화면) 에 서 있다.
+
+### 49.5 증거 (`work/verify/ep4_d/`, 커밋 안 함)
+`video/` (영상 48 장), `p_beam_elevator.png` (위: 영상 3345 · 3365 · 3405 · 3465, 아래: 엔진 손잡이 뒤 동영상 2 장 · EyeOffCam · 엘리베이터 레버).
 ## 50. QA vs PS2 영상 4화 — 광기의 절벽: PAND04AA 세이브 · 구역 제목 15 → PAND04C 절벽 (줄 · 우리 승강기 · 세이브) → PAND04D 탑 · 줄다리 → PAND04E 헤라 석상 · 소용돌이 물길 → PAND04EE 테트리스 블록 방 · 헤라의 목걸이 (영상 3860–5195 초, 2026-10-29)
 
 영상 = 7QAMXQj38Io (4화, 전사 (보통) = `-Dgow.difficulty=1`, 세이브 화면 3960 · 4880 에서 확인), 프레임 422×317 (`work/verify/ep4_e/video/v<초>.jpg`, 커밋 안 함).
