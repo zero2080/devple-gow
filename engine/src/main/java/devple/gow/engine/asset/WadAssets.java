@@ -483,7 +483,7 @@ public final class WadAssets implements AutoCloseable {
 				lit = litColor(mat, l);
 				tex = s.hasUv ? texture(l.texture()) : null;
 				blend = classify(mat, tex != null);
-				tint = layerTint(mat, l, tex != null);
+				tint = unlitVertexColorOnly(layerTint(mat, l, tex != null), p.tm().renderFlags, colorAnimated(mat));
 				if (blend == RenderModel.Blend.ALPHA) {
 					tint[3] *= mat.param28() * l.param38();
 				}
@@ -500,6 +500,40 @@ public final class WadAssets implements AutoCloseable {
 	 * 플래그 4 의 다른 출처는 그리기 기록 +0x10 의 거리 페이드 α ≠ 1 (0x1580C0 → 0x1585E8, 엔진에 없음) 과 머티리얼 rf 0x4000 (디스크 0 개).
 	 */
 	public static final long VU_MATERIAL_ALPHA = 0x1000;
+
+	/**
+	 * 조명 없는 모델 (렌더 플래그 0x1000 없음) 의 레이어 색 = 정점 색 × 텍스처 — 레이어 rgba · 헤더 색을 곱하지 않는다 (47 §3.2) [확실: 마이크로코드 · 데이터].
+	 * 메시 VU1 주 프로그램 0x090–0x098: VU 플래그 4 (vi10 bit 10) 일 때만 vf7 = qw76 (헤더 × 레이어 rgb × 물체 색), vf30 = (qw76.xyz, qw78.w),
+	 * 아니면 vf7 = vf30 = 1, vf31 = 0 (지연 슬롯 0x095 뒤 0x096–0x098 이 덮어씀). 조명 없는 커널 (라이브러리 0x17F 그대로 / 0x189 · 0x19B vf31 + vf30 × 정점 색)
+	 * 이라 플래그 4 가 없으면 정점 색만 남는다. 플래그 4 의 출처는 0x167A98 의 모델 0x1000 (0x168310) · 그리기 α ≠ 1 (0x168288) · 머티리얼 블록 rf 0x4000 (디스크 0) 뿐이고
+	 * 메시 오브젝트 AND 마스크 (+0x14) 는 0x…25 라 그대로 통과한다. 내보내기 도구가 레이어 rgba 를 정점 색에 구워 넣었다: ATHN04A breakCrate02 —
+	 * wood 0.8595 · wood6 0.719 · wood7 1.2 · wood9 0.0 → 정점 색 최댓값 (64, 68, 101) · (54, 57, 85) · (89, 92, 136) · 0 (비 0.84 · 1.39 정확히 같음),
+	 * PAND03E FakeStatue 빛줄기 MAT_M01SFXlightBeam5 rgba (0.116, 0.112, 0.093) ↔ 정점 색 (29, 28, 23) / 256. 예전 엔진은 rgba 를 한 번 더 곱해 제곱이 되었고
+	 * (빛줄기 0.116 × 0.22 ≈ 2.5 % → 하데스의 시험 기둥 빛줄기 · PAND00D EyeCrusherBeam 이 안 보임, 영상 4화 1040–1300 · 2화 3798), 색 배율이 1 이 아닌 조명 없는
+	 * 모델 · 머티리얼 쌍 약 2300 개 밝기가 달랐다.
+	 * 예외 [근사]: 레이어 · 헤더 색 ANM 트랙이 있는 머티리얼 (PAND00C 해 문 글자 MAT_M01–M14sfxLightRayCore rgba 0 → 1, 영상 2화 3610–3642 은 R2 뒤에만 빛남) 은
+	 * 예전처럼 rgba 를 곱한다 — 원작에서 이 경우 플래그 4 가 어디서 서는지 (그리기 α 0x168288 의 출처) 는 따라가지 못했다 [미확인].
+	 */
+	static float[] unlitVertexColorOnly(float[] tint, long modelRenderFlags, boolean colorAnimated) {
+		if ((modelRenderFlags & VU_MATERIAL_ALPHA) == 0 && !colorAnimated) {
+			tint[0] = tint[1] = tint[2] = 1f;
+		}
+		return tint;
+	}
+
+	/** 머티리얼 ANM 에 헤더 색 (hdr0–2) 또는 레이어 rgb (L{n}s0–2) 트랙이 있는가. */
+	boolean colorAnimated(MaterialResource mat) {
+		MaterialAnim.Anim a = matAnims.get(mat.name());
+		if (a == null) {
+			return false;
+		}
+		for (String k : a.floats().keySet()) {
+			if (k.startsWith("hdr") || k.matches("L\\ds[0-2]")) {
+				return true;
+			}
+		}
+		return false;
+	}
 
 	/**
 	 * 2·3 번째 레이어의 알파 배율 (43 §30) [확실: 메시 VU1 마이크로코드 0x091–0x098 · 0x154410 · 0x167A98 / 확인: 영상 54–56 ATHN07 둥근 문].
@@ -531,7 +565,7 @@ public final class WadAssets implements AutoCloseable {
 				case 0x01 -> RenderModel.Blend.INV;
 				default -> RenderModel.Blend.ALPHA;
 			};
-			float[] tint = layerTint(mat, l, t != null);
+			float[] tint = unlitVertexColorOnly(layerTint(mat, l, t != null), modelRenderFlags, colorAnimated(mat));
 			tint[3] *= extraLayerAlpha(mat, l, modelRenderFlags);
 			// 레이어 렌더 플래그 bit1 (0x02) = 환경맵 VU 경로 → 법선 있는 메시에서 구면 환경맵 UV (MaterialFx.ENV_FLAG). bit2 (0x04) 는 머티리얼 색 (환경맵 아님)
 			boolean env = (l.renderFlags() & MaterialFx.ENV_FLAG) != 0;
