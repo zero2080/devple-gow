@@ -3544,6 +3544,33 @@ R_CNM · 미노타우로스 R_MI4 · 해골). PAND03E (적 없음, 바람개비 
 - TimeWarpBlur 의 다른 사용 (0x206030 → 0x142DE0, 기술 이벤트) 은 보지 않았다.
 - 시험 `TimeWarpBlurTest` (2: 필드 해시 = 이름 해시 · 성분 키 = 덤프 키, R_PERMK 값 · 구간 보간 · 길이 3.5 초), `DeathTimingTest` (선택지 2.5 초 · Death Menu Time 1.0).
 
+### 47.3 "로딩 중..." (영상 1142) — 고치지 않음 [미확인]
+- 영상 1142–1143: 쉬움 제안 "예" 뒤 검은 화면 오른쪽 아래 붉은 "로딩 중..." (1화 8212–8215 는 4.5 초, 3화 785). 글은 FLP_HUDK 루트의 'Loading' 클립 (#327, 90 프레임 붉은
+  깜박임, 동적 글자 PS2_4085 "로딩 중...", 자리 (650, 545)) — 루트 표시 목록 0 (프레임 0) 에만 있고 다음 키 프레임에서 깊이 2 가 비워진다 [확실: FLP 덤프].
+  실행 파일에는 "Loading" 문자열이 없고, 다시 시작 0x21E3D0 → 0x21FC28 (상태 9, 0x29F464 = 60) 이 HUD 루트를 프레임 0 으로 되돌리는 곳은 찾지 못했다.
+  엔진 재시작은 곧바로 새 씬이라 로딩 화면이 없다 — 가짜 지연을 넣지 않았다.
+
+### 47.4 PAND03F 바퀴 문 · 세이브 · 상자 방 (영상 1795–1915) — 원작과 같음
+- 1804–1812 복도 → 바퀴 R2 (1808) → 돌리기: `IO_CSM` 023 "WheelUnlock" (영웅 bmiDoorOpen · 오브젝트 unlockDoor2, 손잡이 handle1 (191.5, 370.7, 1298.2) 축 −z,
+  잡기 높이 16 · 반경 28 · 각 90° · 뒤 32) → 1048 붙잡기 → 100 % 1023 (100, 353) → GlobalData1 · Idle · FloatDrCam → 1813–1820 문 클로즈업 (사슬 문 · 붉은 Ω 자물쇠 켜짐 ·
+  사슬 걷힘, DoorWall AnimUnlock · BossHallGates GatesDown · Chest3) → CamOff 9 초 → 1821 바퀴 앞. 엔진 w6: 7.80 붙잡기 → 10.97 완료 → FloatDrCam → 19.98 CamOff — 같은 순서 ·
+  같은 구도 (`06`). 바퀴는 GateTrigger (03F 위쪽 입구) 가 CDOn 해야 잡힌다 (생성 시 CDOff).
+- 1834–1858 세이브 (덮어쓰기 · 저장 중 · 저장하기 완료) → 1860 빛기둥, 1870 초록 · 파란 상자 (HealthChestOpen / MagicChestOpen, GlobalData6/7), 1886–1898 업그레이드
+  메뉴 (제우스의 분노 1 → 2, 카드 "제우스의 힘: L2 홀드 + △ 홀드"), 1905 붉은 창살 복도 (PAND03G 이음) — 엔진 봇 순회에서 같은 방 · 같은 상자 빛 · 같은 창살 (업그레이드는 §17.3).
+- 1798–1802 갱도 → 03F 다리에서 구역 제목이 없다: ZoneReportGroup (03E) 는 GlobalData:2 ≠ 13 일 때만 — 3화에서 PAND03A 에 들어올 때 이미 13. 엔진도 같은 조건.
+
+### 47.5 남은 것 · 미확인
+- 회전 칼날 기둥 (PinWheel1–3) 피해 · 넉백은 §46 (A 구간, 접촉 재질 피해 13d5bc1) 에서 다룸 — 이 구간의 영상 낙사 다섯과 엔진 피해량은 나란히 보지 않았다.
+- 갱도 오르기 1144–1780 (사다리 · 사슬 · 짚라인) 은 봇 순회 (7/7 볼륨) 와 섬네일로만 보고, 영상과 같은 경로로 몰지 않았다.
+- 1823–1834 줄에 매단 계단 판 (fallPlatGRP "drop the platform", StepsBottomCollision TurnOff) 은 봇이 지나가지 않아 떨어지는 판을 보지 못했다.
+- 47.1 예외 (색 ANM 머티리얼) 의 원작 플래그 4 출처 · 47.2 그리기 층 순서 · 47.3 "로딩 중..." [미확인].
+- 실제 세이브 위치 (`~/Library/Application Support/devple-gow`) 는 생기지 않았다 (모든 실행 = 스크래치 홈).
+
+### 47.6 시험 · 증거
+`UnlitTintTest` (3), `TimeWarpBlurTest` (2), `DeathTimingTest` (1). 엔진 테스트 782 (origin/main 661a3e5 위) 통과.
+증거 `work/verify/ep4_b/` (커밋 안 함): `01`–`04_unlit_tint_*` (영상 | 전 | 후: 2화 DEST01, 3화 PAND01B/00D/03J/03A/02A, 4화 PAND03D/03E/03F, 1화 ATHN04A),
+`05_death_fade_video_before_after` (영상 1137–1141 | 전 | 후), `06_wheel_door_floatdrcam_video_vs_engine`, `07_shaft_light_beam_video_vs_engine_after`, `video/` · `video1/`.
+
 ## 48. QA vs PS2 영상 4화 — 하데스의 시험 끝: PAND03G 판도라 수호자 (BMI) → PAND03I 썩은 시체 · PAND03H 제단 (책 · 관 · 머리) → PAND03I 하데스의 군대 · 결계 싸움 → PAND03F 소용돌이 · 관 → PAND00C 허브 (영상 1980–2880 초, 2026-10-29)
 
 영상 = 7QAMXQj38Io (4화, 전사 (보통) = `-Dgow.difficulty=1`), 프레임 422×317 (`work/verify/ep4_c/video/v<초>.jpg` — 1960–2880 10 초 간격, 1995–2010 · 2095–2125 ·
