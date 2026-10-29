@@ -510,6 +510,11 @@ public final class NavWorld {
 		return neighbour.collideSphere(c, r, skip, exclude) | own; // 이웃 레버·밀기 상자도 붙잡은 동안 몸 제외 (SceneNav 가 두 슬롯 이름을 함께 줌)
 	}
 
+	/** 몸 구가 닿은 CDV 재질 접촉 피해의 최댓값 — 이 레벨 + 다른 슬롯 레벨 ({@link Platforms#contactDamage}, 43 §46). */
+	public Platforms.Touch contactDamage(Vector3f c, float r, boolean ai, java.util.Collection<String> skip, long exclude) {
+		return Platforms.Touch.max(platforms.contactDamage(c, r, ai, skip, exclude), neighbour.contactDamage(c, r, ai, skip, exclude));
+	}
+
 	// ---- 줄 공유 상태 (영웅·적이 같은 줄 오브젝트를 쓴다) ----
 
 	private final java.util.Map<NavRope, RopeSim> sims = new java.util.IdentityHashMap<>();

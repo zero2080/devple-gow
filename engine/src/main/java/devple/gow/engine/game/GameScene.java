@@ -3800,20 +3800,41 @@ public final class GameScene implements Scene {
 	/**
 	 * 바닥 재질 피해 (원작 0x1EAC70 → 0x1EADC8, 공용 내비 0x1EBD78 매 프레임): 밟은 면의 시트 속성 "Damage" (영웅) / "AIDamage" (적) 를
 	 * 0..최대 HP 로 자르고, 타이머가 0 이면 값 × AIDamageMult (난이도 0.5/1/2.5/5) × 코스튬 AIDamage × 신 모드 감소 를 입히고 타이머 = 1 초.
-	 * 예 PAND04J visualsPand04J_Damage 10 → 초당 쉬움 5 / 보통 10 / 어려움 25 / 신 50. [근사: 벽 면 접촉은 보지 않음]
+	 * 예 PAND04J visualsPand04J_Damage 10 → 초당 쉬움 5 / 보통 10 / 어려움 25 / 신 50. [근사: 정적 시트는 바닥 면만 — 벽 면 접촉은 보지 않음]
+	 * <p>
+	 * 움직이는 · 정지 GO 의 CDV 재질도 같은 접촉 0x1E1DF0 으로 대기 피해를 건다 (43 §46): PAND03C 굴러오는 불덩이 20 (적 1024), PAND03E 바람개비 날 10,
+	 * HDES01B/01C 날 · 죽음 굴림대 10, PAND01B 톱날 · 가시 블록, PAND02G 가시 바퀴 25, PAND03B 화살 함정 20 · 분쇄기 40, PAND04G 톱 25 …
+	 * 예전엔 정적 바닥 면만 봐서 이 함정들이 크레토스를 지나가도 피해가 없었다. 몸 구 = 벽 밀어내기와 같은 (발 + 20, 반지름 12).
+	 * 피해를 입히는 0x204690 (플래그 4 / 6, 0x1EAE58) 은 HP 가 남으면 피격 이벤트 13 (0x2048A0) 을 쏜다 — 분기 키 = 재질 SheetFX (+0x284 → 0x2090B8 t2 →
+	 * 분기 +0x1A): 불덩이 MFX 105 → 영웅 A185 HITBALL (넘어짐 → hitGetupGround) [확실: 이벤트 · 키 / 근사: 나머지 키 −1 · 0x1EAD5C 밀어내기 (+0x270 수평 × 6 × 16) 생략].
 	 */
 	private void surfaceDamage(float dt) {
 		surfTimer = Math.max(0, surfTimer - dt);
 		Vector3f p = hero.ctl.position;
-		int d = hero.ctl.grounded ? surfaceValue(p, false) : 0;
+		var touch = hero.ctl.grounded ? surfaceValue(p, false) : devple.gow.engine.nav.Platforms.Touch.NONE;
+		if (nav != null) {
+			touch = devple.gow.engine.nav.Platforms.Touch.max(touch,
+					nav.navWorld.contactDamage(new Vector3f(p.x, p.y + 20, p.z), 12, false, java.util.Set.of(), heroBodyExclude()));
+		}
+		int d = touch.damage();
 		if (d > 0 && surfTimer <= 0 && hero.player.hp > 0) {
 			hero.player.hp = Math.max(0, hero.player.hp - Math.min(d, hero.player.maxHp()) * hero.incomingScale());
 			surfTimer = 1f;
+			if (hero.player.hp > 0) {
+				hero.combat.fireFrom(devple.gow.engine.combat.CombatInput.EV_HIT, -1, 0, -1, -1, touch.sheetFx());
+			}
+			if (hero.combat.debug) {
+				System.out.printf(java.util.Locale.ROOT, "[영웅] 재질 접촉 피해 %d (SheetFX %d) → HP %.1f%n", d, touch.sheetFx(), hero.player.hp);
+			}
 		}
+		long enemyEx = devple.gow.engine.nav.NavWorld.bodyExclude(false, false, false, false, 0, 0);
 		for (Enemy en : enemies) {
 			EnemyFighter f = en.fighter();
 			float t = Math.max(0, enemySurfTimer.getOrDefault(f, 0f) - dt);
-			int ad = !f.dead() && f.onGround() ? surfaceValue(f.pos, true) : 0;
+			int ad = !f.dead() && f.onGround() ? surfaceValue(f.pos, true).damage() : 0;
+			if (!f.dead() && nav != null) {
+				ad = Math.max(ad, nav.navWorld.contactDamage(new Vector3f(f.pos.x, f.pos.y + 20, f.pos.z), 12, true, java.util.Set.of(), enemyEx).damage());
+			}
 			if (ad > 0 && t <= 0) {
 				f.selfHp(Math.min(ad, f.maxHp()) * hero.incomingScale());
 				t = 1f;
@@ -3823,8 +3844,8 @@ public final class GameScene implements Scene {
 		enemySurfTimer.keySet().removeIf(f -> enemies.stream().noneMatch(en -> en.fighter() == f));
 	}
 
-	private int surfaceValue(Vector3f p, boolean ai) {
-		int best = 0;
+	private devple.gow.engine.nav.Platforms.Touch surfaceValue(Vector3f p, boolean ai) {
+		var best = devple.gow.engine.nav.Platforms.Touch.NONE;
 		for (LevelCollision c : new LevelCollision[]{col, otherCol}) {
 			if (c == null) {
 				continue;
@@ -3832,7 +3853,7 @@ public final class GameScene implements Scene {
 			LevelCollision.Floor fl = c.floorAt(p.x, p.y + STEP, p.z, STEP + 4);
 			var info = fl != null ? fl.tri().info() : null;
 			if (info != null) {
-				best = Math.max(best, ai ? info.aiDamage() : info.damage());
+				best = devple.gow.engine.nav.Platforms.Touch.max(best, new devple.gow.engine.nav.Platforms.Touch(ai ? info.aiDamage() : info.damage(), info.sheetFx()));
 			}
 		}
 		return best;

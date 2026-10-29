@@ -533,7 +533,7 @@ public final class Platforms {
 			String anm = null;
 			for (String r : p.object().refs()) {
 				BallHull h = lv.hulls.get(r);
-				if (h != null && h.kind == 0 && (!h.hulls.isEmpty() || breakableBalls(lv, name, h))) {
+				if (h != null && h.kind == 0 && (!h.hulls.isEmpty() || breakableBalls(lv, name, h) || damageBalls(h))) {
 					cdv = h;
 				}
 				if (r.startsWith("ANM_")) {
@@ -614,7 +614,7 @@ public final class Platforms {
 		}
 		for (String r : p.object().refs()) {
 			BallHull h = lv.hulls.get(r);
-			if (h != null && h.kind == 0 && breakableBalls(lv, name, h)) {
+			if (h != null && h.kind == 0 && (breakableBalls(lv, name, h) || damageBalls(h))) {
 				return true;
 			}
 			if (h != null && h.kind == 0) {
@@ -642,6 +642,121 @@ public final class Platforms {
 		for (var e : lv.behaviors.entrySet()) {
 			if (e.getKey().equalsIgnoreCase(owner)) {
 				return "Breakable".equals(e.getValue().type());
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * 공 (ball) 만 있고 재질에 접촉 피해 ("Damage" / "AIDamage" &gt; 0) 가 있는 CDV — PAND03C 굴러오는 불덩이 goleftrock* · gomidrock* · gorightrock*
+	 * (공 1 개, 관절 1, 반지름 43.2, Ground · Slide, 피해 20 / 적 1024). 원작은 모든 CDV 를 충돌 세계에 올리고 (0x138FD0) 몸 질의 0x1E2100 이
+	 * 공에 닿으면 접촉 0x1E1DF0 이 그 재질의 피해를 건다 (43 §46) [확실: 접촉 · 피해 / 근사: 엔진은 피해 공만 몸 구 밀어내기 — 피해 없는 장식 공은 예전처럼 뺌].
+	 */
+	static boolean damageBalls(BallHull h) {
+		if (h.balls.isEmpty() || !h.hulls.isEmpty()) {
+			return false;
+		}
+		for (int i = 0; i < h.materialDamage.length; i++) {
+			if (h.materialDamage[i] > 0 || h.materialAiDamage[i] > 0) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** 접촉 판정 여유 (밀어내기가 몸 구를 면에서 정확히 반지름 거리에 두므로 그 자리도 "닿음"). */
+	static final float CONTACT_SKIN = 0.5f;
+
+	/**
+	 * 몸 구 (c, r) 가 닿은 CDV 재질의 접촉 피해 중 최댓값 — 원작 0x1E1DF0: 몸·바닥 질의 (0x1E3298 바닥 · 0x1E36B0 · 0x1E2F20 · 0x1E1F28) 가 맞은
+	 * 면의 재질 레코드 (+0x2C) 에서 플레이어 (+0x174 비트 31) 면 "Damage", 아니면 "AIDamage" 를 읽어 0 이 아니면 생물 vtable +0xA8 (대기 피해 +0x280 ·
+	 * 접촉점 +0x270 · SheetFX +0x284) 에 둔다 [확실]. 공 = 공 중심 거리 &lt; 공 반지름 + r, hull = 모든 평면 부호 거리 &lt; r 이면 가장 얕은 (거리가 큰) 평면의
+	 * 재질 [근사: 원작 질의는 면별 — 볼록 hull 의 맞은 면 = 가장 얕은 면]. 충돌 꺼진 몸, skip, 재질 &amp; exclude ≠ 0 인 면은 빼고, 몸 밀어내기와 같은 몸 목록.
+	 *
+	 * @param ai true = 적 ("AIDamage")
+	 * @return 가장 큰 피해와 그 재질 SheetFX (없으면 {@link Touch#NONE})
+	 */
+	public Touch contactDamage(Vector3f c, float r, boolean ai, Collection<String> skip, long exclude) {
+		int best = 0, fx = -1;
+		float[] w = new float[3];
+		for (Body b : bodies) {
+			if (!b.solid || b.hull == null || skip.contains(b.owner)) {
+				continue;
+			}
+			BallHull h = b.hull;
+			int[] dmg = ai ? h.materialAiDamage : h.materialDamage;
+			if (!anyPositive(dmg)) {
+				continue;
+			}
+			if (h.hulls.isEmpty()) {
+				for (int i = 0; i < h.balls.size(); i++) {
+					int mat = h.ballMaterial[i];
+					if (mat < 0 || mat >= dmg.length || dmg[mat] <= best || (h.materialAttrs[mat] & exclude) != 0) {
+						continue;
+					}
+					float[] ball = h.balls.get(i);
+					float[] m = b.joints[Math.min(Math.max(h.ballJoint[i], 0), b.joints.length - 1)];
+					Mat4.transformPoint(m, ball[0], ball[1], ball[2], w);
+					float scale = (float) Math.sqrt(m[0] * m[0] + m[1] * m[1] + m[2] * m[2]);
+					if (c.distance(w[0], w[1], w[2]) < ball[3] * scale + r + CONTACT_SKIN) {
+						best = dmg[mat];
+						fx = h.materialFx[mat];
+					}
+				}
+				continue;
+			}
+			for (int hi = 0; hi < h.hulls.size(); hi++) {
+				BallHull.Hull hh = h.hulls.get(hi);
+				if (hh.planes().size() < 4) {
+					continue;
+				}
+				float[] m = b.joints[Math.min(h.hullJoint[hi], b.joints.length - 1)];
+				float[] lp = new float[3];
+				Mat4.transformPoint(Mat4.invertAffine(m), c.x, c.y, c.z, lp);
+				float scale = (float) Math.sqrt(m[0] * m[0] + m[1] * m[1] + m[2] * m[2]);
+				float lr = (r + CONTACT_SKIN) / Math.max(1e-3f, scale);
+				float sdMax = -Float.MAX_VALUE;
+				int face = -1;
+				for (int k = 0; k < hh.planes().size(); k++) {
+					float[] pl = hh.planes().get(k);
+					float len = (float) Math.sqrt(pl[0] * pl[0] + pl[1] * pl[1] + pl[2] * pl[2]);
+					if (len < 1e-6f) {
+						continue;
+					}
+					float sd = (pl[0] * lp[0] + pl[1] * lp[1] + pl[2] * lp[2] + pl[3]) / len;
+					if (sd > sdMax) {
+						sdMax = sd;
+						face = k;
+					}
+				}
+				if (face < 0 || sdMax >= lr) {
+					continue;
+				}
+				int[] pm = hh.planeMaterials();
+				int mat = face < pm.length ? pm[face] : hh.nameIndex();
+				if (mat >= 0 && mat < dmg.length && dmg[mat] > best && (h.materialAttrs[mat] & exclude) == 0) {
+					best = dmg[mat];
+					fx = h.materialFx[mat];
+				}
+			}
+		}
+		return best > 0 ? new Touch(best, fx) : Touch.NONE;
+	}
+
+	/** 접촉 피해 (재질 "Damage"/"AIDamage") 와 그 재질의 SheetFX (MFX 템플릿, 피격 분기 +0x1A 키). */
+	public record Touch(int damage, int sheetFx) {
+		public static final Touch NONE = new Touch(0, -1);
+
+		/** 피해가 큰 쪽. */
+		public static Touch max(Touch a, Touch b) {
+			return b.damage > a.damage ? b : a;
+		}
+	}
+
+	private static boolean anyPositive(int[] a) {
+		for (int v : a) {
+			if (v > 0) {
+				return true;
 			}
 		}
 		return false;

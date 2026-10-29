@@ -33,8 +33,13 @@ public final class Combatant {
 	public static final float REACH = 55f, HIT_RADIUS = 55f;
 
 	/** 분기 매칭 상대 정보 (폴링: 락온 대상, 이벤트: 공격자). */
-	private record Other(float hp, int classId, int tag, boolean grabbable, boolean polled) {
+	/** fx = 분기 +0x1A (matchC) 와 대조할 재질 SheetFX (0x2090B8 의 t2 → 0x208578 스택 +0x98, −1 = 없음). */
+	private record Other(float hp, int classId, int tag, boolean grabbable, boolean polled, int fx) {
 		static final Other NONE = new Other(0, -1, -1, false, true);
+
+		Other(float hp, int classId, int tag, boolean grabbable, boolean polled) {
+			this(hp, classId, tag, grabbable, polled, -1);
+		}
 	}
 
 	private final CombatData data;
@@ -720,7 +725,17 @@ public final class Combatant {
 			return -1;
 		}
 		int s = 0;
-		if (b.matchC() == -1) {
+		if (o.fx() >= 0) {
+			// 0x208970–0x208990 [확실]: 분기 +0x1A == 키 → 0, 분기 −1 → +1, 그 밖 실패. 키 = 재질 접촉 피해의 SheetFX (0x1EAC70 → 0x204690 a3 = +0x284
+			// → 0x2090B8 t2) — 영웅 A180–A189 의 +0x1A 100–109 가 함정 재질 MFX 100–109 에 짝: 105 "trap roll ball" → A185 HITBALL (PAND03C 불덩이, 43 §46)
+			if (b.matchC() == o.fx()) {
+				s += 0;
+			} else if (b.matchC() == -1) {
+				s += 1;
+			} else {
+				return -1;
+			}
+		} else if (b.matchC() == -1) {
 			s += 1;
 		}
 		if (b.reaction() == -1) {
@@ -827,7 +842,14 @@ public final class Combatant {
 
 	/** 전투 combatant 가 아닌 공격자(투사체: Arrow "Context" = 자세 태그)의 이벤트. 예 BMI 통나무 Arrow/060 Context 456 → A210/A245. */
 	public void fireFrom(int code, int reaction, float attackerHp, int attackerClass, int attackerTag) {
-		Other o = new Other(attackerHp, attackerClass, attackerTag, false, false);
+		fireFrom(code, reaction, attackerHp, attackerClass, attackerTag, -1);
+	}
+
+	/**
+	 * 재질 접촉 피해의 피격 이벤트 (0x1EAC70 → 0x204690 → 0x2090B8(13 / 14, …, t2 = SheetFX)): 공격자 없음, 분기 +0x1A 를 sheetFx 와 대조 (43 §46).
+	 */
+	public void fireFrom(int code, int reaction, float attackerHp, int attackerClass, int attackerTag, int sheetFx) {
+		Other o = new Other(attackerHp, attackerClass, attackerTag, false, false, sheetFx);
 		Branch c = move != null ? bestMatch(eventBranches(move.branches(), code, reaction), null, o) : null;
 		if (c == null) {
 			c = bestMatch(eventBranches(data.rootActions(), code, reaction), null, o);

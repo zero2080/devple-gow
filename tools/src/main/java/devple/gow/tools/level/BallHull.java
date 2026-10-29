@@ -61,6 +61,12 @@ public final class BallHull {
 	public final long[] materialAttrs;
 	/** 재질 엔트리 원값 (bitfield0, bitfield1) — 검증·조사용. */
 	public final int[][] materialRaw;
+	/**
+	 * 재질 엔트리별 접촉 피해 "Damage" (+0x38, 영웅) / "AIDamage" (+0x3C, 적) — 표면 레코드 +0x20 / +0x24 (스키마 0x1BECA0 → 오프셋 0x337708 /
+	 * 0x33770C, 엔트리 크기 0x40 미만이면 0). 읽는 곳은 접촉 0x1E1DF0 하나 (+0x174 비트 31 = 플레이어면 Damage, 아니면 AIDamage) [확실].
+	 * 예 PAND03C 굴러오는 불덩이 CDV_LeftRock1 20 / 1024, PAND03E 바람개비 날 10 / 0, HDES01C 죽음 굴림대 10 / 10.
+	 */
+	public final int[] materialDamage, materialAiDamage;
 
 	public BallHull(String name, ByteBuffer d) {
 		this.name = name;
@@ -89,7 +95,14 @@ public final class BallHull {
 		materialFx = new int[nameCount];
 		materialAttrs = new long[nameCount];
 		materialRaw = new int[nameCount][2];
+		materialDamage = new int[nameCount];
+		materialAiDamage = new int[nameCount];
 		for (int i = 0; i < nameCount; i++) {
+			if (nameStride >= 0x40 && off[0] + i * nameStride + 0x40 <= d.limit()) {
+				int e = off[0] + i * nameStride;
+				materialDamage[i] = d.getInt(e + 0x38);
+				materialAiDamage[i] = d.getInt(e + 0x3C);
+			}
 			if (nameStride >= 0x34 && off[0] + i * nameStride + 0x34 <= d.limit()) {
 				int e = off[0] + i * nameStride;
 				materialPart[i] = d.getInt(e + 0x30);

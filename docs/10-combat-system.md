@@ -422,7 +422,7 @@ m = Difficulty.AIDamageMult × Costume.AIDamageMult × (GodMode ? WeaponLevel[lv
 | 영웅이 주는 피해 | 0x1DBD18 | Damage Mult 2/1/0.75/0.5 | `DamageRules.playerScale` |
 | 적이 주는 피해 | 0x1D3E80 | AI Damage Mult 0.5/1/2.5/5 | `EnemyFighter.setIncomingScale` |
 | 공격 뒤 대기·재사용 대기 | 0x1CCCC8 / 0x1D3074, 잎 고르기 0x229258 | AI Recovery Time Mult 2/1/0.75/0.5 | `AiBrain` |
-| 바닥 재질 피해 | 0x1EAC70 → 0x1EADC8 (1 초마다, 시트 "Damage"/"AIDamage" × AI Damage Mult × 코스튬 × 신 모드) | 예 PAND04J 10 → 초당 5/10/25/50 | `GameScene.surfaceDamage` [근사: 벽 면 없음] |
+| 바닥 재질 피해 | 0x1EAC70 → 0x1EADC8 (1 초마다, 시트 "Damage"/"AIDamage" × AI Damage Mult × 코스튬 × 신 모드) | 예 PAND04J 10 → 초당 5/10/25/50 | `GameScene.surfaceDamage` — 움직이는·정지 GO 의 CDV 재질 (+0x38/+0x3C, 굴러오는 불덩이 · 톱날 · 가시 · 바람개비) 도 몸 구 접촉으로, 피격 13 분기 키 = 재질 SheetFX (43 §46) [근사: 정적 시트 벽 면 없음] |
 | 범위 피해 (SCR_ConcussionBurst) | 0x191720: 템플릿 "Damage" 하위 바이트 × 주인 배율 | 주인 배율 따라 | `MagicFx.concussionDamage` [근사: 한 번, 밀어내기 없음] |
 | 쉬움으로 다시 하기 제안 | 0x1DBF90 ← 사망 메뉴 0x220360: 보통·어려움, 사망 수 % "Deaths Before Easy Offer"(5) == 0, Arena 아님 → DeadMenu_Event 3, 선택 → 0x29F484 → 체크포인트 로드 때 난이도 0 | – | `GameScene.openDeadMenu` (사망 메뉴 FLP DeadMenu: Choice 0 다시 / 1 나가기 / 2 쉬움으로) |
 | 스크립트 변수 Internal 48 DifficultyLevel | 0x1AFF94 | OLYMP02 크레딧: 신만 Bonus24 | `GameScriptHost.difficulty` |

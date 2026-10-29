@@ -3413,6 +3413,53 @@ bd6a17a 는 하네스 순간이동 (`AutoPlay` → `GameScene`) 에서 헤엄치
 PAND02D/02F/03F 의 증가는 삼지창 게이트가 아니었다 — giveAll 로도 같고, 고친 뒤 PAND02F · 03F 는 예전 값으로 돌아왔다. 남은 PAND02D 차이는 물속 · 돌진 문 볼륨 점 (봇이 잠수 ·
 돌진을 하지 않음) 이다.
 
+## 46. QA vs PS2 영상 4화 — 하데스의 시험 계속: PAND03C 굴러오는 불덩이 복도 · 끝 방 (해골 · 상자 · 병사의 쪽지) · 들어 올리는 옆문 · 사망 → 체크포인트 → PAND03C DMC 굴 → PAND03D 줄 다리 · 용암 원형 경기장 (영상 0–960 초, 2026-10-29)
+
+영상 = 7QAMXQj38Io (4화, 전사 (보통) = `-Dgow.difficulty=1`), 프레임 422×317 (`work/verify/ep4_a/video/v<초>.jpg` — 0–950 10 초 간격, 115–130 · 140–150 · 195–210 ·
+270–300 1 초, 커밋 안 함). 엔진 = origin/main 464352b 위, 1280×720 lockstep, 스크래치 홈, `--skip-movies`, `--game PAND03C|PAND03D`, 경로 `-Dgow.auto.route` · 봇.
+
+경로 [확실: 스크립트 · 영상]: 0–40 PAND03A → 03C 계단 · 빛줄기 문 (3화 끝의 이음) → 50–100 PAND03C 굴러오는 불덩이 복도 (goleftrock1–6 · gomidrock1–5 · gorightrock1–6, 반복 act
+30 초, 세 줄) → 110–130 끝 방 (−5440…−5650): 해골 BallwaySkels (R_SKC 템플릿 22) · 상자 셋 · 불 기둥 → 140–150 병사의 쪽지 NewBook (메시지 225 "8개의 막다른 길, 하나의 올바른 길…")
+→ 195–260 복도로 돌아와 옆 벽감 (S3LiftDoor1–9, TAndF 330 "Pandora3CBallWa") 으로 불덩이 피하기 → 271–276 불덩이에 맞아 튕김 · 넘어짐 → 다음 불덩이 → YOU ARE DEAD →
+281–284 "로딩 중.." → 285 체크포인트 (복도) 다시 → 300–530 옆문 탐색 · 끝 방 다시 (해골 다시 생김) → 540–600 PAND03C DMC 굴 (미노타우로스 R_MI4 · 궁수 · DMC 개 머리 문) →
+600–620 강화 메뉴 (혼돈의 블레이드 5) → 640–720 굴 싸움 → 720–760 PAND03D 용암 위 줄 다리 (RopeArchers · 오르는 해골) → 780–950 PAND03D 용암 원형 경기장 (DMCEnemies 켄타우로스
+R_CNM · 미노타우로스 R_MI4 · 해골). PAND03E (적 없음, 바람개비 기둥) 는 960 이후 (B 구간).
+
+### 46.1 엔진 결함과 수정
+1. **CDV 재질의 접촉 피해가 없었다 — 굴러오는 불덩이가 크레토스를 지나가도 피해 · 넘어짐 · 사망이 없음 (영상 271–276: 맞아 튕겨 넘어지고 다음 불덩이에 사망, 엔진 전체)**
+   [확실: 디스어셈블 · 데이터, 표시한 것 제외].
+   - 표면 레코드 스키마 0x1BECA0 은 "bitfield0–3 · SheetFX · PartType · WallHangTimer · **Damage · AIDamage**" 의 오프셋을 0x3376EC…0x33770C 에 둔다. Damage (0x337708) 를
+     읽는 곳은 **0x1E1DF0 하나**: 접촉 레코드 +0x2C (맞은 면의 재질) 에서 플레이어 (+0x174 비트 31) 면 Damage, 아니면 AIDamage 를 읽어 0 이 아니면 생물 vtable +0xA8
+     (대기 피해 +0x280 · 접촉 +0x270 · SheetFX +0x284). 부르는 곳 = 바닥 질의 0x1E3298 · 0x1E36B0 · 0x1E2F20 · 0x1E1F28 — 정적 시트와 GO 충돌 인스턴스 (CDV) 를 같이 본다.
+   - 0x1EAC70 (생물 갱신 0x1EBD78 매 프레임): +0x280 ≠ 0 이고 타이머 +0x2B0 = 0 이면 피해 × AI Damage Mult × 코스튬 × 신 모드로 **0x204690 (플래그 4, MFX +0x1C & 0x10 이면 6)**,
+     타이머 1 초. 0x204690 은 HP 가 0 이면 사망 14, 아니면 (플래그 비트 0 없음) **피격 13** 을 0x2090B8 로 쏘고, 키 t2 = SheetFX 가 분기 매치 0x208578 의 스택 인자 →
+     **0x208970: 분기 +0x1A == 키 → 점수 0, 분기 −1 → +1, 그 밖 실패**. 영웅 루트 A180–A189 의 +0x1A = 100–109 → 함정 MFX 100–109 에 짝: **105 "trap roll ball" → A185
+     HITBALL** (튕겨 넘어짐 → 193 hitGetupGround), 101 → A181 HITFIREBALL, 104 → A184 PARRYHITLEFT …
+   - 데이터 (CDV 재질 엔트리 0x40 바이트 = 이름 24 + 표면 레코드 40, Damage +0x38 · AIDamage +0x3C): PAND03C 불덩이 공 CDV_Left/Mid/RightRock1 **20 / 1024** (MFX 105, 공 1 개
+     반지름 43.2, Ground · Slide), PAND03E 바람개비 10 / 0, HDES01B BladeDamage · HDES01C 죽음 굴림대 10 / 10, PAND01B 톱날 10 / 15 · 블록 10 / 1024, PAND02G 가시 바퀴 25,
+     PAND02H 날 1 · 가시 20, PAND03B 화살 함정 20 · 분쇄기 40 / 1024, PAND04G 톱 25, PAND00C 굴러가는 통나무 50, PAND00D 분쇄기 10, PAND02C 불 15, DEST02 분쇄기 33 / 1024,
+     PAND02AA 회전방 1024, PAND04C 가시 1024 (전 WAD 조사).
+   - 엔진은 정적 시트의 **바닥 면** 피해만 보았고 (PAND04J), CDV 재질 피해는 읽지도 않았다. 불덩이는 피해 없는 공 CDV 라 몸도 아니어서 크레토스를 그냥 지나갔다.
+   → `BallHull.materialDamage/materialAiDamage`, `Platforms.contactDamage` (몸 구가 닿은 공 · hull 면의 재질 피해 최댓값과 SheetFX; hull 은 가장 얕은 면의 재질 [근사]),
+   피해 공 CDV (`Platforms.damageBalls`) 는 몸으로 올림 (몸 밀어내기 — 원작은 모든 CDV 를 충돌 세계에 올림 [추정: 0x138FD0], 피해 없는 장식 공은 예전처럼 뺌 [근사]),
+   `GameScene.surfaceDamage` 가 바닥 + CDV 접촉 (발 + 20, 반지름 12 — 벽 밀어내기와 같은 몸 구) 의 최댓값을 1 초 타이머로, 영웅은 이어서 `Combatant.fireFrom(13, …, SheetFX)`,
+   적은 AIDamage (불덩이에 닿은 해골 1024 → 즉사). `Combatant.score` 는 키 (SheetFX ≥ 0) 가 있으면 0x208970 규칙 (키 없는 예전 호출은 그대로).
+   [근사: 0x1EAD5C 밀어내기 (+0x270 수평 × 6 × 16 × dt × 질량) 생략 — 넘어짐은 HITBALL 루트 모션, 몸 밀어내기는 공이 민다; 정적 시트 벽 면 접촉은 아직 바닥만]
+   - 증거 `01_fireball_hit_v272-276_vs_engine.png` (위 영상 271–274: 튕겨 넘어짐, 아래 엔진 `0,260,-1500!;wait` 8.0–9.6 초: 불덩이 → HITBALL → 넘어짐). 같은 자리 30 초
+     대기 = 피해 20 × 5 → 22.4 초 사망 → 체크포인트 (영상 276 사망 화면 → 281 로딩 → 285 다시).
+
+### 46.2 60 초 봇 (보통, 스크래치 홈) — 고치기 전 (464352b) → 뒤
+| 레벨 | 사망 | 피격 반응 (EV_HIT_REACT) | 비고 |
+|---|---|---|---|
+| PAND03C | 0 → 1 | 11 → 24 | 불덩이 HITBALL · 사망 (의도) |
+| PAND01B | 2 → 2 | 0 → 6 | 톱날 · 블록 접촉 (사망 2 = 예전과 같은 낙하) |
+| PAND03D · PAND04J · HDES01C · ATHN01C · PAND02G · PAND04G | 같음 | 같음 | 예외 0 |
+
+### 46.3 남은 것 · 미확인
+- [미확인] 끝 방 상자 셋: 영상 121–129 는 왼쪽 초록 (healthChest CSM 004) · 가운데 나무 상자 · 오른쪽 붉은 빛 상자, 엔진은 초록 하나 + 회색 (HealthShard CSM 010 · MagicShard
+  CSM 011 = 종류 1 plain) 둘 — 아이템 상자의 빛 이펙트 출처 미해석.
+- 끝 방 해골 수: 엔진은 BallwaySkels AI1 · AI2 (H0 = 2) 가 넷까지 함께 나오고 다시 생김, 영상 110–130 은 한두 마리로 보인다 [미대조: 스폰 규칙].
+
 ## 시연 녹화 (-Dgow.record, -Dgow.bot) [엔진 전용]
 
 - `-Dgow.record=DIR` 로직 틱 `gow.record.every`(기본 2 = 30fps) 번마다 `DIR/f000000.jpg` 저장, `gow.record.secs` 초 뒤 종료. 녹화 중에는 lockstep (프레임당 틱 하나) 이라 렌더 속도와 무관하게 영상 시간이 게임 시간과 같다.
