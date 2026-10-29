@@ -3722,10 +3722,20 @@ lockstep, 스크래치 홈 (`home-ep4e`), `--skip-movies`.
    (`01_pushbox1_engine_after`, 영상 4880 과 같은 자리). 전 WAD 밀기 상자 21 개의 hull 옆면은 Push 몸 반 너비와 같거나 몇 유닛 차 (PAND04G 석상 +z 33 ↔ 24,
    PAND03B 미로 벽은 관절 0 이 −32 라 GO 기준 ±32) — 몸 구 12 로 막힌 자리의 앞 점은 모든 면에서 잡기 거리 20 안이다. 발리스타 (손잡이 관절) r15 경로 앞 64 초
    (§22) 그대로 (−667 → 14, 4728). 60 초 봇 (쉬움) DEST02 · ATHN06B · ATHN01D · ATHN05B · PAND02A · PAND01A · ATHN01C · PAND04C 결과 (방문 · 순간이동 · 사망) 고치기 전과 같다.
+2. **우리 승강기를 돌리면 우리만 올라가고 크라토스는 구덩이 바닥에 남았다 (영상 4 4010–4024: 우리 안의 크랭크를 돌려 함께 절벽 위 세이브 턱으로, 엔진 전체).**
+   PAND04C gocavecrank · gohangcrank = Push "Pand04CElevs" Type 3 (기중기형 크랭크) — GO 자체가 둥근 우리이고 손잡이 관절 (−217.6, 236, −1374.9) 이 우리 바닥 위다.
+   `GameScene.physics` 는 내비게이터가 붙잡기 상태 (INTERACT · PUSH) 면 바로 돌아가 발판 실림 (`SceneNav.carry`) 을 건너뛰었다 → 진행 시간으로 우리 몸이 오르는 동안
+   영웅은 y 219 에 남아 빈 바닥에서 크랭크 동작만 했다 (`--game PAND04C`, 경로 `-218,236,-1352!;wait:1;crank:14:-218,-1375`).
+   원작 [확실: 호출 순서]: 영웅 갱신 0x1EBD78 은 지면 GO 실림 0x1E6248 (+0x24C GO 의 +0x250 관절 이번 틱 움직임) 을 **0x1EC514 에서 상태와 무관하게** 먼저 하고,
+   그 뒤에 +0x174 0x4000 이면 붙잡기 0x1C4258 (0x1EC60C) 로 간다. → 붙잡은 동안 (INTERACT · PUSH) 에도 발밑 발판으로 실린다. 고친 뒤 2.3 → 15 초 동안
+   y 219 → 747 (세이브 (−288, 752, −1408) 턱), 영상 4010 → 4024 (≈ 14 초) 와 같은 오름 (`02_cage_elevator_video` | `02_cage_elevator_engine_after`).
+   60 초 봇 8 레벨 결과 같음 (DEST02 사망 0 → 1 은 이 고침 전 · 후 같다 — rebase 로 들어온 다른 작업, 지면 (2436, 274, 6662)).
+3. 하네스 [엔진 전용]: 경로 단계 `stick:초:x,y:버튼+` — 버튼 이름 끝 `+` 면 단계 내내 누름 (□ 를 누른 채 물속 관을 따라 잠수).
 
 ### 50.4 시험 · 증거
-`PushBoxBodyTest` (PAND04EE gopushbox1 Square 16 · 크랭크는 레버 목록 · 붙지 않은 상자는 몸 구를 면 + 12 로 밀어냄 · 붙은 상자는 밀지 않음).
-증거 `work/verify/ep4_e/` (커밋 안 함): `01_pushbox1_engine_before` · `01_pushbox1_engine_after`.
+`PushBoxBodyTest` (PAND04EE gopushbox1 Square 16 · 크랭크는 레버 목록 · 붙지 않은 상자는 몸 구를 면 + 12 로 밀어냄 · 붙은 상자는 밀지 않음),
+`CageElevatorCarryTest` (PAND04C gocavecrank Type 3 · 손잡이 앞 발밑 = 우리 몸 · 길이 끝 자세로 실으면 y ≈ 747 이고 여전히 우리 바닥 위).
+증거 `work/verify/ep4_e/` (커밋 안 함): `01_pushbox1_engine_before` · `01_pushbox1_engine_after`, `02_cage_elevator_video` (4004–4026 2 초) · `02_cage_elevator_engine_after`.
 
 ## 시연 녹화 (-Dgow.record, -Dgow.bot) [엔진 전용]
 

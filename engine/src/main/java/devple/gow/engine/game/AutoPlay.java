@@ -273,7 +273,7 @@ public final class AutoPlay {
 	 *   hold:초:fx,fz      R2 를 누른 채 (fx, fz) 쪽으로 스틱 (크랭크 돌리기)
 	 *   push:초:fx,fz      버튼 없이 (fx, fz) 쪽으로 스틱 (사다리·벽 쪽으로 걸어 들어가기)
 	 *   up:초              카메라와 무관하게 스틱 위 (사다리 오르기)
-	 *   stick:초:x,y[:버튼] 카메라와 무관한 스틱 값 (벽에서 뒤로 점프 = 0,-1:CROSS), 버튼은 단계 첫 프레임에 한 번
+	 *   stick:초:x,y[:버튼] 카메라와 무관한 스틱 값 (벽에서 뒤로 점프 = 0,-1:CROSS), 버튼은 단계 첫 프레임에 한 번 (버튼+ = 내내 누름)
 	 *   mash:초            R2 연타 (들어 올리는 문 TAndF)
 	 *   crank:초:fx,fz     손잡이 쪽으로 돌아 R2 를 누른 채 스틱을 영웅 정면으로 (손잡이를 밀며 둘레를 도는 Type 1 크랭크, PAND00B 문 크랭크)
 	 *   pull:초:fx,fz      (fx, fz) 쪽으로 돌아 R2 를 누른 채 스틱을 영웅 정면 반대로 (밀기 상자 끌어내기)
@@ -347,7 +347,10 @@ public final class AutoPlay {
 			case "stick" -> {
 				// stick:초:x,y[:버튼] — 카메라와 무관한 스틱 (벽 오르기 위 0,1 · 뒤로 점프 0,-1:CROSS), 버튼은 단계 시작 프레임에 한 번
 				String[] q = a[1].split(",");
-				PadButton btn = a.length > 2 && routeTime < 0.05f ? PadButton.valueOf(a[2].toUpperCase(Locale.ROOT)) : null;
+				// 버튼 이름 끝 '+' = 단계 내내 누름 (잠수 □ 를 누른 채 물속 관을 따라 헤엄, 43 §50)
+				boolean holdBtn = a.length > 2 && a[2].endsWith("+");
+				PadButton btn = a.length > 2 && (holdBtn || routeTime < 0.05f)
+						? PadButton.valueOf(a[2].replace("+", "").toUpperCase(Locale.ROOT)) : null;
 				return routeNext(routeTime > Float.parseFloat(a[0]),
 						bot.hold(btn, hero, null, new float[]{Float.parseFloat(q[0]), Float.parseFloat(q[1])}, camYaw));
 			}

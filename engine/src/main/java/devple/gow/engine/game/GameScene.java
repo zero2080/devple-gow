@@ -5453,6 +5453,12 @@ public final class GameScene implements Scene {
 	private void physics(float dt) {
 		Vector3f p = hero.ctl.position;
 		if (nav.navigator.active()) {
+			if (nav.navigator.state() == devple.gow.engine.nav.NavState.INTERACT || nav.navigator.state() == devple.gow.engine.nav.NavState.PUSH) {
+				// 붙잡은 동안에도 발판에 실려 간다: 영웅 갱신 0x1EBD78 은 지면 GO 실림 0x1E6248 (0x1EC514) 을 상태와 무관하게 먼저 하고 그 뒤에
+				// 붙잡기 0x1C4258 (+0x174 0x4000, 0x1EC60C) 로 간다 [확실: 호출 순서]. PAND04C 우리 승강기 (Pand04CElevs, 기중기형 크랭크 — 손잡이가
+				// 우리 안) 를 돌리면 우리와 함께 올라간다 (영상 4 4010–4020, 43 §50.1-2)
+				nav.carry(p, true);
+			}
 			return;
 		}
 		Vector3f uncarried = new Vector3f(p);
