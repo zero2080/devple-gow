@@ -24,8 +24,21 @@ import java.util.List;
  */
 public final class Platforms {
 
-	/** 지지 바닥: 높이, 오브젝트, hull 관절. */
-	public record Support(float y, Body body, int joint, long attrs) {
+	/** 지지 바닥: 높이, 오브젝트, hull 관절, 윗면 표면 속성, 윗면 재질 번호 (CDV 재질 엔트리, 없으면 −1). */
+	public record Support(float y, Body body, int joint, long attrs, int material) {
+		/**
+		 * 이 윗면 재질의 접촉 피해 (영웅 "Damage" / 적 "AIDamage") 와 SheetFX. 원작 바닥 질의 (0x1E3298 · 0x1E36B0 · 0x1E2F20 · 0x1E1F28) 는 정적 시트와
+		 * GO 충돌 인스턴스 (CDV) 를 같이 보고, 맞은 면의 재질을 접촉 0x1E1DF0 에 넘겨 Damage 를 대기 피해로 건다 (43 §46.1-1) [확실] — 밟고 선 CDV 윗면도 피해를 준다
+		 * (PAND04C 가시 함정 gospikes 1024: 30 초 뒤 솟는 가시가 영웅을 들어 올리며 죽인다, 영상 5화 1708, 43 §53).
+		 */
+		public Touch touch(boolean ai) {
+			BallHull h = body.hull;
+			int[] dmg = ai ? h.materialAiDamage : h.materialDamage;
+			if (material < 0 || material >= dmg.length || dmg[material] <= 0) {
+				return Touch.NONE;
+			}
+			return new Touch(dmg[material], material < h.materialFx.length ? h.materialFx[material] : -1);
+		}
 	}
 
 	/** 오브젝트 하나 (CDV hull + 애니). */
@@ -342,6 +355,10 @@ public final class Platforms {
 		}
 
 		float top(float x, float y, float z, float drop, int[] jointOut, long[] attrsOut) {
+			return top(x, y, z, drop, jointOut, attrsOut, null);
+		}
+
+		float top(float x, float y, float z, float drop, int[] jointOut, long[] attrsOut, int[] matOut) {
 			float best = Float.NaN;
 			if (!solid) {
 				return best; // 충돌 끔 (Vis Attr11_0 = 2) — 충돌 세계에서 빠짐
@@ -387,6 +404,10 @@ public final class Platforms {
 					jointOut[0] = j;
 					if (attrsOut != null) {
 						attrsOut[0] = planeAttrs[h][topPlane];
+					}
+					if (matOut != null) {
+						int[] pm = hh.planeMaterials();
+						matOut[0] = topPlane < pm.length ? pm[topPlane] : hh.nameIndex(); // contactDamage 와 같은 규칙
 					}
 				}
 			}
@@ -1358,13 +1379,15 @@ public final class Platforms {
 		Support best = null;
 		int[] j = new int[1];
 		long[] at = new long[1];
+		int[] mt = new int[1];
 		for (Body b : bodies) {
 			if (!skip.isEmpty() && skip.contains(b.owner)) {
 				continue;
 			}
-			float t = b.top(x, y, z, drop, j, at);
+			mt[0] = -1;
+			float t = b.top(x, y, z, drop, j, at, mt);
 			if (!Float.isNaN(t) && (best == null || t > best.y)) {
-				best = new Support(t, b, j[0], at[0]);
+				best = new Support(t, b, j[0], at[0], mt[0]);
 			}
 		}
 		return best;

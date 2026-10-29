@@ -3883,6 +3883,73 @@ PAND04E GlobalData 이름 0 key1 (아프로디테) · 1 key2 (헤라) · 2 block
 증거 `work/verify/ep5_a/` (커밋 안 함): `01_pand04f_elevator_engine_after.png`, `02_hera_cog_back_engine.jpg` · `02_hera_cog_back_video197.jpg`,
 `03_hera_necklace_engine.png`.
 
+## 53. QA vs PS2 영상 5화 — 광기의 절벽 되돌아가기: PAND04C 가시 함정 방 · 아프로디테의 목걸이 (key1) · DMC 굴 싸움 → PAND04D 탑 (낙사 · 로딩 중) → PAND04E 아프로디테 석상 · 떠 있는 돌 · 줄다리 → 회상 동영상 Semo07 → 짚라인 · 우리 → PAND04G 건축가의 무덤 · 톱날 홀 낙사 (영상 1650–2820 초, 2026-10-29)
+
+영상 = M-jC8VJVlzg (5화, 전사 (보통) = `-Dgow.difficulty=1`), 프레임 422×317 (`work/verify/ep5_b/video/v<초>.jpg`, 커밋 안 함). 엔진 = origin/main (b05dbf2) 위,
+1280×720 lockstep, 스크래치 홈 (`home-ep5b`), `--skip-movies` (Semo07 만 동영상 켬). 이 구간은 PAND04F/G/H 가 아니라 (PAND04G 는 끝 30 초) **PAND04EE 에서 헤라의 목걸이를 얻은 뒤
+광기의 절벽을 되돌아가 아프로디테의 목걸이를 얻는 길**이다 [확실: 스크립트 · 영상] — PAND04C 의 가시 함정 방은 key1 (아프로디테의 목걸이 — 메시지 230, GlobalData key1) 을 주고, PAND04E 아프로디테 석상이
+key1 을 받아 떠 있는 돌 (Ledge1) 을 움직인다. PAND04G 는 구간 끝 (2752 구역 제목 16 "건축가의 무덤" · 세이브 34) 부터.
+
+### 53.1 엔진 결함과 수정
+1. **밟고 선 GO CDV 윗면의 재질 피해가 없었다 — PAND04C 가시 함정의 솟는 가시가 크라토스를 들어 올리기만 하고 죽이지 않음 (영상 1708–1712: 레버 30 초 뒤 가시가 솟아
+   꿰뚫려 사망 → 세이브 32 자리에서 다시, 엔진 전체).**
+   PAND04C SpikeRmLever (PushPull 012, id 42) 를 당기면 1023 (100, 42) → Gate2 닫힘 · BlockCage 열림 (밀기 상자 Push 098) · 톱니 · `spikes-AniFor` (지연 30 초,
+   key1 ≠ 1 일 때만) — 가시 GO gospikes 의 CDV_spikes 재질 lambert289 은 **Damage 1024** (AIDamage 0, 표면 Ground) [확실: 데이터]. 엔진은 레버 33.95 초에 가시가
+   솟아 영웅을 y 1483 → 1495 로 올렸지만 피해가 없었다: §46 의 접촉 피해는 몸 구 (발 + 20, 반지름 12) 와 CDV 면의 거리만 보았고 (윗면 1495 ↔ 구 중심 1515 = 20 > 12),
+   바닥 재질 피해 (`GameScene.surfaceValue`) 는 정적 시트만 보았다.
+   원작 [확실: 디스어셈블]: 바닥 질의 0x1E3298 은 접촉 레코드 0x2C8F10 (+0x24 = 맞은 GO → 영웅 +0x24C 지면 GO, 0x1E3640) 을 **같은 레코드로 0x1E1DF0 에 넘긴다**
+   (0x1E3650) — 정적 시트와 GO 충돌 인스턴스를 가리지 않고 맞은 면 재질 (+0x2C) 의 Damage (0x337708) 를 대기 피해로 건다. 0x1E1DF0 을 부르는 곳은 바닥 질의
+   0x1E3298 · 0x1E36B0 · 0x1E2F20 과 몸 질의 0x1E1F28 넷.
+   → `Platforms.Support` 에 윗면 재질 번호 (`material`, 평면별 off[9], `contactDamage` 와 같은 규칙) 와 `touch(ai)`, `GameScene.surfaceValue` 가 정적 바닥에 더해
+   `NavWorld.floor` 의 발판 지지 재질 피해를 본다. 고친 뒤 같은 경로 (`-505,1484,-2150!;use;…;-600,1490,-2200;wait:40`, 보통) 에서 가시가 솟는 33.95 초 → 사망 #1 →
+   체크포인트 (세이브 32 (−1038, 1520, −1748)) 에서 다시 — 영상 1709 사망 → 1715 세이브 빛기둥 자리와 같다 (`01_spike_trap_video_1705-1715_vs_engine_after`).
+   전 WAD 의 위를 보는 피해 CDV 면 (조사): PAND04C 가시 1024, PAND02AA 회전방 1024, DEST02 분쇄기 33, PAND03B 분쇄기 40 · 화살 함정 20, PAND02G 가시 바퀴 25,
+   PAND02H 가시 20 · 날 1, PAND04G 톱날 25, PAND03E 바람개비 10, PAND02C 불 15, PAND01B 톱날 10, HDES01B 날 · HDES01C 죽음 굴림대 10, ATHN04A a04HL05 1 —
+   모두 함정 몸이다. 60 초 봇 (쉬움) 11 레벨 (PAND02AA · DEST02 · ATHN04A · PAND02H · PAND04G · PAND03E · PAND01B · PAND03B · PAND02G · HDES01B · HDES01C)
+   방문 · 사망 · 막은 전환이 고치기 전과 같다 (HDES01B 순간이동 6 → 5 · 마지막 위치만 다름). 29 레벨 60 초 봇 (ATHN01A–PAND04EE) 도 §51 결과와 같다 —
+   다른 것은 DEST00 (§51.2 하네스 고침) · PAND03A (§54.1 열린 hull) · ATHN06B · PAND04AA (같은 빌드에서도 3/4/6 · 0–4 로 흔들림).
+2. 톱날 홀 낙사 (영상 2781.5–2790) — 엔진에서 떨어진 크라토스가 437 떨어진 시작 방 누름판 gopressplate1 의 열린 CDV hull (아래로 끝없는 원뿔) 위 y 2310 에
+   서서 살았다. 같은 결함을 §54.1 (fd109cd, `Platforms.Body.outsideBound`, 원작 0x139218 경계 구 판별) 이 먼저 고쳤다 — 이 작업트리의 같은 수정 (넓은 단계 경계 구,
+   열린 hull 만) 은 버리고 그쪽을 쓴다. rebase 뒤 같은 경로에서 11.23 초 낙하 → y 1976 KillMe (Death) → 사망 → 세이브 34 자리 (−121, 2724, −2655) 에서 다시
+   (영상 2781.5 → 2783 YOU ARE DEAD → 2790 세이브 빛기둥) [확실: 엔진 로그].
+
+
+### 53.2 장면 대응 (경로 [확실: 스크립트 · 영상])
+| 영상 (초) | 장면 | 원작 (스크립트 · 데이터) | 엔진 | 결과 |
+|---|---|---|---|---|
+| 1650 | 세이브 덮어쓰기 질문 | PAND04C SaveGameZone1 (32, (−1038, 1520, −1748)) | r2: 같은 빛기둥 자리 | 같음 |
+| 1660–1700 | 시체 · 피 · 구멍 바닥 방, 바퀴 레버 → 창살 문, 갇힌 밀기 상자가 나옴 → 밀기 | SpikeRmLever (Push 012 id 42) → TrapCam 4.25 초 · Gate2 · BlockCage · PushBlock (Creator Push 098 · Brkb 951) | r3/r4: 같은 방 · 레버 · 창살 · 상자 | 같음 |
+| 1705–1715 | 가시가 솟아 사망 → 붉은 소용돌이 · YOU ARE DEAD → 세이브 32 자리 (첫 프레임에 "로딩 중.." 남음) | spikes-AniFor 지연 30 초 · Damage 1024 | 고치기 전: 가시 위에 서서 삶 → **53.1-1 고침** | 고침 |
+| 1740–1770 | 상자를 밀어 턱 아래 · 뛰어올라 덩굴 벽 | PushBlock · 벽 | 봇 경로 없음 | 대조 안 함 |
+| 1780–1810 | 금빛 벽감 · "목걸이를 가져가시겠습니까?" · NecklaceCam → ResetCam (창살 · 가시 · 톱니 되돌아감) | SpikeRmKey: 1024 (key1 = 0) → 질문 1018 → 예 → AnimNecklace · 메시지 230 카드 · key1 = 1 · Cogs/spikes/Gate2 되감기 · CamOff 15 초 | r5: 같은 벽감 · 질문 · 카메라 순서 · 카드 230 · 되감기 | 같음 (`03_necklace_alcove_video_vs_engine`) |
+| 1830 | 둥근 나무 우리 승강기 (햇빛 절벽) | gohangcrank / gocavecrank (Push 244 Type 3) | §50.1-2 와 같은 기중기 크랭크 | 대조 안 함 (§50) |
+| 1860–2160 | 붉은 결계 (DMC) 굴 싸움: 사티로스 · 해골 · 불, 상자 둘 | DMCdog2-DMC-pCube2850 → CaveEnemies 8 (R_SAT 1 · R_SK4 7, Respawn) · DMCdog2/3 dogIn · DestructionSensor 431 → dogOut · DMCOffCam | r6: 같은 결계 · 비계 · 횃불 · 적 종류 (보통 봇은 3 회 사망) | 구도 같음, 전투 대조 안 함 |
+| 2190 | 업그레이드 메뉴 (혼돈의 블레이드 레벨 5) | 공통 | — | 대조 안 함 |
+| 2220–2280 | 사다리 · 절벽 길 · 상자 | PAND04C | — | 대조 안 함 (§50 경로) |
+| 2290–2304 | PAND04D 둥근 탑 크랭크 · 다리 끝에서 떨어짐 → YOU ARE DEAD (떨어지는 중) → 소용돌이 → 사망 메뉴 | 낙사 | §46 · §47 과 같음 | — |
+| 2310–2313 | **"로딩 중.."** 검은 화면 4 초 → 2314 PAND04C 체크포인트 | 재시작 0x21E3D0 → 두 슬롯 내림 · 다시 올림 (11 §5.3) | 없음 (53.3) | 미고침 |
+| 2380–2400 | 아프로디테 석상 R2 · "아프로디테의 석상에 목걸이를 걸어주시겠습니까?" → Key2AnimCam (떠 있는 돌이 움직임) | RightAphrodite UseWorldAphroKey (key1 = 1) → 1016 → 예 → key1 = 2 · Ledge1 AnimForward (지연 9.5) · CDHullWall 끔 · CamOff 13.5 → ZipCam18 | r7: 같은 질문 · 같은 석상 클로즈업 · 같은 떠 있는 돌 구도 | 같음 (`04_aphrodite_ledge_video_vs_engine`) |
+| 2400–2450 | 폭포 위 떠 있는 돌 건너기 (2410 낙사) | Ledge1 · Bridge1/2 Marker 458/459 | 돌이 Marker 458 에서 멈춤 (r7) | 건너기 대조 안 함 |
+| 2461–2467 | 줄다리 끝 → 검은 화면 → 회상 동영상 Semo07 (자막 "이제 크레토스의 길에 장애물은 사라졌다" …) | SpawnZoneGroup2 EntrySensorFade (FadeOut 1 초) → 2 초 PlayMpeg Semo07 → 501 → FadeIn · TopAreaEnemies (해골 3 · 미노타우로스 2) · 체크포인트 | r8: 1.53 페이드 → 3.55 Semo07 (자막 같음) → 적 5 · 체크포인트 | 같음 |
+| 2620–2690 | 절벽 위 싸움 (미노타우로스) | TopAreaEnemies | 봇 | 대조 안 함 |
+| 2700–2744 | 짚라인 → 둥근 우리 내려감 → 비계 | PAND04E | — | 대조 안 함 |
+| 2752–2766 | PAND04G 구역 제목 16 "건축가의 무덤" · 세이브 34 R2 · 저장 | ZoneReportGroup (16) · SaveGameZone 34 (−197, 2715, −2682) | r1: 같은 빛기둥 · 톱니 건물 | 같음 |
+| 2774–2790 | 누름판 · 창살 문 → 톱날 통나무 건너기 → 헛디뎌 낙사 → 세이브 34 자리 | PressPlate1 · NewSlide/SawMove (Animator 모드 10/12 · 속도 1.5) · FallAnimZone 1019 → 504 DEATHFALL01 · KillMe Death 바닥 1976 | b05dbf2: 누름판 원뿔에 서서 삶 → §54.1 로 고쳐짐 (53.1-2) | 같음 (§54) |
+
+### 53.3 남은 것 · 미확인
+- **"로딩 중..."** (2310–2313 4 초, 1712 은 다시 시작한 첫 게임 프레임 위에 HUD 막대 없이 1 프레임 남음) — 발동은 §57.4 (HUD InterfaceStyle_Event 3, 다시 시작
+  0x21E3D0 → 0x21FC28(0, 1) → 0x21E450(1)). 끄는 때 [확실: 디스어셈블]: 상태 9 0x21FD48 은 적재 끝 (0x21FD00) 뒤 영웅 +0x174 & 0x8 (떨어지는 중) 인 동안
+  0x29F464 (60 프레임, 0x21FCCC) 를 세고, 이어 0x29F468 (1 프레임) 을 센 뒤 0x21FEA8 → 0x21E450(0). 즉 보이는 길이 = 디스크 적재 시간 + 내려서기까지 최대 1 초 —
+  같은 두 슬롯을 다시 읽은 1712 는 1 초 미만, 다른 레벨 체크포인트 (PAND04D 사망 → PAND04C) 인 2310 은 4 초. 엔진 재시작은 적재 시간이 없어 고치지 않았다 (§47.3 · §57.4 와 같음).
+- PAND04C 레버의 1023 이 진행 % 마다 PushBlock-BlockCreator 를 다시 발동한다 (원작 Creator 생성 0x1ACCA8 은 슬롯 7 상한
+  기본 0 = 무제한 [확실] — 원작도 같은 이벤트를 받는지 · 겹친 상자가 생기는지 미확인; 엔진은 같은 키의 GO 를 바꿔 끼워 하나만 남음).
+- [미대조] DMC 굴 싸움 · PAND04E 정상 싸움 (보통 난이도 피해), 떠 있는 돌 Ledge1 의 Marker 459 · 다시 움직임, 짚라인 · 우리 (2700–2744), PAND04D 크랭크 다리.
+
+### 53.4 시험 · 증거
+`FloorCdvDamageTest` (PAND04C CDV_spikes Damage 1024 · AIDamage 0, 솟기 전엔 바닥 위 가시 지지 없음 → spikes act 끝 자세에서 gospikes 윗면 지지 y > 1490 · touch 1024 / 적 0),
+엔진 시험 803 개 통과.
+증거 `work/verify/ep5_b/` (커밋 안 함): `01_spike_trap_video_1705-1715_vs_engine_after`, `03_necklace_alcove_video_vs_engine`, `04_aphrodite_ledge_video_vs_engine`.
+
 ## 54. QA vs PS2 영상 5화 — 건축가의 무덤 (PAND04G): 세이브 · 톱날 구덩이 사망 → 체크포인트 · 갈라진 구덩이 쪽지 · 기중기 · 키클롭스 · 블록 타고 내려가기 · 병사의 쪽지 (영상 2820–4400 초, 2026-10-29)
 
 영상 = M-jC8VJVlzg (5화 "엔딩", 전사 (보통) = `-Dgow.difficulty=1`), 프레임 422×317 (`work/verify/ep5_c/video/v<초>.jpg`, 커밋 안 함). 엔진 = origin/main b05dbf2 위,

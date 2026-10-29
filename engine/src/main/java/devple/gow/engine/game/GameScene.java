@@ -3932,6 +3932,14 @@ public final class GameScene implements Scene {
 				best = devple.gow.engine.nav.Platforms.Touch.max(best, new devple.gow.engine.nav.Platforms.Touch(ai ? info.aiDamage() : info.damage(), info.sheetFx()));
 			}
 		}
+		// 밟고 선 GO CDV 윗면의 재질 피해도 (원작 바닥 질의가 GO 충돌 인스턴스를 같이 본다, 0x1E3298 → 0x1E1DF0) — PAND04C 솟는 가시 1024 (43 §53).
+		// 예전엔 몸 구 (발 + 20, 반지름 12) 만 CDV 를 보아 가시 윗면에 올라선 영웅은 닿지 않았다
+		if (nav != null) {
+			var fl = nav.navWorld.floor(p.x, p.y + STEP, p.z, STEP + 4);
+			if (fl != null && fl.platform() != null) {
+				best = devple.gow.engine.nav.Platforms.Touch.max(best, fl.platform().touch(ai));
+			}
+		}
 		return best;
 	}
 
