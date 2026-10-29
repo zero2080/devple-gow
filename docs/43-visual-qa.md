@@ -3917,6 +3917,17 @@ OLYMP02 스크립트 (왕좌 gothroneseat 1023 (100, 550)): `PlaySemo13` → `Mp
   미확인" 이 이것). 엔진 `GameScriptHost` 는 변수 50 을 몰라 쓰기를 버렸다 → `VAR_BLADES` (읽기 +1, 쓰기 min(6) − 1, 0 아래 자름 [엔진]). 바뀐 레벨은
   `HeroRig` 가 다음 그리기에서 R_WPN 을 바꾼다 (§17.2). 시험 `GameScriptHostTest.bladesLevelVariableIsOneBased`.
 
+### 57.4 "로딩 중..." 의 발동 조건 (§39.3 · §47.3 · §51.3 의 [미확인] 해독) — 엔진은 그대로 [확실: 디스어셈블 · FLP 헤드리스]
+- HUD +0x20C = **InterfaceStyle_Event** (Hud_RegisterFlashVars 이름 순서: ZoneReport_Event +0x264 · SaveGame_Event +0x268 에서 거꾸로 센 자리). FLP_HUDK 루트 SimKeyEvent:
+  1 → GotoFrame 93 (빈 HUD), 2 → GotoFrame 0 (→ 1 "HUD" 정지 = 보통 HUD), **3 → GotoFrame 2 = 'Loading' 클립 (PS2_4085 붉은 깜박임) 이 보이는 프레임 2–6 정지**.
+  헤드리스 `FlpPlayer` 로 확인: 이벤트 3 뒤 `_level0/Loading` 이 재생되고, 1 · 2 에서는 없다.
+- 0x21E450(a0): a0 ≠ 0 → InterfaceStyle 3 (HUD +0x1574 = 3), a0 = 0 → 2 (+ 0x330A70 = 1). 부르는 곳: 체크포인트 다시 시작 0x21E3D0 → 0x21FC28(0, 1) → **0x21E450(1)**,
+  미리 올리지 않은 레벨의 Load (GameMgr 0x1BCA10 → 0x21D930: 상태 10), 셸로 0x21F598. 로드가 끝나 놀이로 갈 때 상태 9 0x21FEA8 · 상태 10 0x21FF10 이
+  **0x21E450(0)** → 2. 새 게임 · 카드 불러오기 (0x21FC28(…, 0)) 는 InterfaceStyle 1 (빈 HUD).
+- 그래서 "로딩 중..." 은 다시 시작 · 강제 로드의 디스크 적재 시간 동안 (+ 상태 9 의 0x29F464 = 60 프레임: 영웅 +0x174 비트 3 이 서 있는 동안만 기다림) 보인다.
+  영상 5화 9960 사망 → 9964 "로딩 중.." → 9968 다시 (ATHN08C), 8790 · 8940 (ATHN08A). 엔진 재시작은 0.4 초 페이드 + 씬 교체라 적재 시간이 없어 띄우지 않았다
+  (가짜 지연을 넣지 않는 기존 판단 유지) — 넣는다면 새 GameScene 의 HUD 에 InterfaceStyle_Event 3 → 준비 끝에 2.
+
 ## 시연 녹화 (-Dgow.record, -Dgow.bot) [엔진 전용]
 
 - `-Dgow.record=DIR` 로직 틱 `gow.record.every`(기본 2 = 30fps) 번마다 `DIR/f000000.jpg` 저장, `gow.record.secs` 초 뒤 종료. 녹화 중에는 lockstep (프레임당 틱 하나) 이라 렌더 속도와 무관하게 영상 시간이 게임 시간과 같다.

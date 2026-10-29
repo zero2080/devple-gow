@@ -550,7 +550,7 @@ completeGame(k): k==0: unlock |= {0,0,1,2,4}[difficulty 0..3 → bit0,bit0,bit1,
 - PlayerProgress +0x40/+0x44/+0x64/+0x84..0x8F, 옵션[0](0x1BF150) 의 정확한 의미.
 - 세이브 스트림 블록 5/6/7(카메라·음악·GameMgr)의 필드, World_Serialize 의 엔티티 청크 형식.
 - 아이템 14(`SirenPiece`) 와 ID 1/2/8/12/13 의 정체, ID 9 가 삼지창인지(수중 비트 0x200020 로 추정).
-- 코스튬 "Infinite Magic" 열의 실제 의미, `R_WPN*_5` 의 사용처.
+- 코스튬 "Infinite Magic" 열의 실제 의미 (`R_WPN*_5` = 아테나의 블레이드, §6.4).
 - #b60d39a0(흔들림 진폭), #117c872e(수명) 원래 키 이름.
 - ~~ZoneReport 번호 ↔ 구역 이름 메시지 대응~~ (800 + 구역, 위), 일시정지 패드 비트 0x100/0x800 의 실제 버튼.
 - 사망 횟수 증가 지점(0x1D6FE4 추정)과 사망 메뉴의 세부 선택지.
