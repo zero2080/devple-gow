@@ -3879,6 +3879,29 @@ Pand4GCrane) · 매단 블록 (goblocktranslatebg) → 3960–3973 키클롭스 
    60 초 봇 (쉬움) ATHN01A · ATHN01C · ATHN02A · PAND00C · DEST02 · PAND03E · PAND04G 같음 (ATHN02A 마지막 위치만 21 차), **ARENA14 사망 1 → 0 · 오브 0 → 17**
    (움직이는 발판 ANM_animplats 의 유지 이동 — 예전엔 발판에서 떨어져 (32, −493) 낙사).
 
+### 54.2 장면 대응 (경로 [확실: 스크립트 · 영상], 엔진 = 경로 `-Dgow.auto.route` · 봇)
+| 영상 (초) | 장면 | 원작 (스크립트 · 데이터) | 엔진 | 결과 |
+|---|---|---|---|---|
+| 2790–2820 | 세이브 빛기둥 · 톱날 바퀴 문 앞 (B 구간 끝) | SaveGameZone 34 (−197, 2715, −2682), ZoneReportGroup 16 | 같은 자리 · 빛기둥 | 같음 |
+| 2820–2830 | 시작 압력판 위에 서면 판이 내려가고 문이 열림 | PressPlate1 PlayerEntry → AnimDown → Marker100 → PressDoor1 AnimForward · Plate1Cam · 타이머 소리 | r19: 2.9 초 뒤 MarkerEntry → 문 · Plate1CamGroup · SNDGrpTimerLP | 같음 |
+| 2860 | 업그레이드 메뉴 (아르테미스의 검 2) | — | 대조 안 함 (공통 메뉴) | — |
+| 2880 · 3220–3250 · 3540–3560 · 4170–4198 | 어두운 홀의 석상을 밀고 당겨 옮기고 → 깨진 구덩이로 밀어 떨어뜨림 → 아래 방 압력판 | gostatue5 (Push 240, Marker149 → StatEntry 센서) | r17: 잡기 · 당기기 28/초 (−4599 → −4371), 앞쪽은 벽 · 문 막음 (DoorBlocker "3 doors CD") | 밀기 같음, 구덩이까지 옮기기는 못 몰았음 |
+| 2930–2946 | 갈라진 구덩이에서 R2 → 쪽지 166 "땅이 갈라져 있습니다. 아래로 작은 방이 보입니다." (○ 까지) | CrackCombatMsg HintMsg 1024 → ShowMessage 166 0 · GroundSparkle 끔 | r6: 같은 메시지 · 같은 자리 | 같음 |
+| 2970–2996 · 3090–3200 · 3600–3660 · 4290–4310 | 톱날 레일 위 움직이는 블록 (gonewslide*) 건너기 · 톱날 gosawmove* (Damage 25) | NewSlide/SawMove 생성 센서 → 반복 애니 | 같은 톱날 · 블록 | 같음 |
+| 2996–3001 | 톱날에 맞아 떨어짐 → 사망 → 세이브 앞 체크포인트 | FallAnimZone → 504 DEATHFALL01, KillMe Death 바닥 1975.8 | 고치기 전: 압력판 원뿔에 섬 → **54.1-1 고침** | 고침 |
+| 3290–3330 | 복도 · 파란 상자 · 해골 (Skelly Level 3) 싸움 | HallEnemies1/2 SkellyLevel3AI1 | 봇 r12: 같은 복도 · 파란 빛 상자 · 해골 | 같음 (전투 대조 안 함) |
+| 3400–3480 | 포세이돈 삼지창 무늬 원형 바닥 · 케르베로스 + 새끼 셋 · 메두사의 시선 · 하데스의 군대 | SpawnerZone5 → CerebusEnemies (80 · 86 ×3) | 대조 안 함 (봇 전투) | — |
+| 3780–3900 · 4060–4140 | 기중기 크랭크 (CrnkCam) · 팔 위를 걸어 끝 레버 → 매단 블록 내림 | gocrane Pand4GCrane · golever (1023 101) · BlockTranslateBG Animator 16 개 | 고치기 전: 팔이 13° 만 돌고 끝에서 순간이동 → **54.1-2** · 레버 r11 · 블록 내림 · 깨짐 r16 · 구덩이로 떨어짐 r20 | 고침 |
+| 3910–3973 | 키클롭스 (CyclopsLevel3) 싸움 · 눈 뽑기 | CycZone · Cyclops 1–6 | r18: CycZone 에서 R_CY3 생성 | 전투 대조 안 함 |
+| 3985–4010 | 블록을 타고 내려가 바닥을 깨고 아래 방 (압력판 · 두 사자 석상) | BlockLowCave → BreakZone → gocrack Crack | r16 · r20 | 같은 순서 |
+| 4020–4050 · 4230 | 줄을 타고 기중기 탑으로 오름 | goropeattopgroup 등 RopeSkinned 6 | 대조 안 함 | — |
+| 4395– | 건축가의 쪽지 (noteMSG 432) | — | D 구간 (§55) | — |
+
+### 54.3 남은 것 · 미확인
+- [미대조] 석상을 구덩이까지 옮기는 길 (문 셋 · DoorBlocker CD · 압력판 셋 LevelData 41–43) 과 석상이 깨진 구덩이로 떨어져 아래 압력판에 서는 것 (영상 4180–4200) — 경로를 봇으로 만들지 못함.
+- [미대조] 싸움 (3290–3480 해골 · 케르베로스, 3910–3973 키클롭스) 보통 난이도 피해량, 4290–4310 둘째 사망 (톱날 레일 위 → 붉은 소용돌이, 1 초 프레임 없음 — 54.1-1 과 같은 낙사로 추정).
+- [근사] 경계구 거르기는 아래로 열린 hull 에만, 경계구는 hull 관절 로컬 (원작 +0x20 을 만드는 곳 미확인).
+
 ### 54.4 시험 · 증거
 `CraneAnimHoldTest` (ANM_crane CraneAni 0.1 초마다 3° 미만 · 24 초 −255° · 4.5 초 블록이 LowZone 위), `OpenHullBoundTest` (PAND04G CDV_PressPlate1 아래로 열림 · 판 위 바닥 2724 · 구덩이 위 압력판 바닥 없음 · 원뿔 안 먼 점 밀지 않음 · 구덩이 바닥 = KillMe 1975.8).
 증거 `work/verify/ep5_c/` (커밋 안 함): `01_saw_pit_video_2985_3002` · `01_saw_pit_engine_before` · `01_saw_pit_engine_after`, `02_crane_engine_before` · `02_crane_engine_after`.
