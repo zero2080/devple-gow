@@ -212,6 +212,8 @@ public final class GameScene implements Scene {
 		return l < 1e-3f || (dx * fx + dz * fz) / l >= minCos;
 	}
 	private devple.gow.engine.fx.MagicFx magicFx;
+	/** 영웅 물속 거품 (gobubpart, 0x1FE518 / 0x1FF3E0 — 43 §50.1-3). R_PERMK 가 없으면 null. */
+	private HeroBubbles bubbles;
 	private final Random rnd = Engine.LOCKSTEP ? new Random(1) : new Random(); // 검증 lockstep 이면 고정 씨앗
 	/** 보스전 (37 문서, 없으면 null) / 전투 ↔ 스크립트 이벤트 다리 (1035/1047/1039/1019/1054). */
 	private devple.gow.engine.boss.BossFight boss;
@@ -639,6 +641,7 @@ public final class GameScene implements Scene {
 		});
 		ph = devple.gow.engine.core.PerfMonitor.phase(". grab+magic", ph);
 		magicFx = preFx != null ? preFx : new devple.gow.engine.fx.MagicFx(session.rom); // 원작 이펙트 GO (40 문서)
+		bubbles = HeroBubbles.of(magicFx.effects());
 		hero.magic.setSink(magicFx.sink((name, at) -> session.sound.play(name, at)));
 		bindPresentation(hero.combat);
 		magicFx.concussionDamage = (owner, c, r, dmg) -> {
@@ -4783,6 +4786,11 @@ public final class GameScene implements Scene {
 		orbPickups.update(dt, p, hero.player.hp > 0, orbSink);
 		hero.tickBlades(dt); // 블레이드 사슬 (0x1FDB18): 이번 틱 자세가 정해진 뒤, 블레이드 GO 앵커보다 먼저
 		magicFx.update(hero.magic, p, hero.ctl.yaw, enemies.stream().map(Enemy::fighter).toList(), dt, cam.eye);
+		if (bubbles != null && nav != null) {
+			var nv = nav.navigator;
+			float speed = dt > 0 ? hero.ctl.position.distance(hero.ctl.prevPosition) / dt : 0;
+			bubbles.update(nv.state() == devple.gow.engine.nav.NavState.SWIM, nv.dashContactSpeed() > 0, speed, nv.waterSurface(), dt, hero::jointWorld);
+		}
 		for (BladeChain.Side s : hero.chain.sides) { // 블레이드 벽 불꽃 (0x1FAFC8 → 0x202248, 45 문서 §3.7)
 			if (s.wallHit) {
 				magicFx.bladeSpark(s.index, s.wallSheetFx, s.wallPoint, s.wallNormal, (n, at) -> session.sound.play(n, at));

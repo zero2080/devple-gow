@@ -727,6 +727,39 @@ public final class EffectSystem implements AutoCloseable {
 	 * 이펙트 이미터 → 파티클 정의. 색·텍스처·블렌드·알파 곡선은 레벨 이미터와 같은 해석 ({@link LevelEmitters#def}),
 	 * 크기 |PTC+0x74| (≥ 800 → /128 (VU 4 는 /256), ≥ 160 → /64, 양수 → /16, 음수 → 2.5) [근사], 가속 = 필드 합 ({@link EffectLibrary#fieldAccel}).
 	 */
+	/**
+	 * 이미터 없이 코드가 파티클을 내는 PTC 모양 (R_PERMK gobubpart = PTC_Bubpart, 이미터 0 개 — 영웅 물속 거품 0x1FF3E0 이 직접 만든다) 의 정의.
+	 * 등록된 WAD 에서 모양 이름을 찾아 머티리얼 첫 레이어 텍스처와 VU 식 ({@link ParticleDef#withPtc}) 으로. 없으면 null.
+	 *
+	 * @param velocity 생성 속도 (월드/초), spread 퍼짐 — 원작 콜백이 정하는 값 [근사]
+	 */
+	public ParticleDef shapeDef(String shapeName, float[] velocity, float[] spread, float box) {
+		for (WadAssets a : assets.values()) {
+			FxResources r;
+			try {
+				r = new FxResources(a.wad());
+			} catch (RuntimeException ex) {
+				continue;
+			}
+			FxResources.Shape sh = r.shape(shapeName, Integer.MAX_VALUE);
+			if (sh == null) {
+				continue;
+			}
+			Texture tex = null;
+			devple.gow.tools.texture.MaterialResource m = sh.material() == null ? null : a.material(sh.material());
+			if (m != null && !m.layers().isEmpty()) {
+				var l = m.layers().getFirst();
+				tex = l.texture() == null || l.texture().isEmpty() ? null : a.texture(l.texture());
+			}
+			float life = sh.lifespan() > 0 ? sh.lifespan() : 1f;
+			ParticleDef pd = new ParticleDef(sh.name(), 0, life, 0, new float[]{box, box, box}, velocity, spread, new float[3], 0, 2, 2,
+					new float[]{1, 1, 1, 1}, new float[]{1, 1, 1, 0}, 0.05f, 0, 0, tex, 1,
+					(sh.flags() & 0x8000) != 0 ? devple.gow.engine.asset.RenderModel.Blend.ALPHA : devple.gow.engine.asset.RenderModel.Blend.ADD);
+			return sh.vu() != null ? pd.withPtc(sh) : pd;
+		}
+		return null;
+	}
+
 	private ParticleDef particleDef(EffectLibrary.EffectDef d, EffectLibrary.EmitterDef ed) {
 		return pdefs.computeIfAbsent(ed, k -> build(ed, assets.get(d.wad()), d.fields()));
 	}
