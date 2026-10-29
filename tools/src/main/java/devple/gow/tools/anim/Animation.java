@@ -367,8 +367,13 @@ public final class Animation {
 
 	private static void apply(List<AnimTrack> tracks, float[] cur, int f, int nj) {
 		for (AnimTrack t : tracks) {
-			if (t.additive() && f > t.start() && f <= t.start() + t.count()) {
-				int k = f - t.start() - 1;
+			// 가산 트랙의 hold: 마지막 변화량을 hold − 1 프레임 더 더한다 — 재생기 0x111760 은 트랙 창을 [start, start + count + hold − 1] 프레임으로
+			// 거르고 (0x113F78–0x113FD0), 가산 이동 0x231E40 은 칸 번호를 count − 1 로 묶어 (0x231EBC–0x231ED0) 그 칸의 변화량을 지난 시간 비율만큼
+			// 더한다 [확실: 디스어셈블]. 데이터: hold 끝 바로 뒤 절대 키와의 차 평균 531 → 3.5 (전 WAD 37 곳, 회전 17 · 이동 20 모두 줄어듦, 43 §52) —
+			// PAND04F 승강기 goelevator "Elevator" 관절 1 y: 1 → 12 프레임 뒤 192 · 190 프레임 동안 1.918/프레임으로 올라 399 프레임 절대 664.9 에 닿는다.
+			int end = t.start() + t.count() + Math.max(0, t.hold() - 1);
+			if (t.additive() && f > t.start() && f <= end) {
+				int k = Math.min(f - t.start() - 1, t.count() - 1);
 				int[] s = t.streams();
 				for (int e = 0; e < s.length; e++) {
 					if (s[e] < nj * 4) {

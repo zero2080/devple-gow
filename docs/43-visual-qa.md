@@ -3816,6 +3816,31 @@ ATHN04B (a04Mp04 → ATHN04A) · ATHN05A · ATHN06C 의 내리기는 막은 전�
 - 테트리스 퍼즐 완성 · 짚라인 오르기 미대조, 보통 난이도 전투 피해 미대조 (§50).
 - 근사: 빛 없는 모델 틴트 예외 규칙 (§47), 사망 페이드 그리기 순서, 동영상 힙 "영웅 슬롯 = 엔진 현재 레벨".
 
+## 52. QA vs PS2 영상 5화 — 광기의 절벽 끝: PAND04E 세이브 → 해골이 벽에서 나오는 큰 암벽 오르기 → 꼭대기 레버 (P04MP05) → PAND04F 우리 승강기 → PAND04G 입구 · 세이브 (영상 0–1650 초, 2026-10-29)
+
+영상 = M-jC8VJVlzg (5화 엔딩, 전사 (보통) = `-Dgow.difficulty=1`), 프레임 422×317 (`work/verify/ep5_a/video/v<초>.jpg`, 커밋 안 함).
+엔진 = origin/main 위, 1280×720 lockstep, 스크래치 홈 (`home-ep5a`), `--skip-movies`. 시작 상태 = 4화 끝 (PAND04EE 헤라의 목걸이 → `-Dgow.arrive.state=PAND04E:Gkey2=1`,
+PAND04E GlobalData 이름 0 key1 · 1 key2 · 2 block1 · 3 hangManOn · 4 LeverPulled).
+
+### 52.1 엔진 결함과 수정
+1. **PAND04F 우리 승강기가 13 초 동안 서 있다가 끝에서 한 번에 739 를 뛰어 탄 크라토스가 떨어졌다 (엔진 전체: ANM 가산 트랙의 hold).**
+   PAND04F goelevator (레버 goelevatorlever newLeever 템플릿 12, id 140 → 1023 인자 100 → LevelData0 = 100 → Elevator-AnimFor "!0" 모드 8) 의 act "Elevator"
+   (13.33 초, 401 프레임) 관절 1 y 는 절대 −81.2 (0 프레임) → 가산 1 + 11 프레임 (끝 변화량 1.918) · **hold 193** → 가산 204 + 3 프레임 · **hold 191** →
+   가산 397 + 2 → 절대 664.9 (399 프레임) 이다. 엔진 `Animation.apply` 는 가산 트랙을 start &lt; f ≤ start + count 에서만 더하고 hold 를 버려 우리 바닥이
+   1972 → 1976 → 1982 로 거의 서 있다가 마지막 프레임에 2720 으로 뛰었고, 우리에 탄 영웅은 18.5 초에 바닥을 잃고 PAND04E 로 떨어져 죽었다 (`-Dgow.debug`
+   영웅 y 1976 → 1984 → 964).
+   원작 [확실: 디스어셈블]: 재생기 0x111760 은 트랙 창을 [start, start + count + hold − 1] 프레임으로 거르고 (0x113F78–0x113FD0: 0x2(Mgr) start,
+   0x4(엔트리) count + 0x4(Mgr) hold − 1), 가산 이동 0x231E40 (엔트리 flags bit 0) 은 칸 번호를 count − 1 로 묶어 (0x231EBC–0x231ED0 `slt`/`movz`) 같은 칸이면
+   그 변화량 × 지난 시간 / frameTime 을 더한다 — 즉 hold 동안 마지막 변화량이 계속 더해진다. 데이터 [확실]: hold 끝 바로 뒤 절대 키와의 차가 전 WAD 37 곳
+   (회전 17 · 이동 20) 모두 줄어든다 (평균 531 → 3.5; hold 전체 프레임으로 더하면 19 라 hold − 1 이 맞다). 가산 트랙 31742 개 중 hold ≥ 2 가 11882 개
+   (회전 8481 · 이동 3401) — 영웅 · 적 · 오브젝트 애니 전부에 걸린다.
+   → `Animation.apply`: start + count &lt; f ≤ start + count + hold − 1 이면 sample[count − 1] 을 더함 (프레임 수 · act 길이는 그대로 duration). 고친 뒤 우리가
+   초당 ≈ 57.5 (1.918 × 30) 로 고르게 올라 영웅이 함께 1973 → 2721 (13.3 초, ElevUpZone 18.28 초) — `01_pand04f_elevator_engine_after.png`.
+   60 초 봇 (쉬움) ATHN01A · ATHN02A · PAND01A · PAND04C: 고치기 전과 결과 (방문 · 순간이동 · 사망) 같음 (ATHN02A 마지막 위치만 다름).
+
+### 52.4 시험 · 증거
+`AnimAdditiveHoldTest` (PAND04F goelevator "Elevator": 데이터 hold 193 · 2–13 초 초당 50–65 오름 · 끝 = 시작 + 748 · 마지막 프레임에 뛰지 않음).
+증거 `work/verify/ep5_a/` (커밋 안 함): `01_pand04f_elevator_engine_after.png`.
 ## 54. QA vs PS2 영상 5화 — 건축가의 무덤 (PAND04G): 세이브 · 톱날 구덩이 사망 → 체크포인트 · 갈라진 구덩이 쪽지 · 기중기 · 키클롭스 · 블록 타고 내려가기 · 병사의 쪽지 (영상 2820–4400 초, 2026-10-29)
 
 영상 = M-jC8VJVlzg (5화 "엔딩", 전사 (보통) = `-Dgow.difficulty=1`), 프레임 422×317 (`work/verify/ep5_c/video/v<초>.jpg`, 커밋 안 함). 엔진 = origin/main b05dbf2 위,

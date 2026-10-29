@@ -29,7 +29,10 @@ public record AnimTrack(int baseStream, int flags, boolean additive, int start, 
 
 	private static final byte[] DEFAULT_BITMAP = {1, 1, 0, 0, 1, 0, 0, 0};
 
-	/** 마지막으로 값이 정의되는 프레임. 절대: start+count-1+hold, 가산: start+count. */
+	/**
+	 * 마지막으로 값이 정의되는 프레임. 절대: start+count-1+hold, 가산: start+count (가산의 hold 는 마지막 변화량을 hold − 1 프레임 더 더하지만 —
+	 * {@code Animation.apply}, 43 §52 — 프레임 수 계산에는 넣지 않는다: act 길이는 duration 그대로).
+	 */
 	public int endFrame() {
 		return additive ? start + count : start + count - 1 + hold;
 	}
