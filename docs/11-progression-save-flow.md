@@ -398,7 +398,7 @@ MemoryCard_Event 0) 10 프레임 뒤 SaveGame_Event (+0x268) = 0 → 11. 세이�
 | 16 | ZoneReport | 구역 번호 | 구역 제목: 메시지 800 + 구역 의 첫 줄 → HUD `ZoneReport_Title` + `ZoneReport_Event` 1 (아래, 43 §16) |
 | 19 | FailedScreen | | 아레나 실패 화면 |
 | 31 | ShowItemCard | msg, sec, kind | §2.2 (kind 1 HP+1, 2 MP+1) |
-| 47 | CompleteGame | kind | §2.3 해금 비트 + `EndGame` 종류(0x29D94C) |
+| 47 | CompleteGame | kind | §2.3 해금 비트 (RAM) + 끝 종류 0x29D94C (2–5) → 프레임 끝 0x21D8B0 클리어 저장 질문 (43 §57) |
 | 58 | SetEndGame | n | HUD `EndGame` = n (ATHN08C 2, ATHN07B 3) |
 
 ### 6.3 리소스 WAD 로딩 [확실: 이름 형식 / 추정: 힙 배치]

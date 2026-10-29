@@ -49,6 +49,12 @@ public final class MemoryCardFlow {
 	private float timer;
 	private Result result = Result.RUNNING;
 	private SaveGame loaded;
+	/**
+	 * 클리어 저장 (원작 0x230A48(0): 0x2A275C = 0 — 끝 종류 ≠ 1 의 상태 17): 파일 선택 단계 0xE (0x230E88) 가 있는 파일이면 덮어쓰기 질문 (0x12)
+	 * 대신 곧 단계 0x19 (카드 레코드 |= 해금 비트) 로, 슬롯 항목 (0x18: 파일 번호 · 0xCAFEBAD1 · 플레이 시간 · 세이브 포인트 · 난이도) 과 게임 데이터는
+	 * 쓰지 않는다 [확실: 0x230ED4 movn, 0x230FE4]. [근사: 빈 파일은 새로 만들기 질문 뒤 같은 해금 쓰기만 — 원작 단계 0x11 의 파일 만들기 0x22F6B8 생략]
+	 */
+	private boolean unlockOnly;
 
 	public MemoryCardFlow(UiVariables vars, MessageTable messages, Path cardDir, Mode mode, Supplier<SaveGame> toSave) {
 		this.vars = vars;
@@ -68,6 +74,12 @@ public final class MemoryCardFlow {
 
 	public static Path file(Path cardDir, int n) {
 		return cardDir.resolve("slot" + n + ".save");
+	}
+
+	/** 클리어 저장 모드 ({@link #unlockOnly}). */
+	public MemoryCardFlow unlockOnly() {
+		unlockOnly = true;
+		return this;
 	}
 
 	public void start() {
@@ -140,7 +152,12 @@ public final class MemoryCardFlow {
 					show(CARD_SELECT);
 				} else if (a <= FILES) {
 					file = a - 1;
-					show(Files.exists(file(cardDir, file)) ? OVERWRITE_ASK : CREATE_ASK);
+					boolean exists = Files.exists(file(cardDir, file));
+					if (unlockOnly && exists) {
+						busy(SAVING);
+					} else {
+						show(exists ? OVERWRITE_ASK : CREATE_ASK);
+					}
 				}
 			}
 			case LOAD_ASK -> busy(a == 1 ? LOADING : LOAD_SELECT);
@@ -174,7 +191,10 @@ public final class MemoryCardFlow {
 			case LOAD_DONE -> finish(Result.LOADED);
 			case SAVING -> {
 				try {
-					toSave.get().write(file(cardDir, file));
+					if (!unlockOnly) {
+						toSave.get().write(file(cardDir, file)); // 단계 0x12 – 0x18
+					}
+					Unlocks.persist(cardDir); // 단계 0x19 0x2312DC: 카드 레코드 +0x40 |= g_unlockMask (세이브 포인트 저장도)
 					show(SAVE_DONE);
 				} catch (IOException | RuntimeException ex) {
 					System.out.println("저장 실패: " + ex);

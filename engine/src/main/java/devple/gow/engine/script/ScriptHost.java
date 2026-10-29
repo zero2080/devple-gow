@@ -22,7 +22,7 @@ public class ScriptHost extends GameScriptHost {
 	/** Entity 스코프 인자 수 (0x2B5BC0 점프 표, 17개). */
 	public static final int[] ENTITY_ARITY = {2, 2, 3, 2, 1, 4, 1, 1, 5, 1, 1, 1, 1, 1, 2, 0, 2};
 	public static final String[] ENTITY_NAMES = {"Min", "Max", "Clamp", "RandomRange", "Sqrt", "FadeOut", "FadeIn",
-			"FindObject", "Printf", "EventArg", "EventArg", "EventArg", "EventArg", "PlayMovie", "MovieCtl?", "MovieSkip?",
+			"FindObject", "Printf", "EventArg", "EventArg", "EventArg", "EventArg", "PlayMovie", "MovieCtl?", "RestartGame",
 			"PreloadMovie"};
 
 	/** Internal 인자 수 (0x2B5E20 점프 표, 0x3B 개; 표 밖/미구현 case = 0). */
@@ -227,6 +227,10 @@ public class ScriptHost extends GameScriptHost {
 			}
 			case 14 -> {
 				listener.movie(String.valueOf(a.get(0)), 1, EscVm.i(a.get(1)));
+				yield null;
+			}
+			case 15 -> {
+				listener.restartGame(); // 0x1AFD58: 0x29D954 = 1
 				yield null;
 			}
 			case 16 -> {

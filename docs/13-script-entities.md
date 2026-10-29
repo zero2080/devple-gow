@@ -157,7 +157,7 @@ Fire(e, sender)     0x1A98C0  (큐에서 꺼낼 때)
 | **9..12** | **EventArg** | i → (float/int/bool/string) | **현재 엔티티가 받은 이벤트 인자 i(0..2)** (+0x5C + 4i). 호출 반환형만 다르다 (1195회 = 최다) |
 | 13 | PlayMovie | name | 동영상 재생 (`0x1B3440`) |
 | 14 | MovieCtl? | name, bool | `0x1B3490(name, b ? 0 : 2)` |
-| 15 | MovieSkip? | – | 플래그 0x29D954 = 1 |
+| 15 | RestartGame (예전 이름 MovieSkip?) | – | 플래그 0x29D954 = 1 → 프레임 끝 0x1B3360 이 0x21F598 (상태 1 셸 적재, 시작 레벨 "Athn01A") — OLYMP02 크레딧 끝 "PlayMovie-Restarting" 하나뿐 (43 §57) |
 | 16 | PreloadMovie | name, int | `0x1B3490(name, n)` |
 
 ## 6. Internal 함수 인자 수 (GameMgr_OnMessage 0x1B01E8, 점프 표 0x2B5E20) [확실]

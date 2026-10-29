@@ -30,7 +30,7 @@ public record EscOp(int offset, int code, String text) {
 			Map.entry(0x0006, "FadeIn(sec)"), Map.entry(0x0007, "FindObject"), Map.entry(0x0008, "Printf"),
 			Map.entry(0x0009, "EventArg"), Map.entry(0x000a, "EventArg"),
 			Map.entry(0x000b, "EventArg"), Map.entry(0x000c, "EventArg"),
-			Map.entry(0x000d, "PlayMovie"), Map.entry(0x000e, "MovieCtl?"), Map.entry(0x000f, "MovieSkip?"),
+			Map.entry(0x000d, "PlayMovie"), Map.entry(0x000e, "MovieCtl?"), Map.entry(0x000f, "RestartGame"),
 			Map.entry(0x0010, "PreloadMovie"),
 			Map.entry(0x1000, "CheckPoint"), Map.entry(0x1002, "Load"), Map.entry(0x1003, "LoadWad"),
 			Map.entry(0x1004, "LoadForWarp"), Map.entry(0x1005, "Warp"), Map.entry(0x1006, "LoadCheck"),

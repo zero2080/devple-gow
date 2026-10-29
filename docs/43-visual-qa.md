@@ -3816,6 +3816,36 @@ ATHN04B (a04Mp04 → ATHN04A) · ATHN05A · ATHN06C 의 내리기는 막은 전�
 - 테트리스 퍼즐 완성 · 짚라인 오르기 미대조, 보통 난이도 전투 피해 미대조 (§50).
 - 근사: 빛 없는 모델 틴트 예외 규칙 (§47), 사망 페이드 그리기 순서, 동영상 힙 "영웅 슬롯 = 엔진 현재 레벨".
 
+## 57. QA vs PS2 영상 5화 — 아테네 귀환 · 아레스 · 엔딩: ATRET01A–C → ATHN08A–C (아레스 보스전 · 가족 · 신들의 검) → ATHN07B → OLYMP01 → OLYMP02 왕좌 · 클리어 저장 · 크레딧 (영상 8250–10635 초, 2026-10-29)
+
+영상 = M-jC8VJVlzg (5화 엔딩, 전사 (보통) = `-Dgow.difficulty=1`), 30 초 접촉 시트 (스크래치 `vid5/s30_*.png`), 프레임 `work/verify/ep5_f/video/` (커밋 안 함).
+엔진 = origin/main b05dbf2 위, 스크래치 홈 (`home-ep5f`), `--skip-movies`.
+
+### 57.1 엔딩 흐름: CompleteGame → 클리어 저장 질문 → 크레딧 → 셸 [확실: 디스어셈블 · 스크립트 · FLP]
+OLYMP02 스크립트 (왕좌 gothroneseat 1023 (100, 550)): `PlaySemo13` → `Mpeg13Complete` → 난이도별 `HistoryCredits0–3` (0–2 = Bonus01, 3 = Bonus24) →
+`Mpeg1or20Complete` = **CompleteGame(0)** + `PlayCreditsMpeg` (0.5 초 뒤 SND_M_CREDITS1 · Bonus20) → `EvtCreditsMpegDone` → `Restarting` (Entity 0xF).
+영상 10560 Semo13 (왕좌) → 10590 "GOW를 모두 마쳤습니다 · 올림푸스의 귀중품들이 풀렸습니다 · 신 모드가 풀렸습니다 · 게임 진행 상황을 저장하시겠습니까? 예/아니오" →
+10620 크레딧.
+1. **클리어 저장 질문이 없었다** — 엔진은 CompleteGame 에서 해금 비트를 곧바로 파일에 적기만 했다.
+   - 0x1B1128 (GameMgr_OnMessage 0x2F): kind 0 → 난이도 0·1 비트 1 / 2 비트 2 / 3 비트 4, kind 1 → 8, kind 2 → 0x10 을 **RAM** g_unlockMask 에
+     (0x230118 Unlocks_Apply), 끝 종류 0x29D94C = 2 (난이도 0–2) / 3 (신) / 4 (kind 1) / 5 (kind 2).
+   - 프레임 끝 0x1B339C: 0x29D94C ≠ 0 → **0x21D8B0(종류)** (놀이 상태 11 일 때만) → 0x29F47C = HUD SaveGame_Event (+0x268) = 종류, 상태 15 — 세이브 포인트와
+     같은 저장 질문인데 종류만 다르다. FLP_HUDK SaveGameMenu "On": `SaveScreen GotoFrame2(SaveGame_Event)`, 종류 ≥ 2 면 SaveQuestion 프레임 1 (메시지
+     4484–4508: 2 "GOW를 모두 마쳤습니다…", 3 "신 모드로 GOW를 모두 마쳤습니다 · 비밀 메시지 1", 4 "신들의 시험을 모두 마쳤습니다 · 모든 의상", 5 이스터 에그 · 비밀 메시지 2).
+   - "예" (상태 15 0x220554): 종류 ≠ 1 이면 세이브 포인트 검사 (0x1BC620 …) 없이 상태 17, 쓰기 흐름 시작 0x230A48(종류 == 1) → 0x2A275C. 파일 선택 단계 0xE
+     (0x230E88) 는 있는 파일이면 덮어쓰기 질문 (0x12) 대신 곧 **단계 0x19** (0x2312DC: 카드 레코드 +0x40 |= g_unlockMask, 디렉터리 쓰기 0x22F410) —
+     슬롯 항목 (0x18: 파일 번호 · 0xCAFEBAD1 · 플레이 시간 · 세이브 포인트 · 난이도) 과 게임 데이터는 쓰지 않는다. 세이브 포인트 저장은 0x18 → 0x19 라
+     해금 비트도 함께 적힌다.
+   → `Unlocks.grant` (RAM) · `endGameKind` · `persist` (쓰기 단계 0x19, 모든 저장), `GameScene` 이 CompleteGame 에서 끝 종류를 두고 다음 틱 `askSave(종류)`,
+   `MemoryCardFlow.unlockOnly` (있는 파일 → 곧 "저장 중" → 완료, 슬롯 파일 그대로). 저장하지 않으면 해금은 실행이 끝날 때까지만 (원작: 전원을 끌 때까지).
+   [근사: 빈 파일을 고르면 새로 만들기 질문 뒤 해금만 적음 — 원작 단계 0x11 의 파일 만들기 0x22F6B8 생략]
+2. **크레딧 끝에 셸로 돌아가지 않았다** — Entity 0xF (0x1AFD58, 예전 이름 `MovieSkip?`) 는 0x29D954 = 1, 프레임 끝 0x1B3360 → **0x21F598**: 시작 레벨
+   "Athn01A" 로 되돌리고 상태 1 (셸 적재 → 타이틀). 엔진은 이 함수를 무시해 크레딧 뒤 왕좌 방에 남았다 → `ScriptListener.restartGame` → `ShellScene`
+   (자동 플레이는 전환 안 하고 로그만). 이름을 `RestartGame` 으로 고침 (13 문서 §5).
+- 엔진 확인 (`--game OLYMP02 --skip-movies`, 경로 `post:1023:100:550`): Semo13 → Bonus01 → "CompleteGame(0) 난이도 1 → 해금 비트 0x1, 끝 종류 2" → 클리어
+  질문 (영상 10590 과 같은 문구) → 카드 · 파일 선택 → unlocks.properties mask=1 → Bonus20 → Restarting. 증거 `work/verify/ep5_f/01_endgame_prompt_engine.png`.
+- 시험 `EndGameSaveTest` (끝 종류 표, RAM → 카드, 해금만 쓰기는 덮어쓰기 질문 없이 슬롯 파일 그대로, 세이브 포인트 저장도 해금 기록, FLP SaveScreen/SaveQuestion 프레임).
+
 ## 시연 녹화 (-Dgow.record, -Dgow.bot) [엔진 전용]
 
 - `-Dgow.record=DIR` 로직 틱 `gow.record.every`(기본 2 = 30fps) 번마다 `DIR/f000000.jpg` 저장, `gow.record.secs` 초 뒤 종료. 녹화 중에는 lockstep (프레임당 틱 하나) 이라 렌더 속도와 무관하게 영상 시간이 게임 시간과 같다.

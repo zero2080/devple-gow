@@ -136,6 +136,15 @@ public final class GameScene implements Scene {
 	 */
 	private float saveCloseTimer;
 	private boolean saveReask;
+	/**
+	 * 저장 질문 종류 = 원작 0x29F47C (HUD SaveGame_Event 값): 1 세이브 포인트, 2–5 클리어 (Unlocks#endGameKind). 상태 15 · 17 이 이 값으로
+	 * 질문을 다시 띄우고 (0x220650), 1 이 아니면 쓰기 흐름이 해금만 적는다 (0x2206DC → 0x230A48).
+	 */
+	private int saveKind = 1;
+	/** CompleteGame 이 둔 끝 종류 0x29D94C — 프레임 끝 (0x1B339C) 에 저장 질문 0x21D8B0(종류) 로 열고 지운다. */
+	private int endGameKind;
+	/** 스크립트 Entity 0xF (0x29D954 = 1) — 프레임 끝 (0x1B3360) 에 0x21F598: 셸 (상태 1, 시작 레벨 Athn01A) 로. */
+	private boolean restartToShell;
 	private final devple.gow.engine.ui.MinigameIcon minigameIcon = new devple.gow.engine.ui.MinigameIcon();
 	private float time;
 	private float messageTimer;
@@ -1755,15 +1764,18 @@ public final class GameScene implements Scene {
 			}
 
 			@Override
+			public void restartGame() {
+				restartToShell = true;
+			}
+
+			@Override
 			public void internal(int func, List<Object> args) {
 				if (func == 0x2F && !args.isEmpty()) { // CompleteGame(kind): 해금 비트 기록 (11 문서 §2.3)
 					int kind = (int) num(args.get(0));
-					try {
-						int m = Unlocks.complete(SaveGame.dir(), kind, session.difficulty);
-						System.out.printf("CompleteGame(%d) 난이도 %d → 해금 비트 0x%X%n", kind, session.difficulty, m);
-					} catch (IOException ex) {
-						System.out.println("해금 기록 실패: " + ex.getMessage());
-					}
+					// 0x1B1128: RAM 해금 비트 (0x230118) + 끝 종류 0x29D94C → 프레임 끝 클리어 저장 질문 (카드에는 "예" 뒤 쓰기 단계 0x19 가 적는다)
+					int m = Unlocks.grant(SaveGame.dir(), kind, session.difficulty);
+					endGameKind = Unlocks.endGameKind(kind, session.difficulty);
+					System.out.printf("CompleteGame(%d) 난이도 %d → 해금 비트 0x%X, 끝 종류 %d%n", kind, session.difficulty, m, endGameKind);
 				}
 				if (func == 0xB && !args.isEmpty()) { // 질문 (원작 0x21D9C8 → GameMgr +0x152C) → HUD 메뉴 템플릿 → 1021 (선택 번호, 메시지 번호)
 					openQuestion((int) num(args.get(0)));
@@ -3974,13 +3986,14 @@ public final class GameScene implements Scene {
 	 * Done(+0x27C) = 0 [확실]. Done 을 0 으로 되돌려야 FLP 가 ○ 에서 쓰는 PS2_Done = 1 이 다시 "바뀜" 으로 들어온다
 	 * (두 번째 세이브 포인트에서 질문이 안 닫히던 문제 — 43 문서 §18).
 	 */
-	private void askSave() {
+	private void askSave(int kind) {
+		saveKind = kind;
 		paused = saveAsk = true;
 		saveReask = false;
 		saveCloseTimer = 0;
 		hud.variables().set("PS2_Menu_Choice", 0).set("PS2_Done", 0);
 		hideMinigameIcon(); // 0x21D8B0 → 0x2207F8 → 0x1BA150
-		hud.variables().event("PS2_SaveGame_Event", 1);
+		hud.variables().event("PS2_SaveGame_Event", kind); // FLP SaveScreen GotoFrame(종류) · SaveQuestion (종류 ≥ 2 면 프레임 1)
 	}
 
 	/**
@@ -4013,6 +4026,9 @@ public final class GameScene implements Scene {
 		SaveGame snap = session.checkpoint;
 		saveFlow = MemoryCardFlow.save(hud.variables(), session.messages, SaveGame.dir(), () -> snap != null ? snap : snapshot())
 				.thumbnails(this::saveThumbnails);
+		if (saveKind != 1) {
+			saveFlow.unlockOnly(); // 클리어 저장: 0x230A48(0x29F47C == 1 = 거짓)
+		}
 		saveFlow.start();
 	}
 
@@ -4491,7 +4507,7 @@ public final class GameScene implements Scene {
 		if (saveCloseTimer > 0 && (saveCloseTimer -= dt) <= 0) {
 			saveCloseTimer = 0;
 			if (saveReask) {
-				askSave();
+				askSave(saveKind);
 			} else {
 				hud.variables().event("PS2_SaveGame_Event", 0); // FLP: SaveGameMenu Animate_Off, Pause_Check 10 → 0
 				paused = false;
@@ -4504,6 +4520,28 @@ public final class GameScene implements Scene {
 			timeWarp.advance(dt); // 0x143048: 게임 상태와 무관하게 프레임마다 (사망 메뉴 정지 중에도)
 			if (!timeWarp.active()) {
 				timeWarp = null;
+			}
+		}
+		if (restartToShell && !leaving) {
+			// 프레임 끝 0x1B3360: 0x29D954 (Entity 0xF, OLYMP02 크레딧 Bonus20 이 끝난 뒤 "Restarting") → 0x21F598: 상태 1 셸 적재, 시작 레벨
+			// Athn01A 로 되돌림 → 타이틀 [확실]
+			restartToShell = false;
+			if (auto != null || pendingEngine == null) {
+				System.out.println("AUTO 셸로 돌아가기 (Entity 0xF) — 자동 플레이라 전환 안 함");
+			} else {
+				leaving = true;
+				pendingEngine.scenes().transitionTo(new ShellScene(session.rom));
+				return;
+			}
+		}
+		if (endGameKind != 0) {
+			// 프레임 끝 0x1B339C: 끝 종류 0x29D94C ≠ 0 → 0x21D8B0(종류) — 놀이 상태 (11) 일 때만 질문을 열고, 어느 쪽이든 0 으로 지운다 [확실]
+			int k = endGameKind;
+			endGameKind = 0;
+			if (!paused && !leaving) {
+				System.out.println("클리어 저장 질문: SaveGame_Event " + k);
+				askSave(k);
+				return;
 			}
 		}
 		if (paused || leaving) {
@@ -4520,7 +4558,7 @@ public final class GameScene implements Scene {
 			// 0x1DC4DC → 0x22D390(영웅 +0x8C): 세이브 포인트 번호 0x2A2704 (저장 슬롯 이름·그림), 스냅숏 (0x22D418) 뒤 저장 질문 (0x21D8B0)
 			session.savePoint = savePointNumber.getOrDefault(nearestSavePoint(), 0);
 			takeCheckpoint("세이브 포인트");
-			askSave();
+			askSave(1);
 			return;
 		}
 		if (questionId >= 0 || pickupOpen) {

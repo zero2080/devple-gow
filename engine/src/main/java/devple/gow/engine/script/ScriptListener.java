@@ -86,6 +86,13 @@ public interface ScriptListener {
 	default void create(ScriptEntity source) {
 	}
 
+	/**
+	 * Entity:0xF (원작 0x1AFD58 → 0x29D954 = 1): 프레임 끝 0x1B3360 이 0x21F598 로 게임을 접고 셸 (타이틀) 로 — OLYMP02 크레딧 Bonus20 끝
+	 * "PlayMovie-Restarting" 하나뿐.
+	 */
+	default void restartGame() {
+	}
+
 	/** Entity:0xD/0xE/0x10 동영상 (op 0 재생, 1 제어, 2 미리 로드). */
 	default void movie(String name, int op, int arg) {
 	}
