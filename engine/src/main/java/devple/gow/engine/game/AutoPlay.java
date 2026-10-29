@@ -722,6 +722,11 @@ public final class AutoPlay {
 		return false;
 	}
 
+	/** 이 레벨로의 전환을 막았는지 — 영웅이 그 레벨 땅에 서 있어도 엔진 현재 레벨은 그대로다. */
+	public boolean vetoed(String target) {
+		return vetoed.contains(target.toUpperCase(Locale.ROOT));
+	}
+
 	public boolean done() {
 		return done;
 	}

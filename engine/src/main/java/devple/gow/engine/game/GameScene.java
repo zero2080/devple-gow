@@ -2134,6 +2134,9 @@ public final class GameScene implements Scene {
 		if (same || other == null) {
 			return;
 		}
+		if (auto != null && auto.vetoed(other)) { // 자동 플레이가 막은 전환: 실제 플레이라면 영웅 슬롯이 other 라 내려갈 슬롯이 아니다 (DEST00 Semo04, 43 §51)
+			return;
+		}
 		if (LevelLink.movieDropsOther(levelHeap(levelName), levelHeap(other))) {
 			System.out.printf("동영상 %s: Levels 힙 빈 블록 %d ≤ 0x322417 → 다른 슬롯 %s 내림%n", name,
 					LevelLink.LEVELS_HEAP - levelHeap(levelName) - levelHeap(other), other);
