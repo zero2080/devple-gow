@@ -104,8 +104,49 @@ public final class Platforms {
 					heroPlane[h][k] = heroSolid(planeAttrs[h][k]);
 				}
 			}
+			open = new boolean[hn];
+			for (int h = 0; h < hn; h++) {
+				open[h] = openBelow(hull.hulls.get(h).planes());
+			}
 			joints = LevelLayout.jointWorld(sk, inst);
 			prev = joints;
+		}
+
+		/**
+		 * hull h 가 아래로 열려 있다 (평면 4 개 이상인데 아래를 보는 평면이 없음) — 발판 · 압력판 CDV (PAND04G CDV_PressPlate1–3, PAND01A · PAND03A
+		 * CDV_PressPlate, ATHN03A CDV_MinoPressurePlate: 윗면 + 비스듬한 옆면 32 개뿐, PAND04C 우리 크랭크 hull 10). 반공간 교집합이 아래로 끝없는 원뿔이다.
+		 */
+		final boolean[] open;
+
+		static boolean openBelow(List<float[]> planes) {
+			if (planes.size() < 4) {
+				return false;
+			}
+			for (float[] q : planes) {
+				if (q[1] < -1e-3f) {
+					return false;
+				}
+			}
+			return true;
+		}
+
+		/**
+		 * 원작 충돌 질의 0x139218 은 hull 평면을 보기 전에 선분이 인스턴스 경계구 (+0x20: 중심 · 반지름) 와 만나는지 판별식으로 거른다
+		 * (0x139258 – 0x139318, 만나지 않으면 0) [확실: 코드]. 엔진 hull 질의 (바닥 {@link #top} · 몸 밀어내기 · 선분) 는 경계구를 보지 않아, 아래로 열린
+		 * hull 은 몸에서 멀리 떨어진 아래쪽 점도 "안" 이었다 — PAND04G 톱날 구덩이 (영상 5 2996–2998: 톱날에 맞아 떨어져 죽음) 로 떨어진 영웅이
+		 * 630 유닛 떨어진 시작 압력판 gopressplate1 의 원뿔 옆면 (y 2147, 판 2719) 에 서서 KillMe 바닥 (1976, Death) 에 닿지 않았다.
+		 * 경계구 = BallHull 0x1C (x, y, z, r) 를 hull 관절 로컬로 [근사: 원작 +0x20 을 만드는 곳은 못 찾음 — 압력판은 경계구 중심 = hull 중심 (0, 2.5, 0),
+		 * r 20.4], 거르기는 열린 hull 에만 [근사: 닫힌 hull 은 경계구 밖 점이 hull 안일 수 없다].
+		 *
+		 * @param margin 질의 반지름 (몸 구) — 로컬 단위
+		 */
+		boolean outsideBound(int h, float lx, float ly, float lz, float margin) {
+			if (!open[h]) {
+				return false;
+			}
+			float[] s = hull.sphere;
+			float dx = lx - s[0], dy = ly - s[1], dz = lz - s[2], r = s[3] + margin + 1f;
+			return dx * dx + dy * dy + dz * dz > r * r;
 		}
 
 		void pose() {
@@ -337,7 +378,8 @@ public final class Platforms {
 						lo = Math.max(lo, b / a);
 					}
 				}
-				if (topPlane < 0 || !heroPlane[h][topPlane]) {
+				if (topPlane < 0 || !heroPlane[h][topPlane]
+						|| hi > -1e8f && outsideBound(h, p0[0] + dx * hi, p0[1] + dy * hi, p0[2] + dz * hi, 0f)) {
 					continue;
 				}
 				if (lo <= hi && hi <= y + 1e-3f && hi >= y - drop && (Float.isNaN(best) || hi > best)) {
@@ -1193,6 +1235,9 @@ public final class Platforms {
 			Mat4.transformPoint(inv, c.x, c.y, c.z, lp);
 			float scale = (float) Math.sqrt(m[0] * m[0] + m[1] * m[1] + m[2] * m[2]);
 			float lr = r / Math.max(1e-3f, scale);
+			if (b.outsideBound(h, lp[0], lp[1], lp[2], lr)) {
+				continue; // 경계구 밖 (0x139218, 열린 hull)
+			}
 			float best = -Float.MAX_VALUE;
 			float[] bn = null;
 			for (float[] pl : hh.planes()) {
@@ -1262,6 +1307,7 @@ public final class Platforms {
 					}
 				}
 				if (miss || enter < 0 || t0 < 0 || t0 > t1 || (bd.planeAttrs[h][enter] & exclude) != 0
+						|| bd.outsideBound(h, a[0] + dx * t0, a[1] + dy * t0, a[2] + dz * t0, 0f)
 						|| best != null && t0 >= best.t()) {
 					continue;
 				}

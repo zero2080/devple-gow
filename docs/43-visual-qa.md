@@ -3816,6 +3816,32 @@ ATHN04B (a04Mp04 → ATHN04A) · ATHN05A · ATHN06C 의 내리기는 막은 전�
 - 테트리스 퍼즐 완성 · 짚라인 오르기 미대조, 보통 난이도 전투 피해 미대조 (§50).
 - 근사: 빛 없는 모델 틴트 예외 규칙 (§47), 사망 페이드 그리기 순서, 동영상 힙 "영웅 슬롯 = 엔진 현재 레벨".
 
+## 54. QA vs PS2 영상 5화 — 건축가의 무덤 (PAND04G): 세이브 · 톱날 구덩이 사망 → 체크포인트 · 갈라진 구덩이 쪽지 · 기중기 · 키클롭스 · 블록 타고 내려가기 · 병사의 쪽지 (영상 2820–4400 초, 2026-10-29)
+
+영상 = M-jC8VJVlzg (5화 "엔딩", 전사 (보통) = `-Dgow.difficulty=1`), 프레임 422×317 (`work/verify/ep5_c/video/v<초>.jpg`, 커밋 안 함). 엔진 = origin/main b05dbf2 위,
+1280×720 lockstep, 스크래치 홈 (`home-ep5c`), `--skip-movies`, `--game PAND04G --arrive PAND04F`, 경로 `-Dgow.auto.route`.
+이 구간 전체가 PAND04G (구역 제목 16 "건축가의 무덤", SaveGameZone 34) 다 [확실: 스크립트 · 영상]: 2790 세이브 (B 구간 끝) → 2820–2880 어두운 홀 · 석상 → 2930–2946 갈라진
+구덩이 (CrackCombatMsg) → 2970–2996 톱날 레일 (gosawmove* · gonewslide*) → 2996–3001 사망 → 세이브 앞 체크포인트 → … → 3780–3900 · 4080–4140 기중기 (gocrane
+Pand4GCrane) · 매단 블록 (goblocktranslatebg) → 3960–3973 키클롭스 (CyclopsLevel3) → 3985–3995 블록을 타고 갈라진 바닥을 깨고 아래 방 → 4395–4415 병사의 쪽지 (noteMSG 432).
+
+### 54.1 엔진 결함과 수정
+1. **톱날 구덩이에 떨어져도 죽지 않았다 — 영웅이 630 유닛 떨어진 시작 압력판의 "원뿔" 위에 섰다 (영상 2996–2998: 톱날 gosawmove (Damage 25) 에 맞아 레일 블록에서
+   떨어지고 비명 DEATHFALL01 → 붉은 소용돌이 → YOU ARE DEAD → 3001 세이브 앞 체크포인트, 엔진 전체).**
+   구덩이 (−112, −3400) 는 FallAnimZone (EventTransmitter 1019 → 영웅 504 DEATHFALL01) 을 지나 KillMe 바닥 (y 1975.8, `visualsPand04G_KillMe_K[Death]`) 으로 떨어진다.
+   엔진은 504 를 틀었지만 영웅이 y 2147 에 "섰다" — 발밑 = `gopressplate1` 관절 2 (판 자리 (−96, 2719, −2779)). 압력판 CDV (PAND04G CDV_PressPlate1–3, PAND01A ·
+   PAND03A CDV_PressPlate, ATHN03A CDV_MinoPressurePlate) 의 hull 은 윗면 + 비스듬한 옆면 32 개뿐이라 (아래를 보는 평면 없음) 반공간 교집합이 아래로 끝없는 원뿔이고,
+   엔진 발판 바닥 질의 (`Platforms.Body.top`) 는 그 원뿔 옆면을 630 유닛 아래에서 찾았다 (`01_saw_pit_engine_before`: 구덩이 가운데 허공에 멈춤).
+   원작 [확실: 디스어셈블]: GO 충돌 질의 0x139218 은 hull 평면을 보기 전에 선분 ↔ 인스턴스 경계구 (+0x20) 판별식 (0x139258 – 0x1392E8: b² − 4ac ≤ 0 이면 0,
+   0x139300 · 0x139310 t 범위) 으로 거른다. 압력판 경계구 = BallHull 0x1C (0, 2.5, 0) r 20.4.
+   → `Platforms.Body.outsideBound`: 아래로 열린 hull (전 WAD 8 개: 위 압력판 6 · PAND04C CDV_CaveCrank · CDV_HangCrank hull 10) 은 바닥 · 몸 밀어내기 · 선분 질의 점이
+   경계구 (hull 관절 로컬) 밖이면 맞지 않음 [근사: 원작 +0x20 을 만드는 곳은 못 찾음 — hull 관절 로컬로 둠, 닫힌 hull 은 거르지 않음 (경계구 밖 점이 안일 수 없음)].
+   고친 뒤 구덩이로 떨어지면 1976 Death 바닥에 닿아 곧바로 사망 → 세이브 앞 체크포인트 (`01_saw_pit_engine_after`, 영상 `01_saw_pit_video_2985_3002`).
+   60 초 봇 (쉬움): PAND04G · PAND01A · ATHN03A · PAND04C 같음, **PAND03A 방문 6 → 13 / 순간이동 31 → 5** (예전엔 피 웅덩이 홀 압력판 원뿔에 서서 볼륨을 포기 —
+   "순간이동해도 못 머묾").
+
+### 54.4 시험 · 증거
+`OpenHullBoundTest` (PAND04G CDV_PressPlate1 아래로 열림 · 판 위 바닥 2724 · 구덩이 위 압력판 바닥 없음 · 원뿔 안 먼 점 밀지 않음 · 구덩이 바닥 = KillMe 1975.8).
+증거 `work/verify/ep5_c/` (커밋 안 함): `01_saw_pit_video_2985_3002` · `01_saw_pit_engine_before` · `01_saw_pit_engine_after`.
 ## 57. QA vs PS2 영상 5화 — 아테네 귀환 · 아레스 · 엔딩: ATRET01A–C → ATHN08A–C (아레스 보스전 · 가족 · 신들의 검) → ATHN07B → OLYMP01 → OLYMP02 왕좌 · 클리어 저장 · 크레딧 (영상 8250–10635 초, 2026-10-29)
 
 영상 = M-jC8VJVlzg (5화 엔딩, 전사 (보통) = `-Dgow.difficulty=1`), 30 초 접촉 시트 (스크래치 `vid5/s30_*.png`), 프레임 `work/verify/ep5_f/video/` (커밋 안 함).
