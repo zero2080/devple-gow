@@ -1313,6 +1313,36 @@ class HeroNavigatorTest {
 	 * 놓이며 (0x1C4674), 놓인 상자는 중력으로 떨어진다 (0x211A10: −50·16, 최저 −800). 영웅도 붙은 채 중력으로 단을 내려간다 (0x1C47B0).
 	 * ATHN06B 석상은 단 789 → 계단 764 를 이렇게 내려간다 (영상 9040 → 9051: 위층 벽감의 석상이 아래 바닥에). 예전 엔진은 발밑 ±16 에 바닥이 없으면 막았다.
 	 */
+	/**
+	 * 43 §55: 받침보다 떠서 놓인 밀기 상자는 처음 틱부터 중력으로 받침에 내려앉는다 (원작 0x212398 → 0x211A10, PAND05A 판도라의 상자 18 위) —
+	 * 받침에 닿아 있는 상자 · 받침이 {@link HeroNavigator#SETTLE_MAX} 보다 먼 견본 GO 는 그대로.
+	 */
+	@Test
+	void aBoxPlacedAboveItsSupportSettlesOntoIt() {
+		List<LevelCollision.Tri> t = new ArrayList<>();
+		floor(t, -400, -400, 400, 400, 0, SurfaceAttr.GROUND);
+		NavWorld w = new NavWorld(LevelCollision.of(t));
+		Body b = new Body();
+		b.pos.set(300, 0, 300);
+		HeroNavigator nav = new HeroNavigator(b, w, null);
+		Interactables items = new Interactables();
+		Interactables.Item hover = items.add(new Interactables.Item(Interactables.Kind.PUSH, "gopbox", v(0, 17.86f, 0), 1, 502, "pushIdle", null, "Pandora's Box", 30f));
+		Interactables.Item rest = items.add(new Interactables.Item(Interactables.Kind.PUSH, "gopushbox1", v(-200, 0, 0), 2, 0, "pushIdle", null, "Push", 16f));
+		Interactables.Item far = items.add(new Interactables.Item(Interactables.Kind.PUSH, "goevistonedbrk", v(200, 200, 0), 3, 0, "pushIdle", null, "Push", 16f));
+		for (Interactables.Item it : items.items()) {
+			it.boxHalf = 14.4f;
+			it.boxHeight = 32;
+		}
+		nav.setItems(items);
+		Pad in = new Pad();
+		for (int i = 0; i < 60; i++) {
+			tick(nav, b, w, in);
+		}
+		assertEquals(0f, hover.pos.y, 0.01f, "18 위 → 바닥");
+		assertEquals(0f, rest.pos.y, 1e-4f);
+		assertEquals(200f, far.pos.y, 1e-4f, "견본 GO 는 그대로");
+	}
+
 	@Test
 	void attachedBoxHoversOverADeepStepAndFallsWhenReleased() {
 		for (float step : new float[]{24, 40}) {

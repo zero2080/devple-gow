@@ -3867,6 +3867,65 @@ Pand4GCrane) · 매단 블록 (goblocktranslatebg) → 3960–3973 키클롭스 
 ### 54.4 시험 · 증거
 `OpenHullBoundTest` (PAND04G CDV_PressPlate1 아래로 열림 · 판 위 바닥 2724 · 구덩이 위 압력판 바닥 없음 · 원뿔 안 먼 점 밀지 않음 · 구덩이 바닥 = KillMe 1975.8).
 증거 `work/verify/ep5_c/` (커밋 안 함): `01_saw_pit_video_2985_3002` · `01_saw_pit_engine_before` · `01_saw_pit_engine_after`.
+## 55. QA vs PS2 영상 5화 — 판도라의 상자: PAND04G 건축가의 쪽지 · 아내의 머리 · 해골 문 → PAND04H 눈 덮인 테라스 → PAND04IB 나선 계단 → PAND04J 상자 방 싸움 (불 기둥 · 하피 · 사망 둘) → PAND05A 세 신의 석상 · 크랭크 · 상자 탁자 · 엘리베이터 → PAND05B 상자 밀기 · Semo08 → HDES01A (영상 4400–5760 초, 2026-10-29)
+
+영상 = M-jC8VJVlzg (5화 "엔딩", 전사 (보통) = `-Dgow.difficulty=1`), 프레임 422×317 (`work/verify/ep5_d/video/v<초>.jpg` — 4404–4446 · 4578–4632 · 5330–5420 ·
+5480–5530 · 5690–5760 2 초, 4822–4834 · 4940–4954 1 초, 커밋 안 함). 엔진 = origin/main b05dbf2 위, 1280×720 lockstep, 스크래치 홈 (`home-ep5d`), `--skip-movies`,
+`--game PAND04G|PAND04J|PAND05A|PAND05B|HDES01A [--arrive …]`, 경로 `-Dgow.auto.route`.
+
+### 55.0 장면 대응 (경로 [확실: 스크립트 · 영상])
+| 영상 (초) | 장면 | 원작 (스크립트 · 데이터) | 엔진 | 결과 |
+|---|---|---|---|---|
+| 4404–4424 | 건축가 시신 위 쪽지 → 양피지 메시지 두 쪽 "나를 막으려고 애썼다…" | PAND04G noteMSG (볼륨 x −140…−68, z −4596…−4516) R2 → 메시지 432 + LetterCam | 같은 메시지 · 같은 카메라 (`r7`) | 같음 |
+| 4428–4446 | 아내의 시신 R2 연타 → 머리를 뜯음 (R2 아이콘) | godeadwifeytf (TAndF id 461, 손잡이 축 (0, −1) — 시신 −z 쪽에서 +z 를 보고 잡음) → 1023 100 % → RipCam | 같은 잡기 · 연타 · RipCam (`r1`: 7 초 연타 → 성공) | 같음 |
+| 4446–4470 | 해골 열쇠 구멍 문에 머리 → 문 열림 → 테라스로 | wifeySuccess → 12.1 초 ChamberDoor-AnimForward · 14 초 Goto skullStand + DrOpenCam · 16 초 카메라 돌려줌 | 같은 순서 · 같은 지연 (9.27 → 21.38 · 23.28 · 25.28) | 같음 |
+| 4500–4560 | PAND04H 눈 덮인 테라스 · 흰 하늘 | PAND04H (적 없음, SaveGameZone 35, Warp G ↔ IB) | 시작 자리 같은 흰 바위 · 기둥 | 대조만 |
+| 4578–4596 | PAND04IB 나선 계단을 내려가 복도 | PAND04IB StartBPI → LoadWad Pand04J | 같은 계단 · 복도 | 같음 |
+| 4602–4620 | PAND04J 방 입구 cine: 방 → 위 계단 → 세 신의 석상 · 둥근 덮개 (PAND05A) → 문 | cine1 EntryCine1 (Idle · LoadCheck Pand05A · cam4Cine1, 23 초) · DoorP4JFake1/2 | 같은 카메라 순서 (`05_pand04j_cine1_engine`) | 같음 |
+| 4620–5190 | 받침대 둘 사이 → 상자 방 싸움: 바닥 불 기둥 (L/R/CFlame), 궁수 · 하피, 콤보 25 | CheckPointGroup (x 728…824) · archerEnt (R_SK2 여섯 · R_HA2 넷, 하피는 죽으면 다시) · 불 구역 5.25 초 → 1019 피해 175 | 같은 스폰 · 불 구역 (`j1`) | 싸움 대조 안 함 (봇) |
+| 4830 · 4950 | 하피에 쓰러져 YOU ARE DEAD (낙사 아님) → 4831 · 4952 받침대 사이 체크포인트에서 바로 싸움 | CheckPointGroup 스냅숏 (cine 끝난 뒤 지남) | `die:` → (724, −1376) 받침대 사이 · 다시 지나면 스폰 (`r2`) | 같음 |
+| 5190–5310 | 계단 → 긴 복도 | PAND04J 끝 → PAND05A Start (2371, −1269) | 같은 복도 · 끝의 덮개 | 같음 |
+| 5340–5352 | 덮개 안 크랭크 → 덮개가 열리고 탁자 위 상자 | globeHandle (PushPull Type 1, id 501) 100 % → shellGrp · tableGrpReflect-AnimTable (camFancyBox) | 고치기 전: **상자 윗면이 덮개 꼭대기로 튀어나옴** → 55.1 | 고침 |
+| 5360–5392 | 상자 R2 → 동영상 p06Mp01 (아테나 "크레토스, 네 여정은 끝났다 … 아레스를 죽이라") | pBox 1048 인자 502 → PlayMovie p06Mp01 → 501 → 엘리베이터 · LoadForWarp Pand05B | 고치기 전: **탁자가 내려가도 상자는 허공** → 55.1 | 고침 |
+| 5394–5420 | 엘리베이터 위 상자와 크라토스 → 갱도 하강 | elevatorShaftGrp · elevatorGrpNoReflect-AnimElevator (elevatorYo) | 상자가 엘리베이터 탁자에 실려 내려감 (`03`) | 같음 |
+| 5430–5490 | PAND05B 상자를 둥근 문 앞 복도로 밀기 | gopboxpand05b (무게 2, 1.2 m/s) → semoMovieHaveBox (Marker 511, x 1244…1252) | 밀기 · 속도 같음 (19 유닛/초), 상자 없이 나가면 exitNoBox Idle 5.5 초 · 아테나 음성 | 문까지 경로는 못 몰았음 |
+| 5492–5680 | Semo08 (상자가 풀려남 · 아레스가 기둥을 던져 크라토스를 꿰뚫음 · 오라클 · 불) | FadeOut 0.6 → Semo08 → Warp HDES01A (0.8) | 동영상 (`--skip-movies`) | — |
+| 5690–5760 | 붉은 지하 세계 · 척추 기둥 위 | HDES01A Start (−8439, −4617, 512) | 같은 척추 · 구도 (`h1`) | E 구간 (§56) |
+
+### 55.1 엔진 결함과 수정
+1. **판도라의 상자가 덮개를 뚫고 튀어나왔고, 크랭크 뒤 탁자가 내려가도 상자는 허공에 남았다 (영상 4616 · 5340: 덮개 안에 숨은 상자, 5394–5402: 엘리베이터 위 탁자에 내려온
+   상자 옆에서 크라토스가 잡는다, 엔진 전체).**
+   PAND05A gopbox (Push "Pandora's Box", Type 0) 의 GO 원점 = CDV 바닥 (CDV_pBox 로컬 y 0.5 – 35) 이 −1216 인데 탁자 gotablegrpreflect 충돌 윗면은 −1233.9 —
+   상자가 17.9 떠서 놓여 있다 [확실: 데이터]. 엔진은 붙잡지 않은 상자를 놓인 자리에 그대로 두었고 (중력은 놓았거나 찬 상자만), 실림 질의 (`SceneNav.rideBoxes`,
+   관절 0 위 16 · 아래 16) 는 탁자를 못 찾았다 → 상자 윗면 (−1181) 이 덮개 꼭대기로 튀어나오고 (`01_pbox_dome_before`), AnimTable 이 탁자를 −1279.9 로 내려도
+   상자는 −1216 에 떠 있었다.
+   원작 [확실: 디스어셈블]: 상자 갱신 0x212398 (Type 0/7/8) 은 매 틱 지면 GO 실림 0x1E6248 을 하고, 붙잡히지 않았으면 0x211A10 을 부른다 — 쉼 (sp+0xC0 = 1,
+   이후 이동 생략) 은 지상 (+0x174 비트 0) ∧ 지면 GO 없음 (+0x24C = 0) ∧ 속도 +0xE0 = 0 ∧ 밀린 적 없음 (+0x29A 비트 1) 일 때뿐이고 (0x211A98 – 0x211B18),
+   아니면 −GlobGame Gravity 50·16·dt (최저 −800) 중력을 받는다. 받침 없이 놓인 상자는 떨어져 탁자에 앉고, 그 뒤 탁자 (지면 GO) 와 함께 실려 간다.
+   → `HeroNavigator.setItems` 가 밀기 상자를 `settle` 에 두고 첫 틱 `settleBoxes` 가 발밑 (restDy 와 같은 질의) 이 0.05 보다 아래인 상자를 중력 목록 (`sliding`) 에
+   넣는다 (`boxFall` 이 받침에 내려놓음) [근사: 원작이 처음 +0x174 비트 0 을 어떻게 두는지는 못 봄 — 영상 4616 · 5340 덮개 안 상자 · 5352 탁자 위 상자가 내려앉은 자리와 같다].
+   받침이 `SETTLE_MAX` 32 보다 먼 상자는 그대로 둔다 (원점에 둔 견본 GO: ATHN08B 석화 goevistonedbrk 아래 1647, R_PERMK gostoneherobrk 바닥 없음) [근사].
+   전 WAD 밀기 상자 21 개 중 처음 틈이 0 이 아닌 것은 gopbox 하나다 (조사 스크립트 BoxScan). 고친 뒤: 덮개 안에 상자가 숨고, 크랭크 → 탁자와 함께 −1279.9 로
+   내려와 크라토스가 엘리베이터 위에서 잡고 (1048 인자 502 → p06Mp01), 엘리베이터와 같이 내려간다 (`02_pbox_after_engine_vs_v5348_v5352_v5340_v5398`, `03_…`).
+   60 초 봇 (쉬움) PAND05A · PAND05B · PAND04EE · ATHN05B · ATHN06B: 사망 · 예외 0, 막은 전환 같음 (ATHN05B 방문 6 ↔ 8 · PAND04EE 마지막 위치는 같은 빌드끼리도
+   바뀌는 프레임 시간 흔들림 — 첫 갈림이 t 29.36 ↔ 29.37 의 낙하 기록).
+
+### 55.2 남은 것 · 미확인
+- [미대조] PAND04J 싸움 (4620–5190): 영상의 두 사망은 하피에 쓰러진 것 (4826–4830 · 4944–4950) — 보통 난이도 하피 피해 · 체력 (영상 HUD 의 체력 막대 길이 ↔ 엔진
+  `--game` 기본 100) 은 대조 못 함. 불 구역 (5.25 초 머물면 1019 피해 175, 하피 · 궁수는 1029) 은 스크립트 그대로 돈다.
+- [미대조] PAND05B 상자를 둥근 문 앞 semoMovieHaveBox 까지 미는 경로: 방 (870, 944) 에서 +z 로 밀면 z 1141 에서 막힌다 (방 기둥 쪽 [미확인]) — 영상 5430–5490 의
+  길은 프레임 간격이 넓어 못 봤다. 상자 없이 나가면 exitNoBox (Idle 5.5 초) 는 확인.
+- PAND05A 엘리베이터 하강 중 영웅이 몇 번 "낙하" 상태가 된다 (엘리베이터 540 유닛/초) — 영상 5402 → 5410 도 크라토스가 상자에서 떨어져 보인다 [미대조].
+- PAND05A 석상 색: 영상 5340 은 밝은 청동, 엔진은 어둡다 (조명 [미확인]).
+- 메시지 양피지 글자: 엔진 글자가 영상보다 조금 작고 밝은 갈색 [미확인: 글꼴 배율].
+- 실제 세이브 위치 (`~/Library/Application Support/devple-gow`) 는 생기지 않았다 (모든 실행 = 스크래치 홈).
+
+### 55.3 시험 · 증거
+`HeroNavigatorTest.aBoxPlacedAboveItsSupportSettlesOntoIt` (18 위 → 바닥, 닿은 상자 · 200 위 견본 그대로), `PandoraBoxTableRideTest` (PAND05A gopbox 관절 0 ±16 받침
+없음 · 탁자 윗면과 17.9 · 내려앉은 상자가 AnimTable 로 −1279.9 까지 실림). 엔진 테스트 798 (rebase 뒤).
+증거 `work/verify/ep5_d/` (커밋 안 함): `01_pbox_dome_before_engine_vs_v4616_v5340`, `02_pbox_after_engine_vs_v5348_v5352_v5340_v5398`,
+`03_pbox_after_engine_crank_table_elevator`, `04_video_5330-5420`, `05_pand04j_cine1_engine`, `06_video_4404-4632`, `07_video_deaths_4822-4954`.
+
 ## 57. QA vs PS2 영상 5화 — 아테네 귀환 · 아레스 · 엔딩: ATRET01A–C → ATHN08A–C (아레스 보스전 · 가족 · 신들의 검) → ATHN07B → OLYMP01 → OLYMP02 왕좌 · 클리어 저장 · 크레딧 (영상 8250–10635 초, 2026-10-29)
 
 영상 = M-jC8VJVlzg (5화 엔딩, 전사 (보통) = `-Dgow.difficulty=1`), 30 초 접촉 시트 (스크래치 `vid5/s30_*.png`), 프레임 `work/verify/ep5_f/video/` (커밋 안 함).

@@ -262,8 +262,46 @@ public final class HeroNavigator {
 		};
 	}
 
+	/**
+	 * 레벨 R1/R2 오브젝트. 밀기 상자는 모두 처음 틱에 중력 검사에 넣는다 ({@link #slideBoxes}: 발밑에 닿아 있으면 바로 빠짐) — 원작 상자 갱신 0x212398
+	 * (Type 0/7/8) 은 붙잡히지 않은 상자를 매 틱 0x211A10 으로 보내고, 쉼 (sp+0xC0) 은 지상 (+0x174 비트 0) · 지면 GO 없음 · 속도 0 · 밀린 적 없음
+	 * (+0x29A 비트 1) 일 때뿐이라 받침 없이 놓인 상자는 −50·16 중력으로 떨어진다 [확실: 코드]. PAND05A 판도라의 상자 gopbox 는 GO 원점 (CDV 바닥,
+	 * 로컬 y 0.5 – 35) 이 탁자 gotablegrpreflect 충돌 윗면 −1233.9 보다 18 위 (−1216) 에 놓여 있다: 영상 5 화 4616 · 5340 은 상자가 둥근 덮개
+	 * (shellGrp) 안에 숨어 있는데 예전 엔진은 18 위에 그대로 두어 상자 윗면이 덮개 꼭대기로 튀어나왔고, 실림 질의 (관절 0 ±16) 가 탁자를 못 찾아
+	 * 크랭크 뒤 탁자가 엘리베이터 높이로 내려가도 (tableGrpReflect-AnimTable) 상자는 허공에 남았다 (영상 5394–5402 는 상자가 엘리베이터 탁자 위) — 43 §55.
+	 */
 	public void setItems(Interactables it) {
 		items = it != null ? it : new Interactables();
+		settle.clear();
+		for (Interactables.Item x : items.items()) {
+			if (x.kind == Interactables.Kind.PUSH) {
+				settle.add(x);
+			}
+		}
+	}
+
+	/** 다음 틱에 받침을 볼 밀기 상자 ({@link #setItems}) — 그때는 발판 몸이 그 레벨 것이다 (슬롯 바꿈). */
+	private final java.util.List<Interactables.Item> settle = new java.util.ArrayList<>();
+
+	/**
+	 * 처음 놓인 상자의 바닥이 받침보다 이만큼 위까지만 떨어뜨린다 — 원점 (0, 0, 0) 에 둔 견본 GO (ATHN08B 석화 goevistonedbrk: 아래 바닥 1647,
+	 * R_PERMK gostoneherobrk: 바닥 없음) 는 그대로 둔다 [근사: 전 WAD 밀기 상자 21 개 중 0 이 아닌 틈은 PAND05A gopbox 17.9 하나].
+	 */
+	static final float SETTLE_MAX = 32f;
+
+	/** {@link #setItems} 뒤 첫 틱: 받침과 떨어져 놓인 상자를 중력 목록에 (받침 = restDy 와 같은 발밑 질의). */
+	private void settleBoxes() {
+		for (Interactables.Item it : settle) {
+			if (it == item || sliding.contains(it)) {
+				continue;
+			}
+			float bottom = it.pos.y - restDy(it, null);
+			NavWorld.Floor f = world.floor(it.pos.x, bottom + 1, it.pos.z, 1 + SETTLE_MAX, world.family(it.owner));
+			if (f != null && bottom - f.y() > 0.05f) {
+				sliding.add(it);
+			}
+		}
+		settle.clear();
 	}
 
 	public void setNeighbourItems(Interactables it) {
@@ -398,6 +436,9 @@ public final class HeroNavigator {
 			resetHangTimer();
 		}
 		rewindReleased(dt);
+		if (!settle.isEmpty()) {
+			settleBoxes();
+		}
 		slideBoxes(dt);
 		world.updateRopes(dt);
 		if (state == NavState.ROPE || state == NavState.ROPE_TRAVERSE || state == NavState.ZIPLINE) {
