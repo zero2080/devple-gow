@@ -4155,6 +4155,8 @@ public final class GameScene implements Scene {
 	/** 사망 메뉴 상태: 0 없음, 1 "죽었습니다" 화면 (DeadMenu On), 2 선택 대기. */
 	private int deadMenu;
 	private float deadMenuTime;
+	/** HP 가 0 이 된 뒤 흐른 시간 (원작 PlayerProgress +0x4C, "Death Menu Time" 과 비교). */
+	private float dyingTime;
 	/**
 	 * "죽었습니다" 화면에서 선택지까지 (0x220830: 0x29F46C = 0x29F470 의 2.5 초, 0x2208B0 이 1/60 초씩 줄여 0 이면 0x220360 이 +0x25C = 2 / 3 —
 	 * 쉬움 제안 0x1DBF90) [확실: 디스어셈블 · 데이터 0x29F470 = 2.5]. 예전 엔진 2 초. 영상 4화 1137 제목 → 1140 쉬움 제안.
@@ -4789,7 +4791,13 @@ public final class GameScene implements Scene {
 		magicFx.weaponWorld(hero.combat, (n, at) -> session.sound.play(n, at)); // 무기-월드 베기 Slice Hit (40 문서 §6)
 		surfaceDamage(dt);
 		if (hero.player.hp <= 0) {
-			heroDied();
+			// 0x1D6F90–0x1D7058: HP < 1 이 된 뒤 "Death Menu Time" (/Player/ +0x34, R_PERMK 1.0 초) 가 지나야 사망 처리 (그 사이 세계는 돌고 영웅은 사망 동작) —
+			// 떨어져 죽음 · Death 재질 (+0x174 0x08000000, 0x1ED048 → 0x1ED05C) 은 곧바로 [확실: 디스어셈블]. 엔진의 떨어짐 · 데스존 · Death 재질은 heroDied 를 곧바로 부른다
+			if ((dyingTime += dt) > (orbTweaks != null ? orbTweaks.f("/Player/", "Death Menu Time", 1f) : 1f)) {
+				heroDied();
+			}
+		} else {
+			dyingTime = 0;
 		}
 		if (!leaving && deadMenu == 0 && !failedMenu) {
 			checkpointFrameEnd(); // 0x1B3070 (프레임 끝): 기다리는 CheckPoint 스냅숏
