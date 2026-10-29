@@ -66,24 +66,47 @@ class EndGameSaveTest {
 		return g;
 	}
 
+	/** 영상 5화 10592 "예" → 10595 Ω 만 → 10596 "저장하기 완료": GOW 디렉터리가 있는 카드는 카드 · 파일 선택 없이 곧 단계 0x19. */
 	@Test
-	void unlockOnlyWriteSkipsOverwriteAndLeavesTheSlotFile() throws Exception {
+	void unlockOnlyWriteGoesStraightToDone() throws Exception {
 		SaveGame old = sample();
-		Path f = MemoryCardFlow.file(card, 0);
+		Path f = MemoryCardFlow.file(card, 2);
 		old.write(f);
 		byte[] before = Files.readAllBytes(f);
 		Unlocks.grant(card, 0, 1);
-		MemoryCardFlow flow = MemoryCardFlow.save(new UiVariables(), null, card, () -> {
+		UiVariables v = new UiVariables();
+		MemoryCardFlow flow = MemoryCardFlow.save(v, null, card, () -> {
 			throw new AssertionError("클리어 저장은 게임 데이터를 쓰지 않는다");
 		}).unlockOnly();
 		flow.start();
-		flow.select(1); // 카드 슬롯 1
-		flow.select(1); // 있는 파일 → 덮어쓰기 질문 없이 (0x230ED4: 0x2A275C = 0 → 단계 0x19)
 		assertEquals(MemoryCardFlow.SAVING, flow.state());
+		assertFalse(v.has("PS2_MemoryCard_Event"), "화면 바꿈 없음 (Ω 만)");
 		flow.update(MemoryCardFlow.BUSY_SEC + 0.1f);
 		assertEquals(MemoryCardFlow.SAVE_DONE, flow.state());
+		assertEquals(18, (int) v.number("PS2_MemoryCard_Event"), "저장하기 완료");
 		assertArrayEquals(before, Files.readAllBytes(f), "슬롯 파일 그대로");
 		assertEquals(0x1, Unlocks.load(card));
+		flow.select(1);
+		assertEquals(MemoryCardFlow.Result.SAVED, flow.result());
+	}
+
+	/** GOW 디렉터리가 없으면 새로 만들기 질문 (단계 0xF, 16): 아니오 → 흐름 −1 (클리어 질문으로), 예 → 만들기 (17) → 해금 쓰기. */
+	@Test
+	void unlockOnlyWithoutDirectoryAsksToCreate() throws Exception {
+		Unlocks.grant(card, 0, 3);
+		MemoryCardFlow no = MemoryCardFlow.save(new UiVariables(), null, card, SaveGame::new).unlockOnly();
+		no.start();
+		assertEquals(MemoryCardFlow.CREATE_ASK, no.state());
+		no.select(0);
+		assertEquals(MemoryCardFlow.Result.CANCELLED, no.result());
+		assertFalse(Files.exists(Unlocks.file(card)));
+		MemoryCardFlow yes = MemoryCardFlow.save(new UiVariables(), null, card, SaveGame::new).unlockOnly();
+		yes.start();
+		yes.select(1);
+		assertEquals(MemoryCardFlow.SAVING, yes.state());
+		yes.update(MemoryCardFlow.BUSY_SEC + 0.1f);
+		assertEquals(MemoryCardFlow.SAVE_DONE, yes.state());
+		assertEquals(0x4, Unlocks.load(card), "신 클리어 → bit2");
 	}
 
 	@Test

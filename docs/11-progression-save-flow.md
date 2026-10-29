@@ -417,7 +417,7 @@ MemoryCard_Event 0) 10 프레임 뒤 SaveGame_Event (+0x268) = 0 → 11. 세이�
   goMAIgodblade) 를 다시 등록한다. 기본 코스튬 0 · 코스튬 5 의 레벨 1–5 WAD 는 모델 이름이 `MDL_MAIblade` (소문자 b) 라 대소문자 무시로 찾는다 [확실: 데이터 전수].
 - 적 리소스 (`R_%s`) 는 **레벨 슬롯마다** (0x3372D8 구조 +0xA + 10·i, 최대 4) 상주한다 [확실: 0x1BB928] — 이웃 슬롯 스크립트의 SpawnEnemy 가 현재 레벨 RSRCS 에 없는 종류
   (ATHN03A 거리의 ATHN03C 고르곤 R_MEW) 도 낸다. 엔진 `GameScene.loadNeighbourKinds` (43 §17.2-1).
-`R_WPN*_5` 파일(블레이드 내부 레벨 5)은 존재하지만 메뉴 최대는 4 → 사용처 미확인.
+`R_WPN*_5` 파일(블레이드 내부 레벨 5)은 메뉴 최대 4 밖 — ATHN07B 아테나의 블레이드 (`set_int Internal:50 ← 6` → 0x1B01A0, 43 §57.3).
 
 ### 6.4 레벨 연결과 챕터 순서 [확실: 연결 / 추정: 지역 이름]
 `progress:levels` 결과 (첫 문자열 인자, 대문자화). 구역 번호 = ESC `ZoneReport(n)` 인자.

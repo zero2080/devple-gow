@@ -4043,7 +4043,8 @@ public final class GameScene implements Scene {
 		saveFlow.update(dt);
 		switch (saveFlow.result()) {
 			case SAVED -> {
-				System.out.println("저장 완료: " + MemoryCardFlow.file(SaveGame.dir(), saveFlow.fileIndex()));
+				System.out.println(saveKind != 1 ? "해금 기록 저장 완료 (끝 종류 " + saveKind + ")"
+						: "저장 완료: " + MemoryCardFlow.file(SaveGame.dir(), saveFlow.fileIndex()));
 				saveFlow = null;
 				closeSaveMenu(21); // 상태 17: MemoryCard_Event 0 (흐름이 이미 보냄) → 10 프레임 → 상태 18 (1 + 10 프레임) → SaveGame_Event 0
 			}

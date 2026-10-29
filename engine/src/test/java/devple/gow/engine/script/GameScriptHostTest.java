@@ -48,6 +48,20 @@ class GameScriptHostTest {
 		assertEquals(true, n.getVar(null, 1, 39, 2));
 	}
 
+	/** 50 BladesLevel (getter 0x1AFF84 = 0x3044BD + 1, setter 0x1B01A0 = min(값, 6) − 1): ATHN07B 아테나의 블레이드 6 → 내부 레벨 5 (R_WPN0_5). */
+	@Test
+	void bladesLevelVariableIsOneBased() throws Exception {
+		PlayerState p = player();
+		ScriptHost h = new ScriptHost();
+		h.players = () -> p;
+		assertEquals(1, h.getVar(null, 1, 50, 1), "새 게임 내부 0 = 1");
+		h.setVar(null, 1, 50, 1, 6); // gotBlades-giveBlades
+		assertEquals(5, p.level.get(Weapon.BLADES));
+		assertEquals(6, h.getVar(null, 1, 50, 1));
+		h.setVar(null, 1, 50, 1, 9);
+		assertEquals(5, p.level.get(Weapon.BLADES), "6 으로 자름");
+	}
+
 	/**
 	 * Internal 0x12 (GameMgr_OnMessage 0x1B0B34: float → 0x3044A4) = 마법 재생 MP/초. 영웅 갱신 0x1D6F20 이 매 프레임 MP += 값/60 을
 	 * 0..최대 MP 로 자른다. 예전 엔진은 0x12 를 버렸다 (ATHN02D RewardPlayer 10 / TurnFaceOffFinal 0).

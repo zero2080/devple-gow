@@ -50,9 +50,11 @@ public final class MemoryCardFlow {
 	private Result result = Result.RUNNING;
 	private SaveGame loaded;
 	/**
-	 * 클리어 저장 (원작 0x230A48(0): 0x2A275C = 0 — 끝 종류 ≠ 1 의 상태 17): 파일 선택 단계 0xE (0x230E88) 가 있는 파일이면 덮어쓰기 질문 (0x12)
-	 * 대신 곧 단계 0x19 (카드 레코드 |= 해금 비트) 로, 슬롯 항목 (0x18: 파일 번호 · 0xCAFEBAD1 · 플레이 시간 · 세이브 포인트 · 난이도) 과 게임 데이터는
-	 * 쓰지 않는다 [확실: 0x230ED4 movn, 0x230FE4]. [근사: 빈 파일은 새로 만들기 질문 뒤 같은 해금 쓰기만 — 원작 단계 0x11 의 파일 만들기 0x22F6B8 생략]
+	 * 클리어 저장 (원작 0x230A48(0): 0x2A275C = 0 — 끝 종류 ≠ 1 의 상태 17) [확실: 0x230ADC – 0x230B80, 0x230E88 – 0x230ED4, 0x230FA0 – 0x230FE4]:
+	 * 단계 0 · 1 이 카드를 살피고 카드가 하나면 (엔진: 늘 슬롯 1) 카드 선택 화면 없이 단계 0xE. 해금 기록은 <b>카드</b> 의 GOW 디렉터리 레코드 (+0x40) 라
+	 * 파일을 고르지 않는다: 디렉터리가 있으면 곧 단계 0x19 (레코드 |= 해금 비트, 디렉터리 쓰기 0x22F410) → 0x1A (대기) → MemoryCard_Event 18 "저장하기
+	 * 완료", 없으면 새로 만들기 질문 (16, 단계 0xF) → 만들기 (17, 0x11 → 0x22F6B8) → 0x19. 슬롯 항목 (0x18) 과 게임 데이터는 쓰지 않는다.
+	 * 영상 5화 10592 질문 "예" → 10595 Ω 만 → 10596 "저장하기 완료" (카드 · 파일 선택 없음).
 	 */
 	private boolean unlockOnly;
 
@@ -83,7 +85,34 @@ public final class MemoryCardFlow {
 	}
 
 	public void start() {
+		if (unlockOnly) {
+			if (hasGowDirectory()) {
+				unlockWrite();
+			} else {
+				show(CREATE_ASK);
+			}
+			return;
+		}
 		show(CARD_SELECT);
+	}
+
+	/** 카드의 GOW 디렉터리 (세이브 파일이나 해금 기록이 하나라도). */
+	private boolean hasGowDirectory() {
+		if (Files.exists(Unlocks.file(cardDir))) {
+			return true;
+		}
+		for (int i = 0; i < FILES; i++) {
+			if (Files.exists(file(cardDir, i))) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** 단계 0x19 – 0x1A: 화면 바꿈 없이 (Ω 배경만) 해금 쓰기 대기 → 완료 18. */
+	private void unlockWrite() {
+		state = SAVING;
+		timer = BUSY_SEC;
 	}
 
 	public Result result() {
@@ -152,16 +181,21 @@ public final class MemoryCardFlow {
 					show(CARD_SELECT);
 				} else if (a <= FILES) {
 					file = a - 1;
-					boolean exists = Files.exists(file(cardDir, file));
-					if (unlockOnly && exists) {
-						busy(SAVING);
-					} else {
-						show(exists ? OVERWRITE_ASK : CREATE_ASK);
-					}
+					show(Files.exists(file(cardDir, file)) ? OVERWRITE_ASK : CREATE_ASK);
 				}
 			}
 			case LOAD_ASK -> busy(a == 1 ? LOADING : LOAD_SELECT);
-			case OVERWRITE_ASK, CREATE_ASK -> busy(a == 1 ? SAVING : SAVE_SELECT);
+			case OVERWRITE_ASK, CREATE_ASK -> {
+				if (unlockOnly) {
+					if (a == 1) {
+						busy(SAVING); // 단계 0x10 → 0x11 "만드는 중" (17) → 0x19
+					} else {
+						finish(Result.CANCELLED); // 흐름 −1 → 상태 17 이 클리어 질문으로 되돌림
+					}
+				} else {
+					busy(a == 1 ? SAVING : SAVE_SELECT);
+				}
+			}
 			case LOAD_ERROR -> show(LOAD_SELECT);
 			case SAVE_DONE -> finish(Result.SAVED);
 			case SAVE_ERROR -> {

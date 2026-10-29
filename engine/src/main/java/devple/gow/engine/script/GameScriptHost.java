@@ -132,7 +132,7 @@ public class GameScriptHost implements EscHost {
 	 * MP 가득. 예전 엔진은 Internal 변수 쓰기를 버려 머리를 뜯어도 L2 시선 마법이 생기지 않았다.
 	 */
 	public static final int VAR_HP = 33, VAR_MAX_HP = 34, VAR_MP = 35, VAR_MAX_MP = 36, VAR_ITEM9 = 37, VAR_ITEM3 = 38, VAR_ITEM7 = 42,
-			VAR_EYES = 44, VAR_FEATHERS = 45;
+			VAR_EYES = 44, VAR_FEATHERS = 45, VAR_BLADES = 50;
 
 	/** Internal 변수 번호 → 아이템 번호 (보유 플래그 변수 37..42), 아니면 −1. */
 	static int itemVar(int id) {
@@ -155,6 +155,7 @@ public class GameScriptHost implements EscHost {
 			case VAR_MAX_MP -> player.maxMp();
 			case VAR_EYES -> (float) player.gorgonEyes;
 			case VAR_FEATHERS -> (float) player.phoenixFeathers;
+			case VAR_BLADES -> (float) (player.level.get(devple.gow.engine.game.Weapon.BLADES) + 1); // 0x1AFF84: 0x3044BD + 1
 			default -> null;
 		};
 	}
@@ -178,6 +179,9 @@ public class GameScriptHost implements EscHost {
 			case VAR_MP -> player.mp = Math.max(0, Math.min(player.maxMp(), EscVm.f(value)));
 			case VAR_EYES -> player.addItem(10, Math.max(0, Math.round(EscVm.f(value)) - player.gorgonEyes));
 			case VAR_FEATHERS -> player.addItem(11, Math.max(0, Math.round(EscVm.f(value)) - player.phoenixFeathers));
+			// 50 BladesLevel 쓰기 0x1B01A0: 블레이드 레벨 바이트 0x3044BD = min(값, 6) − 1 (+ HUD Blades_Level +0x200) [확실] — ATHN07B gotBlades-giveBlades
+			// 의 6 = 내부 레벨 5 = 아테나의 블레이드 R_WPN&lt;코스튬&gt;_5 (업그레이드 메뉴 최대는 4) [엔진: 0 아래로는 자름]
+			case VAR_BLADES -> player.level.put(devple.gow.engine.game.Weapon.BLADES, Math.max(0, Math.min(6, Math.round(EscVm.f(value))) - 1));
 			default -> {
 				return false;
 			}

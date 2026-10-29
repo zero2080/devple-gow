@@ -3850,27 +3850,32 @@ Pand4GCrane) · 매단 블록 (goblocktranslatebg) → 3960–3973 키클롭스 
 ### 57.1 엔딩 흐름: CompleteGame → 클리어 저장 질문 → 크레딧 → 셸 [확실: 디스어셈블 · 스크립트 · FLP]
 OLYMP02 스크립트 (왕좌 gothroneseat 1023 (100, 550)): `PlaySemo13` → `Mpeg13Complete` → 난이도별 `HistoryCredits0–3` (0–2 = Bonus01, 3 = Bonus24) →
 `Mpeg1or20Complete` = **CompleteGame(0)** + `PlayCreditsMpeg` (0.5 초 뒤 SND_M_CREDITS1 · Bonus20) → `EvtCreditsMpegDone` → `Restarting` (Entity 0xF).
-영상 10560 Semo13 (왕좌) → 10590 "GOW를 모두 마쳤습니다 · 올림푸스의 귀중품들이 풀렸습니다 · 신 모드가 풀렸습니다 · 게임 진행 상황을 저장하시겠습니까? 예/아니오" →
-10620 크레딧.
+영상 [확실: 1 초 프레임]: 10500 OLYMP02 세이브 빛기둥 저장 ("마지막 전투" 파일) → 10530–10540 왕좌로 올라가 앉음 → 10550–10572 Semo13 → 10574–10588 Bonus01
+("축하합니다 / 영혼의 반역자를 정복했습니다 / GOD OF WAR / 신 모드에 도전해보세요") → 10592 "GOW를 모두 마쳤습니다 · 올림푸스의 귀중품들이 풀렸습니다 · 신 모드가
+풀렸습니다 · 게임 진행 상황을 저장하시겠습니까? 예/아니오" → "예" → 10595 Ω 만 → 10596–10597 "저장하기 완료. ○ = 계속" → 10599 검정 → 10602– 크레딧 Bonus20.
 1. **클리어 저장 질문이 없었다** — 엔진은 CompleteGame 에서 해금 비트를 곧바로 파일에 적기만 했다.
    - 0x1B1128 (GameMgr_OnMessage 0x2F): kind 0 → 난이도 0·1 비트 1 / 2 비트 2 / 3 비트 4, kind 1 → 8, kind 2 → 0x10 을 **RAM** g_unlockMask 에
      (0x230118 Unlocks_Apply), 끝 종류 0x29D94C = 2 (난이도 0–2) / 3 (신) / 4 (kind 1) / 5 (kind 2).
    - 프레임 끝 0x1B339C: 0x29D94C ≠ 0 → **0x21D8B0(종류)** (놀이 상태 11 일 때만) → 0x29F47C = HUD SaveGame_Event (+0x268) = 종류, 상태 15 — 세이브 포인트와
      같은 저장 질문인데 종류만 다르다. FLP_HUDK SaveGameMenu "On": `SaveScreen GotoFrame2(SaveGame_Event)`, 종류 ≥ 2 면 SaveQuestion 프레임 1 (메시지
      4484–4508: 2 "GOW를 모두 마쳤습니다…", 3 "신 모드로 GOW를 모두 마쳤습니다 · 비밀 메시지 1", 4 "신들의 시험을 모두 마쳤습니다 · 모든 의상", 5 이스터 에그 · 비밀 메시지 2).
-   - "예" (상태 15 0x220554): 종류 ≠ 1 이면 세이브 포인트 검사 (0x1BC620 …) 없이 상태 17, 쓰기 흐름 시작 0x230A48(종류 == 1) → 0x2A275C. 파일 선택 단계 0xE
-     (0x230E88) 는 있는 파일이면 덮어쓰기 질문 (0x12) 대신 곧 **단계 0x19** (0x2312DC: 카드 레코드 +0x40 |= g_unlockMask, 디렉터리 쓰기 0x22F410) —
-     슬롯 항목 (0x18: 파일 번호 · 0xCAFEBAD1 · 플레이 시간 · 세이브 포인트 · 난이도) 과 게임 데이터는 쓰지 않는다. 세이브 포인트 저장은 0x18 → 0x19 라
+   - "예" (상태 15 0x220554): 종류 ≠ 1 이면 세이브 포인트 검사 (0x1BC620 …) 없이 상태 17, 쓰기 흐름 시작 0x230A48(종류 == 1) → 0x2A275C. 단계 0 · 1
+     (0x230ADC · 0x230B00) 이 카드를 살펴 카드가 하나면 카드 선택 없이 단계 0xE (0x230E88): 해금 기록은 파일이 아니라 **카드의 GOW 디렉터리 레코드** (+0x40)
+     라, 디렉터리가 있으면 파일 선택 · 덮어쓰기 질문 없이 곧 **단계 0x19** (0x2312DC: 레코드 |= g_unlockMask, 디렉터리 쓰기 0x22F410) → 0x1A 대기 →
+     MemoryCard_Event 18 "저장하기 완료" (0x2313A8), 없으면 새로 만들기 질문 (16, 단계 0xF) → 만들기 (17, 0x11 → 0x22F6B8) → 0x19. 슬롯 항목 (0x18: 파일 번호 ·
+     0xCAFEBAD1 · 플레이 시간 · 세이브 포인트 · 난이도) 과 게임 데이터는 쓰지 않는다. 세이브 포인트 저장 (0x2A275C = 1) 은 파일 선택 (22) → 0x12 … 0x18 → 0x19 라
      해금 비트도 함께 적힌다.
    → `Unlocks.grant` (RAM) · `endGameKind` · `persist` (쓰기 단계 0x19, 모든 저장), `GameScene` 이 CompleteGame 에서 끝 종류를 두고 다음 틱 `askSave(종류)`,
-   `MemoryCardFlow.unlockOnly` (있는 파일 → 곧 "저장 중" → 완료, 슬롯 파일 그대로). 저장하지 않으면 해금은 실행이 끝날 때까지만 (원작: 전원을 끌 때까지).
-   [근사: 빈 파일을 고르면 새로 만들기 질문 뒤 해금만 적음 — 원작 단계 0x11 의 파일 만들기 0x22F6B8 생략]
+   `MemoryCardFlow.unlockOnly` (GOW 디렉터리 = 세이브 파일이나 unlocks.properties 가 있으면 화면 바꿈 없이 1 초 → 18 "저장하기 완료", 없으면 16 → 예 17 → 18 /
+   아니오 → 클리어 질문으로). 저장하지 않으면 해금은 실행이 끝날 때까지만 (원작: 전원을 끌 때까지).
 2. **크레딧 끝에 셸로 돌아가지 않았다** — Entity 0xF (0x1AFD58, 예전 이름 `MovieSkip?`) 는 0x29D954 = 1, 프레임 끝 0x1B3360 → **0x21F598**: 시작 레벨
    "Athn01A" 로 되돌리고 상태 1 (셸 적재 → 타이틀). 엔진은 이 함수를 무시해 크레딧 뒤 왕좌 방에 남았다 → `ScriptListener.restartGame` → `ShellScene`
    (자동 플레이는 전환 안 하고 로그만). 이름을 `RestartGame` 으로 고침 (13 문서 §5).
 - 엔진 확인 (`--game OLYMP02 --skip-movies`, 경로 `post:1023:100:550`): Semo13 → Bonus01 → "CompleteGame(0) 난이도 1 → 해금 비트 0x1, 끝 종류 2" → 클리어
-  질문 (영상 10590 과 같은 문구) → 카드 · 파일 선택 → unlocks.properties mask=1 → Bonus20 → Restarting. 증거 `work/verify/ep5_f/01_endgame_prompt_engine.png`.
-- 시험 `EndGameSaveTest` (끝 종류 표, RAM → 카드, 해금만 쓰기는 덮어쓰기 질문 없이 슬롯 파일 그대로, 세이브 포인트 저장도 해금 기록, FLP SaveScreen/SaveQuestion 프레임).
+  질문 (영상 10592 와 같은 문구) → Ω 만 → "저장하기 완료" → unlocks.properties mask=1 → Bonus20 → Restarting. 증거
+  `work/verify/ep5_f/01_endgame_prompt_v10592-10596_vs_engine.png` (위 영상 10592 · 10595 · 10596, 아래 엔진).
+- 시험 `EndGameSaveTest` (끝 종류 표, RAM → 카드, 디렉터리가 있으면 곧 완료 · 슬롯 파일 그대로, 없으면 만들기 질문 (아니오 = 취소), 세이브 포인트 저장도 해금 기록,
+  FLP SaveScreen/SaveQuestion 프레임).
 
 ### 57.2 SetEndGame (Internal 0x3A) — HUD EndGame 이 늘 0 이었다 [확실: 디스어셈블 · FLP]
 - 0x1B11E4: 인자 → HUD +0x1B8 (`EndGame`, Hud_RegisterFlashVars 이름 표 0x2B6808). ATHN08C `athn08Cstart-gotBlades` 2 (마지막 결투), ATHN07B `gotBlades-giveBlades` 3
@@ -3880,6 +3885,12 @@ OLYMP02 스크립트 (왕좌 gothroneseat 1023 (100, 550)): `PlaySemo13` → `Mp
   (EndGame 2 → MagicUnavailable · SND_PU_EMPTY, 3 → 블레이드만), 아이템 카드 clip 프레임 29 (2 → 곧 AnimateOff), 템플릿 0x1BA56C (2 → 스타일 0x30C).
 - 엔진: `GameScriptHost.SET_END_GAME` 은 인자만 꺼내고 버렸다 → `GameSession.endGame` + HUD `PS2_EndGame` (씬마다 새 HUD 에도), `SaveGame.endGame` (옵션 [10]).
   확인: `--game ATHN08C` 0.1 초 "SetEndGame 2". 시험 `EndGameSaveTest.endGameOptionRoundTrips`.
+
+### 57.3 Internal 변수 50 BladesLevel — 아테나의 블레이드가 생기지 않았다 [확실: 디스어셈블]
+- 변수 setter 표 0x2B5C80 [50 − 0x21] = 0x1B01A0: 블레이드 레벨 바이트 0x3044BD = min(값, 6) − 1, HUD Blades_Level (+0x200) 도. getter 0x1AFF84 = 0x3044BD + 1.
+  ATHN07B `gotBlades-giveBlades` 가 `set_int Internal:50 ← 6` → 내부 레벨 5 = **R_WPN&lt;코스튬&gt;_5** (업그레이드 메뉴 최대는 4 — 11 문서 §6.4 의 "R_WPN*_5 사용처
+  미확인" 이 이것). 엔진 `GameScriptHost` 는 변수 50 을 몰라 쓰기를 버렸다 → `VAR_BLADES` (읽기 +1, 쓰기 min(6) − 1, 0 아래 자름 [엔진]). 바뀐 레벨은
+  `HeroRig` 가 다음 그리기에서 R_WPN 을 바꾼다 (§17.2). 시험 `GameScriptHostTest.bladesLevelVariableIsOneBased`.
 
 ## 시연 녹화 (-Dgow.record, -Dgow.bot) [엔진 전용]
 
