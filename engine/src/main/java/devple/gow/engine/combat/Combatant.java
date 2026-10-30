@@ -52,7 +52,11 @@ public final class Combatant {
 	private Branch queued;
 	private float queuedAt;
 	private int queuedPrio;
-	private int heldAtStart;
+	/**
+	 * 홀드 마스크 (+0x70, 0x208D28): 기술 시작 때 전부 1, 창 안에서 입력 조건이 맞지 않은 분기의 비트 (분기 번호) 를 지운다 →
+	 * 시작부터 홀드 (mode 3) 분기는 창 안에서 한 번도 떼지 않았을 때만 후보 (우선순위 2) [확실].
+	 */
+	private long holdMask = -1L;
 	private float accumDamage;
 	private int stanceTag = -1;
 	private final Set<Long> hitLog = new HashSet<>();
@@ -338,7 +342,7 @@ public final class Combatant {
 		moveSerial++;
 		clip = data.animation(m);
 		virtualClip(m);
-		heldAtStart = 0;
+		holdMask = -1L;
 		wiggle = 0;
 		accumDamage = 0;
 		stanceTag = -1;
@@ -474,7 +478,7 @@ public final class Combatant {
 			}
 			runEvents(t);
 		}
-		poll(in, t);
+		poll(in, t, progressAfter(dt));
 		if (queued != null && (move == null || t >= queuedAt)) {
 			Branch b = queued;
 			queued = null;
@@ -532,19 +536,45 @@ public final class Combatant {
 				: new Other(target.hp(), target.classId(), target.stanceTag(), target.grabbable(), true);
 	}
 
-	private void poll(Input in, float t) {
+	/**
+	 * 이번 프레임 애니 진행 뒤의 진행률 — Combat_Update 0x205968 이 0x205B88–0x205BD0 에서 (클립 시간 + 프레임 시간 × 속도) / 길이 를
+	 * 0..1 로 잘라 0x208A98 의 f12 로 넘긴다 (창 판정은 지금 진행률, 큐에 넣을지 판정은 이 값) [확실].
+	 */
+	private float progressAfter(float dt) {
+		if (move != null && clip == null && vclip != null && vclip.duration > 0) {
+			return Math.min(1f, (vtime + dt * Math.max(move.speed(), 0)) / vclip.duration);
+		}
+		if (move == null || clip == null || clip.duration <= 0) {
+			return 1f;
+		}
+		return Math.min(1f, anim.timeAfter(dt) / clip.duration);
+	}
+
+	/**
+	 * @param t  지금 진행률 (분기 창 판정)
+	 * @param tn 이번 프레임 뒤 진행률 (0x208A98 의 f20) — 버퍼 분기의 실행 시점 (창 끝) 이 이 값 이하면 큐에 넣는다 (0x208E80).
+	 *           시작부터 홀드 (mode 3) 분기는 그때만 들어간다 (0x208E9C): 창 끝 바로 앞 프레임. 예전 엔진은 지금 진행률과 비교해 창 끝과
+	 *           정확히 같은 프레임이 아니면 들어가지 않아 △ 홀드 띄우기 (COMBO6A [0–0.30] △ 홀드 → COMBO7A → COMBO4D) 가 나오지 않았다.
+	 */
+	private void poll(Input in, float t, float tn) {
 		Other o = other();
 		if (move != null) {
 			List<Branch> cands = new ArrayList<>();
 			int best = -1;
-			for (Branch b : move.branches()) {
-				if (t < b.winStart() || t > b.winEnd() || !inputOk(b, in) || score(b, o) < 0) {
+			List<Branch> bl = move.branches();
+			for (int bi = 0; bi < bl.size(); bi++) {
+				Branch b = bl.get(bi);
+				if (t < b.winStart() || t > b.winEnd()) {
+					continue;
+				}
+				long bit = bi < 64 ? 1L << bi : 0;
+				if (!inputOk(b, in) || score(b, o) < 0) {
+					holdMask &= ~bit; // 0x208D28 (입력 0x207E40 · 조건 0x208578 어느 쪽이 실패해도)
 					continue;
 				}
 				int prio = b.input() == CombatInput.AUTO ? 1 : 3;
 				if (b.mode() == 3) {
-					PadButton pb = CombatInput.button(b.input());
-					prio = pb != null && (heldAtStart & (1 << pb.ordinal())) != 0 ? 2 : -1;
+					prio = (holdMask & bit) != 0 ? 2 : -1;
 				}
 				if ((b.flags() & 0x1000) != 0 && prio != -1) {
 					prio = 4;
@@ -574,8 +604,8 @@ public final class Combatant {
 			}
 			Branch c = cands.get(rnd.nextInt(cands.size()));
 			float execAt = c.immediate() ? 0 : c.winEnd();
-			if (execAt > t && c.mode() == 3) {
-				return; // 나중에 다시 평가
+			if (execAt > tn && c.mode() == 3) {
+				return; // 나중에 다시 평가 (0x208E9C)
 			}
 			// AUTO 는 창 끝 시점으로 큐 (Combat_QueueBranch 0x209400 실행 시점 f12). 프레임 간격이 창 끝(예 0.98)을
 			// 건너뛰어도 실행된다 (이전엔 "나중에 재평가" 라 1초 기술의 [0–0.98] AUTO 를 60fps 에서 놓침)
@@ -721,8 +751,8 @@ public final class Combatant {
 		if (hp < b.hpMin() || hp > b.hpMax()) {
 			return -1;
 		}
-		if (o.hp() < b.argMin() || o.hp() > b.argMax()) {
-			return -1;
+		if (o.hp() != -1 && (o.hp() < b.argMin() || o.hp() > b.argMax())) {
+			return -1; // 0x208914: 상대 HP 인자 −1 (범위 충격 0x204690 · 화살) 이면 범위 검사 없음
 		}
 		int s = 0;
 		if (o.fx() >= 0) {
@@ -803,7 +833,7 @@ public final class Combatant {
 		moveSerial++;
 		clip = data.animation(m);
 		virtualClip(m);
-		heldAtStart = in != null ? CombatInput.mask(in) : 0;
+		holdMask = -1L;
 		wiggle = 0; // 0x209750: 기술 시작 시 플레이어 +0x50 = 0
 		// 기술 시작 시 +0x1AC = 세트 플래그 | (이전 & 0x4004) → 차지·트리거 비트는 새 기술마다 지움, 누른 시간 0 (10 문서 §17)
 		stateBits &= 0x4004;
@@ -863,8 +893,16 @@ public final class Combatant {
 
 	public void fire(int code, int reaction, Combatant attacker) {
 		// 공격자 쪽 이벤트(17 적중 확인, 22 막힘)는 attacker == null → 상대 = 맞은 대상(락온 대상)
-		Other o = attacker == null ? other()
-				: new Other(attacker.owner.hp(), attacker.owner.classId(), attacker.stanceTag, false, false);
+		fireWith(code, reaction, attacker == null ? other()
+				: new Other(attacker.owner.hp(), attacker.owner.classId(), attacker.stanceTag, false, false));
+	}
+
+	/** 공격자 쪽 이벤트의 상대 = 맞은 개체 (대상이면 폴링과 같은 값). */
+	private Other victimOther(Hittable v) {
+		return v == target ? other() : new Other(v.hp(), v.classId(), v.stanceTag(), v.grabbable(), true);
+	}
+
+	private void fireWith(int code, int reaction, Other o) {
 		Branch c = null;
 		if (move != null) {
 			c = bestMatch(eventBranches(move.branches(), code, reaction), null, o);
@@ -1037,7 +1075,64 @@ public final class Combatant {
 		if (immovable) {
 			return;
 		}
-		impulse.set((dx * fwd + dz * side) * k, 0, (dz * fwd - dx * side) * k);
+		// 위 성분 vec.y·Sy 도 속도 +0xF0 에 들어간다 (0x203890): 이동 단계 0x1EB3D8 이 0x1EBA18–0x1EBA40 에서 +0xE0 (속도) += +0xF0 을 한 번 하고
+		// +0xF0.y = 0 (vaddx.y vf3, vf0, vf1x) — 공중이면 수직 속도가 그만큼 바뀐다 (공중 콤보 AIRH1 (0,1000,150) → 띄워 둠, AIRV1 (0,−2000,0) → 내리꽂음) [확실]
+		impulse.set((dx * fwd + dz * side) * k, v[base + 1] * impSy * k, (dz * fwd - dx * side) * k);
+	}
+
+	/**
+	 * 범위 충격 (Concussion) 의 밀어내기 (0x2045B8 → 0x203890): 방향 = 중심 → 이 개체 (수평), vec = 템플릿 (Right, Up, Away) [근사: 성분 순서는 적 화살과 같은 가정].
+	 *
+	 * @param base 0 지상 / 3 공중 / 6 방어 (템플릿 +0x18 / +0x1E / +0x24)
+	 */
+	void pushFrom(Vector3f from, float[] v, int base) {
+		if (immovable || v == null || v.length < base + 3) {
+			return;
+		}
+		Vector3f me = owner.position();
+		float dx = me.x - from.x, dz = me.z - from.z, n = (float) Math.hypot(dx, dz);
+		if (n < 1e-4f) {
+			return;
+		}
+		dx /= n;
+		dz /= n;
+		float side = v[base] * impSx, fwd = v[base + 2] * impSz, k = 16f / impMass;
+		impulse.set((dx * fwd + dz * side) * k, v[base + 1] * impSy * k, (dz * fwd - dx * side) * k);
+	}
+
+	/**
+	 * 범위 충격 피격 (Concussion 접촉 0x1909C8 → 0x190840 → 0x2045B8 → 0x204690 [확실]) 피격자 쪽 — 공격 판정 (0x2032C0) 과 다르다:
+	 * 경직 (poise) 검사 없이 HP 가 남으면 늘 피격 이벤트 13 (사망 14, 잡기 원 21), 이벤트 인자 = 템플릿 "Context" (+0x4C, 공격자 자세 태그 자리) ·
+	 * #0000247b (+0x50, 공격자 종류 자리) · 공격자 HP −1. 밀어내기는 반응과 관계없이 지상 +0x18 / 공중 +0x1E.
+	 * 막기 (0x1909C8 의 0x190EB8 – 0x190F1C: 방어 자세 또는 AI 자동 방어, 템플릿 플래그 0x40 이면 묻지 않음) 는 호출 쪽이 정하고 blocked 로 넘긴다 →
+	 * 방어 밀어내기 +0x24 · 이벤트 16 (0x204550), 피해 없음.
+	 */
+	public Hittable.Result areaHit(Vector3f center, float dmg, int tag, int cls, float[] imp, boolean blocked) {
+		if (invulnerable() || owner.hp() <= 0) {
+			return Hittable.Result.IGNORED;
+		}
+		if (blocked) {
+			pushFrom(center, imp, 6);
+			fireFrom(CombatInput.EV_BLOCKED, -1, -1, cls, tag, -1);
+			return Hittable.Result.BLOCKED;
+		}
+		int st = owner.stateMask();
+		boolean air = (st & 0x2) == 0 && (st & 0x4) != 0;
+		boolean kill = owner.killedBy(dmg);
+		boolean circle = owner.applyDamage(dmg);
+		fireFrom(kill ? CombatInput.EV_DEATH : circle ? CombatInput.EV_CIRCLE : CombatInput.EV_HIT, -1, -1, cls, tag, -1);
+		pushFrom(center, imp, air ? 3 : 0);
+		return Hittable.Result.HIT;
+	}
+
+	/**
+	 * 밀어내기의 수직 속도 (단위/초) 를 꺼내고 지운다 — 0x1EBA40 이 한 번 더한 뒤 +0xF0.y = 0. 공중 이동 단계만 쓰고 (EnemyNav AIR), 지상·자유 이동은
+	 * 버린다 (지상은 바닥에 붙음) [근사: 날기 적·영웅은 버림].
+	 */
+	public float takeLift() {
+		float y = impulse.y;
+		impulse.y = 0;
+		return y;
 	}
 
 	/**
@@ -1046,6 +1141,7 @@ public final class Combatant {
 	 * [추정: 시간 배율 vslot 0xC8 / +0x16C = 1]
 	 */
 	public Vector3f stepImpulse(float dt, boolean grounded) {
+		impulse.y = 0; // 수직 성분은 {@link #takeLift} 로만 (이번 프레임에 쓰지 않았으면 버림 — 0x1EBA40)
 		Vector3f d = new Vector3f(impulse.x * dt, 0, impulse.z * dt);
 		if (grounded) {
 			float s = (float) Math.hypot(impulse.x, impulse.z);
@@ -1102,70 +1198,80 @@ public final class Combatant {
 		return null;
 	}
 
+	/**
+	 * 공격 판정 = 원작 접촉 루프 (0x13B688 → 0x13C400 → 콜백 0x203150 → OnContact 0x203AF0) 의 공격자 쪽.
+	 * 원작은 대상 (+0x80) 만이 아니라 공격 구에 닿은 <b>모든</b> 생물에 같은 OnContact 를 부른다 [확실]:
+	 * <ul>
+	 *   <li>0x209AB0: 부위 (+0x18) · 진행률 창 · 같은 (상대, 공격 레코드) 기록 없음 — 공격 플래그 0x1 이면 상대 == 공격자 +0x80 (락온 대상) 일 때만
+	 *       (GRAB · COMBO5A · BRUTAL1 · PARRY02 · BLOCKFORWARDFLIP 부위 9 …). 기록 수 (+0x9F) 가 32 면 그 기술은 더 맞히지 못한다 (0x209AB4).</li>
+	 *   <li>피격 구 = 재질 bitfield1 비트 0 "TakeDamage" (0x2040A8: [0x3376F0] = bitfield1, {@link HitVolumes#sweptHit}).</li>
+	 *   <li>맞은 상대마다 피해·반응·넉백 (0x2032C0 → 0x204458), 히트스톱 (0x203688), 히트 카운터 (0x1DB5B8), 공격자 이벤트 17 (상대 = 그 피격자의
+	 *       자세 태그·종류·HP, 0x2043B4 → 0x2090B8) — 맞으면 곧바로 새 기술 (0x205190) 이라 같은 프레임 나머지 접촉은 새 기술 창으로 본다.</li>
+	 * </ul>
+	 * 예전 엔진은 영웅이 가장 가까운 적 하나만 맞혔고 (휘말림 목록이 비어 있음) 휘말린 쪽은 피격자 처리만 했다 (사용자 보고: 강공격 범위 판정).
+	 */
 	private void attacks(float t) {
+		Move m0 = move;
+		hitConfirmQueued = false;
+		if (target != null && !target.invulnerable()) {
+			hits(target, t, false);
+		}
 		for (Hittable b : bystanders.get()) {
+			if (move != m0 || hitConfirmQueued) {
+				break; // 이벤트 17 분기가 맞음 → 원작은 그 자리에서 새 기술 (0x205190)
+			}
 			if (b != target && b != null && !b.invulnerable()) {
-				bystanderHits(b, t);
+				hits(b, t, bystandersSameTeam);
 			}
 		}
-		if (target == null || target.invulnerable()) {
-			return;
-		}
-		HitVolumes victim = target.hitVolumes();
+		hitConfirmQueued = false;
+	}
+
+	/** 원작 공격 기록 상한 (+0x9F &lt; 0x20, 0x209AB4): 기술 하나가 남길 수 있는 (상대, 공격) 쌍 수. */
+	public static final int HIT_LOG_MAX = 32;
+	/** 이번 접촉 처리에서 이벤트 17 (HIT_CONFIRM) 분기가 큐에 들어갔는가. */
+	private boolean hitConfirmQueued;
+
+	/** 상대 하나에 대한 0x209AB0 + OnContact. sameTeam = 같은 편 휘말림 (공격 플래그 0x8 일 때만, 0x203798). */
+	private void hits(Hittable victim, float t, boolean sameTeam) {
+		HitVolumes vv = victim.hitVolumes();
 		Vector3f p = owner.position();
 		float yaw = owner.yaw();
 		Vector3f hit = new Vector3f((float) -Math.sin(yaw), 0, (float) -Math.cos(yaw)).mul(reach).add(p);
-		Vector3f tp = target.position();
+		Vector3f tp = victim.position();
 		float dx = tp.x - hit.x, dz = tp.z - hit.z;
 		boolean inRange = dx * dx + dz * dz <= hitRadius * hitRadius;
+		Move m0 = move;
 		for (Attack a : move.attacks()) {
+			if (move != m0) {
+				return;
+			}
 			if (t < a.start() || t > a.end()) {
 				continue;
 			}
-			boolean real = volumes != null && victim != null && !victim.isEmpty() && volumes.hasPart(a.part());
-			boolean touch = real ? volumes.sweptHit(a.part(), victim) : inRange;
+			if ((a.flags() & 0x1) != 0 && victim != target) {
+				continue; // 0x209BB8: 락온 대상만 (+0x80 == 상대)
+			}
+			if (sameTeam && (a.flags() & 0x8) == 0) {
+				continue; // 같은 편은 공격 플래그 0x8 (날아가는 몸 — 던진 해골 MAISKB02, HITSPIN, AIRTHROW …) 일 때만 (0x203798)
+			}
+			boolean real = volumes != null && vv != null && !vv.isEmpty() && volumes.hasPart(a.part());
+			boolean touch = real ? volumes.sweptHit(a.part(), vv) : inRange;
 			if (!touch) {
-				if (debug) {
+				if (debug && victim == target) {
 					log.accept(String.format("  (빗나감 공격#%d 부위 %d %s)", a.index(), a.part(), real ? "히트박스"
 							: String.format("근사 거리 %.0f", Math.sqrt(dx * dx + dz * dz))));
 				}
 				continue;
 			}
-			long key = ((long) System.identityHashCode(target) << 16) | a.index();
-			if (hitLog.add(key)) {
-				contact(a);
+			if (hitLog.size() >= HIT_LOG_MAX) {
+				return; // 0x209AB4: 기록 32 개 → 이 기술은 더 맞히지 못함
 			}
-		}
-	}
-
-	/** 대상 아닌 개체 판정: 대상과 같은 부위 히트박스 스윕 (없으면 정면 구). 적중 시 피격자 처리만. */
-	private void bystanderHits(Hittable b, float t) {
-		HitVolumes victim = b.hitVolumes();
-		Vector3f p = owner.position();
-		float yaw = owner.yaw();
-		Vector3f hit = new Vector3f((float) -Math.sin(yaw), 0, (float) -Math.cos(yaw)).mul(reach).add(p);
-		Vector3f bp = b.position();
-		float dx = bp.x - hit.x, dz = bp.z - hit.z;
-		boolean inRange = dx * dx + dz * dz <= hitRadius * hitRadius;
-		boolean sameTeam = bystandersSameTeam;
-		for (Attack a : move.attacks()) {
-			if (t < a.start() || t > a.end()) {
-				continue;
-			}
-			if (sameTeam && (a.flags() & 0x8) == 0) {
-				continue; // 같은 편은 공격 플래그 0x8 (날아가는 몸 — 던진 해골 MAISKB02, HITSPIN, AIRTHROW …) 일 때만 (0x203798)
-			}
-			boolean real = volumes != null && victim != null && !victim.isEmpty() && volumes.hasPart(a.part());
-			if (!(real ? volumes.sweptHit(a.part(), victim) : inRange)) {
-				continue;
-			}
-			if (hitLog.add(((long) System.identityHashCode(b) << 16) | a.index())) {
-				float dmg = a.damage() * damageScale.get();
-				Vector3f knock = new Vector3f(a.impulse()[0], a.impulse()[1], -a.impulse()[2]).rotateY(owner.yaw());
-				boolean alive = b.hp() > 0;
-				Hittable.Result r = b.receive(a, this, dmg, knock);
-				noteContact(b, r, alive);
-				log.accept(String.format("  휘말림 공격#%d → 피해 %.1f (%s)", a.index(), dmg, r));
+			if (hitLog.add(((long) System.identityHashCode(victim) << 16) | a.index())) {
+				contact(a, victim);
+				if (hitConfirmQueued) {
+					return;
+				}
 			}
 		}
 	}
@@ -1202,6 +1308,7 @@ public final class Combatant {
 	 */
 	public int chainSweep(int part, Vector3f from, java.util.List<Vector3f> to) {
 		chainTouched = false;
+		hitConfirmQueued = false;
 		if (to.isEmpty() || activeDamage(part) == 0 && activeDamage(HitVolumes.PART_TWIN) == 0) {
 			return 0;
 		}
@@ -1237,20 +1344,14 @@ public final class Combatant {
 					if (t < a.start() || t > a.end() || a.part() != p) {
 						continue;
 					}
+					if ((a.flags() & 0x1) != 0 && v != target || hitLog.size() >= HIT_LOG_MAX) {
+						continue; // 0x209AB0: 락온 대상만 / 기록 32 개 상한
+					}
 					if (!hitLog.add(((long) System.identityHashCode(v) << 16) | a.index())) {
 						continue;
 					}
 					n++;
-					if (v == target) {
-						contact(a);
-					} else {
-						float dmg = a.damage() * damageScale.get();
-						Vector3f knock = new Vector3f(a.impulse()[0], a.impulse()[1], -a.impulse()[2]).rotateY(owner.yaw());
-						boolean alive = v.hp() > 0;
-						Hittable.Result r = v.receive(a, this, dmg, knock);
-						noteContact(v, r, alive);
-						log.accept(String.format("  사슬 휘말림 공격#%d → 피해 %.1f (%s)", a.index(), dmg, r));
-					}
+					contact(a, v);
 				}
 			}
 		}
@@ -1268,14 +1369,13 @@ public final class Combatant {
 		}
 	}
 
-	/** OnContact (10 문서 §15.4) 공격자 쪽. */
-	private void contact(Attack a) {
+	/** OnContact (10 문서 §15.4) 공격자 쪽 — 대상이든 휘말린 상대든 같은 처리 (0x203AF0). */
+	private void contact(Attack a, Hittable victim) {
 		float dmg = a.damage() * damageScale.get();
 		// 충격 벡터 (x 좌우, y 상하, z 전후 — 추정) 를 공격자 방향으로 회전
 		Vector3f knock = new Vector3f(a.impulse()[0], a.impulse()[1], -a.impulse()[2]).rotateY(owner.yaw());
-		Hittable victim = target;
 		boolean alive = victim.hp() > 0;
-		Hittable.Result r = target.receive(a, this, dmg, knock);
+		Hittable.Result r = victim.receive(a, this, dmg, knock);
 		for (ContactListener l : contactListeners) {
 			l.contact(a, victim, r);
 		}
@@ -1298,11 +1398,14 @@ public final class Combatant {
 					presentation(e);
 				}
 			}
-			fire(CombatInput.EV_HIT_CONFIRM, -1, null);
+			// 이벤트 17 (0x2043B4): 상대 = 이 피격자 (자세 태그 +0x1B0, 종류, HP)
+			Branch before = queued;
+			fireWith(CombatInput.EV_HIT_CONFIRM, -1, victimOther(victim));
+			hitConfirmQueued |= queued != null && queued != before;
 		} else if (r == Hittable.Result.BLOCKED) {
-			fire(CombatInput.EV_WAS_BLOCKED, -1, null);
+			fireWith(CombatInput.EV_WAS_BLOCKED, -1, victimOther(victim)); // 이벤트 22 (0x2042E4): 상대 = 피격자
 		}
-		log.accept(String.format("  적중 공격#%d 기본 %d → 피해 %.1f (%s)", a.index(), a.damage(), dmg, r));
+		log.accept(String.format("  %s공격#%d 기본 %d → 피해 %.1f (%s)", victim == target ? "적중 " : "휘말림 ", a.index(), a.damage(), dmg, r));
 	}
 
 	/**

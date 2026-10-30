@@ -19,7 +19,7 @@ import java.util.List;
  *   <li>부위(part) = ball 재질 엔트리의 PartType (+0x30). 공격 레코드 {@code Attack.part} 와 같은 번호
  *       (0x203150 → OnContact → 0x209AB0 비교). 오른손 무기 오브젝트(flags 0x200)는 2 → 3</li>
  *   <li>블레이드 = 별도 오브젝트 {@code maiblade} 를 {@code lWeapOH}/{@code rWeapOH} 에 부착, CDV_MAIBlade (part 2/3, 쌍 11)</li>
- *   <li>피격 볼륨 = PartType 1 (몸) 구 [추정: 원작은 구끼리 모든 쌍을 검사하지만 공격 부위가 아닌 접촉은 판정이 없다]</li>
+ *   <li>피격 볼륨 = 재질 bitfield1 비트 0 TakeDamage 구 (OnContact 0x2040A8) [확실] — 몸·머리·다리, 일부 적 무기</li>
  *   <li>판정 = 이전 프레임 → 현재 프레임 위치를 잇는 스윕 구 대 스윕 구 (빠른 블레이드가 빠져나가지 않게)</li>
  * </ul>
  * 오브젝트 행렬 = translation(pos) · rotateY(yaw): 모델 -Z(05 문서 정면, 루트 모션 방향)가 월드 (-sin yaw, -cos yaw).
@@ -31,7 +31,15 @@ public final class HitVolumes {
 	public static final int PART_ARTEMIS = 10;
 
 	/** 구 하나의 원본 (관절 또는 무기 부착). */
-	private record Src(int joint, float[] local, float radius, int part, float[] attach, int fx) {
+	private record Src(int joint, float[] local, float radius, int part, float[] attach, int fx, boolean hurt) {
+	}
+
+	/** 재질 bitfield1 (+0x1C) 비트 0 "TakeDamage" — OnContact 0x2040A8 이 피격 쪽 구에 요구 ([0x3376F0] = bitfield1, 0x1BECE4). */
+	public static final int TAKE_DAMAGE = 0x1;
+
+	private static boolean hurt(BallHull h, int b) {
+		int m = h.ballMaterial[b];
+		return m >= 0 && m < h.materialRaw.length && (h.materialRaw[m][1] & TAKE_DAMAGE) != 0;
 	}
 
 	/** 마지막 {@link #sweptHit} 적중: 피격 구의 SheetFX(MFX 템플릿, 0 = 없음)와 접촉점 (두 구 중심 사이, 반지름 비). 피격자 쪽에 기록. */
@@ -49,7 +57,7 @@ public final class HitVolumes {
 		for (int b = 0; b < h.balls.size(); b++) {
 			if (h.ballJoint[b] < jointCount) {
 				float[] ball = h.balls.get(b);
-				srcs.add(new Src(h.ballJoint[b], new float[]{ball[0], ball[1], ball[2]}, ball[3], h.ballPart(b), null, h.ballFx(b)));
+				srcs.add(new Src(h.ballJoint[b], new float[]{ball[0], ball[1], ball[2]}, ball[3], h.ballPart(b), null, h.ballFx(b), hurt(h, b)));
 			}
 		}
 		resize();
@@ -73,13 +81,14 @@ public final class HitVolumes {
 				part = PART_RIGHT;
 			}
 			float[] at = bw[Math.min(w.cdv.ballJoint[b], bw.length - 1)];
-			srcs.add(new Src(locator, new float[]{ball[0], ball[1], ball[2]}, ball[3], part, at, w.cdv.ballFx(b)));
+			srcs.add(new Src(locator, new float[]{ball[0], ball[1], ball[2]}, ball[3], part, at, w.cdv.ballFx(b), hurt(w.cdv, b)));
 		}
 		resize();
 		return this;
 	}
 
 	private void resize() {
+		filters();
 		cur = new float[srcs.size()][4];
 		prev = new float[srcs.size()][4];
 		primed = false;
@@ -167,18 +176,44 @@ public final class HitVolumes {
 		return out;
 	}
 
+	/** 피격 구 k 인가: 재질 TakeDamage (0x2040A8). 그런 구가 하나도 없는 볼륨 (재질 정보 없음) 은 몸 (PartType 1), 그것도 없으면 전부. */
+	private boolean victimSphere(int k) {
+		if (anyHurt) {
+			return srcs.get(k).hurt;
+		}
+		return !anyBody || srcs.get(k).part == PART_BODY;
+	}
+
+	private boolean anyHurt, anyBody;
+
+	/** 피격 구 (TakeDamage) 의 PartType 집합 — 검증용. */
+	public java.util.Set<Integer> hurtParts() {
+		java.util.Set<Integer> s = new java.util.HashSet<>();
+		for (int k = 0; k < srcs.size(); k++) {
+			if (victimSphere(k)) {
+				s.add(srcs.get(k).part);
+			}
+		}
+		return s;
+	}
+
+	private void filters() {
+		anyHurt = srcs.stream().anyMatch(Src::hurt);
+		anyBody = srcs.stream().anyMatch(x -> x.part == PART_BODY);
+	}
+
 	/**
-	 * 공격 부위 part 의 구들이 이번 프레임 이동 중 상대의 몸(PartType 1) 구와 닿았는지 (스윕 판정).
-	 * 상대에 몸 구가 없으면 모든 구를 피격 볼륨으로 쓴다.
+	 * 공격 부위 part 의 구들이 이번 프레임 이동 중 상대의 피격 구 (재질 TakeDamage — 몸뿐 아니라 키클롭스·켄타우로스·하피 다리, 머리,
+	 * 고르곤·사티로스 무기 등) 와 닿았는지 (스윕 판정). 원작 0x203150 은 두 개체의 모든 구 쌍을 접촉시키고, 피격 쪽 구 재질 bitfield1 &amp; 1 이
+	 * 없으면 OnContact 0x2040A8 이 기록 없이 끝낸다 [확실]. 예전 엔진은 PartType 1 (몸) 구만 봐 다리·머리에 닿은 베기를 놓쳤다.
 	 */
 	public boolean sweptHit(int part, HitVolumes victim) {
-		boolean anyBody = victim.hasPart(PART_BODY);
 		for (int i = 0; i < srcs.size(); i++) {
 			if (srcs.get(i).part != part) {
 				continue;
 			}
 			for (int k = 0; k < victim.srcs.size(); k++) {
-				if (anyBody && victim.srcs.get(k).part != PART_BODY) {
+				if (!victim.victimSphere(k)) {
 					continue;
 				}
 				if (swept(prev[i], cur[i], victim.prev[k], victim.cur[k])) {
@@ -195,15 +230,15 @@ public final class HitVolumes {
 	}
 
 	/**
-	 * 선분 a → b 가 이 볼륨의 피격 구 (몸 PartType 1, 없으면 전부) 를 지나는지 — 블레이드 사슬 적 스윕 (0x1FAFC8 → 0x11E190, 질의 0x100003).
-	 * 맞으면 접촉점 (구 중심에서 선분까지 가장 가까운 점) · SheetFX 를 피격 기록에 남긴다 [추정: 피격 구 필터는 {@link #sweptHit} 와 같은 규칙].
+	 * 선분 a → b 가 이 볼륨의 피격 구 (재질 TakeDamage, {@link #sweptHit} 와 같은 거름) 를 지나는지 — 블레이드 사슬 적 스윕 (0x1FAFC8 → 0x11E190, 질의 0x100003).
+	 * 맞으면 접촉점 (구 중심에서 선분까지 가장 가까운 점) · SheetFX 를 피격 기록에 남긴다. 콜백 0x1FAF40 도 접촉 레코드 +0x2C (맞은 구 재질) 로
+	 * OnContact 를 불러 같은 0x2040A8 검사를 받는다 [확실].
 	 */
 	public boolean segmentHit(Vector3f a, Vector3f b) {
-		boolean anyBody = hasPart(PART_BODY);
 		float dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
 		float dd = dx * dx + dy * dy + dz * dz;
 		for (int k = 0; k < srcs.size(); k++) {
-			if (anyBody && srcs.get(k).part != PART_BODY) {
+			if (!victimSphere(k)) {
 				continue;
 			}
 			float[] c = cur[k];

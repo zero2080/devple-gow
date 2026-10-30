@@ -460,6 +460,7 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 			combat.clearImpulse();
 			return;
 		}
+		nav.lift(combat.takeLift()); // 공중 피격의 위·아래 충격 → 수직 속도 (0x1EBA18)
 		Vector3f d = combat.stepImpulse(dt, nav.grounded());
 		pos.x += d.x;
 		pos.z += d.z;
@@ -1065,6 +1066,26 @@ public final class EnemyFighter implements Hittable, CombatOwner, BodyPush.Body 
 		}
 		// 넉백·방어 밀어내기 = Combatant.takeHit 이 속도로 (0x2039E0), 이동은 update 의 impulseMotion
 		return combat.takeHit(attack, attacker, damage);
+	}
+
+	/**
+	 * 영웅 기술의 범위 충격 (SCR_ConcussionBurst → Concussion 0x191038 의 구 질의 → 콜백 0x1909C8) 한 번 [확실: 흐름]:
+	 * 방어 자세 (기술 +0x13 == 1) 거나, 템플릿 플래그 0x40 (방어 불가) 이 아니고 NO_BLOCK 창 밖이면 AI 자동 방어 (0x203248, 공격 기술 −1) 가 막는다.
+	 * 석화된 적은 예전처럼 HP 만 [근사].
+	 */
+	public Result concussionHit(Combatant attacker, Vector3f center, float dmg, int tag, int cls, float[] imp, boolean unblockable) {
+		if (stone) {
+			selfHp(dmg);
+			return Result.HIT;
+		}
+		boolean blocked = combat.guarding();
+		if (!blocked && !unblockable && !combat.noBlock() && brain.tree != null) {
+			boolean fromFoe = attacker != null && foe != null && attacker.owner() != null
+					&& attacker.owner().position().distanceSquared(foe.position()) < 1f;
+			blocked = brain.tryBlock(-1, fromFoe) && combat.guarding();
+		}
+		brain.onHit();
+		return combat.areaHit(center, dmg, tag, cls, imp, blocked);
 	}
 
 	// ---- CombatOwner ----

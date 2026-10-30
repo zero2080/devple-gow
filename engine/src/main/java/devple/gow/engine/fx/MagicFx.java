@@ -749,7 +749,29 @@ public final class MagicFx implements AutoCloseable {
 	 */
 	/** 범위 피해 받는 쪽 (게임): 주인 (null = 영웅 마법), 중심, 반경, 템플릿 피해 (주인 배율 전). */
 	public interface ConcussionDamage {
-		void apply(Combatant owner, Vector3f center, float radius, int damage);
+		void apply(Combatant owner, Vector3f center, float radius, int damage, ConcussionSpec spec);
+	}
+
+	/**
+	 * 범위 충격 템플릿의 피격 인자 (Concussion_Template 0x190388 의 등록 순서로 복원한 오프셋) [확실: 오프셋 / 근사: 충격 성분 순서]:
+	 * tag = "Context" (+0x4C → 0x204690 의 공격자 자세 태그 자리 — 7A Plume 10, BF Plume 10/9, 3F Plume 11, Impale 12/13),
+	 * cls = #0000247b (+0x50, 공격자 종류 자리, 전부 −1), impulse = 지상 (Right, Up, Away) · 공중 · 방어 (#9f21a01e, #131b6e59, #d0d4210c),
+	 * unblockable = 플래그 #a0cdb24e (+0x54 비트 0x40), freeze = #6ae9ba97 (비트 0x20 — 피해 대신 석화 0x1E1778).
+	 */
+	public record ConcussionSpec(int tag, int cls, float[] impulse, boolean unblockable, boolean freeze) {
+	}
+
+	/** 템플릿 노드의 피격 인자. */
+	public static ConcussionSpec concussionSpec(Tweaks tw, String n) {
+		float[] imp = {tw.f(n, "Ground Impulse Right", 0f), tw.f(n, "Ground Impulse Up", 0f), tw.f(n, "Ground Impulse Away", 0f),
+				tw.f(n, "Air Impulse Right", 0f), tw.f(n, "Air Impulse Up", 0f), tw.f(n, "Air Impulse Away", 0f),
+				hashF(tw, n, 0x9F21A01E), hashF(tw, n, 0x131B6E59), hashF(tw, n, 0xD0D4210C)};
+		return new ConcussionSpec(tw.i(n, "Context", -1), tw.rawHash(n, 0x247B).orElse(-1),
+				imp, (tw.rawHash(n, 0xA0CDB24E).orElse(0) & 0xFF) != 0, (tw.rawHash(n, 0x6AE9BA97).orElse(0) & 0xFF) != 0);
+	}
+
+	private static float hashF(Tweaks tw, String n, int h) {
+		return Float.intBitsToFloat(tw.rawHash(n, h).orElse(0));
 	}
 
 	public ConcussionDamage concussionDamage;
@@ -779,8 +801,10 @@ public final class MagicFx implements AutoCloseable {
 		float r0 = tw.f(n, "Start Radius", 1f), r1 = tw.f(n, "End Radius", r0), dur = Math.max(tw.f(n, "Duration", 0.3f), 0.05f);
 		boolean scaled = (tw.raw(n, "Scale X").orElse(0) & 0xFF) != 0;
 		int dmg = tw.raw(n, "Damage").orElse(0) & 0xFF;
-		if (dmg > 0 && concussionDamage != null) {
-			concussionDamage.apply(owner, p, Math.max(r0, r1) * Magic.UNIT, dmg); // [근사: 반경 시간 변화·밀어내기 (Ground/Air Impulse) 없음, 터지는 순간 한 번]
+		if (concussionDamage != null) {
+			// 원작 0x191038 은 매 프레임 지금 반경 (Start → End, Duration) 으로 구 질의하고 개체마다 한 번 (+0x34 목록, 최대 10) — 피해 0 인 템플릿
+			// (Impale FX) 도 질의한다 [확실]. 엔진은 터지는 순간 가장 큰 반경으로 한 번 [근사]
+			concussionDamage.apply(owner, p, Math.max(r0, r1) * Magic.UNIT, dmg, concussionSpec(tw, n));
 		}
 		EffectSystem.Effect e = fx.play(name, EffectSystem.Anchor.at(p, heroYaw), dur + 0.5f);
 		if (e == null) {

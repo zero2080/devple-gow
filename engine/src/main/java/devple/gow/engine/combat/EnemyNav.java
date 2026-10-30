@@ -339,6 +339,16 @@ public final class EnemyNav {
 		return world;
 	}
 
+	/**
+	 * 밀어내기 수직 속도를 더한다 (0x1EB3D8: +0xE0 += +0xF0, 그 뒤 +0xF0.y = 0) — 공중 (중력 낙하 중, 자유 이동 기술 아님) 일 때만.
+	 * 자유 이동 (0x1ECD60, 띄우기 HITLAUNCH·HITBOUNCE 같은 stateMask 3 기술) 은 +0xF0 을 위치에 더하지 않고, 지상은 바닥에 붙는다 [근사: 날기 적 제외].
+	 */
+	public void lift(float dv) {
+		if (dv != 0 && mode == Mode.AIR && !free && (caps & AiTemplate.CAP_FLY) == 0) {
+			vy += dv;
+		}
+	}
+
 	public Mode mode() {
 		return mode;
 	}
@@ -543,7 +553,10 @@ public final class EnemyNav {
 	 * 계단 높이 안이면 그대로 선다 (원작은 0x1EAB78 뒤 몸 질의를 다시 하고 다음 틱 바닥 0x1E3298 이 그 위치에서 붙인다) [근사].
 	 */
 	private void landAfterGuard(Vector3f pos) {
-		if (world == null || mode != Mode.AIR || vy > 0) {
+		// 자유 이동 기술 (띄우기 HITLAUNCH · 튕김 HITBOUNCE 같은 stateMask 3) 은 원작 0x1ECD60 → 0x1EA200 의 바닥 질의 (0x1E3298, 발 아래 3.2–6.4) 만 —
+		// 계단 높이 (14) 안을 바닥에 붙이는 이 근사를 타면 루트 모션으로 떠오르는 적이 두 틱마다 바닥으로 끌려 내려와 높이 5–9 에서 떨었다
+		// (△ COMBO6A 튕김 · △ 홀드 띄우기가 안 뜸, 51 문서 §4)
+		if (world == null || mode != Mode.AIR || vy > 0 || free) {
 			return;
 		}
 		float g = world.ground(pos.x, pos.y + STEP, pos.z, 4000);

@@ -644,6 +644,9 @@ public final class GameScene implements Scene {
 		grab.onSound(n -> session.sound.play(n));
 		// 마법 (35 문서): 대상 = 살아있는 적 전체, 소리 → SoundManager, HUD 선택 마법 아이콘
 		hero.magic.setTargets(() -> enemies.stream().map(Enemy::fighter).filter(f -> !f.dead()).toList());
+		// 영웅 공격 = 블레이드 구에 닿은 모든 적 (원작 접촉 루프 0x13B688 → OnContact 0x203AF0, 대상 +0x80 은 공격 플래그 0x1 만 거름).
+		// 예전엔 휘말림 목록이 비어 가장 가까운 적 하나만 맞았다 (△ 범위·L1+□ 회전 베기 …). 조준 가중 0 인 NPC (오라클·무덤지기) 는 빼 둔다 [근사]
+		hero.combat.setBystanders(() -> enemies.stream().map(Enemy::fighter).filter(f -> !f.dead() && f.targetWeight > 0).toList());
 		hero.magic.setSightBlocked((eye, to) -> {
 			Vector3f d = new Vector3f(to).sub(eye);
 			float len = d.length();
@@ -654,9 +657,27 @@ public final class GameScene implements Scene {
 		bubbles = HeroBubbles.of(magicFx.effects());
 		hero.magic.setSink(magicFx.sink((name, at) -> session.sound.play(name, at)));
 		bindPresentation(hero.combat);
-		magicFx.concussionDamage = (owner, c, r, dmg) -> {
+		magicFx.concussionDamage = (owner, c, r, dmg, spec) -> {
 			// 범위 피해 (0x191720): 영웅 것은 반경 안의 적에게, 적 것은 영웅에게 — 템플릿 피해 × 주인 배율 (난이도 포함)
-			if (owner == null || owner == hero.combat) {
+			if (owner == hero.combat && !spec.freeze()) {
+				// 영웅 기술의 충격파 (□□△ COMBO7A "7A Plume", L1+△ BLOCKFORWARDFLIP "BF Plume", COMBO3F "3F Plume", 임페일 내려찍기):
+				// 맞은 적마다 0x1909C8 → 0x204690 — 피해 + 피격 이벤트 13 (자세 태그 = Context) + 중심에서 밀어내기, 막기, 히트 카운터.
+				// 예전엔 HP 만 깎아 반경 안 적이 움찔도 하지 않았다 (51 문서 §5)
+				float v = dmg * hero.combat.damageScale();
+				int n = 0;
+				for (Enemy en : enemies) {
+					EnemyFighter f = en.fighter();
+					if (n < 10 && !f.dead() && f.targetWeight > 0 && !f.invulnerable() && f.pos.distance(c) < r + f.bodyRadius()) {
+						n++; // +0x5C 목록 최대 10 (0x190A14)
+						if (f.concussionHit(owner, c, v, spec.tag(), spec.cls(), spec.impulse(), spec.unblockable())
+								== devple.gow.engine.combat.Hittable.Result.HIT && v > 0) {
+							hero.combat.hitCounter++; // 0x190F7C
+						}
+					}
+				}
+			} else if (dmg <= 0) {
+				return;
+			} else if (owner == null || owner == hero.combat) {
 				float v = dmg * hero.combat.damageScale();
 				for (Enemy en : enemies) {
 					EnemyFighter f = en.fighter();

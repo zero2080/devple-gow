@@ -76,7 +76,9 @@ class GrabRelationTest {
 				new Case("R_SIR.WAD", 421, 21.7f, false),  // 세이렌 MAISIRKILL (HP 5)
 				new Case("R_SAT.WAD", 431, 37.4f, true),   // 사티로스 MAISATGRAB
 				new Case("R_SKS.WAD", 220, 27.6f, false),  // 해골병 (레기오네어) MAISKB00
-				new Case("R_CNM.WAD", 291, 40.6f, true),   // 켄타우로스 MAICNMKILL
+				// 켄타우로스 MAICNMKILL: 피격 구 = 재질 TakeDamage (0x2040A8) 라 왼팔·다리 구에 GRAB 부위 1 창 [0.05–] 에서 먼저 닿는다 —
+				// 결합 거리는 그대로 설계 관계 (예전 몸 구만 보던 근사에서는 부위 9 창)
+				new Case("R_CNM.WAD", 291, 40.6f, false),
 				new Case("R_CEP.WAD", 286, 34.8f, false),  // 케르베로스 새끼 MAICEPSTOMP
 				new Case("R_CEA.WAD", 395, 44.2f, false),  // 케르베로스 MAICEAKILL
 				new Case("R_HAR.WAD", 270, 23.9f, false)); // 하피 MAIHARWINGRIP (뒤에서, 요 차 0)

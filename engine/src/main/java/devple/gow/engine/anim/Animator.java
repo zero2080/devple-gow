@@ -114,6 +114,11 @@ public final class Animator {
 		return a == null ? 1f : AnimOverrides.speed(set != null ? set.name : null, a.name);
 	}
 
+	/** 이번 프레임 {@link #update} 뒤의 클립 시간 (미리 보기 — 상태는 바꾸지 않음). */
+	public float timeAfter(float dt) {
+		return scrubbed ? time : time + dt * rate * curScale;
+	}
+
 	public void update(float dt) {
 		if (!scrubbed) {
 			time += dt * rate * curScale;
