@@ -4740,7 +4740,7 @@ public final class GameScene implements Scene {
 		if (neighbourBridge != null && neighbourBridgeWorld != null && nav.neighbour() == neighbourBridgeWorld) {
 			neighbourBridge.tick(); // 이웃 스크립트가 만든 적의 피해 1039
 		}
-		if (target != null && (boss == null || !boss.claimsGrab(target))) {
+		if (ticksGrab(target, boss)) {
 			Enemy te = enemies.stream().filter(x -> x.fighter() == target).findFirst().orElse(null);
 			boolean was = grab.active();
 			EnemyFighter held = grab.partner(); // 처형 대상 = 잡고 있던 적 (끝나는 틱의 가장 가까운 적이 아님)
@@ -4758,8 +4758,8 @@ public final class GameScene implements Scene {
 				grabWalls();
 			}
 			// HP 32767 소품 (ATHN01F 쌍둥이) 은 미니게임 성공 (853 MAIXPTBEDMOUNTWIN → 875) 뒤에도 그대로 — 처형이 아니다
-			// 예전엔 끝나는 틱의 target (가장 가까운 적) 을 죽였다: ATHN02D 여왕 머리 뜯기 (보스 → claimsGrab, 이 경로는 여왕 사망 뒤 영웅 Idle 동안
-			// 결합이 남아 있음) 가 끝나는 순간 막 스폰된 미노타우로스 (68.88 초) 가 HP 0 → 0.5 초 뒤 MinoDestruction1 + 7 초 Respawn 이 한 번 더 돌았다
+			// 예전엔 끝나는 틱의 target (가장 가까운 적) 을 죽였다: ATHN02D 여왕 머리 뜯기 (보스 → claimsGrab, 그때는 여왕 사망 뒤 산 적이 없어 이 경로가
+			// 돌지 않아 결합이 남아 있었음 — ticksGrab) 가 끝나는 순간 막 스폰된 미노타우로스 (68.88 초) 가 HP 0 → 0.5 초 뒤 MinoDestruction1 + 7 초 Respawn 이 한 번 더 돌았다
 			if (was && !grab.active() && grab.executionSucceeded() && held != null && held.maxHp() < 32767) {
 				held.hp = 0; // 처형 성공 → 사망 처리 (원작은 처형 기술의 피해/스크립트) [근사]
 			}
@@ -5709,6 +5709,16 @@ public final class GameScene implements Scene {
 	 */
 	private void grabWalls() {
 		grabWalls(hero.ctl.position, hero.ctl.prevPosition, heroBodyExclude(), col, otherCol, nav, nav.navWorld);
+	}
+
+	/**
+	 * 이번 틱 잡기 동기 ({@link devple.gow.engine.combat.GrabSync}) 를 돌리는지 — 보스가 맡는 잡기 (BossSync) 만 뺀다. 원작 영웅 Combatant 갱신
+	 * (0x205968, 동기 상대 정리 0x2050D8 포함) 은 대상과 무관하게 매 프레임 돈다. 예전 엔진은 대상 (가장 가까운 <b>산</b> 적) 이 없으면 건너뛰어,
+	 * 마지막 적이 붙잡힌 채 처형 기술의 자기 피해로 죽으면 (해골병 ○ 머리치기 222 CONCUSSION 400 → 227 · □ 던지기 221 SELF_HP 200 — 적은 기술을
+	 * 끝까지 하고 4 초 뒤 정리돼 사라짐) 결합이 풀리지 않고 영웅 갱신도 멈춰 크레토스가 붙잡은 자세로 굳었다 (ATHN01A 갑판 마지막 해골병, 50 §6.1).
+	 */
+	static boolean ticksGrab(EnemyFighter target, devple.gow.engine.boss.BossFight boss) {
+		return boss == null || !boss.claimsGrab(target);
 	}
 
 	/** {@link #grabWalls()} 본체: 몸 구 밀어내기 → 이동 선분 (틱 시작 → 지금) 막힘이면 그 앞에서 다시 (최대 3 회, 장면 물리와 같은 순서). */
